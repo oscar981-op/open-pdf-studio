@@ -4,9 +4,9 @@ Een afzonderlijke herbouw naast de bestaande applicatie. Branch: `feat/rust-nati
 
 ## Doel en huidige status
 
-De applicatie, interface, PDF-engine en applicatiebibliotheken worden Rust. De **huidige Open PDF Studio-UI** is de exacte doelreferentie. Open CAD Studio van Hakan Seven dient als technische referentie voor native Iced-UI, niet als visueel ontwerp of vervangende PDF-engine. De bestaande app blijft de functionele referentie voor de migratie.
+De applicatie, interface, PDF-engine en applicatiebibliotheken worden Rust. De **huidige Open PDF Studio-UI** is de exacte doelreferentie. De UI-code van Hakan Seven's OpenCADStudio wordt rechtstreeks hergebruikt als basis: ribbonhelpers en SVG-iconen zijn aangesloten, de overige UI-bronnen zijn lokaal opgenomen voor verdere migratie. De bestaande app blijft de functionele referentie voor de migratie.
 
-**Dit is een werkend eerste native venster, nog geen volledige PDF-editor.** Het venster kan een PDF openen, pagina's met Hayro renderen, door pagina's bladeren en op 50/100/200% zoomen. De lint- en paneelindeling is nog een beginversie; visuele en functionele pariteit is niet bereikt. De eerste crate `opds-native-core` bevat documentgebonden render-tickets, pagina-selectie, cursorvast zoomen, annotaties en undo/redo, met regressietests. Deze crate heeft geen externe dependencies en verbiedt eigen unsafe-code. Een herbruikbare Rust-PDF-renderer (`opds-engine-probe` als library met CLI-harnas) rendert lokale PDF’s voor de enginekeuze.
+**Dit is een werkend eerste native venster, nog geen volledige PDF-editor.** Het venster kan een PDF openen, pagina's met Hayro renderen, door pagina's bladeren en in stappen in- en uitzoomen. De lint- en paneelindeling is nog een beginversie; visuele en functionele pariteit is niet bereikt. De eerste crate `opds-native-core` bevat documentgebonden render-tickets, pagina-selectie, cursorvast zoomen, annotaties en undo/redo, met regressietests. Deze crate heeft geen externe dependencies en verbiedt eigen unsafe-code. Een herbruikbare Rust-PDF-renderer (`opds-engine-probe` als library met CLI-harnas) rendert lokale PDF’s voor de enginekeuze.
 
 ```sh
 cd rust-studio
@@ -22,11 +22,11 @@ De native shell gebruikt Iced 0.14 met `tiny-skia`, zonder de optionele wgpu-ren
 cargo run --bin opds-native-app -- "/pad/naar/tekening.pdf"
 ```
 
-Je kunt een PDF ook in het venster openen door een absoluut pad in te voeren en op Open te drukken. Een bestandsdialoog ontbreekt nog.
+Open toont nu een afzonderlijk invoervenster voor het PDF-pad. Een bestandsbrowser ontbreekt nog.
 
 - [Architectuur en dependencybeleid](docs/architecture.md)
 - [Exacte UI-pariteit met huidige app](docs/current-ui-parity.md)
-- [Technische UI-referentie van Hakan](docs/ui-reference.md)
+- [Overgenomen UI-code van Hakan](docs/ui-reference.md)
 - [Migratie en acceptatie](docs/migration.md)
 - [Eerste engineproef en meetgrenzen](docs/phase1-2026-09-30.md)
 
@@ -34,6 +34,6 @@ Je kunt een PDF ook in het venster openen door een absoluut pad in te voeren en 
 
 - Deze branch: `/home/aia02/Documenten/GitHub/open-pdf-studio-rust`
 - Bestaande app/PR #510: `/home/aia02/Documenten/GitHub/open-pdf-studio`
-- Referentieclone: `/home/aia02/Documenten/GitHub/OpenCADStudio`
+- Originele UI-bronclone: `/home/aia02/Documenten/GitHub/OpenCADStudio`
 
-De referentieclone is een aparte repository, geen submodule of vendored broncode.
+De originele clone blijft een aparte repository. De UI-bronnen en iconen van de vastgelegde commit zijn gekopieerd naar `vendor/opencadstudio`, met de oorspronkelijke licentie.

@@ -2,10 +2,10 @@
 name = "opds-native-app"
 version = "0.1.0"
 edition.workspace = true
-license.workspace = true
+license = "GPL-3.0-only"
 publish.workspace = true
 
 [dependencies]
-iced = { version = "=0.14.0", default-features = false, features = ["tiny-skia", "thread-pool", "x11", "image-without-codecs"] }
+iced = { version = "=0.14.0", default-features = false, features = ["tiny-skia", "thread-pool", "x11", "image-without-codecs", "svg"] }
 opds-native-core = { path = "../studio-core" }
 opds-engine-probe = { path = "../engine-probe" }

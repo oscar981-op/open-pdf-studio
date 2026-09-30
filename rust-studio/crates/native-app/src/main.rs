@@ -1,20 +1,28 @@
 //! First native window; UI structure follows the current Open PDF Studio app.
 #![forbid(unsafe_code)]
-use iced::widget::{button, column, container, image, row, scrollable, text, text_input};
-use iced::{color, Element, Fill, Length, Task, Theme};
+mod hakan_ui;
+use iced::widget::image;
+use iced::{color, Element, Task, Theme};
 use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::DocumentModel;
 use opds_native_core::{DocumentId, RenderTicket};
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-const BG: iced::Color = color!(0x36363E);
-const SURFACE: iced::Color = color!(0x44444C);
-const ACCENT: iced::Color = color!(0xD97706);
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
 
 fn theme(_: &App) -> Theme {
-    Theme::Dark
+    Theme::custom(
+        "Open PDF Studio",
+        iced::theme::Palette {
+            background: color!(0x28282b),
+            text: color!(0xd7d7db),
+            primary: color!(0xd97706),
+            success: color!(0x4caf50),
+            warning: color!(0xffb300),
+            danger: color!(0xe53935),
+        },
+    )
 }
 
 fn boot() -> (App, Task<Message>) {
@@ -43,6 +51,9 @@ struct App {
     next_load: u64,
     busy: bool,
     message: String,
+    open_dialog: bool,
+    hide_pages: bool,
+    hide_properties: bool,
 }
 
 struct OpenDocument {
@@ -115,6 +126,10 @@ impl RibbonTab {
 
 #[derive(Debug, Clone)]
 enum Message {
+    ShowOpen,
+    CancelOpen,
+    TogglePages,
+    ToggleProperties,
     PathChanged(String),
     Open,
     Loaded(u64, Result<(String, Arc<ParsedPdf>, Raster), String>),
@@ -128,6 +143,10 @@ enum Message {
 impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::ShowOpen => self.open_dialog = true,
+            Message::CancelOpen => self.open_dialog = false,
+            Message::TogglePages => self.hide_pages = !self.hide_pages,
+            Message::ToggleProperties => self.hide_properties = !self.hide_properties,
             Message::PathChanged(value) => self.path_input = value,
             Message::SelectRibbon(tab) => self.active_ribbon = tab,
             Message::Open => {
@@ -136,6 +155,7 @@ impl App {
                     self.message = "Enter a PDF path".into();
                     return Task::none();
                 }
+                self.open_dialog = false;
                 self.next_load += 1;
                 let token = self.next_load;
                 self.busy = true;
@@ -257,135 +277,6 @@ impl App {
     }
 
     fn view(&self) -> Element<'_, Message> {
-        let title = row![
-            text("Open PDF Studio").size(17).color(iced::Color::WHITE),
-            text("  Rust").color(ACCENT)
-        ]
-        .spacing(8)
-        .padding(10);
-        let title = container(title).width(Fill).style(|_| container::Style {
-            background: Some(SURFACE.into()),
-            ..Default::default()
-        });
-
-        let mut tabs = row![].spacing(4);
-        for tab in RibbonTab::ALL {
-            let label = if tab == self.active_ribbon {
-                format!("● {}", tab.label())
-            } else {
-                tab.label().into()
-            };
-            tabs = tabs.push(button(text(label)).on_press(Message::SelectRibbon(tab)));
-        }
-        let controls = row![
-            text_input("PDF path", &self.path_input)
-                .on_input(Message::PathChanged)
-                .on_submit(Message::Open)
-                .width(Length::Fixed(420.0)),
-            button("Open").on_press(Message::Open),
-            button("50%").on_press(Message::Zoom(0.5)),
-            button("100%").on_press(Message::Zoom(1.0)),
-            button("200%").on_press(Message::Zoom(2.0)),
-            button("◀").on_press(Message::GoToPage(
-                self.document
-                    .as_ref()
-                    .map_or(0, |d| d.model.view().page().saturating_sub(1))
-            )),
-            text(self.document.as_ref().map_or_else(
-                || "0 / 0".to_owned(),
-                |d| format!(
-                    "{} / {}",
-                    d.model.view().page() + 1,
-                    d.model.view().page_count()
-                )
-            )),
-            button("▶").on_press(Message::GoToPage(
-                self.document
-                    .as_ref()
-                    .map_or(0, |d| d.model.view().page() + 1)
-            )),
-        ]
-        .spacing(8)
-        .padding(8);
-        let ribbon = container(column![tabs.padding(6), controls])
-            .width(Fill)
-            .style(|_| container::Style {
-                background: Some(BG.into()),
-                ..Default::default()
-            });
-
-        let name = self
-            .document
-            .as_ref()
-            .and_then(|d| std::path::Path::new(&d.path).file_name())
-            .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "No document".into());
-        let doc_tab = row![
-            text(name).color(ACCENT),
-            button("×").on_press(Message::Close)
-        ]
-        .spacing(12)
-        .padding(8);
-        let doc_tab = container(doc_tab).width(Fill).style(|_| container::Style {
-            background: Some(SURFACE.into()),
-            ..Default::default()
-        });
-
-        let left = container(
-            column![
-                text("Pages").size(18),
-                text("Bookmarks"),
-                text("Annotations"),
-                text("Layers")
-            ]
-            .spacing(15)
-            .padding(12),
-        )
-        .width(Length::Fixed(210.0))
-        .height(Fill)
-        .style(|_| container::Style {
-            background: Some(SURFACE.into()),
-            ..Default::default()
-        });
-        let center: Element<'_, Message> =
-            if let Some(handle) = self.document.as_ref().and_then(|d| d.bitmap.clone()) {
-                scrollable(
-                    container(image(handle).width(Length::Shrink))
-                        .center_x(Fill)
-                        .padding(24),
-                )
-                .into()
-            } else {
-                container(text(if self.busy {
-                    "Rendering…"
-                } else {
-                    "Open a PDF to begin"
-                }))
-                .center(Fill)
-                .into()
-            };
-        let right = container(
-            column![text("Properties").size(18), text("No selection")]
-                .spacing(12)
-                .padding(12),
-        )
-        .width(Length::Fixed(210.0))
-        .height(Fill)
-        .style(|_| container::Style {
-            background: Some(SURFACE.into()),
-            ..Default::default()
-        });
-        let workspace = row![left, container(center).width(Fill).height(Fill), right].height(Fill);
-        let status = container(text(&self.message).size(13))
-            .width(Fill)
-            .padding(8)
-            .style(|_| container::Style {
-                background: Some(BG.into()),
-                ..Default::default()
-            });
-        column![title, ribbon, doc_tab, workspace, status]
-            .width(Fill)
-            .height(Fill)
-            .into()
+        hakan_ui::view(self)
     }
 }

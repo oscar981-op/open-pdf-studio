@@ -1,6 +1,6 @@
 # Doel: huidige Open PDF Studio-interface exact overzetten
 
-De bestaande Open PDF Studio-versie op branch `feat/pdf-export-snippets-pdfjs6` is de **visuele en functionele referentie**. Open CAD Studio van Hakan laat zien hoe een native Rust/Iced-UI technisch kan worden opgebouwd; zijn schermindeling of iconen zijn niet het gewenste eindresultaat.
+De bestaande Open PDF Studio-versie op branch `feat/pdf-export-snippets-pdfjs6` is de **visuele en functionele referentie**. Op verzoek van de gebruiker is de UI-code van Hakan's OpenCADStudio nu de implementatiebasis. De ribbonhelpers en iconen worden daadwerkelijk overgenomen en aan PDF-commands gekoppeld.
 
 ## Huidige desktopstructuur (broncode-inventaris)
 
@@ -22,6 +22,6 @@ Deze lijst is een startinventaris. Voor elk scherm komt er een visuele vergelijk
 
 Eerst documentmodel, PDF-engine en rendercontract. Daarna een native shell die de huidige titelbalk, lint, tabs, panelen en statusbalk reproduceert. Vervolgens functie voor functie koppelen, van openen/zoomen en pagina's naar annotaties, tekst, export, print en integraties. De bestaande app blijft beschikbaar als testreferentie tot de pariteit bewezen is.
 
-## Eerste native shell (nog geen pariteit)
+## Overname OpenCADStudio (1 oktober 2026)
 
-`crates/native-app` toont nu de belangrijkste zones in dezelfde volgorde en met de donkere basis- en accentkleuren van de bestaande app. Een PDF-pad als argument of in het padveld opent de PDF en Hayro toont de pagina. Vorige/volgende pagina en 50/100/200%-knoppen renderen in een achtergrondtaak of halen de afbeelding uit een geheugenbegrensde cache van 32 MiB; resultaten uit een vorige document-, pagina- of zoomgeneratie worden geweigerd. De lintknoppen wisselen alleen tabstatus. Panelen zijn voorlopig tekstvakken. Alle ontbrekende knoppen, iconen, vormen, vensterbediening, dialoogvensters en interacties blijven op de pariteitslijst staan.
+De eerdere testshell is vervangen door de port in `hakan_ui.rs`. Deze gebruikt echte upstream ribbonhelpers en SVG-assets, compacte quick actions, gegroepeerde tools, paginalijst en documenteigenschappen. Zie [bronverantwoording](ui-reference.md). Openen staat in een afzonderlijk dialoogvenster; de ribbon bevat geen padveld meer. Volledige UI-pariteit en de niet-aangesloten editorfuncties zijn nog niet gereed.

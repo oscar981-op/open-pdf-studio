@@ -1,30 +1,24 @@
-# Technische UI-referentie: Open CAD Studio van Hakan Seven
+# OpenCADStudio als UI-codebasis
 
-Gevonden via https://open-aec.com/en/open-cad-studio/.
+Op uitdrukkelijk verzoek van de gebruiker wordt Hakans code daadwerkelijk hergebruikt.
 
-- Repository: https://github.com/HakanSeven12/OpenCADStudio
-- Lokale clone: `/home/aia02/Documenten/GitHub/OpenCADStudio`
-- Bekeken commit: `2a15a370f6886d3e8695ab81c7d677e0cd484451`
-- UI: Iced; GPU-rendering via wgpu.
-- Referentiebeeld bekeken: `site/workspace.png`.
-- Licentiebestand van referentie: GPL-3.0. Er is geen broncode of beeldmateriaal uit deze clone gekopieerd naar het Rust-subproject.
+- Bron: https://github.com/HakanSeven12/OpenCADStudio
+- Auteur/project: Hakan Seven en OpenCADStudio contributors.
+- Commit: `2a15a370f6886d3e8695ab81c7d677e0cd484451`.
+- Ongewijzigde bronkopie: `../vendor/opencadstudio/src/ui/`.
+- Ongewijzigde SVG-iconen: `../vendor/opencadstudio/assets/icons/`.
+- Originele GPL-3.0-licentie: `../vendor/opencadstudio/LICENSE`.
+- Actieve port: `../crates/native-app/src/hakan_ui.rs`.
 
-De huidige Open PDF Studio is de visuele doelreferentie; zie [current-ui-parity.md](current-ui-parity.md). Hieronder staan alleen ideeën voor de Rust-implementatie.
+De actieve port gebruikt `tool_btn_style`, de grote toolknop-layout uit
+`render_large`, `quick_access_btn` en de groepsopbouw uit `render_group`.
+De Iced Git-API is aangepast naar Iced 0.14 (`extended_palette`); CAD-events
+zijn vervangen door PDF-commands. De SVG's worden rechtstreeks uit de
+gekopieerde assets geladen. De native-app crate vermeldt GPL-3.0-only;
+de overige Rust-crates behouden hun bestaande licentievermelding.
 
-## Vertaling naar een PDF-editor
-
-| Hakan-referentie | Locatie in clone | Toepassing in Open PDF Studio Rust |
-| --- | --- | --- |
-| Ribbon met gegroepeerde tools, compacte weergave | `src/ui/ribbon/mod.rs`, `collapse.rs`, `widgets.rs` | Tabs Bestand, Annoteren, Meten, Bewerken, Beeld; contextgroep voor selectie |
-| Dockbare panelen, resize en automatisch inklappen | `src/ui/dock.rs` | Links pagina's/bookmarks/lagen; rechts eigenschappen/meting; ruimte voor canvas bewaren |
-| Eigenschappenpaneel | `src/ui/properties.rs` | Getypeerde eigenschappen van PDF-annotaties en geselecteerde objecten |
-| Centrale viewport | `src/scene/view/` | Pagina's op neutrale achtergrond, cursorvast zoomen, pan, selecteren; geen CAD-kernel overnemen |
-| Meerdere documenten | `src/app/document.rs` | Documenttabs met eigen undo/redo, selectie, zoom en bewaartoestand |
-| Statusbalk | `src/ui/statusbar/` | Pagina, schaal, coördinaten, zoom en renderstatus |
-| Dialogen | `src/ui/window/` | Openen, exporteren, afdrukken en voorkeuren als latere stappen |
-
-## Eerste native scherm, volgende implementatiestap
-
-Maak een Iced-proef zodra dependencybeleid en systeemgrens zijn afgerond. Toon bovenaan compacte quick actions en linttabs, daaronder documenttabs; links pagina's, centraal canvas, rechts eigenschappen, onderaan status. Paneelbreedtes aanpasbaar; relevante PDF-handelingen moeten ook via toetsenbord bereikbaar zijn. Geen knoppen presenteren als functioneel zolang de documentcommand ontbreekt.
-
-Eerste werkende route: PDF openen → pagina renderen → zoomen/pannen → tab wisselen → document sluiten. Daarna selectie en een echte annotatie met undo/redo en opslaan/heropenen. Niet meteen de volledige CAD-interface kopiëren.
+Openen, paginawissel, zoom en paneelzichtbaarheid zijn aangesloten. Niet
+gemigreerde editoracties zijn uitgeschakeld. De oorspronkelijke dock-,
+properties-, menu- en dialoogcode staat klaar in de bronkopie, maar is nog
+niet volledig aangesloten. De bestaande Open PDF Studio blijft de doelreferentie
+voor PDF-functionaliteit en uiteindelijke schermpariteit.
