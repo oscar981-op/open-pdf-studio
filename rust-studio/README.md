@@ -4,21 +4,25 @@ Een afzonderlijke herbouw naast de bestaande applicatie. Branch: `feat/rust-nati
 
 ## Doel en huidige status
 
-De applicatie, interface, PDF-engine en applicatiebibliotheken worden Rust. Open CAD Studio van Hakan Seven dient als **UI-referentie**, niet als vervangende PDF-engine. De bestaande app blijft de functionele referentie voor de migratie.
+De applicatie, interface, PDF-engine en applicatiebibliotheken worden Rust. De **huidige Open PDF Studio-UI** is de exacte doelreferentie. Open CAD Studio van Hakan Seven dient als technische referentie voor native Iced-UI, niet als visueel ontwerp of vervangende PDF-engine. De bestaande app blijft de functionele referentie voor de migratie.
 
-**Dit is de projectbasis, geen werkende PDF-editor.** Er is nog geen native venster, PDF-parser of renderer aangesloten. De eerste crate `opds-native-core` bevat documentgebonden render-tickets, pagina-selectie en cursorvast zoomen, met regressietests. Deze crate heeft geen externe dependencies en verbiedt eigen unsafe-code.
+**Dit is de projectbasis, geen werkende PDF-editor.** Er is nog geen native venster, PDF-parser of renderer aangesloten. De eerste crate `opds-native-core` bevat documentgebonden render-tickets, pagina-selectie, cursorvast zoomen, annotaties en undo/redo, met regressietests. Deze crate heeft geen externe dependencies en verbiedt eigen unsafe-code. Een herbruikbare Rust-PDF-renderer (`opds-engine-probe` als library met CLI-harnas) rendert lokale PDF’s voor de enginekeuze.
 
 ```sh
 cd rust-studio
 cargo test --workspace --locked
 cargo tree --workspace --locked
+python3 scripts/audit_dependencies.py
+python3 scripts/compare.py
 ```
 
-De desktop-GUI is nog niet gekozen/geïntegreerd: Iced is de eerste kandidaat vanwege de UI-referentie. Hayro is de eerste kandidaat voor een PDF-engine. Beide moeten eerst op hun volledige, platform- en feature-specifieke afhankelijkheden worden gecontroleerd.
+De desktop-GUI is nog niet gekozen/geïntegreerd: Iced is de eerste kandidaat. Hayro 0.7.1 is als afzonderlijke Rust-library aangesloten en op een eerste corpus gemeten; visuele verschillen, featurepariteit en platformafhankelijkheden moeten verder worden onderzocht.
 
 - [Architectuur en dependencybeleid](docs/architecture.md)
-- [UI-referentie van Hakan](docs/ui-reference.md)
+- [Exacte UI-pariteit met huidige app](docs/current-ui-parity.md)
+- [Technische UI-referentie van Hakan](docs/ui-reference.md)
 - [Migratie en acceptatie](docs/migration.md)
+- [Eerste engineproef en meetgrenzen](docs/phase1-2026-09-30.md)
 
 ## Lokale werkmappen
 

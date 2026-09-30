@@ -1,0 +1,262 @@
+//! Document-scoped annotations with reversible edits and no active-tab globals.
+use crate::{DocumentId, DocumentView, ViewError};
+use std::collections::BTreeMap;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Rect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl Rect {
+    fn valid(self) -> bool {
+        [self.x, self.y, self.width, self.height]
+            .iter()
+            .all(|n| n.is_finite())
+            && self.width > 0.0
+            && self.height > 0.0
+            && (self.x + self.width).is_finite()
+            && (self.y + self.height).is_finite()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Kind {
+    Rectangle { color_rgb: [u8; 3] },
+    Text { value: String },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Annotation {
+    pub id: u64,
+    pub page: usize,  // zero-based
+    pub bounds: Rect, // page points, top-left origin
+    pub kind: Kind,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Edit {
+    Add(Annotation),
+    Replace(Annotation),
+    Remove(u64),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditError {
+    DuplicateId,
+    UnknownId,
+    InvalidPage,
+    InvalidGeometry,
+    GenerationExhausted,
+}
+
+impl From<ViewError> for EditError {
+    fn from(value: ViewError) -> Self {
+        match value {
+            ViewError::GenerationExhausted => Self::GenerationExhausted,
+            _ => Self::InvalidPage,
+        }
+    }
+}
+
+/// The identity belongs to the document, never to the selected UI tab.
+/// IDs must not be reused within a document, even after undo or deletion.
+#[derive(Clone, Debug)]
+pub struct DocumentModel {
+    view: DocumentView,
+    items: BTreeMap<u64, Annotation>,
+    used_ids: std::collections::BTreeSet<u64>,
+    undo: Vec<Edit>,
+    redo: Vec<Edit>,
+}
+
+impl DocumentModel {
+    pub fn new(id: DocumentId, pages: usize) -> Result<Self, ViewError> {
+        Ok(Self {
+            view: DocumentView::new(id, pages)?,
+            items: BTreeMap::new(),
+            used_ids: Default::default(),
+            undo: Vec::new(),
+            redo: Vec::new(),
+        })
+    }
+    pub fn view(&self) -> &DocumentView {
+        &self.view
+    }
+    pub fn items(&self) -> impl Iterator<Item = &Annotation> {
+        self.items.values()
+    }
+    pub fn get(&self, id: u64) -> Option<&Annotation> {
+        self.items.get(&id)
+    }
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
+    pub fn apply(&mut self, edit: Edit) -> Result<(), EditError> {
+        let inverse = self.apply_raw(edit, false)?;
+        self.undo.push(inverse);
+        self.redo.clear();
+        Ok(())
+    }
+    pub fn undo(&mut self) -> Result<bool, EditError> {
+        let Some(edit) = self.undo.pop() else {
+            return Ok(false);
+        };
+        match self.apply_raw(edit.clone(), true) {
+            Ok(inverse) => {
+                self.redo.push(inverse);
+                Ok(true)
+            }
+            Err(error) => {
+                self.undo.push(edit);
+                Err(error)
+            }
+        }
+    }
+    pub fn redo(&mut self) -> Result<bool, EditError> {
+        let Some(edit) = self.redo.pop() else {
+            return Ok(false);
+        };
+        match self.apply_raw(edit.clone(), true) {
+            Ok(inverse) => {
+                self.undo.push(inverse);
+                Ok(true)
+            }
+            Err(error) => {
+                self.redo.push(edit);
+                Err(error)
+            }
+        }
+    }
+    fn check(&self, item: &Annotation) -> Result<(), EditError> {
+        if item.page >= self.view.page_count() {
+            return Err(EditError::InvalidPage);
+        }
+        if !item.bounds.valid() {
+            return Err(EditError::InvalidGeometry);
+        }
+        Ok(())
+    }
+    fn apply_raw(&mut self, edit: Edit, replay: bool) -> Result<Edit, EditError> {
+        let inverse = match &edit {
+            Edit::Add(item) => {
+                self.check(item)?;
+                if self.items.contains_key(&item.id)
+                    || (self.used_ids.contains(&item.id) && !replay)
+                {
+                    return Err(EditError::DuplicateId);
+                }
+                Edit::Remove(item.id)
+            }
+            Edit::Replace(item) => {
+                self.check(item)?;
+                Edit::Replace(
+                    self.items
+                        .get(&item.id)
+                        .ok_or(EditError::UnknownId)?
+                        .clone(),
+                )
+            }
+            Edit::Remove(id) => Edit::Add(self.items.get(id).ok_or(EditError::UnknownId)?.clone()),
+        };
+        self.view.invalidate()?;
+        match edit {
+            Edit::Add(item) => {
+                self.used_ids.insert(item.id);
+                self.items.insert(item.id, item);
+            }
+            Edit::Replace(item) => {
+                self.items.insert(item.id, item);
+            }
+            Edit::Remove(id) => {
+                self.items.remove(&id);
+            }
+        }
+        Ok(inverse)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn annotation(id: u64) -> Annotation {
+        Annotation {
+            id,
+            page: 0,
+            bounds: Rect {
+                x: 2.0,
+                y: 3.0,
+                width: 10.0,
+                height: 20.0,
+            },
+            kind: Kind::Text {
+                value: "first".into(),
+            },
+        }
+    }
+    #[test]
+    fn undo_redo_and_new_edit_clear_redo() {
+        let mut doc = DocumentModel::new(DocumentId(1), 2).unwrap();
+        doc.apply(Edit::Add(annotation(7))).unwrap();
+        let mut changed = annotation(7);
+        changed.bounds.x = 50.0;
+        doc.apply(Edit::Replace(changed.clone())).unwrap();
+        assert_eq!(doc.get(7).unwrap().bounds.x, 50.0);
+        assert!(doc.undo().unwrap());
+        assert_eq!(doc.get(7).unwrap().bounds.x, 2.0);
+        assert!(doc.redo().unwrap());
+        assert_eq!(doc.get(7).unwrap().bounds.x, 50.0);
+        assert!(doc.undo().unwrap());
+        doc.apply(Edit::Remove(7)).unwrap();
+        assert!(!doc.can_redo());
+        assert!(doc.undo().unwrap());
+        assert_eq!(doc.get(7), Some(&annotation(7)));
+    }
+    #[test]
+    fn invalid_edits_leave_contents_and_render_ticket_unchanged() {
+        let mut doc = DocumentModel::new(DocumentId(1), 1).unwrap();
+        doc.apply(Edit::Add(annotation(7))).unwrap();
+        let ticket = doc.view().ticket();
+        let mut invalid = annotation(8);
+        invalid.bounds.x = f64::NAN;
+        assert_eq!(
+            doc.apply(Edit::Add(invalid)),
+            Err(EditError::InvalidGeometry)
+        );
+        assert_eq!(
+            doc.apply(Edit::Add(annotation(7))),
+            Err(EditError::DuplicateId)
+        );
+        invalid = annotation(9);
+        invalid.page = 1;
+        assert_eq!(doc.apply(Edit::Add(invalid)), Err(EditError::InvalidPage));
+        assert_eq!(doc.apply(Edit::Remove(50)), Err(EditError::UnknownId));
+        assert_eq!(doc.view().ticket(), ticket);
+        assert_eq!(doc.items().count(), 1);
+    }
+    #[test]
+    fn every_edit_rejects_old_rendered_pages() {
+        let mut doc = DocumentModel::new(DocumentId(1), 1).unwrap();
+        let ticket = doc.view().ticket();
+        doc.apply(Edit::Add(annotation(1))).unwrap();
+        assert!(!doc.view().accepts(ticket));
+        let after_add = doc.view().ticket();
+        doc.undo().unwrap();
+        assert!(!doc.view().accepts(after_add));
+    }
+    #[test]
+    fn ids_are_not_reused_after_delete_or_undo() {
+        let mut doc = DocumentModel::new(DocumentId(1), 1).unwrap();
+        doc.apply(Edit::Add(annotation(1))).unwrap();
+        doc.undo().unwrap();
+        assert_eq!(
+            doc.apply(Edit::Add(annotation(1))),
+            Err(EditError::DuplicateId)
+        );
+    }
+}

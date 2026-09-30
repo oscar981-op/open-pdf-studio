@@ -1,4 +1,4 @@
-# UI-referentie: Open CAD Studio van Hakan Seven
+# Technische UI-referentie: Open CAD Studio van Hakan Seven
 
 Gevonden via https://open-aec.com/en/open-cad-studio/.
 
@@ -8,6 +8,8 @@ Gevonden via https://open-aec.com/en/open-cad-studio/.
 - UI: Iced; GPU-rendering via wgpu.
 - Referentiebeeld bekeken: `site/workspace.png`.
 - Licentiebestand van referentie: GPL-3.0. Er is geen broncode of beeldmateriaal uit deze clone gekopieerd naar het Rust-subproject.
+
+De huidige Open PDF Studio is de visuele doelreferentie; zie [current-ui-parity.md](current-ui-parity.md). Hieronder staan alleen ideeën voor de Rust-implementatie.
 
 ## Vertaling naar een PDF-editor
 

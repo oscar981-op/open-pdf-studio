@@ -5,6 +5,8 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DocumentId(pub u64);
 
+pub mod annotations;
+
 /// A render result can only be installed in the exact view that requested it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RenderTicket {
@@ -95,6 +97,9 @@ impl DocumentView {
         })
     }
     /// Pages are zero-based in the domain model; UI labels add one.
+    pub fn page_count(&self) -> usize {
+        self.page_count
+    }
     pub fn page(&self) -> usize {
         self.page
     }

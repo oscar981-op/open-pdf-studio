@@ -1,0 +1,139 @@
+{
+  "host": "Linux-6.14.0-37-generic-x86_64-with-glibc2.39",
+  "rust_probe": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/target/release/opds-engine-probe",
+  "reference": "pdftoppm at 72 dpi",
+  "files": [
+    {
+      "name": "Tekst.pdf",
+      "bytes": 158293,
+      "page": 1,
+      "hayro": {
+        "exit": 0,
+        "wall_ms": 62,
+        "max_rss_kib": 19312,
+        "stdout": "file=\"/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Originele bestanden/Tekst.pdf\" page=1 total_pages=5 pt=595.30396x841.8898 pixels=595x841 parse_ms=0 render_ms=51 output=\"/tmp/opds-engine-7w5u0y75/0-hayro.png\"",
+        "stderr": "",
+        "dimensions": [
+          595,
+          841
+        ]
+      },
+      "poppler": {
+        "exit": 0,
+        "wall_ms": 185,
+        "max_rss_kib": 19836,
+        "stdout": "",
+        "stderr": "",
+        "dimensions": [
+          596,
+          842
+        ]
+      },
+      "compared_dimensions": [
+        595,
+        841
+      ],
+      "mean_channel_difference": 4.059,
+      "different_pixels_percent": 24.35
+    },
+    {
+      "name": "Technische tekening.pdf",
+      "bytes": 1055395,
+      "page": 1,
+      "hayro": {
+        "exit": 0,
+        "wall_ms": 101,
+        "max_rss_kib": 42340,
+        "stdout": "file=\"/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Originele bestanden/Technische tekening.pdf\" page=1 total_pages=4 pt=2384x1684 pixels=2384x1684 parse_ms=1 render_ms=72 output=\"/tmp/opds-engine-7w5u0y75/1-hayro.png\"",
+        "stderr": "",
+        "dimensions": [
+          2384,
+          1684
+        ]
+      },
+      "poppler": {
+        "exit": 0,
+        "wall_ms": 466,
+        "max_rss_kib": 29876,
+        "stdout": "",
+        "stderr": "",
+        "dimensions": [
+          2384,
+          1684
+        ]
+      },
+      "compared_dimensions": [
+        2384,
+        1684
+      ],
+      "mean_channel_difference": 3.386,
+      "different_pixels_percent": 6.44
+    },
+    {
+      "name": "Combinatie Raster, vector, tekening images.pdf",
+      "bytes": 699151,
+      "page": 1,
+      "hayro": {
+        "exit": 0,
+        "wall_ms": 797,
+        "max_rss_kib": 32164,
+        "stdout": "file=\"/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Originele bestanden/Combinatie Raster, vector, tekening images.pdf\" page=1 total_pages=1 pt=1684x1191 pixels=1684x1191 parse_ms=0 render_ms=775 output=\"/tmp/opds-engine-7w5u0y75/2-hayro.png\"",
+        "stderr": "",
+        "dimensions": [
+          1684,
+          1191
+        ]
+      },
+      "poppler": {
+        "exit": 0,
+        "wall_ms": 767,
+        "max_rss_kib": 18244,
+        "stdout": "",
+        "stderr": "",
+        "dimensions": [
+          1684,
+          1191
+        ]
+      },
+      "compared_dimensions": [
+        1684,
+        1191
+      ],
+      "mean_channel_difference": 1.574,
+      "different_pixels_percent": 15.9
+    },
+    {
+      "name": "Zware vector PDF.pdf",
+      "bytes": 17894799,
+      "page": 1,
+      "hayro": {
+        "exit": 0,
+        "wall_ms": 685,
+        "max_rss_kib": 52576,
+        "stdout": "file=\"/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Originele bestanden/Zware vector PDF.pdf\" page=1 total_pages=19 pt=1692.48x1190.52 pixels=1692x1190 parse_ms=1 render_ms=640 output=\"/tmp/opds-engine-7w5u0y75/3-hayro.png\"",
+        "stderr": "",
+        "dimensions": [
+          1692,
+          1190
+        ]
+      },
+      "poppler": {
+        "exit": 0,
+        "wall_ms": 1069,
+        "max_rss_kib": 21956,
+        "stdout": "",
+        "stderr": "",
+        "dimensions": [
+          1693,
+          1191
+        ]
+      },
+      "compared_dimensions": [
+        1692,
+        1190
+      ],
+      "mean_channel_difference": 2.976,
+      "different_pixels_percent": 31.79
+    }
+  ]
+}
