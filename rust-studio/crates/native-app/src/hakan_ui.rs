@@ -272,6 +272,17 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 large_tool("Measure", icon_asset!("measure.svg"), None),
             ],
         ));
+        groups = groups.push(group(
+            "Edit",
+            vec![large_tool(
+                "Delete",
+                icon_asset!("ui/trash.svg"),
+                app.document
+                    .as_ref()
+                    .and_then(|d| d.selected_annotation)
+                    .map(|_| Message::RemoveSelectedAnnotation),
+            )],
+        ));
     }
     groups = groups
         .push(group(
@@ -359,15 +370,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
         if let Some(document) = app.document.as_ref().filter(|d| d.bitmap.is_some()) {
             let handle = document.bitmap.clone().expect("filtered above");
             let (width, height) = document.bitmap_size;
-            let annotations = document
-                .model
-                .items()
-                .filter(|item| item.page == document.displayed_page)
-                .collect();
             let page = iced::widget::stack![
                 image(handle).width(width as f32).height(height as f32),
                 annotation_layer::view(
-                    annotations,
+                    &document.model,
+                    document.displayed_page,
+                    document.selected_annotation,
                     app.annotation_tool,
                     document.bitmap_page_points,
                     document.bitmap_size
@@ -421,7 +429,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
     }
     workspace = workspace.push(container(center).width(Fill).height(Fill));
     if !app.hide_properties {
-        let properties = column![
+        let mut properties = column![
             text("Properties").size(12),
             text("DOCUMENT").size(10),
             text(name).size(12),
@@ -430,6 +438,33 @@ pub fn view(app: &App) -> Element<'_, Message> {
         ]
         .padding(12)
         .spacing(14);
+        if let Some(annotation) = app
+            .document
+            .as_ref()
+            .and_then(|d| d.selected_annotation.and_then(|id| d.model.get(id)))
+        {
+            let kind = match &annotation.kind {
+                opds_native_core::annotations::Kind::Rectangle { color_rgb }
+                    if *color_rgb == [255, 226, 67] =>
+                {
+                    "Highlight"
+                }
+                opds_native_core::annotations::Kind::Rectangle { .. } => "Rectangle",
+                opds_native_core::annotations::Kind::Text { .. } => "Text",
+            };
+            properties = properties
+                .push(text("ANNOTATION").size(10))
+                .push(text(format!("{kind} #{}", annotation.id)).size(12))
+                .push(text(format!("Page   {}", annotation.page + 1)).size(12))
+                .push(
+                    text(format!(
+                        "X / Y   {:.1} / {:.1} pt",
+                        annotation.bounds.x, annotation.bounds.y
+                    ))
+                    .size(12),
+                )
+                .push(button("Delete annotation").on_press(Message::RemoveSelectedAnnotation));
+        }
         workspace = workspace.push(container(properties).width(230).height(Fill).style(surface));
     }
     let status = container(

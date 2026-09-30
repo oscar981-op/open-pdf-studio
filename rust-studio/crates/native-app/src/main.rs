@@ -75,6 +75,7 @@ struct OpenDocument {
     bitmap_size: (u32, u32),
     bitmap_page_points: (f32, f32),
     displayed_page: usize,
+    selected_annotation: Option<u64>,
     page_cache: VecDeque<CachedPage>,
 }
 
@@ -159,6 +160,9 @@ enum Message {
     Rendered(RenderTicket, Result<Raster, String>),
     SelectRibbon(RibbonTab),
     SelectAnnotationTool(AnnotationTool),
+    SelectAnnotation(Option<u64>),
+    MoveAnnotation(u64, [f64; 2]),
+    RemoveSelectedAnnotation,
     AddAnnotation(Rect),
     Undo,
     Redo,
@@ -175,6 +179,54 @@ impl App {
             Message::PathChanged(value) => self.path_input = value,
             Message::SelectRibbon(tab) => self.active_ribbon = tab,
             Message::SelectAnnotationTool(tool) => self.annotation_tool = tool,
+            Message::SelectAnnotation(id) => {
+                if let Some(document) = &mut self.document {
+                    document.selected_annotation = id.filter(|id| {
+                        document
+                            .model
+                            .get(*id)
+                            .is_some_and(|item| item.page == document.displayed_page)
+                    });
+                }
+            }
+            Message::MoveAnnotation(id, delta) => {
+                if let Some(document) = &mut self.document {
+                    if document.selected_annotation == Some(id)
+                        && delta.iter().all(|value| value.is_finite())
+                    {
+                        if let Some(mut item) = document.model.get(id).cloned() {
+                            let previous = item.bounds;
+                            let max_x = (f64::from(document.bitmap_page_points.0)
+                                - item.bounds.width)
+                                .max(0.0);
+                            let max_y = (f64::from(document.bitmap_page_points.1)
+                                - item.bounds.height)
+                                .max(0.0);
+                            item.bounds.x = (item.bounds.x + delta[0]).clamp(0.0, max_x);
+                            item.bounds.y = (item.bounds.y + delta[1]).clamp(0.0, max_y);
+                            if item.bounds != previous {
+                                match document.model.apply(Edit::Replace(item)) {
+                                    Ok(()) => self.message = "Annotation moved".into(),
+                                    Err(error) => self.message = format!("Move failed: {error:?}"),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Message::RemoveSelectedAnnotation => {
+                if let Some(document) = &mut self.document {
+                    if let Some(id) = document.selected_annotation {
+                        match document.model.apply(Edit::Remove(id)) {
+                            Ok(()) => {
+                                document.selected_annotation = None;
+                                self.message = "Annotation removed".into();
+                            }
+                            Err(error) => self.message = format!("Delete failed: {error:?}"),
+                        }
+                    }
+                }
+            }
             Message::AddAnnotation(bounds) => {
                 if let Some(document) = &mut self.document {
                     let color_rgb = match self.annotation_tool {
@@ -190,6 +242,7 @@ impl App {
                     };
                     match document.model.apply(Edit::Add(item)) {
                         Ok(()) => {
+                            document.selected_annotation = Some(self.next_annotation_id);
                             self.next_annotation_id += 1;
                             self.message = "Annotation added".into();
                         }
@@ -201,6 +254,12 @@ impl App {
                 if let Some(document) = &mut self.document {
                     if let Err(error) = document.model.undo() {
                         self.message = format!("Undo failed: {error:?}");
+                    }
+                    if document
+                        .selected_annotation
+                        .is_some_and(|id| document.model.get(id).is_none())
+                    {
+                        document.selected_annotation = None;
                     }
                 }
             }
@@ -266,6 +325,7 @@ impl App {
                             bitmap_size: (0, 0),
                             bitmap_page_points: (0.0, 0.0),
                             displayed_page: 0,
+                            selected_annotation: None,
                             page_cache: VecDeque::new(),
                         };
                         document.cache_bitmap(0, initial_scale, raster);
@@ -287,6 +347,7 @@ impl App {
                     if document.model.go_to_page(page).is_err() {
                         return Task::none();
                     }
+                    document.selected_annotation = None;
                 }
                 return self.render_current_page();
             }

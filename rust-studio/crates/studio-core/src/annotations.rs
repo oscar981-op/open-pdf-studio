@@ -97,6 +97,23 @@ impl DocumentModel {
     pub fn get(&self, id: u64) -> Option<&Annotation> {
         self.items.get(&id)
     }
+    /// The newest annotation at a page point, allowing a small screen-sized
+    /// tolerance around thin rectangle borders and text boxes.
+    pub fn hit_test(&self, page: usize, point: [f64; 2], tolerance: f64) -> Option<u64> {
+        if !point.iter().all(|value| value.is_finite()) || !tolerance.is_finite() || tolerance < 0.0
+        {
+            return None;
+        }
+        self.items.iter().rev().find_map(|(id, annotation)| {
+            let bounds = annotation.bounds;
+            (annotation.page == page
+                && point[0] >= bounds.x - tolerance
+                && point[0] <= bounds.x + bounds.width + tolerance
+                && point[1] >= bounds.y - tolerance
+                && point[1] <= bounds.y + bounds.height + tolerance)
+                .then_some(*id)
+        })
+    }
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
@@ -264,5 +281,21 @@ mod tests {
             doc.apply(Edit::Add(annotation(1))),
             Err(EditError::DuplicateId)
         );
+    }
+    #[test]
+    fn hit_test_selects_topmost_annotation_on_correct_page() {
+        let mut doc = DocumentModel::new(DocumentId(1), 2).unwrap();
+        doc.apply(Edit::Add(annotation(1))).unwrap();
+        let mut top = annotation(2);
+        top.bounds.x = 4.0;
+        top.page = 1;
+        doc.apply(Edit::Add(top.clone())).unwrap();
+        assert_eq!(doc.hit_test(0, [5.0, 5.0], 0.0), Some(1));
+        assert_eq!(doc.hit_test(1, [5.0, 5.0], 0.0), Some(2));
+        top.page = 0;
+        doc.apply(Edit::Replace(top)).unwrap();
+        assert_eq!(doc.hit_test(0, [5.0, 5.0], 0.0), Some(2));
+        assert_eq!(doc.hit_test(1, [5.0, 5.0], 0.0), None);
+        assert_eq!(doc.hit_test(0, [f64::NAN, 5.0], 1.0), None);
     }
 }
