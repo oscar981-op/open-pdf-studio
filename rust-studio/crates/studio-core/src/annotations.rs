@@ -82,6 +82,12 @@ impl DocumentModel {
             redo: Vec::new(),
         })
     }
+    pub fn zoom_at(&mut self, scale: f64, anchor: [f64; 2]) -> Result<(), ViewError> {
+        self.view.zoom_at(scale, anchor)
+    }
+    pub fn go_to_page(&mut self, page: usize) -> Result<(), ViewError> {
+        self.view.go_to_page(page)
+    }
     pub fn view(&self) -> &DocumentView {
         &self.view
     }

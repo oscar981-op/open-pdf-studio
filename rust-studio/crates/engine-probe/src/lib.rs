@@ -10,7 +10,7 @@ use std::time::Instant;
 pub const MAX_SIDE: f64 = 4096.0;
 pub const MAX_PIXELS: f64 = 16_000_000.0;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Raster {
     pub width: u32,
     pub height: u32,

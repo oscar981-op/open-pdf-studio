@@ -6,7 +6,7 @@ Een afzonderlijke herbouw naast de bestaande applicatie. Branch: `feat/rust-nati
 
 De applicatie, interface, PDF-engine en applicatiebibliotheken worden Rust. De **huidige Open PDF Studio-UI** is de exacte doelreferentie. Open CAD Studio van Hakan Seven dient als technische referentie voor native Iced-UI, niet als visueel ontwerp of vervangende PDF-engine. De bestaande app blijft de functionele referentie voor de migratie.
 
-**Dit is de projectbasis, geen werkende PDF-editor.** Er is nog geen native venster, PDF-parser of renderer aangesloten. De eerste crate `opds-native-core` bevat documentgebonden render-tickets, pagina-selectie, cursorvast zoomen, annotaties en undo/redo, met regressietests. Deze crate heeft geen externe dependencies en verbiedt eigen unsafe-code. Een herbruikbare Rust-PDF-renderer (`opds-engine-probe` als library met CLI-harnas) rendert lokale PDF’s voor de enginekeuze.
+**Dit is een werkend eerste native venster, nog geen volledige PDF-editor.** Het venster kan een PDF openen, pagina's met Hayro renderen, door pagina's bladeren en op 50/100/200% zoomen. De lint- en paneelindeling is nog een beginversie; visuele en functionele pariteit is niet bereikt. De eerste crate `opds-native-core` bevat documentgebonden render-tickets, pagina-selectie, cursorvast zoomen, annotaties en undo/redo, met regressietests. Deze crate heeft geen externe dependencies en verbiedt eigen unsafe-code. Een herbruikbare Rust-PDF-renderer (`opds-engine-probe` als library met CLI-harnas) rendert lokale PDF’s voor de enginekeuze.
 
 ```sh
 cd rust-studio
@@ -16,7 +16,13 @@ python3 scripts/audit_dependencies.py
 python3 scripts/compare.py
 ```
 
-De desktop-GUI is nog niet gekozen/geïntegreerd: Iced is de eerste kandidaat. Hayro 0.7.1 is als afzonderlijke Rust-library aangesloten en op een eerste corpus gemeten; visuele verschillen, featurepariteit en platformafhankelijkheden moeten verder worden onderzocht.
+De native shell gebruikt Iced 0.14 met `tiny-skia`, zonder de optionele wgpu-renderer op Linux. Hayro 0.7.1 is als afzonderlijke Rust-library aangesloten en op een eerste corpus gemeten; visuele verschillen, featurepariteit en platformafhankelijkheden moeten verder worden onderzocht.
+
+```sh
+cargo run --bin opds-native-app -- "/pad/naar/tekening.pdf"
+```
+
+Je kunt een PDF ook in het venster openen door een absoluut pad in te voeren en op Open te drukken. Een bestandsdialoog ontbreekt nog.
 
 - [Architectuur en dependencybeleid](docs/architecture.md)
 - [Exacte UI-pariteit met huidige app](docs/current-ui-parity.md)

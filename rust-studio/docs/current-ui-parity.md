@@ -21,3 +21,7 @@ Deze lijst is een startinventaris. Voor elk scherm komt er een visuele vergelijk
 ## Volgorde
 
 Eerst documentmodel, PDF-engine en rendercontract. Daarna een native shell die de huidige titelbalk, lint, tabs, panelen en statusbalk reproduceert. Vervolgens functie voor functie koppelen, van openen/zoomen en pagina's naar annotaties, tekst, export, print en integraties. De bestaande app blijft beschikbaar als testreferentie tot de pariteit bewezen is.
+
+## Eerste native shell (nog geen pariteit)
+
+`crates/native-app` toont nu de belangrijkste zones in dezelfde volgorde en met de donkere basis- en accentkleuren van de bestaande app. Een PDF-pad als argument of in het padveld opent de PDF en Hayro toont de pagina. Vorige/volgende pagina en 50/100/200%-knoppen renderen in een achtergrondtaak of halen de afbeelding uit een geheugenbegrensde cache van 32 MiB; resultaten uit een vorige document-, pagina- of zoomgeneratie worden geweigerd. De lintknoppen wisselen alleen tabstatus. Panelen zijn voorlopig tekstvakken. Alle ontbrekende knoppen, iconen, vormen, vensterbediening, dialoogvensters en interacties blijven op de pariteitslijst staan.
