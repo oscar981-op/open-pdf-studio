@@ -4,20 +4,20 @@
 
 Gebruikerskeuze: ook PDF-engine en afhankelijkheden in Rust. Geen Tauri/WebView, JavaScript-runtime, PDFium, MuPDF, Tesseract, FreeType/HarfBuzz, libjpeg-turbo of OpenSSL als ingebouwde applicatie-engine. Een Rust-wrapper om een C/C++-bibliotheek voldoet niet.
 
-Er is een noodzakelijke technische grens: besturingssysteem, drivers, venstersysteem en de implementatie van delen van de Rust-standaardbibliotheek zijn niet per definitie Rust. **Zonder zo'n grens kunnen we een desktopapp niet eerlijk '100% Rust inclusief alles' noemen.** Het project houdt deze uitzonderingen zichtbaar; de gebruiker moet het OS/driver-beleid bevestigen voordat een GUI-dependency als goedgekeurd geldt. De eerste dependencyvrije kern kiest nog geen platformbinding.
+Er is een noodzakelijke technische grens: besturingssysteem, drivers, venstersysteem en de implementatie van delen van de Rust-standaardbibliotheek zijn niet per definitie Rust. **Zonder zo'n grens kunnen we een desktopapp niet eerlijk '100% Rust inclusief alles' noemen.** Het project houdt deze OS/ABI-grenzen zichtbaar en sluit C/C++-PDF-engines en C-buildstappen uit de actieve Linux-appgrafiek uit.
 
 ## Lagen
 
 | Laag | Verantwoordelijkheid | Status |
 | --- | --- | --- |
-| `opds-native-core` | Documentidentiteit, viewport, afwijzen verouderde resultaten; later commands/undo, annotaties, geometrie | Eerste implementatie |
-| PDF-engine | Parser, fonts, transparantie, kleuren, raster/vector, tekstextractie | Hayro onderzoeken; niet aangesloten |
+| `opds-native-core` | Documentidentiteit, viewport, afwijzen verouderde resultaten, annotaties en undo/redo | Eerste implementatie |
+| PDF-engine | Parser, fonts, transparantie, kleuren, raster/vector, tekstextractie | Hayro-parser/renderer op native viewer aangesloten; tekstextractie ontbreekt |
 | Documentopslag | PDF-objectmutaties, vectorfragmenten, formulieren, atomair opslaan | Te ontwerpen; rendering is geen schrijfmotor |
-| Desktop-UI | Iced-kandidaat, ribbon, documenttabs, dockpanelen, viewport | Referentie geïnventariseerd; geen window |
+| Desktop-UI | Iced, ribbon, documenttabs, dockpanelen, viewport | Eerste native venster met PDF-weergave; pariteit ontbreekt |
 | Integraties | Print, clipboard, bestanddialoog, keyring, toegankelijkheid | Platformgrens nog vastleggen |
 | MCP | Getypeerde documentcommands, dezelfde kern als UI | Te porteren |
 
-Gebruik stabiele documentidentiteiten, geen actieve-tab-globals voor async werk. Een renderresultaat draagt de document-ID en generatie waarop het is gestart. Pagina-, zoom- en inhoudswijzigingen maken eerdere resultaten ongeldig. Document-ID's mogen tijdens de sessie niet opnieuw worden gebruikt. Rendering en zware parsing moeten later buiten de UI-thread plaatsvinden, met begrensde wachtrijen en cachebudgetten.
+Gebruik stabiele documentidentiteiten, geen actieve-tab-globals voor async werk. Een renderresultaat draagt de document-ID en generatie waarop het is gestart. Pagina-, zoom- en inhoudswijzigingen maken eerdere resultaten ongeldig. Document-ID's mogen tijdens de sessie niet opnieuw worden gebruikt. Bestand lezen, PDF-parsing en rendering vinden in de native viewer buiten de UI-update plaats. De paginacache heeft een budget van 32 MiB; taakcoalescing/annuleren en een expliciete renderwachtrij ontbreken nog.
 
 ## Eerste audit van de huidige broncode
 
@@ -40,7 +40,7 @@ Voor iedere nieuwe library:
 5. OS/driverbindings apart inventariseren. Alleen expliciet afgesproken systeemgrenzen toelaten.
 6. Herhalen bij dependencyupdates; onbekend is niet goedgekeurd.
 
-De huidige kern heeft nul third-party dependencies. Dat bewijst nog niets over toekomstige GUI- of enginecrates.
+De huidige kern heeft nul third-party dependencies. De actieve Linux-GUI/enginegrafiek wordt met `scripts/audit_dependencies.py` op bekende native links en verboden crates gecontroleerd. Dat bewijst niet dat alle transitieve broncode handmatig is beoordeeld of dat Windows/macOS dezelfde grafiek hebben.
 
 ## Enginekandidaten
 

@@ -5,6 +5,7 @@ use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::{RenderCache, RenderSettings};
+use std::sync::Arc;
 use std::time::Instant;
 
 pub const MAX_SIDE: f64 = 4096.0;
@@ -38,62 +39,104 @@ impl std::fmt::Display for RenderError {
 }
 impl std::error::Error for RenderError {}
 
-/// Page numbers are one-based at this API boundary. `bytes` is owned because
-/// Hayro's parser stores it; the UI can pass a clone of its immutable Arc bytes.
-/// The caller runs this off the UI thread and checks its document render ticket.
-pub fn render_page(bytes: Vec<u8>, page_number: usize, scale: f32) -> Result<Raster, RenderError> {
+/// Parsed PDF backed by shared original bytes. Reuse it across page and zoom renders.
+pub struct ParsedPdf {
+    pdf: Pdf,
+    parse_ms: u128,
+}
+
+impl std::fmt::Debug for ParsedPdf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ParsedPdf")
+            .field("pages", &self.page_count())
+            .finish()
+    }
+}
+
+impl ParsedPdf {
+    pub fn open(bytes: Arc<Vec<u8>>) -> Result<Self, RenderError> {
+        let started = Instant::now();
+        let pdf = Pdf::new(bytes).map_err(|error| RenderError::Parse(format!("{error:?}")))?;
+        Ok(Self {
+            pdf,
+            parse_ms: started.elapsed().as_millis(),
+        })
+    }
+
+    pub fn page_count(&self) -> usize {
+        self.pdf.pages().len()
+    }
+
+    pub fn parse_ms(&self) -> u128 {
+        self.parse_ms
+    }
+
+    pub fn render_page(&self, page_number: usize, scale: f32) -> Result<Raster, RenderError> {
+        validate_request(page_number, scale)?;
+        let pages = self.pdf.pages();
+        let page = pages.get(page_number - 1).ok_or(RenderError::InvalidPage)?;
+        let (page_width_pt, page_height_pt) = page.render_dimensions();
+        let width_px = page_width_pt as f64 * scale as f64;
+        let height_px = page_height_pt as f64 * scale as f64;
+        if !width_px.is_finite()
+            || !height_px.is_finite()
+            || width_px <= 0.0
+            || height_px <= 0.0
+            || width_px > MAX_SIDE
+            || height_px > MAX_SIDE
+            || width_px * height_px > MAX_PIXELS
+        {
+            return Err(RenderError::TooLarge);
+        }
+        let started = Instant::now();
+        let pixmap = hayro::render(
+            page,
+            &RenderCache::new(),
+            &InterpreterSettings::default(),
+            &RenderSettings {
+                x_scale: scale,
+                y_scale: scale,
+                bg_color: WHITE,
+                ..Default::default()
+            },
+        );
+        let width = u32::from(pixmap.width());
+        let height = u32::from(pixmap.height());
+        let rgba = pixmap.data_as_u8_slice().to_vec();
+        if width == 0 || height == 0 || rgba.len() != width as usize * height as usize * 4 {
+            return Err(RenderError::InvalidBitmap);
+        }
+        Ok(Raster {
+            width,
+            height,
+            rgba,
+            page_width_pt,
+            page_height_pt,
+            total_pages: pages.len(),
+            parse_ms: 0,
+            render_ms: started.elapsed().as_millis(),
+        })
+    }
+}
+
+fn validate_request(page_number: usize, scale: f32) -> Result<(), RenderError> {
     if page_number == 0 {
         return Err(RenderError::InvalidPage);
     }
     if !scale.is_finite() || !(0.1..=8.0).contains(&scale) {
         return Err(RenderError::InvalidScale);
     }
-    let started = Instant::now();
-    let pdf = Pdf::new(bytes).map_err(|error| RenderError::Parse(format!("{error:?}")))?;
-    let pages = pdf.pages();
-    let page = pages.get(page_number - 1).ok_or(RenderError::InvalidPage)?;
-    let (page_width_pt, page_height_pt) = page.render_dimensions();
-    let width_px = page_width_pt as f64 * scale as f64;
-    let height_px = page_height_pt as f64 * scale as f64;
-    if !width_px.is_finite()
-        || !height_px.is_finite()
-        || width_px <= 0.0
-        || height_px <= 0.0
-        || width_px > MAX_SIDE
-        || height_px > MAX_SIDE
-        || width_px * height_px > MAX_PIXELS
-    {
-        return Err(RenderError::TooLarge);
-    }
-    let parse_ms = started.elapsed().as_millis();
-    let started = Instant::now();
-    let pixmap = hayro::render(
-        page,
-        &RenderCache::new(),
-        &InterpreterSettings::default(),
-        &RenderSettings {
-            x_scale: scale,
-            y_scale: scale,
-            bg_color: WHITE,
-            ..Default::default()
-        },
-    );
-    let width = u32::from(pixmap.width());
-    let height = u32::from(pixmap.height());
-    let rgba = pixmap.data_as_u8_slice().to_vec();
-    if width == 0 || height == 0 || rgba.len() != width as usize * height as usize * 4 {
-        return Err(RenderError::InvalidBitmap);
-    }
-    Ok(Raster {
-        width,
-        height,
-        rgba,
-        page_width_pt,
-        page_height_pt,
-        total_pages: pages.len(),
-        parse_ms,
-        render_ms: started.elapsed().as_millis(),
-    })
+    Ok(())
+}
+
+/// Page numbers are one-based at this API boundary. `bytes` is owned because
+/// the CLI harness takes ownership. The GUI uses `ParsedPdf` to avoid reparsing.
+pub fn render_page(bytes: Vec<u8>, page_number: usize, scale: f32) -> Result<Raster, RenderError> {
+    validate_request(page_number, scale)?;
+    let parsed = ParsedPdf::open(Arc::new(bytes))?;
+    let mut raster = parsed.render_page(page_number, scale)?;
+    raster.parse_ms = parsed.parse_ms();
+    Ok(raster)
 }
 
 #[cfg(test)]
@@ -113,5 +156,21 @@ mod tests {
             render_page(vec![], 1, 9.0).unwrap_err(),
             RenderError::InvalidScale
         );
+    }
+
+    #[test]
+    fn parsed_document_reuses_shared_bytes_for_multiple_renders() {
+        let bytes = Arc::new(
+            include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec(),
+        );
+        let pdf = ParsedPdf::open(Arc::clone(&bytes)).unwrap();
+        assert!(Arc::strong_count(&bytes) >= 2);
+        assert!(pdf.page_count() >= 1);
+        let first = pdf.render_page(1, 0.5).unwrap();
+        let second = pdf.render_page(1, 1.0).unwrap();
+        assert!(second.width >= first.width);
+        assert!(second.height >= first.height);
+        assert_eq!(first.parse_ms, 0);
+        assert_eq!(second.parse_ms, 0);
     }
 }

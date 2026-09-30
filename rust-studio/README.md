@@ -16,7 +16,7 @@ python3 scripts/audit_dependencies.py
 python3 scripts/compare.py
 ```
 
-De native shell gebruikt Iced 0.14 met `tiny-skia`, zonder de optionele wgpu-renderer op Linux. Hayro 0.7.1 is als afzonderlijke Rust-library aangesloten en op een eerste corpus gemeten; visuele verschillen, featurepariteit en platformafhankelijkheden moeten verder worden onderzocht.
+De native shell gebruikt Iced 0.14 met `tiny-skia`, zonder de optionele wgpu-renderer op Linux. Hayro 0.7.1 is als afzonderlijke Rust-library aangesloten en op een eerste corpus gemeten. Het bestand wordt buiten de UI-update gelezen en één keer per open document geparseerd; renderaanroepen delen de originele bytes en parser. Visuele verschillen, featurepariteit en platformafhankelijkheden moeten verder worden onderzocht.
 
 ```sh
 cargo run --bin opds-native-app -- "/pad/naar/tekening.pdf"

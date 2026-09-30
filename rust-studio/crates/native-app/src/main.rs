@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 use iced::widget::{button, column, container, image, row, scrollable, text, text_input};
 use iced::{color, Element, Fill, Length, Task, Theme};
-use opds_engine_probe::{render_page, Raster};
+use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::DocumentModel;
 use opds_native_core::{DocumentId, RenderTicket};
 use std::collections::VecDeque;
@@ -47,7 +47,7 @@ struct App {
 
 struct OpenDocument {
     path: String,
-    bytes: Arc<Vec<u8>>,
+    pdf: Arc<ParsedPdf>,
     model: DocumentModel,
     bitmap: Option<image::Handle>,
     page_cache: VecDeque<CachedPage>,
@@ -117,7 +117,7 @@ impl RibbonTab {
 enum Message {
     PathChanged(String),
     Open,
-    Loaded(u64, String, Arc<Vec<u8>>, Result<Raster, String>),
+    Loaded(u64, Result<(String, Arc<ParsedPdf>, Raster), String>),
     Zoom(f64),
     GoToPage(usize),
     Rendered(RenderTicket, Result<Raster, String>),
@@ -136,33 +136,29 @@ impl App {
                     self.message = "Enter a PDF path".into();
                     return Task::none();
                 }
-                let bytes = match std::fs::read(&path) {
-                    Ok(value) => Arc::new(value),
-                    Err(error) => {
-                        self.message = format!("Open failed: {error}");
-                        return Task::none();
-                    }
-                };
                 self.next_load += 1;
                 let token = self.next_load;
                 self.busy = true;
-                self.message = "Rendering first page…".into();
+                self.message = "Opening PDF…".into();
                 return Task::perform(
                     async move {
-                        let result = render_page((*bytes).clone(), 1, 1.0)
-                            .map_err(|error| error.to_string());
-                        (path, bytes, result)
+                        let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+                        let pdf = Arc::new(
+                            ParsedPdf::open(Arc::new(bytes)).map_err(|error| error.to_string())?,
+                        );
+                        let raster = pdf.render_page(1, 1.0).map_err(|error| error.to_string())?;
+                        Ok((path, pdf, raster))
                     },
-                    move |(path, bytes, result)| Message::Loaded(token, path, bytes, result),
+                    move |result| Message::Loaded(token, result),
                 );
             }
-            Message::Loaded(token, path, bytes, result) => {
+            Message::Loaded(token, result) => {
                 if token != self.next_load {
                     return Task::none();
                 }
                 self.busy = false;
                 match result {
-                    Ok(raster) => {
+                    Ok((path, pdf, raster)) => {
                         let Ok(model) = DocumentModel::new(DocumentId(token), raster.total_pages)
                         else {
                             return Task::none();
@@ -173,7 +169,7 @@ impl App {
                         );
                         let mut document = OpenDocument {
                             path,
-                            bytes,
+                            pdf,
                             model,
                             bitmap: None,
                             page_cache: VecDeque::new(),
@@ -181,7 +177,7 @@ impl App {
                         document.cache_bitmap(0, 1.0, raster);
                         self.document = Some(document);
                     }
-                    Err(error) => self.message = format!("PDF render failed: {error}"),
+                    Err(error) => self.message = format!("PDF open/render failed: {error}"),
                 }
             }
             Message::Zoom(scale) => {
@@ -248,11 +244,14 @@ impl App {
             self.message = format!("Page {page} • {:.0}% (cached)", scale * 100.0);
             return Task::none();
         }
-        let bytes = Arc::clone(&document.bytes);
+        let pdf = Arc::clone(&document.pdf);
         self.busy = true;
         self.message = format!("Rendering page {page} at {:.0}%…", scale * 100.0);
         Task::perform(
-            async move { render_page((*bytes).clone(), page, scale).map_err(|error| error.to_string()) },
+            async move {
+                pdf.render_page(page, scale)
+                    .map_err(|error| error.to_string())
+            },
             move |result| Message::Rendered(ticket, result),
         )
     }
