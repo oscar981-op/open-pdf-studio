@@ -6,6 +6,6 @@ license = "GPL-3.0-only"
 publish.workspace = true
 
 [dependencies]
-iced = { version = "=0.14.0", default-features = false, features = ["tiny-skia", "thread-pool", "x11", "image-without-codecs", "svg"] }
+iced = { version = "=0.14.0", default-features = false, features = ["wgpu", "tiny-skia", "thread-pool", "x11", "image-without-codecs", "svg", "canvas"] }
 opds-native-core = { path = "../studio-core" }
 opds-engine-probe = { path = "../engine-probe" }

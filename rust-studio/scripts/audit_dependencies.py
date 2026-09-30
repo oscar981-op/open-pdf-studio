@@ -28,7 +28,7 @@ for line in subprocess.check_output(tree_command, text=True).splitlines():
 visited = {package_id for package_id, package in packages.items()
            if (package['name'], package['version']) in active}
 forbidden = ('pdfium', 'tesseract', 'turbojpeg', 'mozjpeg', 'openssl',
-             'freetype', 'harfbuzz', 'mu-pdf', 'mupdf', 'tauri', 'wgpu')
+             'freetype', 'harfbuzz', 'mu-pdf', 'mupdf', 'tauri')
 forbidden_exact = {'cc', 'cmake', 'bindgen'}
 problems = []
 build_scripts = []

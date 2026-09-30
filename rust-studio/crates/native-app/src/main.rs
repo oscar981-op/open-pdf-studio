@@ -1,10 +1,11 @@
 //! First native window; UI structure follows the current Open PDF Studio app.
 #![forbid(unsafe_code)]
+mod annotation_layer;
 mod hakan_ui;
 use iced::widget::image;
 use iced::{color, Element, Task, Theme};
 use opds_engine_probe::{ParsedPdf, Raster};
-use opds_native_core::annotations::DocumentModel;
+use opds_native_core::annotations::{Annotation, DocumentModel, Edit, Kind, Rect};
 use opds_native_core::{DocumentId, RenderTicket};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -54,6 +55,16 @@ struct App {
     open_dialog: bool,
     hide_pages: bool,
     hide_properties: bool,
+    annotation_tool: AnnotationTool,
+    next_annotation_id: u64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum AnnotationTool {
+    #[default]
+    Select,
+    Rectangle,
+    Highlight,
 }
 
 struct OpenDocument {
@@ -61,6 +72,9 @@ struct OpenDocument {
     pdf: Arc<ParsedPdf>,
     model: DocumentModel,
     bitmap: Option<image::Handle>,
+    bitmap_size: (u32, u32),
+    bitmap_page_points: (f32, f32),
+    displayed_page: usize,
     page_cache: VecDeque<CachedPage>,
 }
 
@@ -69,10 +83,15 @@ struct CachedPage {
     scale_bits: u32,
     bytes: usize,
     bitmap: image::Handle,
+    bitmap_size: (u32, u32),
+    page_points: (f32, f32),
 }
 
 impl OpenDocument {
     fn cache_bitmap(&mut self, page: usize, scale: f32, raster: Raster) {
+        self.bitmap_size = (raster.width, raster.height);
+        self.bitmap_page_points = (raster.page_width_pt, raster.page_height_pt);
+        self.displayed_page = page;
         let bytes = raster.rgba.len();
         let bitmap = image::Handle::from_rgba(raster.width, raster.height, raster.rgba);
         self.bitmap = Some(bitmap.clone());
@@ -86,6 +105,8 @@ impl OpenDocument {
             scale_bits: scale.to_bits(),
             bytes,
             bitmap,
+            bitmap_size: self.bitmap_size,
+            page_points: self.bitmap_page_points,
         });
         while self.page_cache.iter().map(|item| item.bytes).sum::<usize>() > MAX_PAGE_CACHE_BYTES {
             self.page_cache.pop_front();
@@ -132,11 +153,15 @@ enum Message {
     ToggleProperties,
     PathChanged(String),
     Open,
-    Loaded(u64, Result<(String, Arc<ParsedPdf>, Raster), String>),
+    Loaded(u64, Result<(String, Arc<ParsedPdf>, f32, Raster), String>),
     Zoom(f64),
     GoToPage(usize),
     Rendered(RenderTicket, Result<Raster, String>),
     SelectRibbon(RibbonTab),
+    SelectAnnotationTool(AnnotationTool),
+    AddAnnotation(Rect),
+    Undo,
+    Redo,
     Close,
 }
 
@@ -149,6 +174,43 @@ impl App {
             Message::ToggleProperties => self.hide_properties = !self.hide_properties,
             Message::PathChanged(value) => self.path_input = value,
             Message::SelectRibbon(tab) => self.active_ribbon = tab,
+            Message::SelectAnnotationTool(tool) => self.annotation_tool = tool,
+            Message::AddAnnotation(bounds) => {
+                if let Some(document) = &mut self.document {
+                    let color_rgb = match self.annotation_tool {
+                        AnnotationTool::Rectangle => [231, 76, 60],
+                        AnnotationTool::Highlight => [255, 226, 67],
+                        AnnotationTool::Select => return Task::none(),
+                    };
+                    let item = Annotation {
+                        id: self.next_annotation_id,
+                        page: document.displayed_page,
+                        bounds,
+                        kind: Kind::Rectangle { color_rgb },
+                    };
+                    match document.model.apply(Edit::Add(item)) {
+                        Ok(()) => {
+                            self.next_annotation_id += 1;
+                            self.message = "Annotation added".into();
+                        }
+                        Err(error) => self.message = format!("Annotation failed: {error:?}"),
+                    }
+                }
+            }
+            Message::Undo => {
+                if let Some(document) = &mut self.document {
+                    if let Err(error) = document.model.undo() {
+                        self.message = format!("Undo failed: {error:?}");
+                    }
+                }
+            }
+            Message::Redo => {
+                if let Some(document) = &mut self.document {
+                    if let Err(error) = document.model.redo() {
+                        self.message = format!("Redo failed: {error:?}");
+                    }
+                }
+            }
             Message::Open => {
                 let path = self.path_input.trim().to_owned();
                 if path.is_empty() {
@@ -166,8 +228,13 @@ impl App {
                         let pdf = Arc::new(
                             ParsedPdf::open(Arc::new(bytes)).map_err(|error| error.to_string())?,
                         );
-                        let raster = pdf.render_page(1, 1.0).map_err(|error| error.to_string())?;
-                        Ok((path, pdf, raster))
+                        let (page_width, _) =
+                            pdf.page_dimensions(1).map_err(|error| error.to_string())?;
+                        let initial_scale = (550.0 / page_width).clamp(0.1, 1.0);
+                        let raster = pdf
+                            .render_page(1, initial_scale)
+                            .map_err(|error| error.to_string())?;
+                        Ok((path, pdf, initial_scale, raster))
                     },
                     move |result| Message::Loaded(token, result),
                 );
@@ -178,11 +245,15 @@ impl App {
                 }
                 self.busy = false;
                 match result {
-                    Ok((path, pdf, raster)) => {
-                        let Ok(model) = DocumentModel::new(DocumentId(token), raster.total_pages)
+                    Ok((path, pdf, initial_scale, raster)) => {
+                        let Ok(mut model) =
+                            DocumentModel::new(DocumentId(token), raster.total_pages)
                         else {
                             return Task::none();
                         };
+                        if model.zoom_at(f64::from(initial_scale), [0.0, 0.0]).is_err() {
+                            return Task::none();
+                        }
                         self.message = format!(
                             "{} pages • {}×{} px",
                             raster.total_pages, raster.width, raster.height
@@ -192,9 +263,12 @@ impl App {
                             pdf,
                             model,
                             bitmap: None,
+                            bitmap_size: (0, 0),
+                            bitmap_page_points: (0.0, 0.0),
+                            displayed_page: 0,
                             page_cache: VecDeque::new(),
                         };
-                        document.cache_bitmap(0, 1.0, raster);
+                        document.cache_bitmap(0, initial_scale, raster);
                         self.document = Some(document);
                     }
                     Err(error) => self.message = format!("PDF open/render failed: {error}"),
@@ -260,6 +334,9 @@ impl App {
             .find(|item| item.page == page - 1 && item.scale_bits == scale.to_bits())
         {
             document.bitmap = Some(cached.bitmap.clone());
+            document.bitmap_size = cached.bitmap_size;
+            document.bitmap_page_points = cached.page_points;
+            document.displayed_page = cached.page;
             self.busy = false;
             self.message = format!("Page {page} • {:.0}% (cached)", scale * 100.0);
             return Task::none();

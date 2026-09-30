@@ -170,7 +170,8 @@ impl DocumentModel {
             }
             Edit::Remove(id) => Edit::Add(self.items.get(id).ok_or(EditError::UnknownId)?.clone()),
         };
-        self.view.invalidate()?;
+        // The PDF bitmap and the native annotation overlay are separate.
+        // Editing the overlay must not discard an in-flight page render.
         match edit {
             Edit::Add(item) => {
                 self.used_ids.insert(item.id);
@@ -246,14 +247,13 @@ mod tests {
         assert_eq!(doc.items().count(), 1);
     }
     #[test]
-    fn every_edit_rejects_old_rendered_pages() {
+    fn overlay_edits_keep_in_flight_page_render_valid() {
         let mut doc = DocumentModel::new(DocumentId(1), 1).unwrap();
         let ticket = doc.view().ticket();
         doc.apply(Edit::Add(annotation(1))).unwrap();
-        assert!(!doc.view().accepts(ticket));
-        let after_add = doc.view().ticket();
+        assert!(doc.view().accepts(ticket));
         doc.undo().unwrap();
-        assert!(!doc.view().accepts(after_add));
+        assert!(doc.view().accepts(ticket));
     }
     #[test]
     fn ids_are_not_reused_after_delete_or_undo() {

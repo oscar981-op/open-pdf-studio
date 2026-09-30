@@ -2,11 +2,11 @@
 // Adapted from Hakan Seven / OpenCADStudio, commit 2a15a370f6886d3e8695ab81c7d677e0cd484451.
 // Source: src/ui/ribbon/widgets.rs and src/ui/ribbon/mod.rs.
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
-use super::{App, Message, RibbonTab};
+use super::{annotation_layer, AnnotationTool, App, Message, RibbonTab};
 use iced::widget::{
     button, column, container, image, row, scrollable, svg, text, text_input, tooltip, Space,
 };
-use iced::{Background, Border, Color, Element, Fill, Length, Theme};
+use iced::{Background, Border, Color, Element, Fill, Theme};
 use std::time::Duration;
 
 pub const ROW_H: f32 = 26.0;
@@ -90,6 +90,15 @@ fn large_tool(
     bytes: &'static [u8],
     action: Option<Message>,
 ) -> Element<'static, Message> {
+    large_tool_active(label, bytes, action, false)
+}
+
+fn large_tool_active(
+    label: &'static str,
+    bytes: &'static [u8],
+    action: Option<Message>,
+    active: bool,
+) -> Element<'static, Message> {
     let btn = button(
         column![
             container(icon_state(bytes, LARGE_ICON, action.is_some()))
@@ -105,7 +114,7 @@ fn large_tool(
         .height(Fill),
     )
     .on_press_maybe(action)
-    .style(|theme, status| tool_btn_style(theme, false, status))
+    .style(move |theme, status| tool_btn_style(theme, active, status))
     .width(LARGE_W)
     .height(Fill)
     .padding(4);
@@ -184,8 +193,22 @@ pub fn view(app: &App) -> Element<'_, Message> {
         quick_access(OPEN, "Open", Some(Message::ShowOpen)),
         quick_access(SAVE, "Save", None),
         quick_access(PRINT, "Print", None),
-        quick_access(icon_asset!("ui/undo.svg"), "Undo", None),
-        quick_access(icon_asset!("ui/redo.svg"), "Redo", None),
+        quick_access(
+            icon_asset!("ui/undo.svg"),
+            "Undo",
+            app.document
+                .as_ref()
+                .filter(|d| d.model.can_undo())
+                .map(|_| Message::Undo)
+        ),
+        quick_access(
+            icon_asset!("ui/redo.svg"),
+            "Redo",
+            app.document
+                .as_ref()
+                .filter(|d| d.model.can_redo())
+                .map(|_| Message::Redo)
+        ),
     ]
     .spacing(2)
     .align_y(iced::Center);
@@ -214,7 +237,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
             vec![
                 large_tool("Line", icon_asset!("line.svg"), None),
                 large_tool("Polyline", icon_asset!("polyline.svg"), None),
-                large_tool("Rectangle", icon_asset!("shapes/rect.svg"), None),
+                large_tool_active(
+                    "Rectangle",
+                    icon_asset!("shapes/rect.svg"),
+                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Rectangle)),
+                    app.annotation_tool == AnnotationTool::Rectangle,
+                ),
                 large_tool("Circle", icon_asset!("circle/circle.svg"), None),
             ],
         ));
@@ -222,6 +250,24 @@ pub fn view(app: &App) -> Element<'_, Message> {
         groups = groups.push(group(
             "Annotation",
             vec![
+                large_tool_active(
+                    "Select",
+                    icon_asset!("blocks/select_objects.svg"),
+                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Select)),
+                    app.annotation_tool == AnnotationTool::Select,
+                ),
+                large_tool_active(
+                    "Rectangle",
+                    icon_asset!("shapes/rect.svg"),
+                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Rectangle)),
+                    app.annotation_tool == AnnotationTool::Rectangle,
+                ),
+                large_tool_active(
+                    "Highlight",
+                    icon_asset!("blocks/quick_select.svg"),
+                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Highlight)),
+                    app.annotation_tool == AnnotationTool::Highlight,
+                ),
                 large_tool("Text", icon_asset!("text.svg"), None),
                 large_tool("Measure", icon_asset!("measure.svg"), None),
             ],
@@ -310,13 +356,29 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .width(Fill)
     .style(surface);
     let center: Element<'_, Message> =
-        if let Some(handle) = app.document.as_ref().and_then(|d| d.bitmap.clone()) {
-            scrollable(
-                container(image(handle).width(Length::Shrink))
-                    .center_x(Fill)
-                    .padding(24),
-            )
-            .into()
+        if let Some(document) = app.document.as_ref().filter(|d| d.bitmap.is_some()) {
+            let handle = document.bitmap.clone().expect("filtered above");
+            let (width, height) = document.bitmap_size;
+            let annotations = document
+                .model
+                .items()
+                .filter(|item| item.page == document.displayed_page)
+                .collect();
+            let page = iced::widget::stack![
+                image(handle).width(width as f32).height(height as f32),
+                annotation_layer::view(
+                    annotations,
+                    app.annotation_tool,
+                    document.bitmap_page_points,
+                    document.bitmap_size
+                )
+            ];
+            scrollable(container(page).center_x(Fill).padding(24))
+                .direction(scrollable::Direction::Both {
+                    vertical: scrollable::Scrollbar::new(),
+                    horizontal: scrollable::Scrollbar::new(),
+                })
+                .into()
         } else {
             container(
                 column![

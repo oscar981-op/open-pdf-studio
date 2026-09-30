@@ -67,6 +67,15 @@ impl ParsedPdf {
         self.pdf.pages().len()
     }
 
+    pub fn page_dimensions(&self, page_number: usize) -> Result<(f32, f32), RenderError> {
+        let page = self
+            .pdf
+            .pages()
+            .get(page_number.checked_sub(1).ok_or(RenderError::InvalidPage)?)
+            .ok_or(RenderError::InvalidPage)?;
+        Ok(page.render_dimensions())
+    }
+
     pub fn parse_ms(&self) -> u128 {
         self.parse_ms
     }
