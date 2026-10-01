@@ -69,6 +69,10 @@ struct App {
     save_path_input: String,
     save_busy: bool,
     save_scroll_offset: Option<scrollable::AbsoluteOffset>,
+    print_dialog: bool,
+    print_path_input: String,
+    print_busy: bool,
+    print_scroll_offset: Option<scrollable::AbsoluteOffset>,
     text_dialog: bool,
     text_draft: String,
     pending_text_bounds: Option<Rect>,
@@ -183,6 +187,11 @@ enum Message {
     SavePathChanged(String),
     SaveAs,
     Saved(Result<String, String>),
+    ShowPrint,
+    CancelPrint,
+    PrintPathChanged(String),
+    PrintToPdf,
+    Printed(Result<String, String>),
     CancelOpen,
     TogglePages,
     ToggleProperties,
@@ -285,6 +294,68 @@ impl App {
                 match result {
                     Ok(path) => self.message = format!("Saved PDF: {path}"),
                     Err(error) => self.message = format!("Save As failed: {error}"),
+                }
+            }
+            Message::ShowPrint => {
+                if let Some(document) = &self.document {
+                    let path = std::path::Path::new(&document.path);
+                    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+                    self.print_path_input = path
+                        .with_file_name(format!("{stem}-print.pdf"))
+                        .to_string_lossy()
+                        .into_owned();
+                    self.print_dialog = true;
+                    self.print_scroll_offset = Some(self.page_scroll_offset);
+                }
+            }
+            Message::CancelPrint => {
+                self.print_dialog = false;
+                if let Some(offset) = self.print_scroll_offset.take() {
+                    self.page_scroll_offset = offset;
+                    return scroll_page_to(offset);
+                }
+            }
+            Message::PrintPathChanged(value) => self.print_path_input = value,
+            Message::PrintToPdf => {
+                if self.print_busy {
+                    return Task::none();
+                }
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                let path = self.print_path_input.trim().to_owned();
+                if path.is_empty() {
+                    self.message = "Enter a print PDF destination path".into();
+                    return Task::none();
+                }
+                if std::path::Path::new(&path) == std::path::Path::new(&document.path) {
+                    self.message = "Choose a different path for the print PDF".into();
+                    return Task::none();
+                }
+                let source = Arc::clone(&document.source_bytes);
+                let annotations: Vec<_> = document.model.items().cloned().collect();
+                self.print_dialog = false;
+                self.print_busy = true;
+                self.message = "Creating print PDF…".into();
+                let print = Task::perform(
+                    async move {
+                        let bytes = pdf_save::export_annotations(&source, &annotations)?;
+                        pdf_save::save_new(std::path::Path::new(&path), &bytes)?;
+                        Ok(path)
+                    },
+                    Message::Printed,
+                );
+                if let Some(offset) = self.print_scroll_offset.take() {
+                    self.page_scroll_offset = offset;
+                    return Task::batch([print, scroll_page_to(offset)]);
+                }
+                return print;
+            }
+            Message::Printed(result) => {
+                self.print_busy = false;
+                match result {
+                    Ok(path) => self.message = format!("Print PDF created: {path}"),
+                    Err(error) => self.message = format!("Print to PDF failed: {error}"),
                 }
             }
             Message::CancelOpen => self.open_dialog = false,

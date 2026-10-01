@@ -23,7 +23,7 @@ cargo run --release --bin opds-native-app -- "/pad/naar/tekening.pdf"
 ```
 
 Open toont nu een afzonderlijk invoervenster voor het PDF-pad. Een bestandsbrowser ontbreekt nog.
-Gebruik voor interactie altijd de release-build: de debug-build rendert zware PDF's veel trager en vertraagt ook de ribbon. Onder Annotation kunnen Highlight en Text Box met slepen op de pagina worden geplaatst. Text Box opent een invoervenster voor één regel tekst; een geselecteerd tekstvak kan via Properties worden bewerkt. Rectangle staat onder Drawing; Select staat onder Home en kan annotaties aanwijzen en verslepen; de acht grepen van een selectie wijzigen de grootte. Delete verwijdert de selectie. Het eigenschappenpaneel toont type, pagina, positie en afmetingen. De overlay, selectie, wijzigingen en undo/redo zijn Rust. Ctrl+scroll zoomt op de pagina rond de muispositie. Meerregelige tekst, opmaak en printen ontbreken nog. Save As schrijft de native annotaties met `lopdf` als incrementele PDF-update, met printbare appearances. Deze eerste versie maakt uitsluitend een nieuw bestand en ondersteunt alleen niet-versleutelde, ongedraaide pagina's met een origin-zero MediaBox/CropBox en tekst met glyphs in het ingebedde Liberation Sans-lettertype.
+Gebruik voor interactie altijd de release-build: de debug-build rendert zware PDF's veel trager en vertraagt ook de ribbon. Onder Annotation kunnen Highlight en Text Box met slepen op de pagina worden geplaatst. Text Box opent een invoervenster voor één regel tekst; een geselecteerd tekstvak kan via Properties worden bewerkt. Rectangle staat onder Drawing; Select staat onder Home en kan annotaties aanwijzen en verslepen; de acht grepen van een selectie wijzigen de grootte. Delete verwijdert de selectie. Het eigenschappenpaneel toont type, pagina, positie en afmetingen. De overlay, selectie, wijzigingen en undo/redo zijn Rust. Ctrl+scroll zoomt op de pagina rond de muispositie. Meerregelige tekst en opmaak ontbreken nog. Save As schrijft de native annotaties met `lopdf` als incrementele PDF-update, met printbare appearances. De titelbalk-Print en Print in de voorlopige View-ribbon openen nu een eerste pure-Rust afdrukpad: uitvoer naar een nieuw PDF-bestand met alle bronpagina's en native annotaties. Er wordt nog geen printopdracht aan een printer verstuurd; paginabereik, schaling en de overige instellingen uit het oorspronkelijke printvenster zijn nog niet overgezet. Deze eerste versie maakt uitsluitend een nieuw bestand en ondersteunt alleen niet-versleutelde, ongedraaide pagina's met een origin-zero MediaBox/CropBox en tekst met glyphs in het ingebedde Liberation Sans-lettertype.
 
 - [Architectuur en dependencybeleid](docs/architecture.md)
 - [Exacte UI-pariteit met huidige app](docs/current-ui-parity.md)
@@ -31,6 +31,7 @@ Gebruik voor interactie altijd de release-build: de debug-build rendert zware PD
 - [Migratie en acceptatie](docs/migration.md)
 - [Eerste engineproef en meetgrenzen](docs/phase1-2026-09-30.md)
 - [UI- en snelheidsvergelijking](docs/ui-performance-2026-10-01.md)
+- [Eerste native Print-pad en vergelijking](docs/print-2026-10-01.md)
 
 ## Lokale werkmappen
 

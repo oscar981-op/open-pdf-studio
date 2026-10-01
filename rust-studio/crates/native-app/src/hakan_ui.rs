@@ -750,7 +750,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             vec![
                 large_tool("Open", OPEN, Some(Message::ShowOpen)),
                 large_tool("Save As", SAVE, has_doc.then_some(Message::ShowSave)),
-                large_tool("Print", PRINT, None),
+                large_tool("Print", PRINT, has_doc.then_some(Message::ShowPrint)),
             ],
         ));
     }
@@ -850,7 +850,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
         app_icon,
         quick_access(OPEN, "Open", Some(Message::ShowOpen)),
         quick_access(SAVE, "Save As", has_doc.then_some(Message::ShowSave)),
-        quick_access(PRINT, "Print", None),
+        quick_access(PRINT, "Print", has_doc.then_some(Message::ShowPrint)),
         quick_access(pdf_icon!("preferencesIcon"), "Settings", None),
         quick_access(
             icon_asset!("ui/undo.svg"),
@@ -1105,7 +1105,35 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .width(Fill)
     .height(Fill)
     .into();
-    if app.save_dialog {
+    if app.print_dialog {
+        let dialog = container(
+            column![
+                text("Print").size(20),
+                text("Destination: PDF file").size(14),
+                text("All pages and native annotations are included. Creates a new file; existing files are not overwritten.").size(12),
+                text_input("Destination PDF path", &app.print_path_input)
+                    .on_input(Message::PrintPathChanged)
+                    .on_submit(Message::PrintToPdf),
+                row![
+                    button("Create print PDF").on_press(Message::PrintToPdf),
+                    button("Cancel").on_press(Message::CancelPrint)
+                ]
+                .spacing(8)
+            ]
+            .spacing(16)
+            .padding(24),
+        )
+        .width(600)
+        .style(surface);
+        iced::widget::stack![
+            content,
+            iced::widget::opaque(container(dialog).center(Fill).style(|_| container::Style {
+                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.55).into()),
+                ..Default::default()
+            }))
+        ]
+        .into()
+    } else if app.save_dialog {
         let dialog = container(
             column![
                 text("Save PDF As").size(20),
