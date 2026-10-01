@@ -8,7 +8,7 @@ use super::{
 };
 use iced::widget::{
     button, checkbox, column, container, image, mouse_area, row, rule, scrollable, svg, text,
-    text_input, tooltip, Space,
+    text_editor, text_input, tooltip, Space,
 };
 use iced::{Background, Border, Color, Element, Fill, Padding, Theme};
 use std::time::Duration;
@@ -1424,9 +1424,22 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     "Text box"
                 })
                 .size(20),
-                text_input("Annotation text", &app.text_draft)
-                    .on_input(Message::TextChanged)
-                    .on_submit(Message::CommitText),
+                text_editor(&app.text_draft)
+                    .placeholder("Annotation text")
+                    .height(140)
+                    .key_binding(|press| {
+                        if press.modifiers.control()
+                            && matches!(
+                                press.key,
+                                iced::keyboard::Key::Named(iced::keyboard::key::Named::Enter)
+                            )
+                        {
+                            Some(text_editor::Binding::Custom(Message::CommitText))
+                        } else {
+                            text_editor::Binding::from_key_press(press)
+                        }
+                    })
+                    .on_action(Message::TextEdited),
                 row![
                     button("Save text").on_press(Message::CommitText),
                     button("Cancel").on_press(Message::CancelText)

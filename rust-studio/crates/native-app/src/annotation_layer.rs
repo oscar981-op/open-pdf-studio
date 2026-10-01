@@ -354,13 +354,18 @@ impl canvas::Program<Message> for Layer<'_> {
                     }
                 }
                 Kind::Text { value } => {
-                    frame.fill_text(canvas::Text {
-                        content: value.clone(),
-                        position: top_left,
-                        max_width: size.width,
-                        color: Color::from_rgb8(20, 20, 20),
-                        size: iced::Pixels(14.0 * scale_y),
-                        ..Default::default()
+                    frame.with_clip(Rectangle::new(top_left, size), |frame| {
+                        frame.fill_text(canvas::Text {
+                            content: value.clone(),
+                            position: top_left,
+                            // PDF Save As also keeps explicit line breaks and clips
+                            // long lines instead of wrapping them automatically.
+                            max_width: f32::INFINITY,
+                            color: Color::from_rgb8(20, 20, 20),
+                            size: iced::Pixels(14.0 * scale_y),
+                            line_height: iced::Pixels(18.0 * scale_y).into(),
+                            ..Default::default()
+                        });
                     });
                 }
             }

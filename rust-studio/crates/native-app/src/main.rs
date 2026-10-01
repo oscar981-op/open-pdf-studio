@@ -93,7 +93,7 @@ struct App {
     print_preview_document_revision: u64,
     print_preview_error: String,
     text_dialog: bool,
-    text_draft: String,
+    text_draft: iced::widget::text_editor::Content,
     pending_text_bounds: Option<Rect>,
     editing_text_id: Option<u64>,
     text_scroll_offset: Option<scrollable::AbsoluteOffset>,
@@ -381,7 +381,7 @@ enum Message {
     ResizeAnnotation(u64, Rect),
     RemoveSelectedAnnotation,
     AddAnnotation(Rect),
-    TextChanged(String),
+    TextEdited(iced::widget::text_editor::Action),
     CommitText,
     CancelText,
     EditSelectedText,
@@ -724,12 +724,12 @@ impl App {
                 self.annotation_tool = tool;
                 self.annotation_tool_activated = true;
             }
-            Message::TextChanged(value) => self.text_draft = value,
+            Message::TextEdited(action) => self.text_draft.perform(action),
             Message::CancelText => {
                 self.text_dialog = false;
                 self.pending_text_bounds = None;
                 self.editing_text_id = None;
-                self.text_draft.clear();
+                self.text_draft = iced::widget::text_editor::Content::new();
                 if let Some(offset) = self.text_scroll_offset.take() {
                     self.page_scroll_offset = offset;
                     return scroll_page_to(offset);
@@ -743,7 +743,7 @@ impl App {
                             ..
                         }) = document.model.get(id)
                         {
-                            self.text_draft = value.clone();
+                            self.text_draft = iced::widget::text_editor::Content::with_text(value);
                             self.editing_text_id = Some(id);
                             self.pending_text_bounds = None;
                             self.text_dialog = true;
@@ -753,8 +753,12 @@ impl App {
                 }
             }
             Message::CommitText => {
-                let value = self.text_draft.trim().to_owned();
-                if value.is_empty() {
+                let value = self
+                    .text_draft
+                    .text()
+                    .replace("\r\n", "\n")
+                    .replace('\r', "\n");
+                if value.trim().is_empty() {
                     self.message = "Enter annotation text".into();
                     return Task::none();
                 }
@@ -793,7 +797,7 @@ impl App {
                 self.text_dialog = false;
                 self.pending_text_bounds = None;
                 self.editing_text_id = None;
-                self.text_draft.clear();
+                self.text_draft = iced::widget::text_editor::Content::new();
                 if let Some(offset) = self.text_scroll_offset.take() {
                     self.page_scroll_offset = offset;
                     return scroll_page_to(offset);
@@ -876,7 +880,7 @@ impl App {
                 if self.annotation_tool == AnnotationTool::Text {
                     self.pending_text_bounds = Some(bounds);
                     self.editing_text_id = None;
-                    self.text_draft.clear();
+                    self.text_draft = iced::widget::text_editor::Content::new();
                     self.text_dialog = true;
                     self.text_scroll_offset = Some(self.page_scroll_offset);
                     return Task::none();

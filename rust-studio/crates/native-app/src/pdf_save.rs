@@ -195,6 +195,9 @@ fn embed_font(doc: &mut Document, annotations: &[Annotation]) -> Result<ObjectId
     for annotation in annotations {
         if let Kind::Text { value } = &annotation.kind {
             for ch in value.chars() {
+                if ch == '\n' {
+                    continue;
+                }
                 let gid = glyph_id(&face, ch)?;
                 if let Some(previous) = mapping.insert(gid.0, ch) {
                     if previous != ch {
@@ -396,7 +399,6 @@ fn annotation_object(
             .into_bytes()
         }
         Kind::Text { value } => {
-            let encoded = glyphs(value)?;
             let font_id = text_font.ok_or("Missing embedded text font")?;
             dictionary.set("Subtype", Object::Name(b"FreeText".to_vec()));
             dictionary.set("Contents", unicode_string(value));
@@ -409,11 +411,18 @@ fn annotation_object(
             let mut resources = Dictionary::new();
             resources.set("Font", fonts);
             appearance.set("Resources", resources);
-            format!(
-                "q BT /OPDS0 14 Tf 0 0 0 rg 0 {:.3} Td <{encoded}> Tj ET Q",
-                (b.height - 14.0).max(0.0)
-            )
-            .into_bytes()
+            let mut content = format!(
+                "q 0 0 {:.3} {:.3} re W n BT /OPDS0 14 Tf 0 0 0 rg\n",
+                b.width, b.height
+            );
+            for (index, line) in value.split('\n').enumerate() {
+                let encoded = glyphs(line)?;
+                let baseline = b.height - 14.0 - index as f64 * 18.0;
+                writeln!(content, "1 0 0 1 0 {baseline:.3} Tm <{encoded}> Tj")
+                    .map_err(|e| e.to_string())?;
+            }
+            content.push_str("ET Q");
+            content.into_bytes()
         }
     };
     let content = if let Some(matrix) = appearance_matrix(rotation, b.width, b.height) {
@@ -1312,6 +1321,69 @@ mod tests {
             [0.0, 0.0, 20.0, 100.0]
         );
         assert!(stream.content.starts_with(b"q 0 1 -1 0 20.00000000 0 cm"));
+        assert_eq!(
+            opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(saved))
+                .unwrap()
+                .page_count(),
+            1
+        );
+    }
+
+    #[test]
+    fn save_multiline_unicode_text_clips_to_box_on_rotated_page() {
+        let mut source = Document::load_mem(&source_pdf()).unwrap();
+        let page = *source.get_pages().values().next().unwrap();
+        source.get_dictionary_mut(page).unwrap().set("Rotate", 90);
+        let mut source_bytes = Vec::new();
+        source.save_to(&mut source_bytes).unwrap();
+        let value = "One\nCafé Ω\nThree";
+        let saved = export_annotations(
+            &source_bytes,
+            &[Annotation {
+                id: 13,
+                page: 0,
+                bounds: Rect {
+                    x: 10.0,
+                    y: 20.0,
+                    width: 100.0,
+                    height: 50.0,
+                },
+                kind: Kind::Text {
+                    value: value.into(),
+                },
+            }],
+        )
+        .unwrap();
+        let output = Document::load_mem(&saved).unwrap();
+        let page = *output.get_pages().values().next().unwrap();
+        let annots = output.get_page_annotations(page).unwrap();
+        let contents = annots[1].get(b"Contents").unwrap().as_str().unwrap();
+        assert!(contents.starts_with(&[0xFE, 0xFF]));
+        assert_eq!(contents.len(), 2 + value.encode_utf16().count() * 2);
+        let ap_id = annots[1]
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let content = std::str::from_utf8(
+            &output
+                .get_object(ap_id)
+                .unwrap()
+                .as_stream()
+                .unwrap()
+                .content,
+        )
+        .unwrap();
+        assert!(content.starts_with("q 0 1 -1 0 50.00000000 0 cm\n"));
+        assert!(content.contains("q 0 0 100.000 50.000 re W n"));
+        assert_eq!(content.matches(" Tj").count(), 3);
+        for baseline in [36.0_f64, 18.0, 0.0] {
+            assert!(content.contains(&format!("1 0 0 1 0 {baseline:.3} Tm")));
+        }
         assert_eq!(
             opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(saved))
                 .unwrap()
