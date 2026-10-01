@@ -2,7 +2,7 @@
 // Adapted from Hakan Seven / OpenCADStudio, commit 2a15a370f6886d3e8695ab81c7d677e0cd484451.
 // Source: src/ui/ribbon/widgets.rs and src/ui/ribbon/mod.rs.
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
-use super::{annotation_layer, AnnotationTool, App, Message, PrintRange, RibbonTab};
+use super::{annotation_layer, AnnotationTool, App, Message, PrintRange, PrintSubset, RibbonTab};
 use iced::widget::{
     button, column, container, image, mouse_area, row, rule, scrollable, svg, text, text_input,
     tooltip, Space,
@@ -1118,6 +1118,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .unwrap_or(0);
         let selection = super::print_pages(
             app.print_range,
+            app.print_subset,
             current.saturating_sub(1),
             &app.print_custom_pages,
             total,
@@ -1157,6 +1158,32 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .spacing(6),
             text_input("Pages, e.g. 1, 3-5", &app.print_custom_pages)
                 .on_input(Message::PrintCustomPagesChanged),
+            row![
+                text("Subset").size(12),
+                button("All")
+                    .on_press(Message::SelectPrintSubset(PrintSubset::All))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_subset == PrintSubset::All,
+                        status
+                    )),
+                button("Odd")
+                    .on_press(Message::SelectPrintSubset(PrintSubset::Odd))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_subset == PrintSubset::Odd,
+                        status
+                    )),
+                button("Even")
+                    .on_press(Message::SelectPrintSubset(PrintSubset::Even))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_subset == PrintSubset::Even,
+                        status
+                    )),
+            ]
+            .spacing(8)
+            .align_y(iced::Center),
             text(format!(
                 "Selected: {}",
                 match &selection {
@@ -1167,7 +1194,8 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .size(12),
             rule::horizontal(1),
             row![
-                button("Create print PDF").on_press(Message::PrintToPdf),
+                button("Create print PDF")
+                    .on_press_maybe(selection.is_ok().then_some(Message::PrintToPdf)),
                 button("Cancel").on_press(Message::CancelPrint)
             ]
             .spacing(8),
@@ -1186,15 +1214,15 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .into()
         };
         let right = column![
-            text(format!(
-                "Preview · page {} of {}",
-                app.print_preview_page + 1,
-                total
-            ))
+            text(if selection.is_ok() {
+                format!("Preview · page {} of {}", app.print_preview_page + 1, total)
+            } else {
+                "Preview unavailable".to_owned()
+            })
             .size(12),
             container(preview)
                 .width(320)
-                .height(420)
+                .height(400)
                 .align_x(iced::alignment::Horizontal::Center)
                 .align_y(iced::alignment::Vertical::Center)
                 .style(surface),
