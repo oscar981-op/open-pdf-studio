@@ -298,4 +298,21 @@ mod tests {
         assert_eq!(doc.hit_test(1, [5.0, 5.0], 0.0), None);
         assert_eq!(doc.hit_test(0, [f64::NAN, 5.0], 1.0), None);
     }
+
+    #[test]
+    fn text_edit_is_reversible_without_losing_geometry() {
+        let mut doc = DocumentModel::new(DocumentId(1), 1).unwrap();
+        let original = annotation(1);
+        doc.apply(Edit::Add(original.clone())).unwrap();
+        let mut revised = original.clone();
+        revised.kind = Kind::Text {
+            value: "revised".into(),
+        };
+        doc.apply(Edit::Replace(revised.clone())).unwrap();
+        assert_eq!(doc.get(1), Some(&revised));
+        assert!(doc.undo().unwrap());
+        assert_eq!(doc.get(1), Some(&original));
+        assert!(doc.redo().unwrap());
+        assert_eq!(doc.get(1), Some(&revised));
+    }
 }

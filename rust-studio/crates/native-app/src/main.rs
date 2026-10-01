@@ -64,6 +64,11 @@ struct App {
     busy: bool,
     message: String,
     open_dialog: bool,
+    text_dialog: bool,
+    text_draft: String,
+    pending_text_bounds: Option<Rect>,
+    editing_text_id: Option<u64>,
+    text_scroll_offset: Option<scrollable::AbsoluteOffset>,
     hide_pages: bool,
     hide_properties: bool,
     ribbon_collapsed: bool,
@@ -80,6 +85,7 @@ enum AnnotationTool {
     Select,
     Rectangle,
     Highlight,
+    Text,
 }
 
 struct OpenDocument {
@@ -189,6 +195,10 @@ enum Message {
     ResizeAnnotation(u64, Rect),
     RemoveSelectedAnnotation,
     AddAnnotation(Rect),
+    TextChanged(String),
+    CommitText,
+    CancelText,
+    EditSelectedText,
     Undo,
     Redo,
     Close,
@@ -216,6 +226,81 @@ impl App {
             Message::SelectAnnotationTool(tool) => {
                 self.annotation_tool = tool;
                 self.annotation_tool_activated = true;
+            }
+            Message::TextChanged(value) => self.text_draft = value,
+            Message::CancelText => {
+                self.text_dialog = false;
+                self.pending_text_bounds = None;
+                self.editing_text_id = None;
+                self.text_draft.clear();
+                if let Some(offset) = self.text_scroll_offset.take() {
+                    self.page_scroll_offset = offset;
+                    return scroll_page_to(offset);
+                }
+            }
+            Message::EditSelectedText => {
+                if let Some(document) = &self.document {
+                    if let Some(id) = document.selected_annotation {
+                        if let Some(Annotation {
+                            kind: Kind::Text { value },
+                            ..
+                        }) = document.model.get(id)
+                        {
+                            self.text_draft = value.clone();
+                            self.editing_text_id = Some(id);
+                            self.pending_text_bounds = None;
+                            self.text_dialog = true;
+                            self.text_scroll_offset = Some(self.page_scroll_offset);
+                        }
+                    }
+                }
+            }
+            Message::CommitText => {
+                let value = self.text_draft.trim().to_owned();
+                if value.is_empty() {
+                    self.message = "Enter annotation text".into();
+                    return Task::none();
+                }
+                if let Some(document) = &mut self.document {
+                    if let Some(id) = self.editing_text_id {
+                        if let Some(mut item) = document.model.get(id).cloned() {
+                            if matches!(item.kind, Kind::Text { .. }) {
+                                item.kind = Kind::Text { value };
+                                match document.model.apply(Edit::Replace(item)) {
+                                    Ok(()) => self.message = "Text annotation updated".into(),
+                                    Err(error) => {
+                                        self.message = format!("Text edit failed: {error:?}")
+                                    }
+                                }
+                            }
+                        }
+                    } else if let Some(bounds) = self.pending_text_bounds {
+                        let item = Annotation {
+                            id: self.next_annotation_id,
+                            page: document.displayed_page,
+                            bounds,
+                            kind: Kind::Text { value },
+                        };
+                        match document.model.apply(Edit::Add(item)) {
+                            Ok(()) => {
+                                document.selected_annotation = Some(self.next_annotation_id);
+                                self.next_annotation_id += 1;
+                                self.message = "Text annotation added".into();
+                            }
+                            Err(error) => {
+                                self.message = format!("Text annotation failed: {error:?}")
+                            }
+                        }
+                    }
+                }
+                self.text_dialog = false;
+                self.pending_text_bounds = None;
+                self.editing_text_id = None;
+                self.text_draft.clear();
+                if let Some(offset) = self.text_scroll_offset.take() {
+                    self.page_scroll_offset = offset;
+                    return scroll_page_to(offset);
+                }
             }
             Message::SelectAnnotation(id) => {
                 if let Some(document) = &mut self.document {
@@ -291,11 +376,20 @@ impl App {
                 }
             }
             Message::AddAnnotation(bounds) => {
+                if self.annotation_tool == AnnotationTool::Text {
+                    self.pending_text_bounds = Some(bounds);
+                    self.editing_text_id = None;
+                    self.text_draft.clear();
+                    self.text_dialog = true;
+                    self.text_scroll_offset = Some(self.page_scroll_offset);
+                    return Task::none();
+                }
                 if let Some(document) = &mut self.document {
                     let color_rgb = match self.annotation_tool {
                         AnnotationTool::Rectangle => [231, 76, 60],
                         AnnotationTool::Highlight => [255, 226, 67],
                         AnnotationTool::Select => return Task::none(),
+                        AnnotationTool::Text => unreachable!("handled above"),
                     };
                     let item = Annotation {
                         id: self.next_annotation_id,

@@ -506,7 +506,11 @@ fn annotation_properties() -> Element<'static, Message> {
 
 // Layout and icon source: Open PDF Studio's CommentTab.jsx and ribbonIcons.js.
 // Group composition remains Hakan Seven's OpenCADStudio ribbon port above.
-fn ribbon_annotation(has_doc: bool, highlighting: bool) -> Vec<Element<'static, Message>> {
+fn ribbon_annotation(
+    has_doc: bool,
+    highlighting: bool,
+    typing: bool,
+) -> Vec<Element<'static, Message>> {
     vec![
         group(
             "Drawing",
@@ -524,8 +528,8 @@ fn ribbon_annotation(has_doc: bool, highlighting: bool) -> Vec<Element<'static, 
                 large_tool_sized(
                     "Text Box",
                     annotation_icon!("textboxIcon"),
-                    None,
-                    false,
+                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Text)),
+                    typing,
                     48.0,
                 ),
                 large_tool_sized(
@@ -736,6 +740,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
         for item in ribbon_annotation(
             has_doc,
             app.annotation_tool_activated && app.annotation_tool == AnnotationTool::Highlight,
+            app.annotation_tool_activated && app.annotation_tool == AnnotationTool::Text,
         ) {
             groups = groups.push(item);
         }
@@ -1035,7 +1040,15 @@ pub fn view(app: &App) -> Element<'_, Message> {
                         annotation.bounds.width, annotation.bounds.height
                     ))
                     .size(12),
-                )
+                );
+            if matches!(
+                annotation.kind,
+                opds_native_core::annotations::Kind::Text { .. }
+            ) {
+                properties =
+                    properties.push(button("Edit text").on_press(Message::EditSelectedText));
+            }
+            properties = properties
                 .push(button("Delete annotation").on_press(Message::RemoveSelectedAnnotation));
         }
         workspace = workspace.push(container(properties).width(230).height(Fill).style(surface));
@@ -1092,7 +1105,38 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .width(Fill)
     .height(Fill)
     .into();
-    if app.open_dialog {
+    if app.text_dialog {
+        let dialog = container(
+            column![
+                text(if app.editing_text_id.is_some() {
+                    "Edit text box"
+                } else {
+                    "Text box"
+                })
+                .size(20),
+                text_input("Annotation text", &app.text_draft)
+                    .on_input(Message::TextChanged)
+                    .on_submit(Message::CommitText),
+                row![
+                    button("Save text").on_press(Message::CommitText),
+                    button("Cancel").on_press(Message::CancelText)
+                ]
+                .spacing(8)
+            ]
+            .spacing(16)
+            .padding(24),
+        )
+        .width(520)
+        .style(surface);
+        iced::widget::stack![
+            content,
+            iced::widget::opaque(container(dialog).center(Fill).style(|_| container::Style {
+                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.55).into()),
+                ..Default::default()
+            }))
+        ]
+        .into()
+    } else if app.open_dialog {
         let dialog = container(
             column![
                 text("Open PDF").size(20),
