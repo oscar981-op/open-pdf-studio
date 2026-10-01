@@ -1,11 +1,13 @@
 //! Reusable pure-Rust PDF raster entry point for the future native viewer.
 #![forbid(unsafe_code)]
 
+mod imported_annotations;
+
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
 use hayro::vello_cpu::color::palette::css::WHITE;
 use hayro::{RenderCache, RenderSettings};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 pub const MAX_SIDE: f64 = 4096.0;
@@ -43,6 +45,7 @@ impl std::error::Error for RenderError {}
 pub struct ParsedPdf {
     pdf: Pdf,
     parse_ms: u128,
+    imported_annotations: Vec<OnceLock<Vec<imported_annotations::ImportedAnnotation>>>,
 }
 
 impl std::fmt::Debug for ParsedPdf {
@@ -57,9 +60,11 @@ impl ParsedPdf {
     pub fn open(bytes: Arc<Vec<u8>>) -> Result<Self, RenderError> {
         let started = Instant::now();
         let pdf = Pdf::new(bytes).map_err(|error| RenderError::Parse(format!("{error:?}")))?;
+        let imported_annotations = (0..pdf.pages().len()).map(|_| OnceLock::new()).collect();
         Ok(Self {
             pdf,
             parse_ms: started.elapsed().as_millis(),
+            imported_annotations,
         })
     }
 
@@ -111,9 +116,21 @@ impl ParsedPdf {
         );
         let width = u32::from(pixmap.width());
         let height = u32::from(pixmap.height());
-        let rgba = pixmap.data_as_u8_slice().to_vec();
+        let mut rgba = pixmap.data_as_u8_slice().to_vec();
         if width == 0 || height == 0 || rgba.len() != width as usize * height as usize * 4 {
             return Err(RenderError::InvalidBitmap);
+        }
+        let annotations = self.imported_annotations[page_number - 1]
+            .get_or_init(|| imported_annotations::read(page));
+        if !annotations.is_empty() {
+            imported_annotations::paint(
+                annotations,
+                &mut rgba,
+                width,
+                height,
+                page.initial_transform(true).as_coeffs(),
+                f64::from(scale),
+            );
         }
         Ok(Raster {
             width,

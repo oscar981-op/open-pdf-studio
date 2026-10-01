@@ -16,7 +16,7 @@ python3 scripts/audit_dependencies.py
 python3 scripts/compare.py
 ```
 
-De native shell gebruikt Iced 0.14 met `wgpu` voor de GPU en `tiny-skia` als softwareterugval. Hayro 0.7.1 is als afzonderlijke Rust-library aangesloten en op een eerste corpus gemeten. Het bestand wordt buiten de UI-update gelezen en één keer per open document geparseerd; renderaanroepen delen de originele bytes en parser. Visuele verschillen, featurepariteit en platformafhankelijkheden moeten verder worden onderzocht.
+De native shell gebruikt Iced 0.14 met `wgpu` voor de GPU en `tiny-skia` als softwareterugval. Hayro 0.7.1 is als afzonderlijke Rust-library aangesloten en op een eerste corpus gemeten. Het bestand wordt buiten de UI-update gelezen en één keer per open document geparseerd; renderaanroepen delen de originele bytes en parser. De renderer tekent geïmporteerde Square- en Highlight-annotaties zonder `/AP` zelf en cachet hun gegevens per pagina; annotaties met `/AP` blijven bij Hayro. Visuele verschillen, featurepariteit en platformafhankelijkheden moeten verder worden onderzocht.
 
 ```sh
 cargo run --release --bin opds-native-app -- "/pad/naar/tekening.pdf"
@@ -32,6 +32,7 @@ Gebruik voor interactie altijd de release-build: de debug-build rendert zware PD
 - [Eerste engineproef en meetgrenzen](docs/phase1-2026-09-30.md)
 - [UI- en snelheidsvergelijking](docs/ui-performance-2026-10-01.md)
 - [Eerste native Print-pad en vergelijking](docs/print-2026-10-01.md)
+- [Preview van geïmporteerde annotaties zonder appearance](docs/imported-annotations-2026-10-01.md)
 
 ## Lokale werkmappen
 

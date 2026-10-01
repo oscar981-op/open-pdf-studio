@@ -8,3 +8,6 @@ publish.workspace = true
 [dependencies]
 hayro = "=0.7.1"
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+[dev-dependencies]
+lopdf = { version = "=0.34.0", default-features = false, features = ["nom_parser"] }
