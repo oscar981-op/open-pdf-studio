@@ -7,7 +7,9 @@ mod virtual_ipp;
 use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};
 use opds_engine_probe::{ParsedPdf, Raster};
-use opds_native_core::annotations::{Annotation, DocumentModel, Edit, Kind, Rect};
+use opds_native_core::annotations::{
+    Annotation, DocumentModel, Edit, Kind, Rect, DEFAULT_TEXT_FONT_SIZE, TEXT_FONT_SIZES,
+};
 use opds_native_core::{DocumentId, RenderTicket};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -31,6 +33,7 @@ fn theme(_: &App) -> Theme {
 
 fn boot() -> (App, Task<Message>) {
     let mut app = App::default();
+    app.text_font_size = DEFAULT_TEXT_FONT_SIZE;
     if let Some(path) = std::env::args().nth(1) {
         app.path_input = path;
         let task = app.update(Message::Open);
@@ -95,6 +98,7 @@ struct App {
     text_dialog: bool,
     text_draft: iced::widget::text_editor::Content,
     text_color: [u8; 3],
+    text_font_size: u16,
     pending_text_bounds: Option<Rect>,
     editing_text_id: Option<u64>,
     text_scroll_offset: Option<scrollable::AbsoluteOffset>,
@@ -386,6 +390,7 @@ enum Message {
     AddAnnotation(Rect),
     TextEdited(iced::widget::text_editor::Action),
     SetTextColor([u8; 3]),
+    SetTextFontSize(u16),
     CommitText,
     CancelText,
     EditSelectedText,
@@ -748,6 +753,28 @@ impl App {
                     }
                 }
             }
+            Message::SetTextFontSize(size) => {
+                if !TEXT_FONT_SIZES.contains(&size) {
+                    return Task::none();
+                }
+                self.text_font_size = size;
+                if !self.text_dialog {
+                    if let Some(document) = &mut self.document {
+                        if let Some(id) = document.selected_annotation {
+                            if let Some(mut item) = document.model.get(id).cloned() {
+                                if let Kind::Text { font_size, .. } = &mut item.kind {
+                                    if *font_size != size {
+                                        *font_size = size;
+                                        if document.model.apply(Edit::Replace(item)).is_ok() {
+                                            self.message = "Text size updated".into();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Message::CancelText => {
                 self.text_dialog = false;
                 self.active_ribbon = if self.editing_text_id.is_some() {
@@ -767,12 +794,18 @@ impl App {
                 if let Some(document) = &self.document {
                     if let Some(id) = document.selected_annotation {
                         if let Some(Annotation {
-                            kind: Kind::Text { value, color_rgb },
+                            kind:
+                                Kind::Text {
+                                    value,
+                                    color_rgb,
+                                    font_size,
+                                },
                             ..
                         }) = document.model.get(id)
                         {
                             self.text_draft = iced::widget::text_editor::Content::with_text(value);
                             self.text_color = *color_rgb;
+                            self.text_font_size = *font_size;
                             self.editing_text_id = Some(id);
                             self.pending_text_bounds = None;
                             self.text_dialog = true;
@@ -799,6 +832,7 @@ impl App {
                                 item.kind = Kind::Text {
                                     value,
                                     color_rgb: self.text_color,
+                                    font_size: self.text_font_size,
                                 };
                                 match document.model.apply(Edit::Replace(item)) {
                                     Ok(()) => self.message = "Text annotation updated".into(),
@@ -816,6 +850,7 @@ impl App {
                             kind: Kind::Text {
                                 value,
                                 color_rgb: self.text_color,
+                                font_size: self.text_font_size,
                             },
                         };
                         match document.model.apply(Edit::Add(item)) {
@@ -852,8 +887,14 @@ impl App {
                         .selected_annotation
                         .and_then(|id| document.model.get(id))
                     {
-                        if let Kind::Text { color_rgb, .. } = &selected.kind {
+                        if let Kind::Text {
+                            color_rgb,
+                            font_size,
+                            ..
+                        } = &selected.kind
+                        {
                             self.text_color = *color_rgb;
+                            self.text_font_size = *font_size;
                             self.active_ribbon = RibbonTab::Format;
                         } else if self.active_ribbon == RibbonTab::Format {
                             self.active_ribbon = RibbonTab::Comment;
@@ -935,6 +976,7 @@ impl App {
                     self.editing_text_id = None;
                     self.text_draft = iced::widget::text_editor::Content::new();
                     self.text_color = [0, 0, 0];
+                    self.text_font_size = DEFAULT_TEXT_FONT_SIZE;
                     self.text_dialog = true;
                     self.active_ribbon = RibbonTab::Format;
                     self.text_scroll_offset = Some(self.page_scroll_offset);

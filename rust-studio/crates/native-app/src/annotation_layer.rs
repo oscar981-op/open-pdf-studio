@@ -354,7 +354,11 @@ impl canvas::Program<Message> for Layer<'_> {
                         );
                     }
                 }
-                Kind::Text { value, color_rgb } => {
+                Kind::Text {
+                    value,
+                    color_rgb,
+                    font_size,
+                } => {
                     if self.editing_text != Some(annotation.id) {
                         frame.with_clip(Rectangle::new(top_left, size), |frame| {
                             frame.fill_text(canvas::Text {
@@ -364,8 +368,9 @@ impl canvas::Program<Message> for Layer<'_> {
                                 // long lines instead of wrapping them automatically.
                                 max_width: f32::INFINITY,
                                 color: Color::from_rgb8(color_rgb[0], color_rgb[1], color_rgb[2]),
-                                size: iced::Pixels(14.0 * scale_y),
-                                line_height: iced::Pixels(18.0 * scale_y).into(),
+                                size: iced::Pixels(f32::from(*font_size) * scale_y),
+                                line_height: iced::Pixels(f32::from(*font_size + 4) * scale_y)
+                                    .into(),
                                 ..Default::default()
                             });
                         });

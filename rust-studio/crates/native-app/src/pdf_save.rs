@@ -2,7 +2,7 @@
 //! The original bytes remain intact. New annotation appearances are mapped
 //! through the visible CropBox and quarter-turn page rotation.
 use lopdf::{Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream, StringFormat};
-use opds_native_core::annotations::{Annotation, Kind};
+use opds_native_core::annotations::{Annotation, Kind, TEXT_FONT_SIZES};
 use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
 use std::io::Write;
@@ -398,8 +398,16 @@ fn annotation_object(
             )
             .into_bytes()
         }
-        Kind::Text { value, color_rgb } => {
+        Kind::Text {
+            value,
+            color_rgb,
+            font_size,
+        } => {
+            if !TEXT_FONT_SIZES.contains(font_size) {
+                return Err(format!("Unsupported text size: {font_size} pt"));
+            }
             let font_id = text_font.ok_or("Missing embedded text font")?;
+            let size = f64::from(*font_size);
             let rgb = color_rgb.map(|v| f64::from(v) / 255.0);
             let color = format!("{:.3} {:.3} {:.3} rg", rgb[0], rgb[1], rgb[2]);
             dictionary.set("Subtype", Object::Name(b"FreeText".to_vec()));
@@ -408,7 +416,7 @@ fn annotation_object(
             dictionary.set(
                 "DA",
                 Object::String(
-                    format!("/OPDS0 14 Tf {color}").into_bytes(),
+                    format!("/OPDS0 {font_size} Tf {color}").into_bytes(),
                     StringFormat::Literal,
                 ),
             );
@@ -418,12 +426,12 @@ fn annotation_object(
             resources.set("Font", fonts);
             appearance.set("Resources", resources);
             let mut content = format!(
-                "q 0 0 {:.3} {:.3} re W n BT /OPDS0 14 Tf {color}\n",
+                "q 0 0 {:.3} {:.3} re W n BT /OPDS0 {font_size} Tf {color}\n",
                 b.width, b.height,
             );
             for (index, line) in value.split('\n').enumerate() {
                 let encoded = glyphs(line)?;
-                let baseline = b.height - 14.0 - index as f64 * 18.0;
+                let baseline = b.height - size - index as f64 * (size + 4.0);
                 writeln!(content, "1 0 0 1 0 {baseline:.3} Tm <{encoded}> Tj")
                     .map_err(|e| e.to_string())?;
             }
@@ -889,6 +897,7 @@ mod tests {
                 kind: Kind::Text {
                     value: "Café Ω Ж".into(),
                     color_rgb: [0, 0, 0],
+                    font_size: 16,
                 },
             },
         ];
@@ -940,11 +949,20 @@ mod tests {
             kind: Kind::Text {
                 value: "漢".into(),
                 color_rgb: [0, 0, 0],
+                font_size: 16,
             },
         };
         assert!(export_annotations(&source, &[item.clone()])
             .unwrap_err()
             .contains("not supported"));
+        item.kind = Kind::Text {
+            value: "A".into(),
+            color_rgb: [0, 0, 0],
+            font_size: 0,
+        };
+        assert!(export_annotations(&source, &[item.clone()])
+            .unwrap_err()
+            .contains("Unsupported text size"));
         item.bounds.x = 190.0;
         item.kind = Kind::Rectangle {
             color_rgb: [0, 0, 0],
@@ -1302,6 +1320,7 @@ mod tests {
                 kind: Kind::Text {
                     value: "Rotated".into(),
                     color_rgb: [0, 0, 0],
+                    font_size: 16,
                 },
             },
         ];
@@ -1355,11 +1374,12 @@ mod tests {
                     x: 10.0,
                     y: 20.0,
                     width: 100.0,
-                    height: 50.0,
+                    height: 80.0,
                 },
                 kind: Kind::Text {
                     value: value.into(),
                     color_rgb: [0, 102, 204],
+                    font_size: 24,
                 },
             }],
         )
@@ -1394,11 +1414,12 @@ mod tests {
                 .content,
         )
         .unwrap();
-        assert!(content.starts_with("q 0 1 -1 0 50.00000000 0 cm\n"));
-        assert!(content.contains("q 0 0 100.000 50.000 re W n"));
+        assert!(content.starts_with("q 0 1 -1 0 80.00000000 0 cm\n"));
+        assert!(content.contains("q 0 0 100.000 80.000 re W n"));
+        assert!(content.contains("/OPDS0 24 Tf"));
         assert!(content.contains("0.000 0.400 0.800 rg"));
         assert_eq!(content.matches(" Tj").count(), 3);
-        for baseline in [36.0_f64, 18.0, 0.0] {
+        for baseline in [56.0_f64, 28.0, 0.0] {
             assert!(content.contains(&format!("1 0 0 1 0 {baseline:.3} Tm")));
         }
         assert_eq!(

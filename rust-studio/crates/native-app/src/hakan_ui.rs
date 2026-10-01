@@ -7,8 +7,8 @@ use super::{
     PrintSubset, RibbonTab,
 };
 use iced::widget::{
-    button, checkbox, column, container, image, mouse_area, row, rule, scrollable, svg, text,
-    text_editor, text_input, tooltip, Space,
+    button, checkbox, column, container, image, mouse_area, pick_list, row, rule, scrollable, svg,
+    text, text_editor, text_input, tooltip, Space,
 };
 use iced::{Background, Border, Color, Element, Fill, Padding, Theme};
 use std::time::Duration;
@@ -712,7 +712,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 .padding([5, 16]),
         );
     }
-    let selected_text_color = app
+    let selected_text_style = app
         .document
         .as_ref()
         .and_then(|document| {
@@ -721,10 +721,14 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 .and_then(|id| document.model.get(id))
         })
         .and_then(|item| match &item.kind {
-            opds_native_core::annotations::Kind::Text { color_rgb, .. } => Some(*color_rgb),
+            opds_native_core::annotations::Kind::Text {
+                color_rgb,
+                font_size,
+                ..
+            } => Some((*color_rgb, *font_size)),
             _ => None,
         });
-    if app.text_dialog || selected_text_color.is_some() {
+    if app.text_dialog || selected_text_style.is_some() {
         top = top.push(
             button(text("Format").size(12))
                 .on_press(Message::SelectRibbon(RibbonTab::Format))
@@ -786,7 +790,9 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     let active = if app.text_dialog {
                         app.text_color
                     } else {
-                        selected_text_color.unwrap_or(app.text_color)
+                        selected_text_style
+                            .map(|style| style.0)
+                            .unwrap_or(app.text_color)
                     } == color;
                     button(
                         column![
@@ -805,6 +811,29 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     .into()
                 })
                 .collect(),
+        ));
+        let selected_size = if app.text_dialog {
+            app.text_font_size
+        } else {
+            selected_text_style
+                .map(|style| style.1)
+                .unwrap_or(app.text_font_size)
+        };
+        groups = groups.push(group(
+            "Font",
+            vec![column![
+                text("SIZE").size(9),
+                pick_list(
+                    opds_native_core::annotations::TEXT_FONT_SIZES,
+                    Some(selected_size),
+                    Message::SetTextFontSize,
+                )
+                .width(72),
+                text("pt").size(9),
+            ]
+            .spacing(2)
+            .align_x(iced::Center)
+            .into()],
         ));
     } else {
         groups = groups.push(group(
@@ -1023,6 +1052,10 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     let editor = text_editor(&app.text_draft)
                         .placeholder("Type text here")
                         .height(h)
+                        .size(iced::Pixels(f32::from(app.text_font_size) * scale_y))
+                        .line_height(iced::Pixels(f32::from(app.text_font_size + 4) * scale_y))
+                        .wrapping(iced::advanced::text::Wrapping::None)
+                        .padding(0)
                         .style(move |theme, status| {
                             let mut style = text_editor::default(theme, status);
                             style.background = Color::WHITE.into();

@@ -24,9 +24,19 @@ impl Rect {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
-    Rectangle { color_rgb: [u8; 3] },
-    Text { value: String, color_rgb: [u8; 3] },
+    Rectangle {
+        color_rgb: [u8; 3],
+    },
+    Text {
+        value: String,
+        color_rgb: [u8; 3],
+        font_size: u16,
+    },
 }
+
+pub const TEXT_FONT_SIZES: [u16; 16] =
+    [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72];
+pub const DEFAULT_TEXT_FONT_SIZE: u16 = 16;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Annotation {
@@ -49,6 +59,7 @@ pub enum EditError {
     UnknownId,
     InvalidPage,
     InvalidGeometry,
+    InvalidTextSize,
     GenerationExhausted,
 }
 
@@ -163,6 +174,11 @@ impl DocumentModel {
         if !item.bounds.valid() {
             return Err(EditError::InvalidGeometry);
         }
+        if let Kind::Text { font_size, .. } = item.kind {
+            if !TEXT_FONT_SIZES.contains(&font_size) {
+                return Err(EditError::InvalidTextSize);
+            }
+        }
         Ok(())
     }
     fn apply_raw(&mut self, edit: Edit, replay: bool) -> Result<Edit, EditError> {
@@ -221,6 +237,7 @@ mod tests {
             kind: Kind::Text {
                 value: "first".into(),
                 color_rgb: [0, 0, 0],
+                font_size: DEFAULT_TEXT_FONT_SIZE,
             },
         }
     }
@@ -260,6 +277,14 @@ mod tests {
         invalid = annotation(9);
         invalid.page = 1;
         assert_eq!(doc.apply(Edit::Add(invalid)), Err(EditError::InvalidPage));
+        invalid = annotation(10);
+        if let Kind::Text { font_size, .. } = &mut invalid.kind {
+            *font_size = 0;
+        }
+        assert_eq!(
+            doc.apply(Edit::Add(invalid)),
+            Err(EditError::InvalidTextSize)
+        );
         assert_eq!(doc.apply(Edit::Remove(50)), Err(EditError::UnknownId));
         assert_eq!(doc.view().ticket(), ticket);
         assert_eq!(doc.items().count(), 1);
@@ -309,6 +334,7 @@ mod tests {
         revised.kind = Kind::Text {
             value: "revised".into(),
             color_rgb: [0, 102, 204],
+            font_size: 24,
         };
         doc.apply(Edit::Replace(revised.clone())).unwrap();
         assert_eq!(doc.get(1), Some(&revised));
