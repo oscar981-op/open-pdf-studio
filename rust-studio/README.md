@@ -23,7 +23,7 @@ cargo run --release --bin opds-native-app -- "/pad/naar/tekening.pdf"
 ```
 
 Open toont nu een afzonderlijk invoervenster voor het PDF-pad. Een bestandsbrowser ontbreekt nog.
-Gebruik voor interactie altijd de release-build: de debug-build rendert zware PDF's veel trager en vertraagt ook de ribbon. Onder Annotation kunnen Rectangle en Highlight met slepen op de pagina worden geplaatst. Select kan annotaties aanwijzen en verslepen; Delete verwijdert de selectie. Het eigenschappenpaneel toont het geselecteerde type, de pagina en de positie. De overlay, selectie, wijzigingen en undo/redo zijn Rust. Ctrl+scroll zoomt op de pagina rond de muispositie. Tekst invoeren, formaatgrepen, PDF-opslag en printen ontbreken nog.
+Gebruik voor interactie altijd de release-build: de debug-build rendert zware PDF's veel trager en vertraagt ook de ribbon. Onder Annotation kunnen Rectangle en Highlight met slepen op de pagina worden geplaatst. Select kan annotaties aanwijzen en verslepen; de acht grepen van een selectie wijzigen de grootte. Delete verwijdert de selectie. Het eigenschappenpaneel toont type, pagina, positie en afmetingen. De overlay, selectie, wijzigingen en undo/redo zijn Rust. Ctrl+scroll zoomt op de pagina rond de muispositie. Tekst invoeren, PDF-opslag en printen ontbreken nog.
 
 - [Architectuur en dependencybeleid](docs/architecture.md)
 - [Exacte UI-pariteit met huidige app](docs/current-ui-parity.md)

@@ -186,6 +186,7 @@ enum Message {
     SelectAnnotationTool(AnnotationTool),
     SelectAnnotation(Option<u64>),
     MoveAnnotation(u64, [f64; 2]),
+    ResizeAnnotation(u64, Rect),
     RemoveSelectedAnnotation,
     AddAnnotation(Rect),
     Undo,
@@ -245,6 +246,31 @@ impl App {
                                 match document.model.apply(Edit::Replace(item)) {
                                     Ok(()) => self.message = "Annotation moved".into(),
                                     Err(error) => self.message = format!("Move failed: {error:?}"),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Message::ResizeAnnotation(id, bounds) => {
+                if let Some(document) = &mut self.document {
+                    if document.selected_annotation == Some(id) {
+                        let page_width = f64::from(document.bitmap_page_points.0);
+                        let page_height = f64::from(document.bitmap_page_points.1);
+                        if bounds.x < 0.0
+                            || bounds.y < 0.0
+                            || bounds.x + bounds.width > page_width + 1e-6
+                            || bounds.y + bounds.height > page_height + 1e-6
+                        {
+                            self.message = "Resize outside page".into();
+                        } else if let Some(mut item) = document.model.get(id).cloned() {
+                            if item.page == document.displayed_page && item.bounds != bounds {
+                                item.bounds = bounds;
+                                match document.model.apply(Edit::Replace(item)) {
+                                    Ok(()) => self.message = "Annotation resized".into(),
+                                    Err(error) => {
+                                        self.message = format!("Resize failed: {error:?}")
+                                    }
                                 }
                             }
                         }

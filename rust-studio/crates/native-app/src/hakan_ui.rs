@@ -869,6 +869,13 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     ))
                     .size(12),
                 )
+                .push(
+                    text(format!(
+                        "W / H   {:.1} / {:.1} pt",
+                        annotation.bounds.width, annotation.bounds.height
+                    ))
+                    .size(12),
+                )
                 .push(button("Delete annotation").on_press(Message::RemoveSelectedAnnotation));
         }
         workspace = workspace.push(container(properties).width(230).height(Fill).style(surface));

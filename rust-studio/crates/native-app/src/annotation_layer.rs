@@ -17,6 +17,7 @@ pub struct Layer<'a> {
 pub struct State {
     drawing: Option<(Point, Point)>,
     moving: Option<MoveState>,
+    resizing: Option<ResizeState>,
     modifiers: keyboard::Modifiers,
 }
 
@@ -26,12 +27,147 @@ struct MoveState {
     current: Point,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Handle {
+    NorthWest,
+    North,
+    NorthEast,
+    East,
+    SouthEast,
+    South,
+    SouthWest,
+    West,
+}
+
+impl Handle {
+    const ALL: [Self; 8] = [
+        Self::NorthWest,
+        Self::North,
+        Self::NorthEast,
+        Self::East,
+        Self::SouthEast,
+        Self::South,
+        Self::SouthWest,
+        Self::West,
+    ];
+
+    fn point(self, top_left: Point, size: Size) -> Point {
+        let mid_x = top_left.x + size.width / 2.0;
+        let mid_y = top_left.y + size.height / 2.0;
+        let right = top_left.x + size.width;
+        let bottom = top_left.y + size.height;
+        match self {
+            Self::NorthWest => top_left,
+            Self::North => Point::new(mid_x, top_left.y),
+            Self::NorthEast => Point::new(right, top_left.y),
+            Self::East => Point::new(right, mid_y),
+            Self::SouthEast => Point::new(right, bottom),
+            Self::South => Point::new(mid_x, bottom),
+            Self::SouthWest => Point::new(top_left.x, bottom),
+            Self::West => Point::new(top_left.x, mid_y),
+        }
+    }
+
+    fn interaction(self) -> mouse::Interaction {
+        match self {
+            Self::NorthWest | Self::SouthEast => mouse::Interaction::ResizingDiagonallyDown,
+            Self::NorthEast | Self::SouthWest => mouse::Interaction::ResizingDiagonallyUp,
+            Self::North | Self::South => mouse::Interaction::ResizingVertically,
+            Self::East | Self::West => mouse::Interaction::ResizingHorizontally,
+        }
+    }
+}
+
+struct ResizeState {
+    id: u64,
+    handle: Handle,
+    original: Rect,
+    current: Point,
+}
+
 impl Layer<'_> {
     fn page_point(&self, point: Point, bounds: Rectangle) -> [f64; 2] {
         [
             f64::from(point.x * self.page_points.0 / bounds.width),
             f64::from(point.y * self.page_points.1 / bounds.height),
         ]
+    }
+
+    fn selected_handle(&self, point: Point, bounds: Rectangle) -> Option<(u64, Handle, Rect)> {
+        let item = self.model.get(self.selected?)?;
+        if item.page != self.page {
+            return None;
+        }
+        let rect = item.bounds;
+        let top_left = Point::new(
+            rect.x as f32 * bounds.width / self.page_points.0,
+            rect.y as f32 * bounds.height / self.page_points.1,
+        );
+        let size = Size::new(
+            rect.width as f32 * bounds.width / self.page_points.0,
+            rect.height as f32 * bounds.height / self.page_points.1,
+        );
+        Handle::ALL.into_iter().find_map(|handle| {
+            let grip = handle.point(top_left, size);
+            ((point.x - grip.x).abs() <= 7.0 && (point.y - grip.y).abs() <= 7.0)
+                .then_some((item.id, handle, rect))
+        })
+    }
+
+    fn resized_bounds(
+        &self,
+        original: Rect,
+        handle: Handle,
+        position: Point,
+        bounds: Rectangle,
+    ) -> Rect {
+        resize_bounds(
+            original,
+            handle,
+            self.page_point(position, bounds),
+            [f64::from(self.page_points.0), f64::from(self.page_points.1)],
+            [
+                f64::from(3.0 * self.page_points.0 / bounds.width),
+                f64::from(3.0 * self.page_points.1 / bounds.height),
+            ],
+        )
+    }
+}
+
+fn resize_bounds(
+    original: Rect,
+    handle: Handle,
+    target: [f64; 2],
+    page_size: [f64; 2],
+    min_size: [f64; 2],
+) -> Rect {
+    let (mut left, mut top) = (original.x, original.y);
+    let (mut right, mut bottom) = (original.x + original.width, original.y + original.height);
+    let min_width = min_size[0].min(original.width);
+    let min_height = min_size[1].min(original.height);
+    if matches!(handle, Handle::NorthWest | Handle::West | Handle::SouthWest) {
+        left = target[0].clamp(0.0, (right - min_width).max(0.0));
+    }
+    if matches!(handle, Handle::NorthEast | Handle::East | Handle::SouthEast) {
+        right = target[0].clamp(left + min_width, page_size[0].max(left + min_width));
+    }
+    if matches!(
+        handle,
+        Handle::NorthWest | Handle::North | Handle::NorthEast
+    ) {
+        top = target[1].clamp(0.0, (bottom - min_height).max(0.0));
+    }
+    if matches!(
+        handle,
+        Handle::SouthWest | Handle::South | Handle::SouthEast
+    ) {
+        bottom = target[1].clamp(top + min_height, page_size[1].max(top + min_height));
+    }
+    Rect {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
     }
 }
 
@@ -73,6 +209,15 @@ impl canvas::Program<Message> for Layer<'_> {
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = cursor.position_in(bounds)?;
                 if self.tool == AnnotationTool::Select {
+                    if let Some((id, handle, original)) = self.selected_handle(position, bounds) {
+                        state.resizing = Some(ResizeState {
+                            id,
+                            handle,
+                            original,
+                            current: position,
+                        });
+                        return Some(canvas::Action::capture());
+                    }
                     let point = self.page_point(position, bounds);
                     let tolerance = f64::from(4.0 * self.page_points.0 / bounds.width);
                     let id = self.model.hit_test(self.page, point, tolerance);
@@ -101,9 +246,27 @@ impl canvas::Program<Message> for Layer<'_> {
                         return Some(canvas::Action::request_redraw().and_capture());
                     }
                 }
+                if let Some(resizing) = &mut state.resizing {
+                    if let Some(position) = position {
+                        resizing.current = position;
+                        return Some(canvas::Action::request_redraw().and_capture());
+                    }
+                }
                 None
             }
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                if let Some(resizing) = state.resizing.take() {
+                    let position = cursor.position_in(bounds).unwrap_or(resizing.current);
+                    let rect =
+                        self.resized_bounds(resizing.original, resizing.handle, position, bounds);
+                    if rect != resizing.original {
+                        return Some(
+                            canvas::Action::publish(Message::ResizeAnnotation(resizing.id, rect))
+                                .and_capture(),
+                        );
+                    }
+                    return Some(canvas::Action::request_redraw().and_capture());
+                }
                 if let Some(moving) = state.moving.take() {
                     let end = cursor.position_in(bounds).unwrap_or(moving.current);
                     let delta = self.page_point(
@@ -155,7 +318,20 @@ impl canvas::Program<Message> for Layer<'_> {
         let scale_y = bounds.height / self.page_points.1;
         let mut selection = None;
         for annotation in self.model.items().filter(|item| item.page == self.page) {
-            let rect = annotation.bounds;
+            let rect = if let Some(resizing) = &state.resizing {
+                if resizing.id == annotation.id {
+                    self.resized_bounds(
+                        resizing.original,
+                        resizing.handle,
+                        resizing.current,
+                        bounds,
+                    )
+                } else {
+                    annotation.bounds
+                }
+            } else {
+                annotation.bounds
+            };
             let mut top_left = Point::new(rect.x as f32 * scale_x, rect.y as f32 * scale_y);
             if let Some(moving) = &state.moving {
                 if moving.id == annotation.id {
@@ -200,12 +376,8 @@ impl canvas::Program<Message> for Layer<'_> {
                     .with_color(Color::from_rgb8(31, 136, 255))
                     .with_width(1.5),
             );
-            for point in [
-                top_left,
-                Point::new(top_left.x + size.width, top_left.y),
-                Point::new(top_left.x, top_left.y + size.height),
-                Point::new(top_left.x + size.width, top_left.y + size.height),
-            ] {
+            for handle in Handle::ALL {
+                let point = handle.point(top_left, size);
                 frame.fill_rectangle(
                     Point::new(point.x - 3.0, point.y - 3.0),
                     Size::new(6.0, 6.0),
@@ -234,8 +406,14 @@ impl canvas::Program<Message> for Layer<'_> {
         if state.moving.is_some() {
             return mouse::Interaction::Grabbing;
         }
+        if let Some(resizing) = &state.resizing {
+            return resizing.handle.interaction();
+        }
         if self.tool == AnnotationTool::Select {
             if let Some(point) = cursor.position_in(bounds) {
+                if let Some((_, handle, _)) = self.selected_handle(point, bounds) {
+                    return handle.interaction();
+                }
                 let tolerance = f64::from(4.0 * self.page_points.0 / bounds.width);
                 if self
                     .model
@@ -272,4 +450,64 @@ pub fn view<'a>(
     .width(bitmap_size.0 as f32)
     .height(bitmap_size.1 as f32)
     .into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn corner_resize_stays_on_page_and_keeps_positive_size() {
+        let original = Rect {
+            x: 10.0,
+            y: 20.0,
+            width: 30.0,
+            height: 40.0,
+        };
+        let page = [100.0, 100.0];
+        let min = [3.0, 3.0];
+        assert_eq!(
+            resize_bounds(original, Handle::SouthEast, [200.0, 200.0], page, min),
+            Rect {
+                x: 10.0,
+                y: 20.0,
+                width: 90.0,
+                height: 80.0,
+            }
+        );
+        assert_eq!(
+            resize_bounds(original, Handle::NorthWest, [200.0, 200.0], page, min),
+            Rect {
+                x: 37.0,
+                y: 57.0,
+                width: 3.0,
+                height: 3.0,
+            }
+        );
+    }
+
+    #[test]
+    fn side_resize_changes_only_one_axis() {
+        let original = Rect {
+            x: 10.0,
+            y: 20.0,
+            width: 30.0,
+            height: 40.0,
+        };
+        assert_eq!(
+            resize_bounds(
+                original,
+                Handle::East,
+                [70.0, -10.0],
+                [100.0, 100.0],
+                [3.0, 3.0],
+            ),
+            Rect {
+                x: 10.0,
+                y: 20.0,
+                width: 60.0,
+                height: 40.0,
+            }
+        );
+    }
 }
