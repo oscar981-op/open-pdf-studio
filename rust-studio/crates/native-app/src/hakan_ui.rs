@@ -656,7 +656,11 @@ pub fn view(app: &App) -> Element<'_, Message> {
     }
     let ribbon = container(
         scrollable(groups).direction(scrollable::Direction::Horizontal(
-            scrollable::Scrollbar::new(),
+            scrollable::Scrollbar::new()
+                .width(0)
+                .scroller_width(0)
+                .margin(0)
+                .spacing(0),
         )),
     )
     .width(Fill)
@@ -772,10 +776,21 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     document.bitmap_size
                 )
             ];
-            scrollable(container(page).center_x(Fill).padding(24))
+            let page_with_pan_room = row![
+                Space::new().width(super::HORIZONTAL_PAN_MARGIN),
+                page,
+                Space::new().width(super::HORIZONTAL_PAN_MARGIN),
+            ];
+            scrollable(container(page_with_pan_room).padding(24))
+                .id(iced::widget::Id::new("pdf-page-scroll"))
+                .on_scroll(Message::PageScrolled)
                 .direction(scrollable::Direction::Both {
                     vertical: scrollable::Scrollbar::new(),
-                    horizontal: scrollable::Scrollbar::new(),
+                    horizontal: scrollable::Scrollbar::new()
+                        .width(0)
+                        .scroller_width(0)
+                        .margin(0)
+                        .spacing(0),
                 })
                 .into()
         } else {

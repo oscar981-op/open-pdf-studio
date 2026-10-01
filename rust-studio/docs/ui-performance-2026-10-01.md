@@ -28,7 +28,7 @@ Via XTEST zijn toetsenbord- en muisgebeurtenissen naar het native venster gestuu
 | Ribbon inklappen/uitklappen | Groepen verdwijnen en verschijnen; tabrij blijft zichtbaar |
 | Venster maximaliseren, herstellen, slepen, minimaliseren | Via eigen titelbalk bediend; vensterstaat en positie gecontroleerd |
 
-De Ctrl+scroll-implementatie vergroot de pagina, maar houdt het punt onder de muis nog niet vast; de bestaande app doet dat wel. De actieve CAD-toolknoppen in andere tabs gebruiken nog de oudere layout. Uitgeschakelde knoppen kunnen nog niet functioneel worden getest.
+Na de eerste UI-test is Ctrl+scroll uitgebreid met een muisanker op beide assen. De scrollpositie wordt pas na de geaccepteerde PDF-render aangepast; het anker wordt berekend vanaf de daadwerkelijk getoonde bitmap, ook wanneer nieuwe wielgebeurtenissen eerdere renders inhalen. In de venstertest bleef tekst bij 92% → 122% onder de muis. Vier snelle wielstappen brachten de pagina naar 283% en vier stappen terug herstelden 92% en de oorspronkelijke paginapositie. Op `Technische tekening.pdf` in een venster van 1000 × 700 px werd 23% → 40% → 23% via de UI getest; de tekening keerde terug op dezelfde positie en een rechthoekannotatie bleef plaatsbaar. De actieve CAD-toolknoppen in andere tabs gebruiken nog de oudere layout. Uitgeschakelde knoppen kunnen nog niet functioneel worden getest.
 
 ## Meting
 

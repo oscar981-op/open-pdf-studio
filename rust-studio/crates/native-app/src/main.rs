@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 mod annotation_layer;
 mod hakan_ui;
-use iced::widget::image;
+use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};
 use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::{Annotation, DocumentModel, Edit, Kind, Rect};
@@ -11,6 +11,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
+const HORIZONTAL_PAN_MARGIN: f32 = 512.0;
 
 fn theme(_: &App) -> Theme {
     Theme::custom(
@@ -50,6 +51,10 @@ fn main() -> iced::Result {
         .run()
 }
 
+fn scroll_page_to(offset: scrollable::AbsoluteOffset) -> Task<Message> {
+    iced::widget::operation::scroll_to(iced::widget::Id::new("pdf-page-scroll"), offset)
+}
+
 #[derive(Default)]
 struct App {
     path_input: String,
@@ -65,6 +70,8 @@ struct App {
     annotation_tool: AnnotationTool,
     annotation_tool_activated: bool,
     next_annotation_id: u64,
+    page_scroll_offset: scrollable::AbsoluteOffset,
+    pending_zoom_offset: Option<scrollable::AbsoluteOffset>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -82,6 +89,7 @@ struct OpenDocument {
     bitmap: Option<image::Handle>,
     bitmap_size: (u32, u32),
     bitmap_page_points: (f32, f32),
+    bitmap_scale: f32,
     displayed_page: usize,
     selected_annotation: Option<u64>,
     page_cache: VecDeque<CachedPage>,
@@ -100,6 +108,7 @@ impl OpenDocument {
     fn cache_bitmap(&mut self, page: usize, scale: f32, raster: Raster) {
         self.bitmap_size = (raster.width, raster.height);
         self.bitmap_page_points = (raster.page_width_pt, raster.page_height_pt);
+        self.bitmap_scale = scale;
         self.displayed_page = page;
         let bytes = raster.rgba.len();
         let bitmap = image::Handle::from_rgba(raster.width, raster.height, raster.rgba);
@@ -164,7 +173,8 @@ enum Message {
     Open,
     Loaded(u64, Result<(String, Arc<ParsedPdf>, f32, Raster), String>),
     Zoom(f64),
-    WheelZoom(f32),
+    WheelZoom { amount: f32, anchor: [f32; 2] },
+    PageScrolled(scrollable::Viewport),
     GoToPage(usize),
     Rendered(RenderTicket, Result<Raster, String>),
     SelectRibbon(RibbonTab),
@@ -190,6 +200,9 @@ impl App {
             Message::CancelOpen => self.open_dialog = false,
             Message::TogglePages => self.hide_pages = !self.hide_pages,
             Message::ToggleProperties => self.hide_properties = !self.hide_properties,
+            Message::PageScrolled(viewport) => {
+                self.page_scroll_offset = viewport.absolute_offset();
+            }
             Message::PathChanged(value) => self.path_input = value,
             Message::SelectRibbon(tab) => self.active_ribbon = tab,
             Message::ToggleRibbonCollapsed => self.ribbon_collapsed = !self.ribbon_collapsed,
@@ -348,17 +361,25 @@ impl App {
                             bitmap: None,
                             bitmap_size: (0, 0),
                             bitmap_page_points: (0.0, 0.0),
+                            bitmap_scale: initial_scale,
                             displayed_page: 0,
                             selected_annotation: None,
                             page_cache: VecDeque::new(),
                         };
                         document.cache_bitmap(0, initial_scale, raster);
                         self.document = Some(document);
+                        self.page_scroll_offset = scrollable::AbsoluteOffset {
+                            x: HORIZONTAL_PAN_MARGIN,
+                            y: 0.0,
+                        };
+                        self.pending_zoom_offset = None;
+                        return scroll_page_to(self.page_scroll_offset);
                     }
                     Err(error) => self.message = format!("PDF open/render failed: {error}"),
                 }
             }
             Message::Zoom(scale) => {
+                self.pending_zoom_offset = None;
                 if let Some(document) = &mut self.document {
                     if document.model.zoom_at(scale, [0.0, 0.0]).is_err() {
                         return Task::none();
@@ -366,17 +387,43 @@ impl App {
                 }
                 return self.render_current_page();
             }
-            Message::WheelZoom(amount) => {
+            Message::WheelZoom { amount, anchor } => {
                 if let Some(document) = &mut self.document {
                     let scale = document.model.view().viewport().scale();
                     let next = (scale * 1.15_f64.powf(f64::from(amount))).clamp(0.1, 8.0);
-                    if document.model.zoom_at(next, [0.0, 0.0]).is_err() {
+                    if (next - scale).abs() < f64::EPSILON {
                         return Task::none();
                     }
+                    if document
+                        .model
+                        .zoom_at(next, [f64::from(anchor[0]), f64::from(anchor[1])])
+                        .is_err()
+                    {
+                        return Task::none();
+                    }
+                    let current = self.page_scroll_offset;
+                    let factor = (next / f64::from(document.bitmap_scale)) as f32;
+                    self.pending_zoom_offset = Some(scrollable::AbsoluteOffset {
+                        x: (current.x + anchor[0] * (factor - 1.0)).max(0.0),
+                        y: (current.y + anchor[1] * (factor - 1.0)).max(0.0),
+                    });
                 }
-                return self.render_current_page();
+                let render = self.render_current_page();
+                if self.busy {
+                    return render;
+                }
+                if let Some(offset) = self.pending_zoom_offset {
+                    self.page_scroll_offset = offset;
+                }
+                return Task::batch([
+                    render,
+                    self.pending_zoom_offset
+                        .take()
+                        .map_or_else(Task::none, scroll_page_to),
+                ]);
             }
             Message::GoToPage(page) => {
+                self.pending_zoom_offset = None;
                 if let Some(document) = &mut self.document {
                     if document.model.go_to_page(page).is_err() {
                         return Task::none();
@@ -401,13 +448,22 @@ impl App {
                         let scale = view.viewport().scale() as f32;
                         document.cache_bitmap(page, scale, raster);
                         self.message = format!("{}×{} px", width, height);
+                        if let Some(offset) = self.pending_zoom_offset.take() {
+                            self.page_scroll_offset = offset;
+                            return scroll_page_to(offset);
+                        }
                     }
-                    Err(error) => self.message = format!("Render failed: {error}"),
+                    Err(error) => {
+                        self.pending_zoom_offset = None;
+                        self.message = format!("Render failed: {error}");
+                    }
                 }
             }
             Message::Close => {
                 self.next_load += 1;
                 self.document = None;
+                self.page_scroll_offset = scrollable::AbsoluteOffset::default();
+                self.pending_zoom_offset = None;
                 self.busy = false;
                 self.message.clear();
             }
@@ -431,6 +487,7 @@ impl App {
             document.bitmap = Some(cached.bitmap.clone());
             document.bitmap_size = cached.bitmap_size;
             document.bitmap_page_points = cached.page_points;
+            document.bitmap_scale = scale;
             document.displayed_page = cached.page;
             self.busy = false;
             self.message = format!("Page {page} • {:.0}% (cached)", scale * 100.0);

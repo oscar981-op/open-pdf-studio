@@ -60,7 +60,14 @@ impl canvas::Program<Message> for Layer<'_> {
                 if amount == 0.0 {
                     None
                 } else {
-                    Some(canvas::Action::publish(Message::WheelZoom(amount)).and_capture())
+                    let position = cursor.position_in(bounds)?;
+                    Some(
+                        canvas::Action::publish(Message::WheelZoom {
+                            amount,
+                            anchor: [position.x, position.y],
+                        })
+                        .and_capture(),
+                    )
                 }
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
