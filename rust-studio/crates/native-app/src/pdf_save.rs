@@ -2,7 +2,7 @@
 //! The original bytes remain intact. New annotation appearances are mapped
 //! through the visible CropBox and quarter-turn page rotation.
 use lopdf::{Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream, StringFormat};
-use opds_native_core::annotations::{Annotation, Kind, TEXT_FONT_SIZES};
+use opds_native_core::annotations::{Annotation, Kind, TextAlign, TEXT_FONT_SIZES};
 use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
 use std::io::Write;
@@ -171,14 +171,15 @@ fn glyph_id(face: &Face<'_>, ch: char) -> Result<GlyphId, String> {
         .ok_or_else(|| format!("Embedded font has no glyph for U+{code:04X}"))
 }
 
-fn glyphs(value: &str) -> Result<String, String> {
-    let face = font_face()?;
+fn encoded_line(face: &Face<'_>, value: &str, size: f64) -> Result<(String, f64), String> {
     let mut hex = String::new();
+    let mut advance = 0_u64;
     for ch in value.chars() {
-        let id = glyph_id(&face, ch)?;
+        let id = glyph_id(face, ch)?;
         write!(hex, "{:04X}", id.0).map_err(|e| e.to_string())?;
+        advance += u64::from(face.glyph_hor_advance(id).ok_or("Missing glyph width")?);
     }
-    Ok(hex)
+    Ok((hex, advance as f64 * size / f64::from(face.units_per_em())))
 }
 
 fn unicode_string(value: &str) -> Object {
@@ -402,6 +403,7 @@ fn annotation_object(
             value,
             color_rgb,
             font_size,
+            align,
         } => {
             if !TEXT_FONT_SIZES.contains(font_size) {
                 return Err(format!("Unsupported text size: {font_size} pt"));
@@ -413,6 +415,14 @@ fn annotation_object(
             dictionary.set("Subtype", Object::Name(b"FreeText".to_vec()));
             dictionary.set("Contents", unicode_string(value));
             dictionary.set("C", array(&rgb));
+            dictionary.set(
+                "Q",
+                match align {
+                    TextAlign::Left => 0_i64,
+                    TextAlign::Center => 1_i64,
+                    TextAlign::Right => 2_i64,
+                },
+            );
             dictionary.set(
                 "DA",
                 Object::String(
@@ -429,10 +439,16 @@ fn annotation_object(
                 "q 0 0 {:.3} {:.3} re W n BT /OPDS0 {font_size} Tf {color}\n",
                 b.width, b.height,
             );
+            let face = font_face()?;
             for (index, line) in value.split('\n').enumerate() {
-                let encoded = glyphs(line)?;
+                let (encoded, line_width) = encoded_line(&face, line, size)?;
                 let baseline = b.height - size - index as f64 * (size + 4.0);
-                writeln!(content, "1 0 0 1 0 {baseline:.3} Tm <{encoded}> Tj")
+                let x = match align {
+                    TextAlign::Left => 0.0,
+                    TextAlign::Center => (b.width - line_width) / 2.0,
+                    TextAlign::Right => b.width - line_width,
+                };
+                writeln!(content, "1 0 0 1 {x:.3} {baseline:.3} Tm <{encoded}> Tj")
                     .map_err(|e| e.to_string())?;
             }
             content.push_str("ET Q");
@@ -898,6 +914,7 @@ mod tests {
                     value: "Café Ω Ж".into(),
                     color_rgb: [0, 0, 0],
                     font_size: 16,
+                    align: TextAlign::Left,
                 },
             },
         ];
@@ -950,6 +967,7 @@ mod tests {
                 value: "漢".into(),
                 color_rgb: [0, 0, 0],
                 font_size: 16,
+                align: TextAlign::Left,
             },
         };
         assert!(export_annotations(&source, &[item.clone()])
@@ -959,6 +977,7 @@ mod tests {
             value: "A".into(),
             color_rgb: [0, 0, 0],
             font_size: 0,
+            align: TextAlign::Left,
         };
         assert!(export_annotations(&source, &[item.clone()])
             .unwrap_err()
@@ -1321,6 +1340,7 @@ mod tests {
                     value: "Rotated".into(),
                     color_rgb: [0, 0, 0],
                     font_size: 16,
+                    align: TextAlign::Left,
                 },
             },
         ];
@@ -1380,6 +1400,7 @@ mod tests {
                     value: value.into(),
                     color_rgb: [0, 102, 204],
                     font_size: 24,
+                    align: TextAlign::Center,
                 },
             }],
         )
@@ -1390,6 +1411,7 @@ mod tests {
         let contents = annots[1].get(b"Contents").unwrap().as_str().unwrap();
         assert!(contents.starts_with(&[0xFE, 0xFF]));
         assert_eq!(contents.len(), 2 + value.encode_utf16().count() * 2);
+        assert_eq!(annots[1].get(b"Q").unwrap().as_i64().unwrap(), 1);
         assert_eq!(annots[1].get(b"C").unwrap().as_array().unwrap().len(), 3);
         assert!(
             std::str::from_utf8(annots[1].get(b"DA").unwrap().as_str().unwrap())
@@ -1419,8 +1441,11 @@ mod tests {
         assert!(content.contains("/OPDS0 24 Tf"));
         assert!(content.contains("0.000 0.400 0.800 rg"));
         assert_eq!(content.matches(" Tj").count(), 3);
-        for baseline in [56.0_f64, 28.0, 0.0] {
-            assert!(content.contains(&format!("1 0 0 1 0 {baseline:.3} Tm")));
+        let face = font_face().unwrap();
+        for (line, baseline) in value.split('\n').zip([56.0_f64, 28.0, 0.0]) {
+            let (_, line_width) = encoded_line(&face, line, 24.0).unwrap();
+            let x = (100.0 - line_width) / 2.0;
+            assert!(content.contains(&format!("1 0 0 1 {x:.3} {baseline:.3} Tm")));
         }
         assert_eq!(
             opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(saved))

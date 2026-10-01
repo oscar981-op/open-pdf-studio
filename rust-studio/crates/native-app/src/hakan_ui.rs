@@ -11,6 +11,7 @@ use iced::widget::{
     text, text_editor, text_input, tooltip, Space,
 };
 use iced::{Background, Border, Color, Element, Fill, Padding, Theme};
+use opds_native_core::annotations::TextAlign;
 use std::time::Duration;
 
 pub const ROW_H: f32 = 26.0;
@@ -724,8 +725,9 @@ pub fn view(app: &App) -> Element<'_, Message> {
             opds_native_core::annotations::Kind::Text {
                 color_rgb,
                 font_size,
+                align,
                 ..
-            } => Some((*color_rgb, *font_size)),
+            } => Some((*color_rgb, *font_size, *align)),
             _ => None,
         });
     if app.text_dialog || selected_text_style.is_some() {
@@ -834,6 +836,32 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .spacing(2)
             .align_x(iced::Center)
             .into()],
+        ));
+        let selected_align = if app.text_dialog {
+            app.text_align
+        } else {
+            selected_text_style
+                .map(|style| style.2)
+                .unwrap_or(app.text_align)
+        };
+        groups = groups.push(group(
+            "Paragraph",
+            [
+                ("Left", TextAlign::Left),
+                ("Center", TextAlign::Center),
+                ("Right", TextAlign::Right),
+            ]
+            .into_iter()
+            .map(|(label, align)| {
+                button(text(label).size(11))
+                    .on_press(Message::SetTextAlign(align))
+                    .style(move |_, status| pdf_tool_style(selected_align == align, status))
+                    .width(54)
+                    .height(66)
+                    .padding([4, 2])
+                    .into()
+            })
+            .collect(),
         ));
     } else {
         groups = groups.push(group(
@@ -1052,6 +1080,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     let editor = text_editor(&app.text_draft)
                         .placeholder("Type text here")
                         .height(h)
+                        .font(iced::Font::with_name("Liberation Sans"))
                         .size(iced::Pixels(f32::from(app.text_font_size) * scale_y))
                         .line_height(iced::Pixels(f32::from(app.text_font_size + 4) * scale_y))
                         .wrapping(iced::advanced::text::Wrapping::None)

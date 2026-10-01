@@ -31,7 +31,16 @@ pub enum Kind {
         value: String,
         color_rgb: [u8; 3],
         font_size: u16,
+        align: TextAlign,
     },
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
 }
 
 pub const TEXT_FONT_SIZES: [u16; 16] =
@@ -238,6 +247,7 @@ mod tests {
                 value: "first".into(),
                 color_rgb: [0, 0, 0],
                 font_size: DEFAULT_TEXT_FONT_SIZE,
+                align: TextAlign::Left,
             },
         }
     }
@@ -335,6 +345,7 @@ mod tests {
             value: "revised".into(),
             color_rgb: [0, 102, 204],
             font_size: 24,
+            align: TextAlign::Center,
         };
         doc.apply(Edit::Replace(revised.clone())).unwrap();
         assert_eq!(doc.get(1), Some(&revised));

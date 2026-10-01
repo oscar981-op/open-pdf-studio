@@ -3,7 +3,7 @@ use super::{AnnotationTool, Message};
 use iced::widget::canvas::{self, Canvas, Frame, Geometry, Stroke};
 use iced::{keyboard, mouse};
 use iced::{Color, Element, Point, Rectangle, Renderer, Size, Theme};
-use opds_native_core::annotations::{DocumentModel, Kind, Rect};
+use opds_native_core::annotations::{DocumentModel, Kind, Rect, TextAlign};
 
 pub struct Layer<'a> {
     pub model: &'a DocumentModel,
@@ -358,21 +358,43 @@ impl canvas::Program<Message> for Layer<'_> {
                     value,
                     color_rgb,
                     font_size,
+                    align,
                 } => {
                     if self.editing_text != Some(annotation.id) {
                         frame.with_clip(Rectangle::new(top_left, size), |frame| {
-                            frame.fill_text(canvas::Text {
-                                content: value.clone(),
-                                position: top_left,
-                                // PDF Save As also keeps explicit line breaks and clips
-                                // long lines instead of wrapping them automatically.
-                                max_width: f32::INFINITY,
-                                color: Color::from_rgb8(color_rgb[0], color_rgb[1], color_rgb[2]),
-                                size: iced::Pixels(f32::from(*font_size) * scale_y),
-                                line_height: iced::Pixels(f32::from(*font_size + 4) * scale_y)
-                                    .into(),
-                                ..Default::default()
-                            });
+                            let (x, align_x) = match align {
+                                TextAlign::Left => {
+                                    (top_left.x, iced::advanced::text::Alignment::Left)
+                                }
+                                TextAlign::Center => (
+                                    top_left.x + size.width / 2.0,
+                                    iced::advanced::text::Alignment::Center,
+                                ),
+                                TextAlign::Right => (
+                                    top_left.x + size.width,
+                                    iced::advanced::text::Alignment::Right,
+                                ),
+                            };
+                            for (index, line) in value.split('\n').enumerate() {
+                                frame.fill_text(canvas::Text {
+                                    content: line.to_owned(),
+                                    position: Point::new(
+                                        x,
+                                        top_left.y
+                                            + index as f32 * f32::from(*font_size + 4) * scale_y,
+                                    ),
+                                    max_width: f32::INFINITY,
+                                    color: Color::from_rgb8(
+                                        color_rgb[0],
+                                        color_rgb[1],
+                                        color_rgb[2],
+                                    ),
+                                    size: iced::Pixels(f32::from(*font_size) * scale_y),
+                                    font: iced::Font::with_name("Liberation Sans"),
+                                    align_x,
+                                    ..Default::default()
+                                });
+                            }
                         });
                     }
                 }
