@@ -395,8 +395,8 @@ pub fn export_annotations(source: &[u8], annotations: &[Annotation]) -> Result<V
     Ok(bytes)
 }
 
-/// Produce a printable PDF containing the selected original pages, in their
-/// original order. The annotation appearances are added before page removal.
+/// Produce a printable PDF containing the selected original pages in the
+/// requested order. Annotation appearances are added before page removal.
 pub fn export_print_pages(
     source: &[u8],
     annotations: &[Annotation],
@@ -404,21 +404,69 @@ pub fn export_print_pages(
 ) -> Result<Vec<u8>, String> {
     let annotated = export_annotations(source, annotations)?;
     let mut document = Document::load_mem(&annotated).map_err(|e| e.to_string())?;
-    let count = document.get_pages().len();
+    let original_pages: Vec<_> = document.get_pages().into_values().collect();
+    let count = original_pages.len();
+    let selected_set: std::collections::BTreeSet<_> = selected.iter().copied().collect();
     if selected.is_empty()
-        || selected.iter().any(|&page| page >= count)
-        || selected.windows(2).any(|pair| pair[0] >= pair[1])
+        || selected_set.len() != selected.len()
+        || selected_set.iter().any(|&page| page >= count)
     {
-        return Err("Choose at least one valid page in ascending order".into());
+        return Err("Choose valid PDF pages without duplicates".into());
     }
-    if selected.len() == count {
+    if selected.iter().copied().eq(0..count) {
         return Ok(annotated);
     }
     let omitted: Vec<u32> = (0..count)
-        .filter(|page| selected.binary_search(page).is_err())
+        .filter(|page| !selected_set.contains(page))
         .map(|page| page as u32 + 1)
         .collect();
     document.delete_pages(&omitted);
+
+    // Flatten the selected pages under a new root. Before changing Parent,
+    // materialize attributes inherited from the original (possibly nested)
+    // page tree so rotation, page boxes and resources remain intact.
+    let selected_ids: Vec<_> = selected.iter().map(|&page| original_pages[page]).collect();
+    for &page_id in &selected_ids {
+        for key in [b"Resources".as_slice(), b"MediaBox", b"CropBox", b"Rotate"] {
+            if document
+                .get_dictionary(page_id)
+                .map_err(|e| e.to_string())?
+                .get(key)
+                .is_err()
+            {
+                if let Some(value) = inherited(&document, page_id, key)?.cloned() {
+                    document
+                        .get_dictionary_mut(page_id)
+                        .map_err(|e| e.to_string())?
+                        .set(key, value);
+                }
+            }
+        }
+    }
+    let mut page_root = Dictionary::new();
+    page_root.set("Type", Object::Name(b"Pages".to_vec()));
+    page_root.set("Count", selected_ids.len() as i64);
+    page_root.set(
+        "Kids",
+        Object::Array(
+            selected_ids
+                .iter()
+                .copied()
+                .map(Object::Reference)
+                .collect(),
+        ),
+    );
+    let page_root_id = document.add_object(page_root);
+    for &page_id in &selected_ids {
+        document
+            .get_dictionary_mut(page_id)
+            .map_err(|e| e.to_string())?
+            .set("Parent", Object::Reference(page_root_id));
+    }
+    document
+        .catalog_mut()
+        .map_err(|e| e.to_string())?
+        .set("Pages", Object::Reference(page_root_id));
     document.prune_objects();
     // A full rewrite must not retain offsets into the preceding incremental
     // revision: they no longer exist in the new file.
@@ -427,8 +475,9 @@ pub fn export_print_pages(
     let mut bytes = Vec::new();
     document.save_to(&mut bytes).map_err(|e| e.to_string())?;
     let check = Document::load_mem(&bytes).map_err(|e| format!("Print PDF did not reopen: {e}"))?;
-    if check.get_pages().len() != selected.len() {
-        return Err("Print PDF page count differs from selection".into());
+    let check_pages: Vec<_> = check.get_pages().into_values().collect();
+    if check_pages != selected_ids {
+        return Err("Print PDF page order differs from selection".into());
     }
     Ok(bytes)
 }
@@ -647,5 +696,75 @@ mod tests {
         );
         let parsed = opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(bytes)).unwrap();
         assert_eq!(parsed.page_count(), 1);
+    }
+
+    #[test]
+    fn reverse_print_flattens_nested_page_tree_and_preserves_inheritance() {
+        let mut doc = Document::load_mem(&source_pdf()).unwrap();
+        let root = doc.trailer.get(b"Root").unwrap().as_reference().unwrap();
+        let pages_id = doc
+            .get_dictionary(root)
+            .unwrap()
+            .get(b"Pages")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let first = *doc.get_pages().values().next().unwrap();
+        let second = doc.add_object(doc.get_object(first).unwrap().clone());
+        let third = doc.add_object(doc.get_object(first).unwrap().clone());
+        let nested = doc.add_object(dictionary! {
+            "Type" => "Pages", "Parent" => pages_id,
+            "Kids" => vec![Object::Reference(first), Object::Reference(second), Object::Reference(third)],
+            "Count" => 3,
+        });
+        doc.get_dictionary_mut(pages_id)
+            .unwrap()
+            .set("Kids", vec![Object::Reference(nested)]);
+        doc.get_dictionary_mut(pages_id)
+            .unwrap()
+            .set("Count", 3_i64);
+        doc.get_dictionary_mut(pages_id)
+            .unwrap()
+            .set("Resources", Dictionary::new());
+        for id in [first, second, third] {
+            doc.get_dictionary_mut(id)
+                .unwrap()
+                .set("Parent", Object::Reference(nested));
+        }
+        let mut source = Vec::new();
+        doc.save_to(&mut source).unwrap();
+        let highlight = Annotation {
+            id: 7,
+            page: 2,
+            bounds: Rect {
+                x: 10.0,
+                y: 20.0,
+                width: 40.0,
+                height: 20.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let bytes = export_print_pages(&source, &[highlight], &[2, 0]).unwrap();
+        let output = Document::load_mem(&bytes).unwrap();
+        assert_eq!(
+            output.get_pages().into_values().collect::<Vec<_>>(),
+            vec![third, first]
+        );
+        for page in output.get_pages().into_values() {
+            let dict = output.get_dictionary(page).unwrap();
+            assert_eq!(dict.get(b"MediaBox").unwrap().as_array().unwrap().len(), 4);
+            assert!(dict.get(b"Resources").unwrap().as_dict().is_ok());
+        }
+        let first_printed = *output.get_pages().values().next().unwrap();
+        let annots = output.get_page_annotations(first_printed).unwrap();
+        assert_eq!(annots.len(), 2);
+        assert_eq!(
+            annots[1].get(b"Subtype").unwrap().as_name().unwrap(),
+            b"Highlight"
+        );
+        let parsed = opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(bytes)).unwrap();
+        assert_eq!(parsed.page_count(), 2);
     }
 }

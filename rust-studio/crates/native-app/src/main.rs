@@ -75,6 +75,7 @@ struct App {
     print_scroll_offset: Option<scrollable::AbsoluteOffset>,
     print_range: PrintRange,
     print_subset: PrintSubset,
+    print_reverse: bool,
     print_custom_pages: String,
     print_preview: Option<image::Handle>,
     print_preview_pdf: Option<Arc<ParsedPdf>>,
@@ -126,6 +127,7 @@ enum PrintSubset {
 fn print_pages(
     range: PrintRange,
     subset: PrintSubset,
+    reverse: bool,
     current: usize,
     custom: &str,
     total: usize,
@@ -165,7 +167,7 @@ fn print_pages(
             pages.into_iter().collect()
         }
     };
-    let selected: Vec<_> = pages
+    let mut selected: Vec<_> = pages
         .into_iter()
         .filter(|&page| match subset {
             PrintSubset::All => true,
@@ -176,6 +178,9 @@ fn print_pages(
     if selected.is_empty() {
         Err("No pages match this range and subset".into())
     } else {
+        if reverse {
+            selected.reverse();
+        }
         Ok(selected)
     }
 }
@@ -187,25 +192,37 @@ mod print_range_tests {
     #[test]
     fn custom_page_ranges_are_sorted_deduplicated_and_bounded() {
         assert_eq!(
-            print_pages(PrintRange::Custom, PrintSubset::All, 0, "5, 2-3, 2", 5).unwrap(),
+            print_pages(
+                PrintRange::Custom,
+                PrintSubset::All,
+                false,
+                0,
+                "5, 2-3, 2",
+                5
+            )
+            .unwrap(),
             vec![1, 2, 4]
         );
         assert_eq!(
-            print_pages(PrintRange::Current, PrintSubset::All, 3, "", 5).unwrap(),
+            print_pages(PrintRange::Current, PrintSubset::All, false, 3, "", 5).unwrap(),
             vec![3]
         );
         assert_eq!(
-            print_pages(PrintRange::All, PrintSubset::Odd, 0, "", 5).unwrap(),
+            print_pages(PrintRange::All, PrintSubset::Odd, false, 0, "", 5).unwrap(),
             vec![0, 2, 4]
         );
         assert_eq!(
-            print_pages(PrintRange::All, PrintSubset::Even, 0, "", 5).unwrap(),
+            print_pages(PrintRange::All, PrintSubset::Even, false, 0, "", 5).unwrap(),
             vec![1, 3]
         );
-        assert!(print_pages(PrintRange::Current, PrintSubset::Even, 0, "", 5).is_err());
+        assert!(print_pages(PrintRange::Current, PrintSubset::Even, false, 0, "", 5).is_err());
+        assert_eq!(
+            print_pages(PrintRange::All, PrintSubset::Odd, true, 0, "", 5).unwrap(),
+            vec![4, 2, 0]
+        );
         for invalid in ["", "0", "6", "3-2", "1,,2", "1-2-3"] {
             assert!(
-                print_pages(PrintRange::Custom, PrintSubset::All, 0, invalid, 5).is_err(),
+                print_pages(PrintRange::Custom, PrintSubset::All, false, 0, invalid, 5).is_err(),
                 "{invalid}"
             );
         }
@@ -309,6 +326,7 @@ enum Message {
     Printed(Result<String, String>),
     SelectPrintRange(PrintRange),
     SelectPrintSubset(PrintSubset),
+    SetPrintReverse(bool),
     PrintCustomPagesChanged(String),
     PrintPreviewStep(i32),
     PrintPreviewDocumentReady(u64, Result<Arc<ParsedPdf>, String>),
@@ -429,6 +447,7 @@ impl App {
                     self.print_scroll_offset = Some(self.page_scroll_offset);
                     self.print_range = PrintRange::All;
                     self.print_subset = PrintSubset::All;
+                    self.print_reverse = false;
                     self.print_custom_pages.clear();
                     self.print_preview_page = 0;
                     self.print_preview_index = 0;
@@ -475,6 +494,11 @@ impl App {
                 self.print_preview_index = 0;
                 return self.refresh_print_preview();
             }
+            Message::SetPrintReverse(value) => {
+                self.print_reverse = value;
+                self.print_preview_index = 0;
+                return self.refresh_print_preview();
+            }
             Message::PrintCustomPagesChanged(value) => {
                 self.print_custom_pages = value;
                 if self.print_range == PrintRange::Custom {
@@ -487,6 +511,7 @@ impl App {
                     if let Ok(pages) = print_pages(
                         self.print_range,
                         self.print_subset,
+                        self.print_reverse,
                         document.model.view().page(),
                         &self.print_custom_pages,
                         document.pdf.page_count(),
@@ -550,6 +575,7 @@ impl App {
                 let pages = match print_pages(
                     self.print_range,
                     self.print_subset,
+                    self.print_reverse,
                     document.model.view().page(),
                     &self.print_custom_pages,
                     document.pdf.page_count(),
@@ -1016,6 +1042,7 @@ impl App {
         let pages = match print_pages(
             self.print_range,
             self.print_subset,
+            self.print_reverse,
             document.model.view().page(),
             &self.print_custom_pages,
             document.pdf.page_count(),

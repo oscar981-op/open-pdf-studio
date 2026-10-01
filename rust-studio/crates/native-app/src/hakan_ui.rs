@@ -4,8 +4,8 @@
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
 use super::{annotation_layer, AnnotationTool, App, Message, PrintRange, PrintSubset, RibbonTab};
 use iced::widget::{
-    button, column, container, image, mouse_area, row, rule, scrollable, svg, text, text_input,
-    tooltip, Space,
+    button, checkbox, column, container, image, mouse_area, row, rule, scrollable, svg, text,
+    text_input, tooltip, Space,
 };
 use iced::{Background, Border, Color, Element, Fill, Padding, Theme};
 use std::time::Duration;
@@ -1119,6 +1119,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
         let selection = super::print_pages(
             app.print_range,
             app.print_subset,
+            app.print_reverse,
             current.saturating_sub(1),
             &app.print_custom_pages,
             total,
@@ -1181,6 +1182,10 @@ pub fn view(app: &App) -> Element<'_, Message> {
                         app.print_subset == PrintSubset::Even,
                         status
                     )),
+                checkbox(app.print_reverse)
+                    .label("Reverse Order")
+                    .on_toggle(Message::SetPrintReverse)
+                    .size(14),
             ]
             .spacing(8)
             .align_y(iced::Center),
