@@ -2164,6 +2164,7 @@ dependencies = [
  "lopdf",
  "opds-engine-probe",
  "opds-native-core",
+ "ttf-parser",
 ]
 
 [[package]]

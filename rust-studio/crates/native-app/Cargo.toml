@@ -10,3 +10,4 @@ iced = { version = "=0.14.0", default-features = false, features = ["wgpu", "tin
 opds-native-core = { path = "../studio-core" }
 opds-engine-probe = { path = "../engine-probe" }
 lopdf = { version = "=0.34.0", default-features = false, features = ["nom_parser"] }
+ttf-parser = "=0.25.1"

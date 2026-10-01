@@ -3,8 +3,14 @@
 //! unrotated, origin-zero pages whose CropBox equals the MediaBox.
 use lopdf::{Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream, StringFormat};
 use opds_native_core::annotations::{Annotation, Kind};
+use std::collections::BTreeMap;
+use std::fmt::Write as FmtWrite;
 use std::io::Write;
 use std::path::Path;
+use ttf_parser::{Face, GlyphId};
+
+const FONT_BYTES: &[u8] = include_bytes!("../../../assets/fonts/LiberationSans-Regular.ttf");
+const FONT_NAME: &[u8] = b"LiberationSans";
 
 fn number(value: f64) -> Object {
     Object::Real(value as f32)
@@ -84,19 +90,143 @@ fn page_size(doc: &Document, page_id: ObjectId) -> Result<[f64; 2], String> {
     }
 }
 
-fn escape_literal(value: &str) -> Result<String, String> {
-    if !value.bytes().all(|c| (32..=126).contains(&c)) {
-        return Err("PDF Save As currently requires printable ASCII text in text boxes".into());
+fn font_face() -> Result<Face<'static>, String> {
+    Face::parse(FONT_BYTES, 0).map_err(|e| format!("Embedded font cannot be read: {e:?}"))
+}
+
+fn glyph_id(face: &Face<'_>, ch: char) -> Result<GlyphId, String> {
+    let code = ch as u32;
+    let simple_script = (0x20..=0x024F).contains(&code)
+        || (0x0370..=0x052F).contains(&code)
+        || (0x2000..=0x206F).contains(&code)
+        || code == 0x20AC;
+    if !simple_script || ch.is_control() {
+        return Err(format!(
+            "Text script U+{code:04X} is not supported by PDF Save As"
+        ));
     }
-    Ok(value
-        .replace('\\', "\\\\")
-        .replace('(', "\\(")
-        .replace(')', "\\)"))
+    face.glyph_index(ch)
+        .ok_or_else(|| format!("Embedded font has no glyph for U+{code:04X}"))
+}
+
+fn glyphs(value: &str) -> Result<String, String> {
+    let face = font_face()?;
+    let mut hex = String::new();
+    for ch in value.chars() {
+        let id = glyph_id(&face, ch)?;
+        write!(hex, "{:04X}", id.0).map_err(|e| e.to_string())?;
+    }
+    Ok(hex)
+}
+
+fn unicode_string(value: &str) -> Object {
+    let mut bytes = vec![0xFE, 0xFF];
+    for unit in value.encode_utf16() {
+        bytes.extend_from_slice(&unit.to_be_bytes());
+    }
+    Object::String(bytes, StringFormat::Hexadecimal)
+}
+
+fn embed_font(doc: &mut Document, annotations: &[Annotation]) -> Result<ObjectId, String> {
+    let face = font_face()?;
+    let mut mapping = BTreeMap::<u16, char>::new();
+    for annotation in annotations {
+        if let Kind::Text { value } = &annotation.kind {
+            for ch in value.chars() {
+                let gid = glyph_id(&face, ch)?;
+                if let Some(previous) = mapping.insert(gid.0, ch) {
+                    if previous != ch {
+                        return Err("Two Unicode characters share one PDF glyph; cannot preserve text extraction".into());
+                    }
+                }
+            }
+        }
+    }
+    let units = f64::from(face.units_per_em());
+    let scale = |value: i16| f64::from(value) * 1000.0 / units;
+    let bbox = face.global_bounding_box();
+    let mut font_file_dict = Dictionary::new();
+    font_file_dict.set("Length1", FONT_BYTES.len() as i64);
+    let font_file = doc.add_object(Stream::new(font_file_dict, FONT_BYTES.to_vec()));
+    let mut descriptor = Dictionary::new();
+    descriptor.set("Type", Object::Name(b"FontDescriptor".to_vec()));
+    descriptor.set("FontName", Object::Name(FONT_NAME.to_vec()));
+    descriptor.set("Flags", 32_i64);
+    descriptor.set(
+        "FontBBox",
+        array(&[
+            scale(bbox.x_min),
+            scale(bbox.y_min),
+            scale(bbox.x_max),
+            scale(bbox.y_max),
+        ]),
+    );
+    descriptor.set("ItalicAngle", 0_i64);
+    descriptor.set("Ascent", number(scale(face.ascender())));
+    descriptor.set("Descent", number(scale(face.descender())));
+    descriptor.set(
+        "CapHeight",
+        number(scale(face.capital_height().unwrap_or(face.ascender()))),
+    );
+    descriptor.set("StemV", 80_i64);
+    descriptor.set("FontFile2", Object::Reference(font_file));
+    let descriptor_id = doc.add_object(descriptor);
+    let mut widths = Vec::new();
+    for gid in mapping.keys() {
+        let advance = face
+            .glyph_hor_advance(ttf_parser::GlyphId(*gid))
+            .ok_or("Missing glyph width")?;
+        widths.push(Object::Integer(i64::from(*gid)));
+        widths.push(Object::Array(vec![number(
+            f64::from(advance) * 1000.0 / units,
+        )]));
+    }
+    let mut system = Dictionary::new();
+    system.set("Registry", Object::string_literal("Adobe"));
+    system.set("Ordering", Object::string_literal("Identity"));
+    system.set("Supplement", 0_i64);
+    let mut cid = Dictionary::new();
+    cid.set("Type", Object::Name(b"Font".to_vec()));
+    cid.set("Subtype", Object::Name(b"CIDFontType2".to_vec()));
+    cid.set("BaseFont", Object::Name(FONT_NAME.to_vec()));
+    cid.set("CIDSystemInfo", system);
+    cid.set("FontDescriptor", Object::Reference(descriptor_id));
+    cid.set("CIDToGIDMap", Object::Name(b"Identity".to_vec()));
+    cid.set("DW", 1000_i64);
+    cid.set("W", Object::Array(widths));
+    let cid_id = doc.add_object(cid);
+    let mut cmap = String::from("/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /OPDSToUnicode def\n/CMapType 2 def\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n");
+    for chunk in mapping.iter().collect::<Vec<_>>().chunks(100) {
+        writeln!(cmap, "{} beginbfchar", chunk.len()).map_err(|e| e.to_string())?;
+        for (gid, ch) in chunk {
+            let utf16 = ch
+                .encode_utf16(&mut [0; 2])
+                .iter()
+                .map(|unit| format!("{unit:04X}"))
+                .collect::<String>();
+            writeln!(cmap, "<{gid:04X}> <{utf16}>").map_err(|e| e.to_string())?;
+        }
+        cmap.push_str("endbfchar\n");
+    }
+    cmap.push_str("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n");
+    let unicode_id = doc.add_object(Stream::new(Dictionary::new(), cmap.into_bytes()));
+    let mut font = Dictionary::new();
+    font.set("Type", Object::Name(b"Font".to_vec()));
+    font.set("Subtype", Object::Name(b"Type0".to_vec()));
+    font.set("BaseFont", Object::Name(FONT_NAME.to_vec()));
+    font.set("Encoding", Object::Name(b"Identity-H".to_vec()));
+    font.set(
+        "DescendantFonts",
+        Object::Array(vec![Object::Reference(cid_id)]),
+    );
+    font.set("ToUnicode", Object::Reference(unicode_id));
+    Ok(doc.add_object(font))
 }
 
 fn annotation_object(
     annotation: &Annotation,
     page_height: f64,
+    text_font: Option<ObjectId>,
 ) -> Result<(Dictionary, Stream), String> {
     let b = annotation.bounds;
     if ![b.x, b.y, b.width, b.height].iter().all(|n| n.is_finite())
@@ -163,27 +293,21 @@ fn annotation_object(
             .into_bytes()
         }
         Kind::Text { value } => {
-            let escaped = escape_literal(value)?;
+            let encoded = glyphs(value)?;
+            let font_id = text_font.ok_or("Missing embedded text font")?;
             dictionary.set("Subtype", Object::Name(b"FreeText".to_vec()));
-            dictionary.set(
-                "Contents",
-                Object::String(value.as_bytes().to_vec(), StringFormat::Literal),
-            );
+            dictionary.set("Contents", unicode_string(value));
             dictionary.set(
                 "DA",
-                Object::String(b"/Helv 14 Tf 0 0 0 rg".to_vec(), StringFormat::Literal),
+                Object::String(b"/OPDS0 14 Tf 0 0 0 rg".to_vec(), StringFormat::Literal),
             );
-            let mut font = Dictionary::new();
-            font.set("Type", Object::Name(b"Font".to_vec()));
-            font.set("Subtype", Object::Name(b"Type1".to_vec()));
-            font.set("BaseFont", Object::Name(b"Helvetica".to_vec()));
             let mut fonts = Dictionary::new();
-            fonts.set("Helv", font);
+            fonts.set("OPDS0", Object::Reference(font_id));
             let mut resources = Dictionary::new();
             resources.set("Font", fonts);
             appearance.set("Resources", resources);
             format!(
-                "q BT /Helv 14 Tf 0 0 0 rg 0 {:.3} Td ({escaped}) Tj ET Q",
+                "q BT /OPDS0 14 Tf 0 0 0 rg 0 {:.3} Td <{encoded}> Tj ET Q",
                 (b.height - 14.0).max(0.0)
             )
             .into_bytes()
@@ -207,6 +331,14 @@ pub fn export_annotations(source: &[u8], annotations: &[Annotation]) -> Result<V
     }
     let pages = previous.get_pages();
     let mut output = IncrementalDocument::create_from(source.to_vec(), previous);
+    let text_font = if annotations
+        .iter()
+        .any(|a| matches!(a.kind, Kind::Text { .. }))
+    {
+        Some(embed_font(&mut output.new_document, annotations)?)
+    } else {
+        None
+    };
     for (index, page_id) in pages.values().copied().enumerate() {
         let items: Vec<_> = annotations.iter().filter(|a| a.page == index).collect();
         if items.is_empty() {
@@ -237,7 +369,7 @@ pub fn export_annotations(source: &[u8], annotations: &[Annotation]) -> Result<V
             if item.bounds.x + item.bounds.width > size[0] + 0.1 {
                 return Err("Annotation is outside the PDF page".into());
             }
-            let (mut dictionary, stream) = annotation_object(item, size[1])?;
+            let (mut dictionary, stream) = annotation_object(item, size[1], text_font)?;
             let appearance_id = output.new_document.add_object(stream);
             let mut ap = Dictionary::new();
             ap.set("N", Object::Reference(appearance_id));
@@ -350,7 +482,7 @@ mod tests {
                     height: 30.0,
                 },
                 kind: Kind::Text {
-                    value: "Rust text".into(),
+                    value: "Café Ω Ж".into(),
                 },
             },
         ];
@@ -388,7 +520,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_geometry_and_non_ascii_text_fail_before_write() {
+    fn unsupported_geometry_and_missing_glyph_fail_before_write() {
         let source = source_pdf();
         let mut item = Annotation {
             id: 1,
@@ -399,11 +531,13 @@ mod tests {
                 width: 40.0,
                 height: 30.0,
             },
-            kind: Kind::Text { value: "é".into() },
+            kind: Kind::Text {
+                value: "漢".into()
+            },
         };
         assert!(export_annotations(&source, &[item.clone()])
             .unwrap_err()
-            .contains("ASCII"));
+            .contains("not supported"));
         item.bounds.x = 190.0;
         item.kind = Kind::Rectangle {
             color_rgb: [0, 0, 0],

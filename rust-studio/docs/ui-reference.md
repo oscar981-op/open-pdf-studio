@@ -32,3 +32,5 @@ gemigreerde editoracties zijn uitgeschakeld. De oorspronkelijke dock-,
 properties-, menu- en dialoogcode staat klaar in de bronkopie, maar is nog
 niet volledig aangesloten. De bestaande Open PDF Studio blijft de doelreferentie
 voor PDF-functionaliteit en uiteindelijke schermpariteit.
+
+De ingebedde tekstfont voor PDF Save As is de ongewijzigde `LiberationSans-Regular.ttf` uit de bestaande PDF.js-assets. De oorspronkelijke [SIL Open Font License](../assets/fonts/LICENSE_LIBERATION) en de font staan onder `../assets/fonts/`; deze font is geen onderdeel van Hakan's OpenCADStudio-code.
