@@ -482,23 +482,62 @@ pub fn export_print_pages(
     Ok(bytes)
 }
 
-/// Center the page content and printable annotations at a custom percentage
-/// on the original page-sized sheet. This is a full PDF rewrite, not a viewer
-/// zoom. Both preview and print output use the same transformed bytes.
-pub fn apply_print_zoom(bytes: &[u8], percent: u16) -> Result<Vec<u8>, String> {
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PrintPaper {
+    #[default]
+    Original,
+    A4,
+    Letter,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PrintScale {
+    #[default]
+    Fit,
+    Actual,
+    Shrink,
+    Custom,
+}
+
+/// Put each source page on its output sheet. A PDF destination has no known
+/// unprintable margin, so Fit and Shrink use the full sheet. Preview and output
+/// both parse these exact transformed bytes.
+pub fn apply_print_placement(
+    bytes: &[u8],
+    paper: PrintPaper,
+    mode: PrintScale,
+    percent: u16,
+) -> Result<Vec<u8>, String> {
     if !(10..=400).contains(&percent) {
         return Err("Page Zoom must be between 10% and 400%".into());
     }
-    if percent == 100 {
+    if paper == PrintPaper::Original && (mode != PrintScale::Custom || percent == 100) {
         return Ok(bytes.to_vec());
     }
     let mut doc = Document::load_mem(bytes).map_err(|e| e.to_string())?;
-    let scale = f64::from(percent) / 100.0;
     let pages: Vec<_> = doc.get_pages().into_values().collect();
     for page_id in pages {
         let [width, height] = page_size(&doc, page_id)?;
-        let tx = width * (1.0 - scale) / 2.0;
-        let ty = height * (1.0 - scale) / 2.0;
+        let [sheet_w, sheet_h] = match paper {
+            PrintPaper::Original => [width, height],
+            PrintPaper::A4 if width > height => [841.8898, 595.2756],
+            PrintPaper::A4 => [595.2756, 841.8898],
+            PrintPaper::Letter if width > height => [792.0, 612.0],
+            PrintPaper::Letter => [612.0, 792.0],
+        };
+        let fit = (sheet_w / width).min(sheet_h / height);
+        let scale = match mode {
+            PrintScale::Fit => fit,
+            PrintScale::Actual => 1.0,
+            PrintScale::Shrink => fit.min(1.0),
+            PrintScale::Custom => f64::from(percent) / 100.0,
+        };
+        let tx = (sheet_w - width * scale) / 2.0;
+        let ty = (sheet_h - height * scale) / 2.0;
+        let sheet = array(&[0.0, 0.0, sheet_w, sheet_h]);
+        let page = doc.get_dictionary_mut(page_id).map_err(|e| e.to_string())?;
+        page.set("MediaBox", sheet.clone());
+        page.set("CropBox", sheet);
         let contents = doc
             .get_dictionary(page_id)
             .map_err(|e| e.to_string())?
@@ -895,9 +934,17 @@ mod tests {
             },
         };
         let annotated = export_annotations(&source, &[highlight]).unwrap();
-        assert_eq!(apply_print_zoom(&annotated, 100).unwrap(), annotated);
-        assert!(apply_print_zoom(&annotated, 9).is_err());
-        let zoomed = apply_print_zoom(&annotated, 80).unwrap();
+        assert_eq!(
+            apply_print_placement(&annotated, PrintPaper::Original, PrintScale::Custom, 100)
+                .unwrap(),
+            annotated
+        );
+        assert!(
+            apply_print_placement(&annotated, PrintPaper::Original, PrintScale::Custom, 9).is_err()
+        );
+        let zoomed =
+            apply_print_placement(&annotated, PrintPaper::Original, PrintScale::Custom, 80)
+                .unwrap();
         let doc = Document::load_mem(&zoomed).unwrap();
         let page = *doc.get_pages().values().next().unwrap();
         assert_eq!(page_size(&doc, page).unwrap(), [200.0, 300.0]);
@@ -914,5 +961,53 @@ mod tests {
         assert!((numeric(&quads[0]).unwrap() - 28.0).abs() < 0.001);
         let parsed = opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(zoomed)).unwrap();
         assert_eq!(parsed.page_count(), 1);
+    }
+
+    #[test]
+    fn fit_and_shrink_place_pages_and_annotations_on_letter() {
+        let source = source_pdf();
+        let mark = Annotation {
+            id: 4,
+            page: 0,
+            bounds: Rect {
+                x: 10.0,
+                y: 20.0,
+                width: 40.0,
+                height: 20.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let annotated = export_annotations(&source, &[mark]).unwrap();
+        let fit =
+            apply_print_placement(&annotated, PrintPaper::Letter, PrintScale::Fit, 100).unwrap();
+        let shrink =
+            apply_print_placement(&annotated, PrintPaper::Letter, PrintScale::Shrink, 100).unwrap();
+        let fit_doc = Document::load_mem(&fit).unwrap();
+        let shrink_doc = Document::load_mem(&shrink).unwrap();
+        let fit_page = *fit_doc.get_pages().values().next().unwrap();
+        let shrink_page = *shrink_doc.get_pages().values().next().unwrap();
+        assert_eq!(page_size(&fit_doc, fit_page).unwrap(), [612.0, 792.0]);
+        assert_eq!(page_size(&shrink_doc, shrink_page).unwrap(), [612.0, 792.0]);
+        let fit_rect = box_values(
+            fit_doc.get_page_annotations(fit_page).unwrap()[1]
+                .get(b"Rect")
+                .unwrap(),
+        )
+        .unwrap();
+        let shrink_rect = box_values(
+            shrink_doc.get_page_annotations(shrink_page).unwrap()[1]
+                .get(b"Rect")
+                .unwrap(),
+        )
+        .unwrap();
+        // Fit enlarges 200×300 to 528×792, centered; Shrink leaves it 1:1.
+        for (actual, expected) in fit_rect.into_iter().zip([68.4, 686.4, 174.0, 739.2]) {
+            assert!((actual - expected).abs() < 0.01);
+        }
+        for (actual, expected) in shrink_rect.into_iter().zip([216.0, 506.0, 256.0, 526.0]) {
+            assert!((actual - expected).abs() < 0.01);
+        }
     }
 }

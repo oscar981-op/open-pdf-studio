@@ -2,7 +2,9 @@
 // Adapted from Hakan Seven / OpenCADStudio, commit 2a15a370f6886d3e8695ab81c7d677e0cd484451.
 // Source: src/ui/ribbon/widgets.rs and src/ui/ribbon/mod.rs.
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
-use super::{annotation_layer, AnnotationTool, App, Message, PrintRange, PrintSubset, RibbonTab};
+use super::{
+    annotation_layer, pdf_save, AnnotationTool, App, Message, PrintRange, PrintSubset, RibbonTab,
+};
 use iced::widget::{
     button, checkbox, column, container, image, mouse_area, row, rule, scrollable, svg, text,
     text_input, tooltip, Space,
@@ -1192,6 +1194,65 @@ pub fn view(app: &App) -> Element<'_, Message> {
             rule::horizontal(1),
             text("Page Placement and Scaling").size(14),
             row![
+                text("Paper").size(12),
+                button("Original")
+                    .on_press(Message::SelectPrintPaper(pdf_save::PrintPaper::Original))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_paper == pdf_save::PrintPaper::Original,
+                        status
+                    )),
+                button("A4")
+                    .on_press(Message::SelectPrintPaper(pdf_save::PrintPaper::A4))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_paper == pdf_save::PrintPaper::A4,
+                        status
+                    )),
+                button("Letter")
+                    .on_press(Message::SelectPrintPaper(pdf_save::PrintPaper::Letter))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_paper == pdf_save::PrintPaper::Letter,
+                        status
+                    )),
+            ]
+            .spacing(8)
+            .align_y(iced::Center),
+            row![
+                text("Type").size(12),
+                button("Fit")
+                    .on_press(Message::SelectPrintScale(pdf_save::PrintScale::Fit))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_scale == pdf_save::PrintScale::Fit,
+                        status
+                    )),
+                button("Actual")
+                    .on_press(Message::SelectPrintScale(pdf_save::PrintScale::Actual))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_scale == pdf_save::PrintScale::Actual,
+                        status
+                    )),
+                button("Shrink")
+                    .on_press(Message::SelectPrintScale(pdf_save::PrintScale::Shrink))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_scale == pdf_save::PrintScale::Shrink,
+                        status
+                    )),
+                button("Custom")
+                    .on_press(Message::SelectPrintScale(pdf_save::PrintScale::Custom))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_scale == pdf_save::PrintScale::Custom,
+                        status
+                    )),
+            ]
+            .spacing(8)
+            .align_y(iced::Center),
+            row![
                 text("Page Zoom").size(12),
                 text_input("100", &app.print_zoom_draft)
                     .on_input(Message::PrintZoomDraftChanged)
@@ -1206,7 +1267,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             ]
             .spacing(8)
             .align_y(iced::Center),
-            text("Centered on the original page size · 10–400%").size(12),
+            text("Centered on the selected sheet · 10–400%").size(12),
             text(format!(
                 "Selected: {}",
                 match &selection {
@@ -1240,11 +1301,17 @@ pub fn view(app: &App) -> Element<'_, Message> {
         };
         let right = column![
             text(if selection.is_ok() {
+                let placement = match app.print_scale {
+                    pdf_save::PrintScale::Fit => "Fit".to_owned(),
+                    pdf_save::PrintScale::Actual => "Actual".to_owned(),
+                    pdf_save::PrintScale::Shrink => "Shrink".to_owned(),
+                    pdf_save::PrintScale::Custom => format!("{}%", app.print_zoom_percent),
+                };
                 format!(
-                    "Preview · page {} of {} · {}%",
+                    "Preview · page {} of {} · {}",
                     app.print_preview_page + 1,
                     total,
-                    app.print_zoom_percent
+                    placement
                 )
             } else {
                 "Preview unavailable".to_owned()
