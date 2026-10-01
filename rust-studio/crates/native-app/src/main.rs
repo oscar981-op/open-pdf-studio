@@ -94,6 +94,7 @@ struct App {
     print_preview_error: String,
     text_dialog: bool,
     text_draft: iced::widget::text_editor::Content,
+    text_color: [u8; 3],
     pending_text_bounds: Option<Rect>,
     editing_text_id: Option<u64>,
     text_scroll_offset: Option<scrollable::AbsoluteOffset>,
@@ -304,6 +305,7 @@ enum RibbonTab {
     Comment,
     Organize,
     Help,
+    Format,
 }
 impl RibbonTab {
     const ALL: [Self; 6] = [
@@ -322,6 +324,7 @@ impl RibbonTab {
             Self::Comment => "Annotation",
             Self::Organize => "Edit & Combine PDFs",
             Self::Help => "Settings",
+            Self::Format => "Format",
         }
     }
 }
@@ -382,6 +385,7 @@ enum Message {
     RemoveSelectedAnnotation,
     AddAnnotation(Rect),
     TextEdited(iced::widget::text_editor::Action),
+    SetTextColor([u8; 3]),
     CommitText,
     CancelText,
     EditSelectedText,
@@ -725,8 +729,32 @@ impl App {
                 self.annotation_tool_activated = true;
             }
             Message::TextEdited(action) => self.text_draft.perform(action),
+            Message::SetTextColor(color) => {
+                self.text_color = color;
+                if !self.text_dialog {
+                    if let Some(document) = &mut self.document {
+                        if let Some(id) = document.selected_annotation {
+                            if let Some(mut item) = document.model.get(id).cloned() {
+                                if let Kind::Text { color_rgb, .. } = &mut item.kind {
+                                    if *color_rgb != color {
+                                        *color_rgb = color;
+                                        if document.model.apply(Edit::Replace(item)).is_ok() {
+                                            self.message = "Text color updated".into();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Message::CancelText => {
                 self.text_dialog = false;
+                self.active_ribbon = if self.editing_text_id.is_some() {
+                    RibbonTab::Format
+                } else {
+                    RibbonTab::Comment
+                };
                 self.pending_text_bounds = None;
                 self.editing_text_id = None;
                 self.text_draft = iced::widget::text_editor::Content::new();
@@ -739,14 +767,16 @@ impl App {
                 if let Some(document) = &self.document {
                     if let Some(id) = document.selected_annotation {
                         if let Some(Annotation {
-                            kind: Kind::Text { value },
+                            kind: Kind::Text { value, color_rgb },
                             ..
                         }) = document.model.get(id)
                         {
                             self.text_draft = iced::widget::text_editor::Content::with_text(value);
+                            self.text_color = *color_rgb;
                             self.editing_text_id = Some(id);
                             self.pending_text_bounds = None;
                             self.text_dialog = true;
+                            self.active_ribbon = RibbonTab::Format;
                             self.text_scroll_offset = Some(self.page_scroll_offset);
                         }
                     }
@@ -766,7 +796,10 @@ impl App {
                     if let Some(id) = self.editing_text_id {
                         if let Some(mut item) = document.model.get(id).cloned() {
                             if matches!(item.kind, Kind::Text { .. }) {
-                                item.kind = Kind::Text { value };
+                                item.kind = Kind::Text {
+                                    value,
+                                    color_rgb: self.text_color,
+                                };
                                 match document.model.apply(Edit::Replace(item)) {
                                     Ok(()) => self.message = "Text annotation updated".into(),
                                     Err(error) => {
@@ -780,7 +813,10 @@ impl App {
                             id: self.next_annotation_id,
                             page: document.displayed_page,
                             bounds,
-                            kind: Kind::Text { value },
+                            kind: Kind::Text {
+                                value,
+                                color_rgb: self.text_color,
+                            },
                         };
                         match document.model.apply(Edit::Add(item)) {
                             Ok(()) => {
@@ -795,6 +831,7 @@ impl App {
                     }
                 }
                 self.text_dialog = false;
+                self.active_ribbon = RibbonTab::Format;
                 self.pending_text_bounds = None;
                 self.editing_text_id = None;
                 self.text_draft = iced::widget::text_editor::Content::new();
@@ -811,6 +848,19 @@ impl App {
                             .get(*id)
                             .is_some_and(|item| item.page == document.displayed_page)
                     });
+                    if let Some(selected) = document
+                        .selected_annotation
+                        .and_then(|id| document.model.get(id))
+                    {
+                        if let Kind::Text { color_rgb, .. } = &selected.kind {
+                            self.text_color = *color_rgb;
+                            self.active_ribbon = RibbonTab::Format;
+                        } else if self.active_ribbon == RibbonTab::Format {
+                            self.active_ribbon = RibbonTab::Comment;
+                        }
+                    } else if self.active_ribbon == RibbonTab::Format && !self.text_dialog {
+                        self.active_ribbon = RibbonTab::Comment;
+                    }
                 }
             }
             Message::MoveAnnotation(id, delta) => {
@@ -869,6 +919,9 @@ impl App {
                         match document.model.apply(Edit::Remove(id)) {
                             Ok(()) => {
                                 document.selected_annotation = None;
+                                if self.active_ribbon == RibbonTab::Format {
+                                    self.active_ribbon = RibbonTab::Comment;
+                                }
                                 self.message = "Annotation removed".into();
                             }
                             Err(error) => self.message = format!("Delete failed: {error:?}"),
@@ -881,7 +934,9 @@ impl App {
                     self.pending_text_bounds = Some(bounds);
                     self.editing_text_id = None;
                     self.text_draft = iced::widget::text_editor::Content::new();
+                    self.text_color = [0, 0, 0];
                     self.text_dialog = true;
+                    self.active_ribbon = RibbonTab::Format;
                     self.text_scroll_offset = Some(self.page_scroll_offset);
                     return Task::none();
                 }
@@ -918,6 +973,9 @@ impl App {
                         .is_some_and(|id| document.model.get(id).is_none())
                     {
                         document.selected_annotation = None;
+                        if self.active_ribbon == RibbonTab::Format {
+                            self.active_ribbon = RibbonTab::Comment;
+                        }
                     }
                 }
             }
@@ -1053,6 +1111,9 @@ impl App {
                         return Task::none();
                     }
                     document.selected_annotation = None;
+                    if self.active_ribbon == RibbonTab::Format {
+                        self.active_ribbon = RibbonTab::Comment;
+                    }
                 }
                 return self.render_current_page();
             }
@@ -1086,6 +1147,7 @@ impl App {
             Message::Close => {
                 self.next_load += 1;
                 self.document = None;
+                self.active_ribbon = RibbonTab::Home;
                 self.page_scroll_offset = scrollable::AbsoluteOffset::default();
                 self.pending_zoom_offset = None;
                 self.busy = false;

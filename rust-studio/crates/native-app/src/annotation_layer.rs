@@ -9,6 +9,7 @@ pub struct Layer<'a> {
     pub model: &'a DocumentModel,
     pub page: usize,
     pub selected: Option<u64>,
+    pub editing_text: Option<u64>,
     pub tool: AnnotationTool,
     pub page_points: (f32, f32),
 }
@@ -353,20 +354,22 @@ impl canvas::Program<Message> for Layer<'_> {
                         );
                     }
                 }
-                Kind::Text { value } => {
-                    frame.with_clip(Rectangle::new(top_left, size), |frame| {
-                        frame.fill_text(canvas::Text {
-                            content: value.clone(),
-                            position: top_left,
-                            // PDF Save As also keeps explicit line breaks and clips
-                            // long lines instead of wrapping them automatically.
-                            max_width: f32::INFINITY,
-                            color: Color::from_rgb8(20, 20, 20),
-                            size: iced::Pixels(14.0 * scale_y),
-                            line_height: iced::Pixels(18.0 * scale_y).into(),
-                            ..Default::default()
+                Kind::Text { value, color_rgb } => {
+                    if self.editing_text != Some(annotation.id) {
+                        frame.with_clip(Rectangle::new(top_left, size), |frame| {
+                            frame.fill_text(canvas::Text {
+                                content: value.clone(),
+                                position: top_left,
+                                // PDF Save As also keeps explicit line breaks and clips
+                                // long lines instead of wrapping them automatically.
+                                max_width: f32::INFINITY,
+                                color: Color::from_rgb8(color_rgb[0], color_rgb[1], color_rgb[2]),
+                                size: iced::Pixels(14.0 * scale_y),
+                                line_height: iced::Pixels(18.0 * scale_y).into(),
+                                ..Default::default()
+                            });
                         });
-                    });
+                    }
                 }
             }
             if self.selected == Some(annotation.id) {
@@ -441,6 +444,7 @@ pub fn view<'a>(
     model: &'a DocumentModel,
     page: usize,
     selected: Option<u64>,
+    editing_text: Option<u64>,
     tool: AnnotationTool,
     page_points: (f32, f32),
     bitmap_size: (u32, u32),
@@ -449,6 +453,7 @@ pub fn view<'a>(
         model,
         page,
         selected,
+        editing_text,
         tool,
         page_points,
     })

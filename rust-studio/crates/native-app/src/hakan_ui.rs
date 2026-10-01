@@ -712,6 +712,27 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 .padding([5, 16]),
         );
     }
+    let selected_text_color = app
+        .document
+        .as_ref()
+        .and_then(|document| {
+            document
+                .selected_annotation
+                .and_then(|id| document.model.get(id))
+        })
+        .and_then(|item| match &item.kind {
+            opds_native_core::annotations::Kind::Text { color_rgb, .. } => Some(*color_rgb),
+            _ => None,
+        });
+    if app.text_dialog || selected_text_color.is_some() {
+        top = top.push(
+            button(text("Format").size(12))
+                .on_press(Message::SelectRibbon(RibbonTab::Format))
+                .style(move |_, status| tab_style(app.active_ribbon == RibbonTab::Format, status))
+                .height(28)
+                .padding([5, 16]),
+        );
+    }
     top = top.push(Space::new().width(Fill)).push(
         button(text("⌃").size(12))
             .on_press(Message::ToggleRibbonCollapsed)
@@ -747,6 +768,44 @@ pub fn view(app: &App) -> Element<'_, Message> {
         ) {
             groups = groups.push(item);
         }
+    } else if app.active_ribbon == RibbonTab::Format {
+        let colors: [(&str, [u8; 3]); 7] = [
+            ("Red", [255, 0, 0]),
+            ("Purple", [128, 0, 128]),
+            ("Indigo", [75, 0, 130]),
+            ("Blue", [0, 102, 204]),
+            ("Green", [0, 128, 0]),
+            ("Yellow", [230, 168, 23]),
+            ("Black", [0, 0, 0]),
+        ];
+        groups = groups.push(group(
+            "Text color",
+            colors
+                .into_iter()
+                .map(|(name, color)| {
+                    let active = if app.text_dialog {
+                        app.text_color
+                    } else {
+                        selected_text_color.unwrap_or(app.text_color)
+                    } == color;
+                    button(
+                        column![
+                            text("T")
+                                .size(24)
+                                .color(Color::from_rgb8(color[0], color[1], color[2])),
+                            text(name).size(9),
+                        ]
+                        .align_x(iced::Center),
+                    )
+                    .on_press(Message::SetTextColor(color))
+                    .style(move |_, status| pdf_tool_style(active, status))
+                    .width(51)
+                    .height(66)
+                    .padding([3, 3])
+                    .into()
+                })
+                .collect(),
+        ));
     } else {
         groups = groups.push(group(
             "Document",
@@ -773,7 +832,10 @@ pub fn view(app: &App) -> Element<'_, Message> {
             ],
         ));
     }
-    if !matches!(app.active_ribbon, RibbonTab::Home | RibbonTab::Comment) {
+    if !matches!(
+        app.active_ribbon,
+        RibbonTab::Home | RibbonTab::Comment | RibbonTab::Format
+    ) {
         groups = groups
             .push(group(
                 "View",
@@ -933,17 +995,74 @@ pub fn view(app: &App) -> Element<'_, Message> {
         if let Some(document) = app.document.as_ref().filter(|d| d.bitmap.is_some()) {
             let handle = document.bitmap.clone().expect("filtered above");
             let (width, height) = document.bitmap_size;
-            let page = iced::widget::stack![
+            let mut page: Element<'_, Message> = iced::widget::stack![
                 image(handle).width(width as f32).height(height as f32),
                 annotation_layer::view(
                     &document.model,
                     document.displayed_page,
                     document.selected_annotation,
+                    app.editing_text_id,
                     app.annotation_tool,
                     document.bitmap_page_points,
                     document.bitmap_size
                 )
-            ];
+            ]
+            .into();
+            if app.text_dialog {
+                let edit_bounds = app.pending_text_bounds.or_else(|| {
+                    app.editing_text_id
+                        .and_then(|id| document.model.get(id).map(|item| item.bounds))
+                });
+                if let Some(bounds) = edit_bounds {
+                    let scale_x = width as f32 / document.bitmap_page_points.0;
+                    let scale_y = height as f32 / document.bitmap_page_points.1;
+                    let x = (bounds.x as f32 * scale_x).max(0.0);
+                    let y = (bounds.y as f32 * scale_y).max(0.0);
+                    let w = (bounds.width as f32 * scale_x).max(80.0);
+                    let h = (bounds.height as f32 * scale_y).max(40.0);
+                    let editor = text_editor(&app.text_draft)
+                        .placeholder("Type text here")
+                        .height(h)
+                        .style(move |theme, status| {
+                            let mut style = text_editor::default(theme, status);
+                            style.background = Color::WHITE.into();
+                            style.value = Color::from_rgb8(
+                                app.text_color[0],
+                                app.text_color[1],
+                                app.text_color[2],
+                            );
+                            style.placeholder = Color::from_rgb8(110, 110, 110);
+                            style
+                        })
+                        .key_binding(|press| {
+                            if press.modifiers.control()
+                                && matches!(
+                                    press.key,
+                                    iced::keyboard::Key::Named(iced::keyboard::key::Named::Enter)
+                                )
+                            {
+                                Some(text_editor::Binding::Custom(Message::CommitText))
+                            } else {
+                                text_editor::Binding::from_key_press(press)
+                            }
+                        })
+                        .on_action(Message::TextEdited);
+                    let input = column![
+                        container(editor).width(w),
+                        row![
+                            button("Save text").on_press(Message::CommitText),
+                            button("Cancel").on_press(Message::CancelText),
+                        ]
+                        .spacing(4),
+                    ]
+                    .spacing(2);
+                    page = iced::widget::stack![
+                        page,
+                        column![Space::new().height(y), row![Space::new().width(x), input],]
+                    ]
+                    .into();
+                }
+            }
             let page_with_pan_room = row![
                 Space::new().width(super::HORIZONTAL_PAN_MARGIN),
                 page,
@@ -1406,50 +1525,6 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .padding(24),
         )
         .width(600)
-        .style(surface);
-        iced::widget::stack![
-            content,
-            iced::widget::opaque(container(dialog).center(Fill).style(|_| container::Style {
-                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.55).into()),
-                ..Default::default()
-            }))
-        ]
-        .into()
-    } else if app.text_dialog {
-        let dialog = container(
-            column![
-                text(if app.editing_text_id.is_some() {
-                    "Edit text box"
-                } else {
-                    "Text box"
-                })
-                .size(20),
-                text_editor(&app.text_draft)
-                    .placeholder("Annotation text")
-                    .height(140)
-                    .key_binding(|press| {
-                        if press.modifiers.control()
-                            && matches!(
-                                press.key,
-                                iced::keyboard::Key::Named(iced::keyboard::key::Named::Enter)
-                            )
-                        {
-                            Some(text_editor::Binding::Custom(Message::CommitText))
-                        } else {
-                            text_editor::Binding::from_key_press(press)
-                        }
-                    })
-                    .on_action(Message::TextEdited),
-                row![
-                    button("Save text").on_press(Message::CommitText),
-                    button("Cancel").on_press(Message::CancelText)
-                ]
-                .spacing(8)
-            ]
-            .spacing(16)
-            .padding(24),
-        )
-        .width(520)
         .style(surface);
         iced::widget::stack![
             content,

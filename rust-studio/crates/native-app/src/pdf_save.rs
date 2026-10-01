@@ -193,7 +193,7 @@ fn embed_font(doc: &mut Document, annotations: &[Annotation]) -> Result<ObjectId
     let face = font_face()?;
     let mut mapping = BTreeMap::<u16, char>::new();
     for annotation in annotations {
-        if let Kind::Text { value } = &annotation.kind {
+        if let Kind::Text { value, .. } = &annotation.kind {
             for ch in value.chars() {
                 if ch == '\n' {
                     continue;
@@ -398,13 +398,19 @@ fn annotation_object(
             )
             .into_bytes()
         }
-        Kind::Text { value } => {
+        Kind::Text { value, color_rgb } => {
             let font_id = text_font.ok_or("Missing embedded text font")?;
+            let rgb = color_rgb.map(|v| f64::from(v) / 255.0);
+            let color = format!("{:.3} {:.3} {:.3} rg", rgb[0], rgb[1], rgb[2]);
             dictionary.set("Subtype", Object::Name(b"FreeText".to_vec()));
             dictionary.set("Contents", unicode_string(value));
+            dictionary.set("C", array(&rgb));
             dictionary.set(
                 "DA",
-                Object::String(b"/OPDS0 14 Tf 0 0 0 rg".to_vec(), StringFormat::Literal),
+                Object::String(
+                    format!("/OPDS0 14 Tf {color}").into_bytes(),
+                    StringFormat::Literal,
+                ),
             );
             let mut fonts = Dictionary::new();
             fonts.set("OPDS0", Object::Reference(font_id));
@@ -412,8 +418,8 @@ fn annotation_object(
             resources.set("Font", fonts);
             appearance.set("Resources", resources);
             let mut content = format!(
-                "q 0 0 {:.3} {:.3} re W n BT /OPDS0 14 Tf 0 0 0 rg\n",
-                b.width, b.height
+                "q 0 0 {:.3} {:.3} re W n BT /OPDS0 14 Tf {color}\n",
+                b.width, b.height,
             );
             for (index, line) in value.split('\n').enumerate() {
                 let encoded = glyphs(line)?;
@@ -882,6 +888,7 @@ mod tests {
                 },
                 kind: Kind::Text {
                     value: "Café Ω Ж".into(),
+                    color_rgb: [0, 0, 0],
                 },
             },
         ];
@@ -931,7 +938,8 @@ mod tests {
                 height: 30.0,
             },
             kind: Kind::Text {
-                value: "漢".into()
+                value: "漢".into(),
+                color_rgb: [0, 0, 0],
             },
         };
         assert!(export_annotations(&source, &[item.clone()])
@@ -1293,6 +1301,7 @@ mod tests {
                 },
                 kind: Kind::Text {
                     value: "Rotated".into(),
+                    color_rgb: [0, 0, 0],
                 },
             },
         ];
@@ -1350,6 +1359,7 @@ mod tests {
                 },
                 kind: Kind::Text {
                     value: value.into(),
+                    color_rgb: [0, 102, 204],
                 },
             }],
         )
@@ -1360,6 +1370,12 @@ mod tests {
         let contents = annots[1].get(b"Contents").unwrap().as_str().unwrap();
         assert!(contents.starts_with(&[0xFE, 0xFF]));
         assert_eq!(contents.len(), 2 + value.encode_utf16().count() * 2);
+        assert_eq!(annots[1].get(b"C").unwrap().as_array().unwrap().len(), 3);
+        assert!(
+            std::str::from_utf8(annots[1].get(b"DA").unwrap().as_str().unwrap())
+                .unwrap()
+                .contains("0.000 0.400 0.800 rg")
+        );
         let ap_id = annots[1]
             .get(b"AP")
             .unwrap()
@@ -1380,6 +1396,7 @@ mod tests {
         .unwrap();
         assert!(content.starts_with("q 0 1 -1 0 50.00000000 0 cm\n"));
         assert!(content.contains("q 0 0 100.000 50.000 re W n"));
+        assert!(content.contains("0.000 0.400 0.800 rg"));
         assert_eq!(content.matches(" Tj").count(), 3);
         for baseline in [36.0_f64, 18.0, 0.0] {
             assert!(content.contains(&format!("1 0 0 1 0 {baseline:.3} Tm")));

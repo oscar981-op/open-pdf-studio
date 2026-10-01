@@ -25,7 +25,7 @@ impl Rect {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kind {
     Rectangle { color_rgb: [u8; 3] },
-    Text { value: String },
+    Text { value: String, color_rgb: [u8; 3] },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -220,6 +220,7 @@ mod tests {
             },
             kind: Kind::Text {
                 value: "first".into(),
+                color_rgb: [0, 0, 0],
             },
         }
     }
@@ -307,6 +308,7 @@ mod tests {
         let mut revised = original.clone();
         revised.kind = Kind::Text {
             value: "revised".into(),
+            color_rgb: [0, 102, 204],
         };
         doc.apply(Edit::Replace(revised.clone())).unwrap();
         assert_eq!(doc.get(1), Some(&revised));
