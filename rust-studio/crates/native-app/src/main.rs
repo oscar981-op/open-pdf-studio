@@ -77,7 +77,11 @@ struct App {
     print_subset: PrintSubset,
     print_reverse: bool,
     print_custom_pages: String,
+    print_zoom_percent: u16,
+    print_zoom_draft: String,
     print_preview: Option<image::Handle>,
+    print_preview_base_bytes: Option<Arc<Vec<u8>>>,
+    print_preview_base_pdf: Option<Arc<ParsedPdf>>,
     print_preview_pdf: Option<Arc<ParsedPdf>>,
     print_preview_page: usize,
     print_preview_index: usize,
@@ -328,8 +332,11 @@ enum Message {
     SelectPrintSubset(PrintSubset),
     SetPrintReverse(bool),
     PrintCustomPagesChanged(String),
+    PrintZoomDraftChanged(String),
+    ApplyPrintZoom,
     PrintPreviewStep(i32),
-    PrintPreviewDocumentReady(u64, Result<Arc<ParsedPdf>, String>),
+    PrintPreviewDocumentReady(u64, Result<(Arc<Vec<u8>>, Arc<ParsedPdf>), String>),
+    PrintScaledPreviewReady(u64, Result<Arc<ParsedPdf>, String>),
     PrintPreviewReady(u64, usize, Result<Raster, String>),
     CancelOpen,
     TogglePages,
@@ -449,10 +456,14 @@ impl App {
                     self.print_subset = PrintSubset::All;
                     self.print_reverse = false;
                     self.print_custom_pages.clear();
+                    self.print_zoom_percent = 100;
+                    self.print_zoom_draft = "100".into();
                     self.print_preview_page = 0;
                     self.print_preview_index = 0;
                     self.print_preview = None;
                     self.print_preview_pdf = None;
+                    self.print_preview_base_bytes = None;
+                    self.print_preview_base_pdf = None;
                     self.print_preview_error.clear();
                     self.print_preview_document_revision =
                         self.print_preview_document_revision.wrapping_add(1);
@@ -460,15 +471,19 @@ impl App {
                     let source = Arc::clone(&document.source_bytes);
                     let annotations: Vec<_> = document.model.items().cloned().collect();
                     if annotations.is_empty() {
+                        self.print_preview_base_bytes = Some(source);
+                        self.print_preview_base_pdf = Some(Arc::clone(&document.pdf));
                         self.print_preview_pdf = Some(Arc::clone(&document.pdf));
                         return self.refresh_print_preview();
                     }
                     return Task::perform(
                         async move {
                             let bytes = pdf_save::export_annotations(&source, &annotations)?;
-                            ParsedPdf::open(Arc::new(bytes))
+                            let bytes = Arc::new(bytes);
+                            let pdf = ParsedPdf::open(Arc::clone(&bytes))
                                 .map(Arc::new)
-                                .map_err(|e| e.to_string())
+                                .map_err(|e| e.to_string())?;
+                            Ok((bytes, pdf))
                         },
                         move |result| Message::PrintPreviewDocumentReady(revision, result),
                     );
@@ -477,6 +492,8 @@ impl App {
             Message::CancelPrint => {
                 self.print_dialog = false;
                 self.print_preview_pdf = None;
+                self.print_preview_base_bytes = None;
+                self.print_preview_base_pdf = None;
                 self.print_preview = None;
                 if let Some(offset) = self.print_scroll_offset.take() {
                     self.page_scroll_offset = offset;
@@ -506,6 +523,45 @@ impl App {
                     return self.refresh_print_preview();
                 }
             }
+            Message::PrintZoomDraftChanged(value) => self.print_zoom_draft = value,
+            Message::ApplyPrintZoom => {
+                if self.print_preview_base_bytes.is_none() {
+                    return Task::none();
+                }
+                let Ok(percent) = self.print_zoom_draft.trim().parse::<u16>() else {
+                    self.print_preview_error = "Page Zoom must be 10–400%".into();
+                    return Task::none();
+                };
+                if !(10..=400).contains(&percent) {
+                    self.print_preview_error = "Page Zoom must be 10–400%".into();
+                    return Task::none();
+                }
+                self.print_zoom_percent = percent;
+                self.print_preview_document_revision =
+                    self.print_preview_document_revision.wrapping_add(1);
+                self.print_preview_revision = self.print_preview_revision.wrapping_add(1);
+                let revision = self.print_preview_document_revision;
+                self.print_preview_pdf = None;
+                self.print_preview = None;
+                self.print_preview_error.clear();
+                if percent == 100 {
+                    self.print_preview_pdf = self.print_preview_base_pdf.clone();
+                    return self.refresh_print_preview();
+                }
+                let Some(bytes) = self.print_preview_base_bytes.clone() else {
+                    self.print_preview_error = "Preparing PDF preview…".into();
+                    return Task::none();
+                };
+                return Task::perform(
+                    async move {
+                        let scaled = pdf_save::apply_print_zoom(&bytes, percent)?;
+                        ParsedPdf::open(Arc::new(scaled))
+                            .map(Arc::new)
+                            .map_err(|e| e.to_string())
+                    },
+                    move |result| Message::PrintScaledPreviewReady(revision, result),
+                );
+            }
             Message::PrintPreviewStep(step) => {
                 if let Some(document) = &self.document {
                     if let Ok(pages) = print_pages(
@@ -525,6 +581,19 @@ impl App {
                 }
             }
             Message::PrintPreviewDocumentReady(revision, result) => {
+                if self.print_dialog && revision == self.print_preview_document_revision {
+                    match result {
+                        Ok((bytes, pdf)) => {
+                            self.print_preview_base_bytes = Some(bytes);
+                            self.print_preview_base_pdf = Some(Arc::clone(&pdf));
+                            self.print_preview_pdf = Some(pdf);
+                            return self.refresh_print_preview();
+                        }
+                        Err(error) => self.print_preview_error = error,
+                    }
+                }
+            }
+            Message::PrintScaledPreviewReady(revision, result) => {
                 if self.print_dialog && revision == self.print_preview_document_revision {
                     match result {
                         Ok(pdf) => {
@@ -558,6 +627,10 @@ impl App {
                 if self.print_busy {
                     return Task::none();
                 }
+                if self.print_preview_pdf.is_none() {
+                    self.print_preview_error = "Wait for a valid print preview".into();
+                    return Task::none();
+                }
                 let Some(document) = &self.document else {
                     return Task::none();
                 };
@@ -571,6 +644,7 @@ impl App {
                     return Task::none();
                 }
                 let source = Arc::clone(&document.source_bytes);
+                let zoom = self.print_zoom_percent;
                 let annotations: Vec<_> = document.model.items().cloned().collect();
                 let pages = match print_pages(
                     self.print_range,
@@ -588,12 +662,15 @@ impl App {
                 };
                 self.print_dialog = false;
                 self.print_preview_pdf = None;
+                self.print_preview_base_bytes = None;
+                self.print_preview_base_pdf = None;
                 self.print_preview = None;
                 self.print_busy = true;
                 self.message = "Creating print PDF…".into();
                 let print = Task::perform(
                     async move {
                         let bytes = pdf_save::export_print_pages(&source, &annotations, &pages)?;
+                        let bytes = pdf_save::apply_print_zoom(&bytes, zoom)?;
                         pdf_save::save_new(std::path::Path::new(&path), &bytes)?;
                         Ok(path)
                     },

@@ -482,6 +482,116 @@ pub fn export_print_pages(
     Ok(bytes)
 }
 
+/// Center the page content and printable annotations at a custom percentage
+/// on the original page-sized sheet. This is a full PDF rewrite, not a viewer
+/// zoom. Both preview and print output use the same transformed bytes.
+pub fn apply_print_zoom(bytes: &[u8], percent: u16) -> Result<Vec<u8>, String> {
+    if !(10..=400).contains(&percent) {
+        return Err("Page Zoom must be between 10% and 400%".into());
+    }
+    if percent == 100 {
+        return Ok(bytes.to_vec());
+    }
+    let mut doc = Document::load_mem(bytes).map_err(|e| e.to_string())?;
+    let scale = f64::from(percent) / 100.0;
+    let pages: Vec<_> = doc.get_pages().into_values().collect();
+    for page_id in pages {
+        let [width, height] = page_size(&doc, page_id)?;
+        let tx = width * (1.0 - scale) / 2.0;
+        let ty = height * (1.0 - scale) / 2.0;
+        let contents = doc
+            .get_dictionary(page_id)
+            .map_err(|e| e.to_string())?
+            .get(b"Contents")
+            .ok()
+            .cloned();
+        if let Some(contents) = contents {
+            let mut streams = match contents {
+                Object::Array(values) => values,
+                Object::Reference(id) => match doc.get_object(id).map_err(|e| e.to_string())? {
+                    Object::Array(values) => values.clone(),
+                    Object::Stream(_) => vec![Object::Reference(id)],
+                    _ => return Err("Unsupported PDF page contents".into()),
+                },
+                Object::Stream(stream) => vec![Object::Reference(doc.add_object(stream))],
+                _ => return Err("Unsupported PDF page contents".into()),
+            };
+            let prefix = doc.add_object(Stream::new(
+                Dictionary::new(),
+                format!("q {scale:.8} 0 0 {scale:.8} {tx:.8} {ty:.8} cm\n").into_bytes(),
+            ));
+            let suffix = doc.add_object(Stream::new(Dictionary::new(), b"\nQ\n".to_vec()));
+            streams.insert(0, Object::Reference(prefix));
+            streams.push(Object::Reference(suffix));
+            doc.get_dictionary_mut(page_id)
+                .map_err(|e| e.to_string())?
+                .set("Contents", Object::Array(streams));
+        }
+        let annots = doc
+            .get_dictionary(page_id)
+            .map_err(|e| e.to_string())?
+            .get(b"Annots")
+            .ok()
+            .cloned();
+        let annot_entries = match annots {
+            None => Vec::new(),
+            Some(Object::Array(values)) => values,
+            Some(Object::Reference(id)) => doc
+                .get_object(id)
+                .and_then(Object::as_array)
+                .map_err(|e| e.to_string())?
+                .clone(),
+            Some(_) => return Err("Unsupported PDF annotation array for Page Zoom".into()),
+        };
+        for entry in annot_entries {
+            let id = entry
+                .as_reference()
+                .map_err(|_| "Page Zoom requires indirect PDF annotations")?;
+            let dict = doc.get_dictionary_mut(id).map_err(|e| e.to_string())?;
+            for unsupported in [b"Vertices".as_slice(), b"InkList", b"L", b"CL"] {
+                if dict.has(unsupported) {
+                    return Err("Page Zoom does not yet support this annotation geometry".into());
+                }
+            }
+            if let Ok(rect) = dict.get(b"Rect") {
+                let [x0, y0, x1, y1] = box_values(rect)?;
+                dict.set(
+                    "Rect",
+                    array(&[
+                        x0 * scale + tx,
+                        y0 * scale + ty,
+                        x1 * scale + tx,
+                        y1 * scale + ty,
+                    ]),
+                );
+            }
+            if let Ok(quads) = dict.get(b"QuadPoints") {
+                let values = quads.as_array().map_err(|e| e.to_string())?;
+                if values.len() % 2 != 0 {
+                    return Err("Invalid PDF highlight quadrilateral".into());
+                }
+                let mut transformed = Vec::with_capacity(values.len());
+                for (index, value) in values.iter().enumerate() {
+                    let offset = if index % 2 == 0 { tx } else { ty };
+                    transformed.push(number(numeric(value)? * scale + offset));
+                }
+                dict.set("QuadPoints", Object::Array(transformed));
+            }
+        }
+    }
+    doc.trailer.remove(b"Prev");
+    doc.trailer.remove(b"XRefStm");
+    doc.prune_objects();
+    let mut output = Vec::new();
+    doc.save_to(&mut output).map_err(|e| e.to_string())?;
+    let check =
+        Document::load_mem(&output).map_err(|e| format!("Zoomed print PDF did not reopen: {e}"))?;
+    if check.get_pages().len() != doc.get_pages().len() {
+        return Err("Page Zoom changed the PDF page count".into());
+    }
+    Ok(output)
+}
+
 pub fn save_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
@@ -766,5 +876,43 @@ mod tests {
         );
         let parsed = opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(bytes)).unwrap();
         assert_eq!(parsed.page_count(), 2);
+    }
+
+    #[test]
+    fn page_zoom_centers_contents_and_highlight_without_changing_sheet_size() {
+        let source = source_pdf();
+        let highlight = Annotation {
+            id: 4,
+            page: 0,
+            bounds: Rect {
+                x: 10.0,
+                y: 20.0,
+                width: 40.0,
+                height: 20.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let annotated = export_annotations(&source, &[highlight]).unwrap();
+        assert_eq!(apply_print_zoom(&annotated, 100).unwrap(), annotated);
+        assert!(apply_print_zoom(&annotated, 9).is_err());
+        let zoomed = apply_print_zoom(&annotated, 80).unwrap();
+        let doc = Document::load_mem(&zoomed).unwrap();
+        let page = *doc.get_pages().values().next().unwrap();
+        assert_eq!(page_size(&doc, page).unwrap(), [200.0, 300.0]);
+        let annotations = doc.get_page_annotations(page).unwrap();
+        let rect = box_values(annotations[1].get(b"Rect").unwrap()).unwrap();
+        for (actual, expected) in rect.into_iter().zip([28.0, 238.0, 60.0, 254.0]) {
+            assert!((actual - expected).abs() < 0.001);
+        }
+        let quads = annotations[1]
+            .get(b"QuadPoints")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert!((numeric(&quads[0]).unwrap() - 28.0).abs() < 0.001);
+        let parsed = opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(zoomed)).unwrap();
+        assert_eq!(parsed.page_count(), 1);
     }
 }

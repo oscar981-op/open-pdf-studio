@@ -1189,6 +1189,24 @@ pub fn view(app: &App) -> Element<'_, Message> {
             ]
             .spacing(8)
             .align_y(iced::Center),
+            rule::horizontal(1),
+            text("Page Placement and Scaling").size(14),
+            row![
+                text("Page Zoom").size(12),
+                text_input("100", &app.print_zoom_draft)
+                    .on_input(Message::PrintZoomDraftChanged)
+                    .on_submit(Message::ApplyPrintZoom)
+                    .width(70),
+                text("%").size(12),
+                button("Apply").on_press_maybe(
+                    app.print_preview_base_bytes
+                        .is_some()
+                        .then_some(Message::ApplyPrintZoom)
+                ),
+            ]
+            .spacing(8)
+            .align_y(iced::Center),
+            text("Centered on the original page size · 10–400%").size(12),
             text(format!(
                 "Selected: {}",
                 match &selection {
@@ -1199,8 +1217,10 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .size(12),
             rule::horizontal(1),
             row![
-                button("Create print PDF")
-                    .on_press_maybe(selection.is_ok().then_some(Message::PrintToPdf)),
+                button("Create print PDF").on_press_maybe(
+                    (selection.is_ok() && app.print_preview_pdf.is_some())
+                        .then_some(Message::PrintToPdf)
+                ),
                 button("Cancel").on_press(Message::CancelPrint)
             ]
             .spacing(8),
@@ -1220,7 +1240,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
         };
         let right = column![
             text(if selection.is_ok() {
-                format!("Preview · page {} of {}", app.print_preview_page + 1, total)
+                format!(
+                    "Preview · page {} of {} · {}%",
+                    app.print_preview_page + 1,
+                    total,
+                    app.print_zoom_percent
+                )
             } else {
                 "Preview unavailable".to_owned()
             })
