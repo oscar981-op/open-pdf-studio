@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 mod annotation_layer;
 mod hakan_ui;
+mod pdf_save;
 use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};
 use opds_engine_probe::{ParsedPdf, Raster};
@@ -64,6 +65,10 @@ struct App {
     busy: bool,
     message: String,
     open_dialog: bool,
+    save_dialog: bool,
+    save_path_input: String,
+    save_busy: bool,
+    save_scroll_offset: Option<scrollable::AbsoluteOffset>,
     text_dialog: bool,
     text_draft: String,
     pending_text_bounds: Option<Rect>,
@@ -90,6 +95,7 @@ enum AnnotationTool {
 
 struct OpenDocument {
     path: String,
+    source_bytes: Arc<Vec<u8>>,
     pdf: Arc<ParsedPdf>,
     model: DocumentModel,
     bitmap: Option<image::Handle>,
@@ -172,14 +178,25 @@ impl RibbonTab {
 #[derive(Debug, Clone)]
 enum Message {
     ShowOpen,
+    ShowSave,
+    CancelSave,
+    SavePathChanged(String),
+    SaveAs,
+    Saved(Result<String, String>),
     CancelOpen,
     TogglePages,
     ToggleProperties,
     PathChanged(String),
     Open,
-    Loaded(u64, Result<(String, Arc<ParsedPdf>, f32, Raster), String>),
+    Loaded(
+        u64,
+        Result<(String, Arc<Vec<u8>>, Arc<ParsedPdf>, f32, Raster), String>,
+    ),
     Zoom(f64),
-    WheelZoom { amount: f32, anchor: [f32; 2] },
+    WheelZoom {
+        amount: f32,
+        anchor: [f32; 2],
+    },
     PageScrolled(scrollable::Viewport),
     GoToPage(usize),
     Rendered(RenderTicket, Result<Raster, String>),
@@ -208,6 +225,68 @@ impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ShowOpen => self.open_dialog = true,
+            Message::ShowSave => {
+                if let Some(document) = &self.document {
+                    let path = std::path::Path::new(&document.path);
+                    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+                    self.save_path_input = path
+                        .with_file_name(format!("{stem}-annotated.pdf"))
+                        .to_string_lossy()
+                        .into_owned();
+                    self.save_dialog = true;
+                    self.save_scroll_offset = Some(self.page_scroll_offset);
+                }
+            }
+            Message::CancelSave => {
+                self.save_dialog = false;
+                if let Some(offset) = self.save_scroll_offset.take() {
+                    self.page_scroll_offset = offset;
+                    return scroll_page_to(offset);
+                }
+            }
+            Message::SavePathChanged(value) => self.save_path_input = value,
+            Message::SaveAs => {
+                if self.save_busy {
+                    return Task::none();
+                }
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                let path = self.save_path_input.trim().to_owned();
+                if path.is_empty() {
+                    self.message = "Enter a destination PDF path".into();
+                    return Task::none();
+                }
+                if std::path::Path::new(&path) == std::path::Path::new(&document.path) {
+                    self.message = "Choose a different path for Save As".into();
+                    return Task::none();
+                }
+                let source = Arc::clone(&document.source_bytes);
+                let annotations: Vec<_> = document.model.items().cloned().collect();
+                self.save_dialog = false;
+                self.save_busy = true;
+                self.message = "Saving PDF…".into();
+                let save = Task::perform(
+                    async move {
+                        let bytes = pdf_save::export_annotations(&source, &annotations)?;
+                        pdf_save::save_new(std::path::Path::new(&path), &bytes)?;
+                        Ok(path)
+                    },
+                    Message::Saved,
+                );
+                if let Some(offset) = self.save_scroll_offset.take() {
+                    self.page_scroll_offset = offset;
+                    return Task::batch([save, scroll_page_to(offset)]);
+                }
+                return save;
+            }
+            Message::Saved(result) => {
+                self.save_busy = false;
+                match result {
+                    Ok(path) => self.message = format!("Saved PDF: {path}"),
+                    Err(error) => self.message = format!("Save As failed: {error}"),
+                }
+            }
             Message::CancelOpen => self.open_dialog = false,
             Message::TogglePages => self.hide_pages = !self.hide_pages,
             Message::ToggleProperties => self.hide_properties = !self.hide_properties,
@@ -440,9 +519,11 @@ impl App {
                 self.message = "Opening PDF…".into();
                 return Task::perform(
                     async move {
-                        let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+                        let bytes =
+                            Arc::new(std::fs::read(&path).map_err(|error| error.to_string())?);
                         let pdf = Arc::new(
-                            ParsedPdf::open(Arc::new(bytes)).map_err(|error| error.to_string())?,
+                            ParsedPdf::open(Arc::clone(&bytes))
+                                .map_err(|error| error.to_string())?,
                         );
                         let (page_width, _) =
                             pdf.page_dimensions(1).map_err(|error| error.to_string())?;
@@ -450,7 +531,7 @@ impl App {
                         let raster = pdf
                             .render_page(1, initial_scale)
                             .map_err(|error| error.to_string())?;
-                        Ok((path, pdf, initial_scale, raster))
+                        Ok((path, bytes, pdf, initial_scale, raster))
                     },
                     move |result| Message::Loaded(token, result),
                 );
@@ -461,7 +542,7 @@ impl App {
                 }
                 self.busy = false;
                 match result {
-                    Ok((path, pdf, initial_scale, raster)) => {
+                    Ok((path, source_bytes, pdf, initial_scale, raster)) => {
                         let Ok(mut model) =
                             DocumentModel::new(DocumentId(token), raster.total_pages)
                         else {
@@ -476,6 +557,7 @@ impl App {
                         );
                         let mut document = OpenDocument {
                             path,
+                            source_bytes,
                             pdf,
                             model,
                             bitmap: None,

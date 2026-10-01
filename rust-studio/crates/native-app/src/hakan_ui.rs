@@ -749,7 +749,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             "Document",
             vec![
                 large_tool("Open", OPEN, Some(Message::ShowOpen)),
-                large_tool("Save", SAVE, None),
+                large_tool("Save As", SAVE, has_doc.then_some(Message::ShowSave)),
                 large_tool("Print", PRINT, None),
             ],
         ));
@@ -849,7 +849,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
     let title_tools = row![
         app_icon,
         quick_access(OPEN, "Open", Some(Message::ShowOpen)),
-        quick_access(SAVE, "Save", None),
+        quick_access(SAVE, "Save As", has_doc.then_some(Message::ShowSave)),
         quick_access(PRINT, "Print", None),
         quick_access(pdf_icon!("preferencesIcon"), "Settings", None),
         quick_access(
@@ -1105,7 +1105,34 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .width(Fill)
     .height(Fill)
     .into();
-    if app.text_dialog {
+    if app.save_dialog {
+        let dialog = container(
+            column![
+                text("Save PDF As").size(20),
+                text("Creates a new PDF; existing files are not overwritten.").size(12),
+                text_input("Destination PDF path", &app.save_path_input)
+                    .on_input(Message::SavePathChanged)
+                    .on_submit(Message::SaveAs),
+                row![
+                    button("Save As").on_press(Message::SaveAs),
+                    button("Cancel").on_press(Message::CancelSave)
+                ]
+                .spacing(8)
+            ]
+            .spacing(16)
+            .padding(24),
+        )
+        .width(600)
+        .style(surface);
+        iced::widget::stack![
+            content,
+            iced::widget::opaque(container(dialog).center(Fill).style(|_| container::Style {
+                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.55).into()),
+                ..Default::default()
+            }))
+        ]
+        .into()
+    } else if app.text_dialog {
         let dialog = container(
             column![
                 text(if app.editing_text_id.is_some() {
