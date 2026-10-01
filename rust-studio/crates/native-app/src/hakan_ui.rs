@@ -1084,7 +1084,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                         .font(iced::Font::with_name("Liberation Sans"))
                         .size(iced::Pixels(f32::from(app.text_font_size) * scale_y))
                         .line_height(iced::Pixels(f32::from(app.text_font_size + 4) * scale_y))
-                        .wrapping(iced::advanced::text::Wrapping::None)
+                        .wrapping(iced::advanced::text::Wrapping::WordOrGlyph)
                         .padding(0)
                         .style(move |theme, status| {
                             let mut style = text_editor::default(theme, status);

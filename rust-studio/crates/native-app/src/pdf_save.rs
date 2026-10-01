@@ -1,6 +1,7 @@
 //! Pure-Rust, incremental PDF export for the native annotation overlay.
 //! The original bytes remain intact. New annotation appearances are mapped
 //! through the visible CropBox and quarter-turn page rotation.
+use super::text_layout;
 use lopdf::{Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream, StringFormat};
 use opds_native_core::annotations::{Annotation, Kind, TextAlign, TEXT_FONT_SIZES};
 use std::collections::BTreeMap;
@@ -9,7 +10,7 @@ use std::io::Write;
 use std::path::Path;
 use ttf_parser::{Face, GlyphId};
 
-const FONT_BYTES: &[u8] = include_bytes!("../../../assets/fonts/LiberationSans-Regular.ttf");
+const FONT_BYTES: &[u8] = text_layout::FONT_BYTES;
 const FONT_NAME: &[u8] = b"LiberationSans";
 
 fn number(value: f64) -> Object {
@@ -152,8 +153,8 @@ fn print_page_geometry(doc: &Document, page_id: ObjectId) -> Result<([f64; 4], u
     Ok((crop, turn))
 }
 
-fn font_face() -> Result<Face<'static>, String> {
-    Face::parse(FONT_BYTES, 0).map_err(|e| format!("Embedded font cannot be read: {e:?}"))
+fn font_face() -> Result<&'static Face<'static>, String> {
+    text_layout::font_face().ok_or_else(|| "Embedded font cannot be read".into())
 }
 
 fn glyph_id(face: &Face<'_>, ch: char) -> Result<GlyphId, String> {
@@ -440,8 +441,11 @@ fn annotation_object(
                 b.width, b.height,
             );
             let face = font_face()?;
-            for (index, line) in value.split('\n').enumerate() {
-                let (encoded, line_width) = encoded_line(&face, line, size)?;
+            for (index, line) in text_layout::wrap_text(value, b.width, size, &face)
+                .iter()
+                .enumerate()
+            {
+                let (encoded, line_width) = encoded_line(&face, line.text, size)?;
                 let baseline = b.height - size - index as f64 * (size + 4.0);
                 let x = match align {
                     TextAlign::Left => 0.0,
@@ -1453,6 +1457,69 @@ mod tests {
                 .page_count(),
             1
         );
+    }
+
+    #[test]
+    fn wrapped_unicode_text_keeps_contents_and_printable_line_positions() {
+        let mut source = Document::load_mem(&source_pdf()).unwrap();
+        let page = *source.get_pages().values().next().unwrap();
+        source.get_dictionary_mut(page).unwrap().set("Rotate", 90);
+        let mut source_bytes = Vec::new();
+        source.save_to(&mut source_bytes).unwrap();
+        let value = "Café Ω longword voorbeeld en nog meer tekst";
+        let saved = export_annotations(
+            &source_bytes,
+            &[Annotation {
+                id: 14,
+                page: 0,
+                bounds: Rect {
+                    x: 10.0,
+                    y: 20.0,
+                    width: 130.0,
+                    height: 150.0,
+                },
+                kind: Kind::Text {
+                    value: value.into(),
+                    color_rgb: [0, 0, 0],
+                    font_size: 24,
+                    align: TextAlign::Right,
+                },
+            }],
+        )
+        .unwrap();
+        let output = Document::load_mem(&saved).unwrap();
+        let page = *output.get_pages().values().next().unwrap();
+        let annotation = output.get_page_annotations(page).unwrap()[1];
+        assert_eq!(annotation.get(b"Q").unwrap().as_i64().unwrap(), 2);
+        let contents = annotation.get(b"Contents").unwrap().as_str().unwrap();
+        assert_eq!(contents.len(), 2 + value.encode_utf16().count() * 2);
+        let ap_id = annotation
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let appearance = std::str::from_utf8(
+            &output
+                .get_object(ap_id)
+                .unwrap()
+                .as_stream()
+                .unwrap()
+                .content,
+        )
+        .unwrap();
+        let face = font_face().unwrap();
+        let lines = text_layout::wrap_text(value, 130.0, 24.0, &face);
+        assert_eq!(lines.len(), 5);
+        assert_eq!(appearance.matches(" Tj").count(), 5);
+        for (index, line) in lines.iter().enumerate() {
+            let x = 130.0 - line.width;
+            let baseline = 150.0 - 24.0 - index as f64 * 28.0;
+            assert!(appearance.contains(&format!("1 0 0 1 {x:.3} {baseline:.3} Tm")));
+        }
     }
 
     #[test]

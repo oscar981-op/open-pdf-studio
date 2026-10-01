@@ -4,6 +4,7 @@ mod annotation_layer;
 mod hakan_ui;
 mod inline_text;
 mod pdf_save;
+mod text_layout;
 mod virtual_ipp;
 use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};

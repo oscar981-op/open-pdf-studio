@@ -1,21 +1,12 @@
 //! Aligned paint and pointer mapping for Iced's multiline text editor.
 //! The underlying editor still handles keyboard and Unicode input; IME preedit
 //! rendering needs a separate check because its glyphs are hidden here.
-use super::Message;
+use super::{text_layout, Message};
 use iced::advanced::text::editor::{Cursor, Position};
 use iced::widget::canvas::{self, Canvas, Frame, Geometry};
 use iced::widget::text_editor;
 use iced::{keyboard, mouse, Color, Element, Point, Rectangle, Renderer, Size, Theme};
 use opds_native_core::annotations::TextAlign;
-use std::sync::OnceLock;
-
-const FONT: &[u8] = include_bytes!("../../../assets/fonts/LiberationSans-Regular.ttf");
-static FACE: OnceLock<Option<ttf_parser::Face<'static>>> = OnceLock::new();
-
-fn font_face() -> Option<&'static ttf_parser::Face<'static>> {
-    FACE.get_or_init(|| ttf_parser::Face::parse(FONT, 0).ok())
-        .as_ref()
-}
 
 pub struct Aligned<'a> {
     content: &'a text_editor::Content,
@@ -53,15 +44,19 @@ pub fn view<'a>(
 }
 
 impl Aligned<'_> {
-    fn lines(&self, visible_count: usize) -> Vec<String> {
-        (0..self.content.line_count().min(visible_count))
-            .filter_map(|index| self.content.line(index))
-            .map(|line| line.text.into_owned())
-            .collect()
+    fn value(&self) -> String {
+        let mut value = String::new();
+        for (index, line) in self.content.lines().enumerate() {
+            if index > 0 {
+                value.push('\n');
+            }
+            value.push_str(&line.text);
+        }
+        value
     }
 
-    fn line_start(&self, width: f32, text: &str, face: &ttf_parser::Face<'_>) -> f32 {
-        let line_width = text_width(face, text, self.size);
+    fn line_start(&self, width: f32, line_width: f64) -> f32 {
+        let line_width = line_width as f32;
         match self.align {
             TextAlign::Left => 0.0,
             TextAlign::Center => (width - line_width) / 2.0,
@@ -70,25 +65,37 @@ impl Aligned<'_> {
     }
 
     fn position_at(&self, point: Point, bounds: Rectangle) -> Position {
-        let line = ((point.y / self.line_height).floor() as usize)
-            .min(self.content.line_count().saturating_sub(1));
-        let current = self.content.line(line);
-        let text = current.as_ref().map_or("", |current| current.text.as_ref());
-        let Some(face) = font_face() else {
-            return Position { line, column: 0 };
+        let Some(face) = text_layout::font_face() else {
+            return Position { line: 0, column: 0 };
         };
-        let x = point.x - self.line_start(bounds.width, text, face);
-        let mut advance = 0.0;
-        for (byte, ch) in text.char_indices() {
-            let next = advance + glyph_width(face, ch, self.size);
-            if x < (advance + next) / 2.0 {
-                return Position { line, column: byte };
+        let value = self.value();
+        let lines =
+            text_layout::wrap_text(&value, f64::from(bounds.width), f64::from(self.size), face);
+        let index =
+            ((point.y / self.line_height).floor() as usize).min(lines.len().saturating_sub(1));
+        let Some(line) = lines.get(index) else {
+            return Position { line: 0, column: 0 };
+        };
+        let x = point.x - self.line_start(bounds.width, line.width);
+        let mut advance = 0.0_f64;
+        for (byte, ch) in line.text.char_indices() {
+            let next = advance
+                + text_layout::text_width(
+                    face,
+                    &line.text[byte..byte + ch.len_utf8()],
+                    f64::from(self.size),
+                );
+            if f64::from(x) < (advance + next) / 2.0 {
+                return Position {
+                    line: line.source_line,
+                    column: line.start_byte + byte,
+                };
             }
             advance = next;
         }
         Position {
-            line,
-            column: text.len(),
+            line: line.source_line,
+            column: line.end_byte,
         }
     }
 }
@@ -166,11 +173,13 @@ impl canvas::Program<Message> for Aligned<'_> {
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry<Renderer>> {
         let mut frame = Frame::new(renderer, bounds.size());
-        let Some(face) = font_face() else {
+        let Some(face) = text_layout::font_face() else {
             return vec![frame.into_geometry()];
         };
+        let value = self.value();
+        let lines =
+            text_layout::wrap_text(&value, f64::from(bounds.width), f64::from(self.size), face);
         let visible_count = (bounds.height / self.line_height).ceil() as usize + 1;
-        let lines = self.lines(visible_count);
         let cursor = self.content.cursor();
         frame.with_clip(Rectangle::new(Point::ORIGIN, bounds.size()), |frame| {
             if let Some(anchor) = cursor.selection {
@@ -181,36 +190,48 @@ impl canvas::Program<Message> for Aligned<'_> {
                 } else {
                     (cursor.position, anchor)
                 };
-                for line_index in from.line..=to.line.min(lines.len().saturating_sub(1)) {
-                    if let Some(line) = lines.get(line_index) {
-                        let start_byte = if line_index == from.line {
-                            from.column
-                        } else {
-                            0
-                        };
-                        let end_byte = if line_index == to.line {
-                            to.column
-                        } else {
-                            line.len()
-                        };
-                        let start = self.line_start(bounds.width, line, face);
-                        let x1 = start
-                            + text_width(face, line.get(..start_byte).unwrap_or(""), self.size);
-                        let x2 = start
-                            + text_width(face, line.get(..end_byte).unwrap_or(line), self.size);
-                        frame.fill_rectangle(
-                            Point::new(x1, line_index as f32 * self.line_height),
-                            Size::new((x2 - x1).max(1.0), self.line_height),
-                            Color::from_rgba8(64, 130, 220, 0.32),
-                        );
+                for (index, line) in lines.iter().take(visible_count).enumerate() {
+                    if line.source_line < from.line || line.source_line > to.line {
+                        continue;
                     }
+                    let start_byte = if line.source_line == from.line {
+                        from.column.max(line.start_byte)
+                    } else {
+                        line.start_byte
+                    };
+                    let end_byte = if line.source_line == to.line {
+                        to.column.min(line.end_byte)
+                    } else {
+                        line.end_byte
+                    };
+                    if start_byte >= end_byte {
+                        continue;
+                    }
+                    let start = self.line_start(bounds.width, line.width);
+                    let prefix_start = line
+                        .text
+                        .get(..(start_byte - line.start_byte).min(line.text.len()))
+                        .unwrap_or("");
+                    let prefix_end = line
+                        .text
+                        .get(..(end_byte - line.start_byte).min(line.text.len()))
+                        .unwrap_or(line.text);
+                    let x1 = start
+                        + text_layout::text_width(face, prefix_start, f64::from(self.size)) as f32;
+                    let x2 = start
+                        + text_layout::text_width(face, prefix_end, f64::from(self.size)) as f32;
+                    frame.fill_rectangle(
+                        Point::new(x1, index as f32 * self.line_height),
+                        Size::new((x2 - x1).max(1.0), self.line_height),
+                        Color::from_rgba8(64, 130, 220, 0.32),
+                    );
                 }
             }
-            for (index, line) in lines.iter().enumerate() {
+            for (index, line) in lines.iter().take(visible_count).enumerate() {
                 frame.fill_text(canvas::Text {
-                    content: line.clone(),
+                    content: line.text.to_owned(),
                     position: Point::new(
-                        self.line_start(bounds.width, line, face),
+                        self.line_start(bounds.width, line.width),
                         index as f32 * self.line_height,
                     ),
                     max_width: f32::INFINITY,
@@ -232,32 +253,34 @@ impl canvas::Program<Message> for Aligned<'_> {
                 });
             }
             if cursor.selection.is_none() {
-                if let Some(line) = lines.get(cursor.position.line) {
-                    let prefix = line.get(..cursor.position.column).unwrap_or("");
-                    let x = self.line_start(bounds.width, line, face)
-                        + text_width(face, prefix, self.size);
-                    frame.fill_rectangle(
-                        Point::new(x, cursor.position.line as f32 * self.line_height),
-                        Size::new(1.0, self.line_height),
-                        self.color,
-                    );
+                for (index, line) in lines.iter().take(visible_count).enumerate() {
+                    let next_same_source = lines
+                        .get(index + 1)
+                        .is_some_and(|next| next.source_line == line.source_line);
+                    if line.source_line == cursor.position.line
+                        && cursor.position.column >= line.start_byte
+                        && (cursor.position.column < line.end_byte || !next_same_source)
+                    {
+                        let prefix_bytes = cursor
+                            .position
+                            .column
+                            .saturating_sub(line.start_byte)
+                            .min(line.text.len());
+                        let prefix = line.text.get(..prefix_bytes).unwrap_or("");
+                        let x = self.line_start(bounds.width, line.width)
+                            + text_layout::text_width(face, prefix, f64::from(self.size)) as f32;
+                        frame.fill_rectangle(
+                            Point::new(x, index as f32 * self.line_height),
+                            Size::new(1.0, self.line_height),
+                            self.color,
+                        );
+                        break;
+                    }
                 }
             }
         });
         vec![frame.into_geometry()]
     }
-}
-
-fn glyph_width(face: &ttf_parser::Face<'_>, ch: char, size: f32) -> f32 {
-    face.glyph_index(ch)
-        .and_then(|glyph| face.glyph_hor_advance(glyph))
-        .map_or(0.0, |advance| {
-            f32::from(advance) * size / f32::from(face.units_per_em())
-        })
-}
-
-fn text_width(face: &ttf_parser::Face<'_>, text: &str, size: f32) -> f32 {
-    text.chars().map(|ch| glyph_width(face, ch, size)).sum()
 }
 
 #[cfg(test)]
@@ -275,8 +298,8 @@ mod tests {
             color: Color::BLACK,
         };
         let bounds = Rectangle::new(Point::ORIGIN, Size::new(240.0, 40.0));
-        let face = font_face().unwrap();
-        let start = aligned.line_start(bounds.width, "Café Ω", face);
+        let face = text_layout::font_face().unwrap();
+        let start = aligned.line_start(bounds.width, text_layout::text_width(face, "Café Ω", 24.0));
         assert_eq!(
             aligned
                 .position_at(Point::new(start + 0.1, 4.0), bounds)
@@ -288,7 +311,7 @@ mod tests {
             "Café Ω".len()
         );
         let prefix = "Café ";
-        let x = start + text_width(face, prefix, aligned.size) + 0.1;
+        let x = start + text_layout::text_width(face, prefix, f64::from(aligned.size)) as f32 + 0.1;
         assert_eq!(
             aligned.position_at(Point::new(x, 4.0), bounds),
             Position {
@@ -296,10 +319,55 @@ mod tests {
                 column: prefix.len(),
             }
         );
-        let second_start = aligned.line_start(bounds.width, "Ж", face);
+        let second_start =
+            aligned.line_start(bounds.width, text_layout::text_width(face, "Ж", 24.0));
         assert_eq!(
             aligned.position_at(Point::new(second_start + 0.1, 30.0), bounds),
             Position { line: 1, column: 0 }
         );
+    }
+
+    #[test]
+    fn wrapped_line_hit_test_keeps_logical_line_and_byte_offset() {
+        let content = text_editor::Content::with_text("Café Ω longword");
+        let aligned = Aligned {
+            content: &content,
+            align: TextAlign::Center,
+            size: 16.0,
+            line_height: 20.0,
+            color: Color::BLACK,
+        };
+        let face = text_layout::font_face().unwrap();
+        let width = text_layout::text_width(face, "longword", 16.0).max(text_layout::text_width(
+            face,
+            "Café Ω ",
+            16.0,
+        )) as f32
+            + 0.1;
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(width, 60.0));
+        let wrapped = text_layout::wrap_text("Café Ω longword", f64::from(width), 16.0, face);
+        assert_eq!(wrapped.len(), 2);
+        let x = aligned.line_start(width, wrapped[1].width) + 0.1;
+        assert_eq!(
+            aligned.position_at(Point::new(x, 25.0), bounds),
+            Position {
+                line: 0,
+                column: "Café Ω ".len(),
+            }
+        );
+    }
+
+    #[test]
+    fn draft_layout_normalizes_line_endings_without_changing_editor_lines() {
+        let content = text_editor::Content::with_text("A\r\nB");
+        let aligned = Aligned {
+            content: &content,
+            align: TextAlign::Center,
+            size: 16.0,
+            line_height: 20.0,
+            color: Color::BLACK,
+        };
+        assert_eq!(content.line_count(), 2);
+        assert_eq!(aligned.value(), "A\nB");
     }
 }

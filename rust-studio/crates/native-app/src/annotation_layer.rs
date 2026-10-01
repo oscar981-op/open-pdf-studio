@@ -1,5 +1,5 @@
 //! Native page overlay: PDF pixels stay cached while annotations are drawn separately.
-use super::{AnnotationTool, Message};
+use super::{text_layout, AnnotationTool, Message};
 use iced::widget::canvas::{self, Canvas, Frame, Geometry, Stroke};
 use iced::{keyboard, mouse};
 use iced::{Color, Element, Point, Rectangle, Renderer, Size, Theme};
@@ -375,25 +375,35 @@ impl canvas::Program<Message> for Layer<'_> {
                                     iced::advanced::text::Alignment::Right,
                                 ),
                             };
-                            for (index, line) in value.split('\n').enumerate() {
-                                frame.fill_text(canvas::Text {
-                                    content: line.to_owned(),
-                                    position: Point::new(
-                                        x,
-                                        top_left.y
-                                            + index as f32 * f32::from(*font_size + 4) * scale_y,
-                                    ),
-                                    max_width: f32::INFINITY,
-                                    color: Color::from_rgb8(
-                                        color_rgb[0],
-                                        color_rgb[1],
-                                        color_rgb[2],
-                                    ),
-                                    size: iced::Pixels(f32::from(*font_size) * scale_y),
-                                    font: iced::Font::with_name("Liberation Sans"),
-                                    align_x,
-                                    ..Default::default()
-                                });
+                            if let Some(face) = text_layout::font_face() {
+                                let lines = text_layout::wrap_text(
+                                    value,
+                                    annotation.bounds.width,
+                                    f64::from(*font_size),
+                                    face,
+                                );
+                                for (index, line) in lines.iter().enumerate() {
+                                    frame.fill_text(canvas::Text {
+                                        content: line.text.to_owned(),
+                                        position: Point::new(
+                                            x,
+                                            top_left.y
+                                                + index as f32
+                                                    * f32::from(*font_size + 4)
+                                                    * scale_y,
+                                        ),
+                                        max_width: f32::INFINITY,
+                                        color: Color::from_rgb8(
+                                            color_rgb[0],
+                                            color_rgb[1],
+                                            color_rgb[2],
+                                        ),
+                                        size: iced::Pixels(f32::from(*font_size) * scale_y),
+                                        font: iced::Font::with_name("Liberation Sans"),
+                                        align_x,
+                                        ..Default::default()
+                                    });
+                                }
                             }
                         });
                     }
