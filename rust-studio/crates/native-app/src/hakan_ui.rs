@@ -3,8 +3,8 @@
 // Source: src/ui/ribbon/widgets.rs and src/ui/ribbon/mod.rs.
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
 use super::{
-    annotation_layer, pdf_save, AnnotationTool, App, Message, PrintDestination, PrintRange,
-    PrintSubset, RibbonTab,
+    annotation_layer, inline_text, pdf_save, AnnotationTool, App, Message, PrintDestination,
+    PrintRange, PrintSubset, RibbonTab,
 };
 use iced::widget::{
     button, checkbox, column, container, image, mouse_area, pick_list, row, rule, scrollable, svg,
@@ -1078,6 +1078,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     let w = (bounds.width as f32 * scale_x).max(80.0);
                     let h = (bounds.height as f32 * scale_y).max(40.0);
                     let editor = text_editor(&app.text_draft)
+                        .id(iced::widget::Id::new("inline-text-editor"))
                         .placeholder("Type text here")
                         .height(h)
                         .font(iced::Font::with_name("Liberation Sans"))
@@ -1094,6 +1095,11 @@ pub fn view(app: &App) -> Element<'_, Message> {
                                 app.text_color[2],
                             );
                             style.placeholder = Color::from_rgb8(110, 110, 110);
+                            if app.text_align != TextAlign::Left {
+                                style.value = Color::TRANSPARENT;
+                                style.placeholder = Color::TRANSPARENT;
+                                style.selection = Color::TRANSPARENT;
+                            }
                             style
                         })
                         .key_binding(|press| {
@@ -1109,6 +1115,27 @@ pub fn view(app: &App) -> Element<'_, Message> {
                             }
                         })
                         .on_action(Message::TextEdited);
+                    let editor: Element<'_, Message> = if app.text_align == TextAlign::Left {
+                        editor.into()
+                    } else {
+                        iced::widget::stack![
+                            editor,
+                            inline_text::view(
+                                &app.text_draft,
+                                app.text_align,
+                                f32::from(app.text_font_size) * scale_y,
+                                f32::from(app.text_font_size + 4) * scale_y,
+                                Color::from_rgb8(
+                                    app.text_color[0],
+                                    app.text_color[1],
+                                    app.text_color[2]
+                                ),
+                                w,
+                                h,
+                            ),
+                        ]
+                        .into()
+                    };
                     let input = column![
                         container(editor).width(w),
                         row![

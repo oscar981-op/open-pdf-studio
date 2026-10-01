@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 mod annotation_layer;
 mod hakan_ui;
+mod inline_text;
 mod pdf_save;
 mod virtual_ipp;
 use iced::widget::{image, scrollable};
@@ -391,6 +392,7 @@ enum Message {
     RemoveSelectedAnnotation,
     AddAnnotation(Rect),
     TextEdited(iced::widget::text_editor::Action),
+    TextPointer(iced::advanced::text::editor::Cursor, bool),
     SetTextColor([u8; 3]),
     SetTextFontSize(u16),
     SetTextAlign(TextAlign),
@@ -737,6 +739,14 @@ impl App {
                 self.annotation_tool_activated = true;
             }
             Message::TextEdited(action) => self.text_draft.perform(action),
+            Message::TextPointer(cursor, focus) => {
+                self.text_draft.move_to(cursor);
+                if focus {
+                    return iced::widget::operation::focus(iced::widget::Id::new(
+                        "inline-text-editor",
+                    ));
+                }
+            }
             Message::SetTextColor(color) => {
                 self.text_color = color;
                 if !self.text_dialog {
