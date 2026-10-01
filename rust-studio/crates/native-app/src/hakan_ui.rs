@@ -3,7 +3,8 @@
 // Source: src/ui/ribbon/widgets.rs and src/ui/ribbon/mod.rs.
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
 use super::{
-    annotation_layer, pdf_save, AnnotationTool, App, Message, PrintRange, PrintSubset, RibbonTab,
+    annotation_layer, pdf_save, AnnotationTool, App, Message, PrintDestination, PrintRange,
+    PrintSubset, RibbonTab,
 };
 use iced::widget::{
     button, checkbox, column, container, image, mouse_area, row, rule, scrollable, svg, text,
@@ -1128,9 +1129,33 @@ pub fn view(app: &App) -> Element<'_, Message> {
         );
         let selected_count = selection.as_ref().map(|pages| pages.len()).unwrap_or(0);
         let left = column![
-            text("Destination: PDF file").size(14),
-            text("Creates a new PDF; existing files are not overwritten.").size(12),
-            text_input("Destination PDF path", &app.print_path_input)
+            text("Printer").size(14),
+            row![
+                button("PDF file")
+                    .on_press(Message::SelectPrintDestination(PrintDestination::PdfFile))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_destination == PrintDestination::PdfFile,
+                        status
+                    )),
+                button("Local IPP test")
+                    .on_press(Message::SelectPrintDestination(
+                        PrintDestination::VirtualIpp
+                    ))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_destination == PrintDestination::VirtualIpp,
+                        status
+                    )),
+            ]
+            .spacing(8),
+            text(if app.print_destination == PrintDestination::VirtualIpp {
+                "Sends only to a temporary 127.0.0.1 test server; saves its capture."
+            } else {
+                "Creates a new PDF; existing files are not overwritten."
+            })
+            .size(12),
+            text_input("Output PDF path", &app.print_path_input)
                 .on_input(Message::PrintPathChanged)
                 .on_submit(Message::PrintToPdf),
             rule::horizontal(1),
@@ -1278,7 +1303,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .size(12),
             rule::horizontal(1),
             row![
-                button("Create print PDF").on_press_maybe(
+                button(if app.print_destination == PrintDestination::VirtualIpp {
+                    "Test virtual printer"
+                } else {
+                    "Create print PDF"
+                })
+                .on_press_maybe(
                     (selection.is_ok() && app.print_preview_pdf.is_some())
                         .then_some(Message::PrintToPdf)
                 ),

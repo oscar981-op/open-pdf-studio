@@ -3,6 +3,7 @@
 mod annotation_layer;
 mod hakan_ui;
 mod pdf_save;
+mod virtual_ipp;
 use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};
 use opds_engine_probe::{ParsedPdf, Raster};
@@ -73,6 +74,7 @@ struct App {
     print_path_input: String,
     print_busy: bool,
     print_scroll_offset: Option<scrollable::AbsoluteOffset>,
+    print_destination: PrintDestination,
     print_range: PrintRange,
     print_subset: PrintSubset,
     print_reverse: bool,
@@ -128,6 +130,13 @@ enum PrintSubset {
     All,
     Odd,
     Even,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum PrintDestination {
+    #[default]
+    PdfFile,
+    VirtualIpp,
 }
 
 fn print_pages(
@@ -328,6 +337,7 @@ enum Message {
     ShowPrint,
     CancelPrint,
     PrintPathChanged(String),
+    SelectPrintDestination(PrintDestination),
     PrintToPdf,
     Printed(Result<String, String>),
     SelectPrintRange(PrintRange),
@@ -456,6 +466,7 @@ impl App {
                         .into_owned();
                     self.print_dialog = true;
                     self.print_scroll_offset = Some(self.page_scroll_offset);
+                    self.print_destination = PrintDestination::PdfFile;
                     self.print_range = PrintRange::All;
                     self.print_subset = PrintSubset::All;
                     self.print_reverse = false;
@@ -507,6 +518,7 @@ impl App {
                 }
             }
             Message::PrintPathChanged(value) => self.print_path_input = value,
+            Message::SelectPrintDestination(destination) => self.print_destination = destination,
             Message::SelectPrintRange(range) => {
                 self.print_range = range;
                 self.print_preview_index = 0;
@@ -636,6 +648,7 @@ impl App {
                     return Task::none();
                 }
                 let source = Arc::clone(&document.source_bytes);
+                let destination = self.print_destination;
                 let paper = self.print_paper;
                 let scale = self.print_scale;
                 let zoom = self.print_zoom_percent;
@@ -665,8 +678,17 @@ impl App {
                     async move {
                         let bytes = pdf_save::export_print_pages(&source, &annotations, &pages)?;
                         let bytes = pdf_save::apply_print_placement(&bytes, paper, scale, zoom)?;
+                        let bytes = if destination == PrintDestination::VirtualIpp {
+                            virtual_ipp::print_roundtrip(&bytes)?
+                        } else {
+                            bytes
+                        };
                         pdf_save::save_new(std::path::Path::new(&path), &bytes)?;
-                        Ok(path)
+                        Ok(if destination == PrintDestination::VirtualIpp {
+                            format!("Virtual IPP captured PDF: {path}")
+                        } else {
+                            format!("Print PDF created: {path}")
+                        })
                     },
                     Message::Printed,
                 );
@@ -679,7 +701,7 @@ impl App {
             Message::Printed(result) => {
                 self.print_busy = false;
                 match result {
-                    Ok(path) => self.message = format!("Print PDF created: {path}"),
+                    Ok(message) => self.message = message,
                     Err(error) => self.message = format!("Print to PDF failed: {error}"),
                 }
             }
