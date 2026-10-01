@@ -2,7 +2,7 @@
 // Adapted from Hakan Seven / OpenCADStudio, commit 2a15a370f6886d3e8695ab81c7d677e0cd484451.
 // Source: src/ui/ribbon/widgets.rs and src/ui/ribbon/mod.rs.
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
-use super::{annotation_layer, AnnotationTool, App, Message, RibbonTab};
+use super::{annotation_layer, AnnotationTool, App, Message, PrintRange, RibbonTab};
 use iced::widget::{
     button, column, container, image, mouse_area, row, rule, scrollable, svg, text, text_input,
     tooltip, Space,
@@ -1106,24 +1106,124 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .height(Fill)
     .into();
     if app.print_dialog {
-        let dialog = container(
-            column![
-                text("Print").size(20),
-                text("Destination: PDF file").size(14),
-                text("All pages and native annotations are included. Creates a new file; existing files are not overwritten.").size(12),
-                text_input("Destination PDF path", &app.print_path_input)
-                    .on_input(Message::PrintPathChanged)
-                    .on_submit(Message::PrintToPdf),
-                row![
-                    button("Create print PDF").on_press(Message::PrintToPdf),
-                    button("Cancel").on_press(Message::CancelPrint)
-                ]
-                .spacing(8)
+        let current = app
+            .document
+            .as_ref()
+            .map(|d| d.model.view().page() + 1)
+            .unwrap_or(1);
+        let total = app
+            .document
+            .as_ref()
+            .map(|d| d.pdf.page_count())
+            .unwrap_or(0);
+        let selection = super::print_pages(
+            app.print_range,
+            current.saturating_sub(1),
+            &app.print_custom_pages,
+            total,
+        );
+        let selected_count = selection.as_ref().map(|pages| pages.len()).unwrap_or(0);
+        let left = column![
+            text("Destination: PDF file").size(14),
+            text("Creates a new PDF; existing files are not overwritten.").size(12),
+            text_input("Destination PDF path", &app.print_path_input)
+                .on_input(Message::PrintPathChanged)
+                .on_submit(Message::PrintToPdf),
+            rule::horizontal(1),
+            text("Page Range").size(14),
+            row![
+                button("All")
+                    .on_press(Message::SelectPrintRange(PrintRange::All))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_range == PrintRange::All,
+                        status
+                    )),
+                button(text(format!("Current: {current}")))
+                    .on_press(Message::SelectPrintRange(PrintRange::Current))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_range == PrintRange::Current,
+                        status
+                    )),
+                button("Custom")
+                    .on_press(Message::SelectPrintRange(PrintRange::Custom))
+                    .style(|theme, status| tool_btn_style(
+                        theme,
+                        app.print_range == PrintRange::Custom,
+                        status
+                    )),
             ]
-            .spacing(16)
-            .padding(24),
+            .spacing(6),
+            text_input("Pages, e.g. 1, 3-5", &app.print_custom_pages)
+                .on_input(Message::PrintCustomPagesChanged),
+            text(format!(
+                "Selected: {}",
+                match &selection {
+                    Ok(pages) => pages.len().to_string(),
+                    Err(error) => error.clone(),
+                }
+            ))
+            .size(12),
+            rule::horizontal(1),
+            row![
+                button("Create print PDF").on_press(Message::PrintToPdf),
+                button("Cancel").on_press(Message::CancelPrint)
+            ]
+            .spacing(8),
+        ]
+        .spacing(12)
+        .width(430);
+        let preview: Element<'_, Message> = if let Some(bitmap) = &app.print_preview {
+            image(bitmap.clone()).width(300).into()
+        } else {
+            text(if app.print_preview_error.is_empty() {
+                "Rendering preview…"
+            } else {
+                &app.print_preview_error
+            })
+            .size(12)
+            .into()
+        };
+        let right = column![
+            text(format!(
+                "Preview · page {} of {}",
+                app.print_preview_page + 1,
+                total
+            ))
+            .size(12),
+            container(preview)
+                .width(320)
+                .height(420)
+                .align_x(iced::alignment::Horizontal::Center)
+                .align_y(iced::alignment::Vertical::Center)
+                .style(surface),
+            row![
+                text(format!(
+                    "{} of {} selected",
+                    app.print_preview_index + 1,
+                    selected_count
+                ))
+                .size(12),
+                Space::new().width(Fill),
+                button("‹").on_press_maybe(
+                    (app.print_preview_index > 0).then_some(Message::PrintPreviewStep(-1))
+                ),
+                button("›").on_press_maybe(
+                    (app.print_preview_index + 1 < selected_count)
+                        .then_some(Message::PrintPreviewStep(1))
+                ),
+            ]
+            .spacing(5)
+            .align_y(iced::Center),
+        ]
+        .spacing(8);
+        let dialog = container(
+            column![text("Print").size(20), row![left, right].spacing(20),]
+                .spacing(12)
+                .padding(16),
         )
-        .width(600)
+        .width(820)
         .style(surface);
         iced::widget::stack![
             content,

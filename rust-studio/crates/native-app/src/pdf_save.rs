@@ -395,6 +395,44 @@ pub fn export_annotations(source: &[u8], annotations: &[Annotation]) -> Result<V
     Ok(bytes)
 }
 
+/// Produce a printable PDF containing the selected original pages, in their
+/// original order. The annotation appearances are added before page removal.
+pub fn export_print_pages(
+    source: &[u8],
+    annotations: &[Annotation],
+    selected: &[usize],
+) -> Result<Vec<u8>, String> {
+    let annotated = export_annotations(source, annotations)?;
+    let mut document = Document::load_mem(&annotated).map_err(|e| e.to_string())?;
+    let count = document.get_pages().len();
+    if selected.is_empty()
+        || selected.iter().any(|&page| page >= count)
+        || selected.windows(2).any(|pair| pair[0] >= pair[1])
+    {
+        return Err("Choose at least one valid page in ascending order".into());
+    }
+    if selected.len() == count {
+        return Ok(annotated);
+    }
+    let omitted: Vec<u32> = (0..count)
+        .filter(|page| selected.binary_search(page).is_err())
+        .map(|page| page as u32 + 1)
+        .collect();
+    document.delete_pages(&omitted);
+    document.prune_objects();
+    // A full rewrite must not retain offsets into the preceding incremental
+    // revision: they no longer exist in the new file.
+    document.trailer.remove(b"Prev");
+    document.trailer.remove(b"XRefStm");
+    let mut bytes = Vec::new();
+    document.save_to(&mut bytes).map_err(|e| e.to_string())?;
+    let check = Document::load_mem(&bytes).map_err(|e| format!("Print PDF did not reopen: {e}"))?;
+    if check.get_pages().len() != selected.len() {
+        return Err("Print PDF page count differs from selection".into());
+    }
+    Ok(bytes)
+}
+
 pub fn save_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let mut file = std::fs::OpenOptions::new()
         .write(true)
@@ -545,5 +583,69 @@ mod tests {
         assert!(export_annotations(&source, &[item])
             .unwrap_err()
             .contains("outside"));
+    }
+
+    #[test]
+    fn print_pages_rejects_invalid_selection() {
+        let source = source_pdf();
+        assert!(export_print_pages(&source, &[], &[]).is_err());
+        assert!(export_print_pages(&source, &[], &[1]).is_err());
+        let all = export_print_pages(&source, &[], &[0]).unwrap();
+        assert!(all.starts_with(&source));
+    }
+
+    #[test]
+    fn print_pages_keeps_only_selected_original_pages_and_annotations() {
+        let mut doc = Document::load_mem(&source_pdf()).unwrap();
+        let root = doc.trailer.get(b"Root").unwrap().as_reference().unwrap();
+        let pages_id = doc
+            .get_dictionary(root)
+            .unwrap()
+            .get(b"Pages")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let first = *doc.get_pages().values().next().unwrap();
+        for _ in 0..2 {
+            let page = doc.get_object(first).unwrap().clone();
+            let id = doc.add_object(page);
+            doc.get_dictionary_mut(pages_id)
+                .unwrap()
+                .get_mut(b"Kids")
+                .unwrap()
+                .as_array_mut()
+                .unwrap()
+                .push(Object::Reference(id));
+        }
+        doc.get_dictionary_mut(pages_id)
+            .unwrap()
+            .set("Count", 3_i64);
+        let mut source = Vec::new();
+        doc.save_to(&mut source).unwrap();
+        let item = Annotation {
+            id: 9,
+            page: 1,
+            bounds: Rect {
+                x: 10.0,
+                y: 20.0,
+                width: 40.0,
+                height: 30.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let bytes = export_print_pages(&source, &[item], &[1]).unwrap();
+        let output = Document::load_mem(&bytes).unwrap();
+        assert_eq!(output.get_pages().len(), 1);
+        let page = *output.get_pages().values().next().unwrap();
+        let annots = output.get_page_annotations(page).unwrap();
+        assert_eq!(annots.len(), 2);
+        assert_eq!(
+            annots[1].get(b"Subtype").unwrap().as_name().unwrap(),
+            b"Highlight"
+        );
+        let parsed = opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(bytes)).unwrap();
+        assert_eq!(parsed.page_count(), 1);
     }
 }

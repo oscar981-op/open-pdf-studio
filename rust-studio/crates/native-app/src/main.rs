@@ -73,6 +73,15 @@ struct App {
     print_path_input: String,
     print_busy: bool,
     print_scroll_offset: Option<scrollable::AbsoluteOffset>,
+    print_range: PrintRange,
+    print_custom_pages: String,
+    print_preview: Option<image::Handle>,
+    print_preview_pdf: Option<Arc<ParsedPdf>>,
+    print_preview_page: usize,
+    print_preview_index: usize,
+    print_preview_revision: u64,
+    print_preview_document_revision: u64,
+    print_preview_error: String,
     text_dialog: bool,
     text_draft: String,
     pending_text_bounds: Option<Rect>,
@@ -95,6 +104,77 @@ enum AnnotationTool {
     Rectangle,
     Highlight,
     Text,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum PrintRange {
+    #[default]
+    All,
+    Current,
+    Custom,
+}
+
+fn print_pages(
+    range: PrintRange,
+    current: usize,
+    custom: &str,
+    total: usize,
+) -> Result<Vec<usize>, String> {
+    if total == 0 {
+        return Err("No PDF pages available".into());
+    }
+    match range {
+        PrintRange::All => Ok((0..total).collect()),
+        PrintRange::Current => Ok(vec![current.min(total - 1)]),
+        PrintRange::Custom => {
+            let mut pages = std::collections::BTreeSet::new();
+            if custom.trim().is_empty() {
+                return Err("Enter page numbers such as 1, 3-5".into());
+            }
+            for part in custom.split(',') {
+                let part = part.trim();
+                let (first, last) = if let Some((first, last)) = part.split_once('-') {
+                    (first.trim(), last.trim())
+                } else {
+                    (part, part)
+                };
+                let parse = |value: &str| {
+                    value
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|&page| page > 0 && page <= total)
+                };
+                let (Some(first), Some(last)) = (parse(first), parse(last)) else {
+                    return Err(format!("Invalid page range: {part}"));
+                };
+                if first > last {
+                    return Err(format!("Page range runs backwards: {part}"));
+                }
+                pages.extend((first - 1)..last);
+            }
+            Ok(pages.into_iter().collect())
+        }
+    }
+}
+
+#[cfg(test)]
+mod print_range_tests {
+    use super::*;
+
+    #[test]
+    fn custom_page_ranges_are_sorted_deduplicated_and_bounded() {
+        assert_eq!(
+            print_pages(PrintRange::Custom, 0, "5, 2-3, 2", 5).unwrap(),
+            vec![1, 2, 4]
+        );
+        assert_eq!(print_pages(PrintRange::Current, 3, "", 5).unwrap(), vec![3]);
+        for invalid in ["", "0", "6", "3-2", "1,,2", "1-2-3"] {
+            assert!(
+                print_pages(PrintRange::Custom, 0, invalid, 5).is_err(),
+                "{invalid}"
+            );
+        }
+    }
 }
 
 struct OpenDocument {
@@ -192,6 +272,11 @@ enum Message {
     PrintPathChanged(String),
     PrintToPdf,
     Printed(Result<String, String>),
+    SelectPrintRange(PrintRange),
+    PrintCustomPagesChanged(String),
+    PrintPreviewStep(i32),
+    PrintPreviewDocumentReady(u64, Result<Arc<ParsedPdf>, String>),
+    PrintPreviewReady(u64, usize, Result<Raster, String>),
     CancelOpen,
     TogglePages,
     ToggleProperties,
@@ -306,16 +391,101 @@ impl App {
                         .into_owned();
                     self.print_dialog = true;
                     self.print_scroll_offset = Some(self.page_scroll_offset);
+                    self.print_range = PrintRange::All;
+                    self.print_custom_pages.clear();
+                    self.print_preview_page = 0;
+                    self.print_preview_index = 0;
+                    self.print_preview = None;
+                    self.print_preview_pdf = None;
+                    self.print_preview_error.clear();
+                    self.print_preview_document_revision =
+                        self.print_preview_document_revision.wrapping_add(1);
+                    let revision = self.print_preview_document_revision;
+                    let source = Arc::clone(&document.source_bytes);
+                    let annotations: Vec<_> = document.model.items().cloned().collect();
+                    if annotations.is_empty() {
+                        self.print_preview_pdf = Some(Arc::clone(&document.pdf));
+                        return self.refresh_print_preview();
+                    }
+                    return Task::perform(
+                        async move {
+                            let bytes = pdf_save::export_annotations(&source, &annotations)?;
+                            ParsedPdf::open(Arc::new(bytes))
+                                .map(Arc::new)
+                                .map_err(|e| e.to_string())
+                        },
+                        move |result| Message::PrintPreviewDocumentReady(revision, result),
+                    );
                 }
             }
             Message::CancelPrint => {
                 self.print_dialog = false;
+                self.print_preview_pdf = None;
+                self.print_preview = None;
                 if let Some(offset) = self.print_scroll_offset.take() {
                     self.page_scroll_offset = offset;
                     return scroll_page_to(offset);
                 }
             }
             Message::PrintPathChanged(value) => self.print_path_input = value,
+            Message::SelectPrintRange(range) => {
+                self.print_range = range;
+                self.print_preview_index = 0;
+                return self.refresh_print_preview();
+            }
+            Message::PrintCustomPagesChanged(value) => {
+                self.print_custom_pages = value;
+                if self.print_range == PrintRange::Custom {
+                    self.print_preview_index = 0;
+                    return self.refresh_print_preview();
+                }
+            }
+            Message::PrintPreviewStep(step) => {
+                if let Some(document) = &self.document {
+                    if let Ok(pages) = print_pages(
+                        self.print_range,
+                        document.model.view().page(),
+                        &self.print_custom_pages,
+                        document.pdf.page_count(),
+                    ) {
+                        self.print_preview_index = self
+                            .print_preview_index
+                            .saturating_add_signed(step as isize)
+                            .min(pages.len().saturating_sub(1));
+                        return self.refresh_print_preview();
+                    }
+                }
+            }
+            Message::PrintPreviewDocumentReady(revision, result) => {
+                if self.print_dialog && revision == self.print_preview_document_revision {
+                    match result {
+                        Ok(pdf) => {
+                            self.print_preview_pdf = Some(pdf);
+                            return self.refresh_print_preview();
+                        }
+                        Err(error) => self.print_preview_error = error,
+                    }
+                }
+            }
+            Message::PrintPreviewReady(revision, page, result) => {
+                if self.print_dialog && revision == self.print_preview_revision {
+                    match result {
+                        Ok(raster) => {
+                            self.print_preview = Some(image::Handle::from_rgba(
+                                raster.width,
+                                raster.height,
+                                raster.rgba,
+                            ));
+                            self.print_preview_page = page;
+                            self.print_preview_error.clear();
+                        }
+                        Err(error) => {
+                            self.print_preview = None;
+                            self.print_preview_error = error;
+                        }
+                    }
+                }
+            }
             Message::PrintToPdf => {
                 if self.print_busy {
                     return Task::none();
@@ -334,12 +504,26 @@ impl App {
                 }
                 let source = Arc::clone(&document.source_bytes);
                 let annotations: Vec<_> = document.model.items().cloned().collect();
+                let pages = match print_pages(
+                    self.print_range,
+                    document.model.view().page(),
+                    &self.print_custom_pages,
+                    document.pdf.page_count(),
+                ) {
+                    Ok(pages) => pages,
+                    Err(error) => {
+                        self.message = error;
+                        return Task::none();
+                    }
+                };
                 self.print_dialog = false;
+                self.print_preview_pdf = None;
+                self.print_preview = None;
                 self.print_busy = true;
                 self.message = "Creating print PDF…".into();
                 let print = Task::perform(
                     async move {
-                        let bytes = pdf_save::export_annotations(&source, &annotations)?;
+                        let bytes = pdf_save::export_print_pages(&source, &annotations, &pages)?;
                         pdf_save::save_new(std::path::Path::new(&path), &bytes)?;
                         Ok(path)
                     },
@@ -775,6 +959,38 @@ impl App {
                     .map_err(|error| error.to_string())
             },
             move |result| Message::Rendered(ticket, result),
+        )
+    }
+
+    fn refresh_print_preview(&mut self) -> Task<Message> {
+        self.print_preview_revision = self.print_preview_revision.wrapping_add(1);
+        let revision = self.print_preview_revision;
+        self.print_preview = None;
+        let Some(document) = &self.document else {
+            return Task::none();
+        };
+        let pages = match print_pages(
+            self.print_range,
+            document.model.view().page(),
+            &self.print_custom_pages,
+            document.pdf.page_count(),
+        ) {
+            Ok(pages) => pages,
+            Err(error) => {
+                self.print_preview_error = error;
+                return Task::none();
+            }
+        };
+        self.print_preview_error.clear();
+        self.print_preview_index = self.print_preview_index.min(pages.len() - 1);
+        let page = pages[self.print_preview_index];
+        let Some(pdf) = &self.print_preview_pdf else {
+            return Task::none();
+        };
+        let pdf = Arc::clone(pdf);
+        Task::perform(
+            async move { pdf.render_page(page + 1, 0.4).map_err(|e| e.to_string()) },
+            move |result| Message::PrintPreviewReady(revision, page, result),
         )
     }
 
