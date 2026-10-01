@@ -775,41 +775,65 @@ pub fn view(app: &App) -> Element<'_, Message> {
             groups = groups.push(item);
         }
     } else if app.active_ribbon == RibbonTab::Format {
-        let colors: [(&str, [u8; 3]); 7] = [
-            ("Red", [255, 0, 0]),
-            ("Purple", [128, 0, 128]),
-            ("Indigo", [75, 0, 130]),
-            ("Blue", [0, 102, 204]),
-            ("Green", [0, 128, 0]),
-            ("Yellow", [230, 168, 23]),
-            ("Black", [0, 0, 0]),
+        // Keep the source gallery order and footprint (FormatTab.jsx). The
+        // three cloudy presets remain disabled until their PDF appearance is
+        // represented in the native annotation model.
+        let colors: [(&str, [u8; 3], bool); 10] = [
+            ("Red", [255, 0, 0], true),
+            ("Purple", [128, 0, 128], true),
+            ("Indigo", [75, 0, 130], true),
+            ("Blue", [0, 102, 204], true),
+            ("Green", [0, 128, 0], true),
+            ("Yellow", [230, 168, 23], true),
+            ("Black", [0, 0, 0], true),
+            ("Red Cloudy", [255, 0, 0], false),
+            ("Purple Cloudy", [128, 0, 128], false),
+            ("Indigo Cloudy", [123, 104, 238], false),
         ];
         groups = groups.push(group(
-            "Text color",
+            "",
             colors
                 .into_iter()
-                .map(|(name, color)| {
+                .map(|(name, color, enabled)| {
                     let active = if app.text_dialog {
                         app.text_color
                     } else {
                         selected_text_style
                             .map(|style| style.0)
                             .unwrap_or(app.text_color)
-                    } == color;
+                    } == color
+                        && enabled;
+                    let preview = container(
+                        text("T")
+                            .size(20)
+                            .color(Color::from_rgb8(color[0], color[1], color[2])),
+                    )
+                    .width(39)
+                    .height(35)
+                    .align_x(iced::Center)
+                    .align_y(iced::Center)
+                    .style(move |_| container::Style {
+                        border: Border {
+                            color: Color::from_rgb8(color[0], color[1], color[2]),
+                            width: 1.0,
+                            radius: 0.0.into(),
+                        },
+                        ..Default::default()
+                    });
                     button(
                         column![
-                            text("T")
-                                .size(24)
-                                .color(Color::from_rgb8(color[0], color[1], color[2])),
-                            text(name).size(9),
+                            preview,
+                            text(name)
+                                .size(9)
+                                .shaping(iced::widget::text::Shaping::Basic),
                         ]
                         .align_x(iced::Center),
                     )
-                    .on_press(Message::SetTextColor(color))
+                    .on_press_maybe(enabled.then_some(Message::SetTextColor(color)))
                     .style(move |_, status| pdf_tool_style(active, status))
-                    .width(51)
-                    .height(66)
-                    .padding([3, 3])
+                    .width(50)
+                    .height(62)
+                    .padding([2, 2])
                     .into()
                 })
                 .collect(),
