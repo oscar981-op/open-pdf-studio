@@ -1,6 +1,6 @@
 //! Pure-Rust, incremental PDF export for the native annotation overlay.
-//! The original bytes remain intact; this first path deliberately accepts only
-//! unrotated, origin-zero pages whose CropBox equals the MediaBox.
+//! The original bytes remain intact. New annotation appearances are mapped
+//! through the visible CropBox and quarter-turn page rotation.
 use lopdf::{Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream, StringFormat};
 use opds_native_core::annotations::{Annotation, Kind};
 use std::collections::BTreeMap;
@@ -87,30 +87,32 @@ fn box_values(object: &Object) -> Result<[f64; 4], String> {
 }
 
 fn page_size(doc: &Document, page_id: ObjectId) -> Result<[f64; 2], String> {
-    let media =
-        box_values(inherited(doc, page_id, b"MediaBox")?.ok_or("PDF page has no MediaBox")?)?;
-    let crop = inherited(doc, page_id, b"CropBox")?
-        .map(box_values)
-        .transpose()?
-        .unwrap_or(media);
-    let rotate = inherited(doc, page_id, b"Rotate")?
-        .map(numeric)
-        .transpose()?
-        .unwrap_or(0.0);
-    let user_unit = inherited(doc, page_id, b"UserUnit")?
-        .map(numeric)
-        .transpose()?
-        .unwrap_or(1.0);
-    if media != crop || media[0] != 0.0 || media[1] != 0.0 || rotate != 0.0 || user_unit != 1.0 {
-        return Err(
-            "Save As supports only unrotated pages with an origin-zero MediaBox/CropBox".into(),
-        );
-    }
-    let size = [media[2], media[3]];
-    if size.iter().all(|n| n.is_finite() && *n > 0.0) {
-        Ok(size)
+    let (crop, rotation) = print_page_geometry(doc, page_id)?;
+    let size = [crop[2] - crop[0], crop[3] - crop[1]];
+    if matches!(rotation, 90 | 270) {
+        Ok([size[1], size[0]])
     } else {
-        Err("Invalid PDF page size".into())
+        Ok(size)
+    }
+}
+
+fn display_to_pdf(crop: [f64; 4], rotation: u16, u: f64, v: f64) -> [f64; 2] {
+    match rotation {
+        0 => [crop[0] + u, crop[3] - v],
+        90 => [crop[0] + v, crop[1] + u],
+        180 => [crop[2] - u, crop[1] + v],
+        270 => [crop[2] - v, crop[3] - u],
+        _ => unreachable!("validated quarter-turn rotation"),
+    }
+}
+
+fn appearance_matrix(rotation: u16, width: f64, height: f64) -> Option<String> {
+    match rotation {
+        0 => None,
+        90 => Some(format!("0 1 -1 0 {height:.8} 0")),
+        180 => Some(format!("-1 0 0 -1 {width:.8} {height:.8}")),
+        270 => Some(format!("0 -1 1 0 0 {width:.8}")),
+        _ => unreachable!("validated quarter-turn rotation"),
     }
 }
 
@@ -141,11 +143,11 @@ fn print_page_geometry(doc: &Document, page_id: ObjectId) -> Result<([f64; 4], u
         || !rotate.is_finite()
         || rotate.fract() != 0.0
     {
-        return Err("Unsupported PDF page geometry for print placement".into());
+        return Err("Unsupported PDF page geometry".into());
     }
     let turn = rotate.rem_euclid(360.0) as u16;
     if !matches!(turn, 0 | 90 | 180 | 270) {
-        return Err("Print placement supports only quarter-turn PDF rotation".into());
+        return Err("Only quarter-turn PDF rotation is supported".into());
     }
     Ok((crop, turn))
 }
@@ -285,22 +287,51 @@ fn embed_font(doc: &mut Document, annotations: &[Annotation]) -> Result<ObjectId
 
 fn annotation_object(
     annotation: &Annotation,
-    page_height: f64,
+    crop: [f64; 4],
+    rotation: u16,
     text_font: Option<ObjectId>,
 ) -> Result<(Dictionary, Stream), String> {
     let b = annotation.bounds;
+    let raw_size = [crop[2] - crop[0], crop[3] - crop[1]];
+    let display_size = if matches!(rotation, 90 | 270) {
+        [raw_size[1], raw_size[0]]
+    } else {
+        raw_size
+    };
     if ![b.x, b.y, b.width, b.height].iter().all(|n| n.is_finite())
         || b.width <= 0.0
         || b.height <= 0.0
         || b.x < 0.0
         || b.y < 0.0
-        || b.x + b.width > 1.0e7
-        || b.y + b.height > page_height + 0.1
+        || b.x + b.width > display_size[0] + 0.1
+        || b.y + b.height > display_size[1] + 0.1
     {
         return Err("Annotation is outside the PDF page".into());
     }
-    let bottom = page_height - b.y - b.height;
-    let rect = [b.x, bottom, b.x + b.width, bottom + b.height];
+    let corners = [
+        display_to_pdf(crop, rotation, b.x, b.y),
+        display_to_pdf(crop, rotation, b.x + b.width, b.y),
+        display_to_pdf(crop, rotation, b.x, b.y + b.height),
+        display_to_pdf(crop, rotation, b.x + b.width, b.y + b.height),
+    ];
+    let rect = [
+        corners
+            .iter()
+            .map(|point| point[0])
+            .fold(f64::INFINITY, f64::min),
+        corners
+            .iter()
+            .map(|point| point[1])
+            .fold(f64::INFINITY, f64::min),
+        corners
+            .iter()
+            .map(|point| point[0])
+            .fold(f64::NEG_INFINITY, f64::max),
+        corners
+            .iter()
+            .map(|point| point[1])
+            .fold(f64::NEG_INFINITY, f64::max),
+    ];
     let mut dictionary = Dictionary::new();
     dictionary.set("Type", Object::Name(b"Annot".to_vec()));
     dictionary.set("Rect", array(&rect));
@@ -315,13 +346,25 @@ fn annotation_object(
     let mut appearance = Dictionary::new();
     appearance.set("Type", Object::Name(b"XObject".to_vec()));
     appearance.set("Subtype", Object::Name(b"Form".to_vec()));
-    appearance.set("BBox", array(&[0.0, 0.0, b.width, b.height]));
+    appearance.set(
+        "BBox",
+        array(&[0.0, 0.0, rect[2] - rect[0], rect[3] - rect[1]]),
+    );
     let content = match &annotation.kind {
         Kind::Rectangle { color_rgb } if *color_rgb == [255, 226, 67] => {
             dictionary.set("Subtype", Object::Name(b"Highlight".to_vec()));
             dictionary.set(
                 "QuadPoints",
-                array(&[b.x, rect[3], rect[2], rect[3], b.x, bottom, rect[2], bottom]),
+                array(&[
+                    corners[0][0],
+                    corners[0][1],
+                    corners[1][0],
+                    corners[1][1],
+                    corners[2][0],
+                    corners[2][1],
+                    corners[3][0],
+                    corners[3][1],
+                ]),
             );
             dictionary.set("C", array(&[1.0, 226.0 / 255.0, 67.0 / 255.0]));
             let mut state = Dictionary::new();
@@ -373,6 +416,14 @@ fn annotation_object(
             .into_bytes()
         }
     };
+    let content = if let Some(matrix) = appearance_matrix(rotation, b.width, b.height) {
+        let mut wrapped = format!("q {matrix} cm\n").into_bytes();
+        wrapped.extend_from_slice(&content);
+        wrapped.extend_from_slice(b"\nQ\n");
+        wrapped
+    } else {
+        content
+    };
     Ok((dictionary, Stream::new(appearance, content)))
 }
 
@@ -405,6 +456,7 @@ pub fn export_annotations(source: &[u8], annotations: &[Annotation]) -> Result<V
             continue;
         }
         let size = page_size(output.get_prev_documents(), page_id)?;
+        let (crop, rotation) = print_page_geometry(output.get_prev_documents(), page_id)?;
         output
             .opt_clone_object_to_new_document(page_id)
             .map_err(|e| e.to_string())?;
@@ -429,7 +481,7 @@ pub fn export_annotations(source: &[u8], annotations: &[Annotation]) -> Result<V
             if item.bounds.x + item.bounds.width > size[0] + 0.1 {
                 return Err("Annotation is outside the PDF page".into());
             }
-            let (mut dictionary, stream) = annotation_object(item, size[1], text_font)?;
+            let (mut dictionary, stream) = annotation_object(item, crop, rotation, text_font)?;
             let appearance_id = output.new_document.add_object(stream);
             let mut ap = Dictionary::new();
             ap.set("N", Object::Reference(appearance_id));
@@ -1193,6 +1245,120 @@ mod tests {
                     .unwrap()
                     .page_count(),
                 1
+            );
+        }
+    }
+
+    #[test]
+    fn save_maps_native_highlight_and_text_on_rotated_crop() {
+        let mut source = Document::load_mem(&source_pdf()).unwrap();
+        let page = *source.get_pages().values().next().unwrap();
+        let page_dict = source.get_dictionary_mut(page).unwrap();
+        page_dict.set("MediaBox", array(&[20.0, 30.0, 220.0, 330.0]));
+        page_dict.set("CropBox", array(&[40.0, 60.0, 200.0, 300.0]));
+        page_dict.set("Rotate", 90);
+        let mut source_bytes = Vec::new();
+        source.save_to(&mut source_bytes).unwrap();
+        let annotations = [
+            Annotation {
+                id: 11,
+                page: 0,
+                bounds: Rect {
+                    x: 20.0,
+                    y: 30.0,
+                    width: 50.0,
+                    height: 15.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [255, 226, 67],
+                },
+            },
+            Annotation {
+                id: 12,
+                page: 0,
+                bounds: Rect {
+                    x: 60.0,
+                    y: 40.0,
+                    width: 100.0,
+                    height: 20.0,
+                },
+                kind: Kind::Text {
+                    value: "Rotated".into(),
+                },
+            },
+        ];
+        let saved = export_annotations(&source_bytes, &annotations).unwrap();
+        assert!(saved.starts_with(&source_bytes));
+        let output = Document::load_mem(&saved).unwrap();
+        let page = *output.get_pages().values().next().unwrap();
+        let annots = output.get_page_annotations(page).unwrap();
+        assert_eq!(annots.len(), 3);
+        let highlight_rect = box_values(annots[1].get(b"Rect").unwrap()).unwrap();
+        assert_eq!(highlight_rect, [70.0, 80.0, 85.0, 130.0]);
+        let text_rect = box_values(annots[2].get(b"Rect").unwrap()).unwrap();
+        assert_eq!(text_rect, [80.0, 120.0, 100.0, 220.0]);
+        let text_ap = annots[2]
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let stream = output.get_object(text_ap).unwrap().as_stream().unwrap();
+        assert_eq!(
+            box_values(stream.dict.get(b"BBox").unwrap()).unwrap(),
+            [0.0, 0.0, 20.0, 100.0]
+        );
+        assert!(stream.content.starts_with(b"q 0 1 -1 0 20.00000000 0 cm"));
+        assert_eq!(
+            opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(saved))
+                .unwrap()
+                .page_count(),
+            1
+        );
+    }
+
+    #[test]
+    fn save_maps_all_quarter_turns_into_pdf_page_space() {
+        for (rotation, expected) in [
+            (0, [60.0, 255.0, 110.0, 270.0]),
+            (90, [70.0, 80.0, 85.0, 130.0]),
+            (180, [130.0, 90.0, 180.0, 105.0]),
+            (270, [155.0, 230.0, 170.0, 280.0]),
+        ] {
+            let mut source = Document::load_mem(&source_pdf()).unwrap();
+            let page = *source.get_pages().values().next().unwrap();
+            let page_dict = source.get_dictionary_mut(page).unwrap();
+            page_dict.set("MediaBox", array(&[20.0, 30.0, 220.0, 330.0]));
+            page_dict.set("CropBox", array(&[40.0, 60.0, 200.0, 300.0]));
+            page_dict.set("Rotate", rotation);
+            let mut source_bytes = Vec::new();
+            source.save_to(&mut source_bytes).unwrap();
+            let saved = export_annotations(
+                &source_bytes,
+                &[Annotation {
+                    id: 20,
+                    page: 0,
+                    bounds: Rect {
+                        x: 20.0,
+                        y: 30.0,
+                        width: 50.0,
+                        height: 15.0,
+                    },
+                    kind: Kind::Rectangle {
+                        color_rgb: [255, 226, 67],
+                    },
+                }],
+            )
+            .unwrap();
+            let output = Document::load_mem(&saved).unwrap();
+            let page = *output.get_pages().values().next().unwrap();
+            let annots = output.get_page_annotations(page).unwrap();
+            assert_eq!(
+                box_values(annots[1].get(b"Rect").unwrap()).unwrap(),
+                expected
             );
         }
     }
