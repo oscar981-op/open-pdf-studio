@@ -20,6 +20,30 @@ fn array(values: &[f64]) -> Object {
     Object::Array(values.iter().copied().map(number).collect())
 }
 
+fn transform_pairs(
+    values: &[Object],
+    crop: [f64; 4],
+    scale: f64,
+    tx: f64,
+    ty: f64,
+) -> Result<Vec<Object>, String> {
+    if values.len() % 2 != 0 {
+        return Err("Invalid PDF annotation point array".into());
+    }
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            let (origin, offset) = if index % 2 == 0 {
+                (crop[0], tx)
+            } else {
+                (crop[1], ty)
+            };
+            Ok(number((numeric(value)? - origin) * scale + offset))
+        })
+        .collect()
+}
+
 fn inherited<'a>(
     doc: &'a Document,
     mut page_id: ObjectId,
@@ -88,6 +112,42 @@ fn page_size(doc: &Document, page_id: ObjectId) -> Result<[f64; 2], String> {
     } else {
         Err("Invalid PDF page size".into())
     }
+}
+
+/// Visible page region in default user space, before /Rotate is applied.
+fn print_page_geometry(doc: &Document, page_id: ObjectId) -> Result<([f64; 4], u16), String> {
+    let media =
+        box_values(inherited(doc, page_id, b"MediaBox")?.ok_or("PDF page has no MediaBox")?)?;
+    let crop = inherited(doc, page_id, b"CropBox")?
+        .map(box_values)
+        .transpose()?
+        .unwrap_or(media);
+    let rotate = inherited(doc, page_id, b"Rotate")?
+        .map(numeric)
+        .transpose()?
+        .unwrap_or(0.0);
+    let unit = inherited(doc, page_id, b"UserUnit")?
+        .map(numeric)
+        .transpose()?
+        .unwrap_or(1.0);
+    if !media.iter().chain(crop.iter()).all(|n| n.is_finite())
+        || crop[0] >= crop[2]
+        || crop[1] >= crop[3]
+        || crop[0] < media[0]
+        || crop[1] < media[1]
+        || crop[2] > media[2]
+        || crop[3] > media[3]
+        || unit != 1.0
+        || !rotate.is_finite()
+        || rotate.fract() != 0.0
+    {
+        return Err("Unsupported PDF page geometry for print placement".into());
+    }
+    let turn = rotate.rem_euclid(360.0) as u16;
+    if !matches!(turn, 0 | 90 | 180 | 270) {
+        return Err("Print placement supports only quarter-turn PDF rotation".into());
+    }
+    Ok((crop, turn))
 }
 
 fn font_face() -> Result<Face<'static>, String> {
@@ -517,13 +577,25 @@ pub fn apply_print_placement(
     let mut doc = Document::load_mem(bytes).map_err(|e| e.to_string())?;
     let pages: Vec<_> = doc.get_pages().into_values().collect();
     for page_id in pages {
-        let [width, height] = page_size(&doc, page_id)?;
-        let [sheet_w, sheet_h] = match paper {
+        let (crop, rotation) = print_page_geometry(&doc, page_id)?;
+        let [width, height] = [crop[2] - crop[0], crop[3] - crop[1]];
+        let display_landscape = if matches!(rotation, 90 | 270) {
+            height > width
+        } else {
+            width > height
+        };
+        let [display_w, display_h] = match paper {
+            PrintPaper::Original if matches!(rotation, 90 | 270) => [height, width],
             PrintPaper::Original => [width, height],
-            PrintPaper::A4 if width > height => [841.8898, 595.2756],
+            PrintPaper::A4 if display_landscape => [841.8898, 595.2756],
             PrintPaper::A4 => [595.2756, 841.8898],
-            PrintPaper::Letter if width > height => [792.0, 612.0],
+            PrintPaper::Letter if display_landscape => [792.0, 612.0],
             PrintPaper::Letter => [612.0, 792.0],
+        };
+        let [sheet_w, sheet_h] = if matches!(rotation, 90 | 270) {
+            [display_h, display_w]
+        } else {
+            [display_w, display_h]
         };
         let fit = (sheet_w / width).min(sheet_h / height);
         let scale = match mode {
@@ -535,9 +607,18 @@ pub fn apply_print_placement(
         let tx = (sheet_w - width * scale) / 2.0;
         let ty = (sheet_h - height * scale) / 2.0;
         let sheet = array(&[0.0, 0.0, sheet_w, sheet_h]);
+        let mut auxiliary_boxes = Vec::new();
+        for key in [b"BleedBox".as_slice(), b"TrimBox", b"ArtBox"] {
+            if inherited(&doc, page_id, key)?.is_some() {
+                auxiliary_boxes.push(key);
+            }
+        }
         let page = doc.get_dictionary_mut(page_id).map_err(|e| e.to_string())?;
         page.set("MediaBox", sheet.clone());
-        page.set("CropBox", sheet);
+        page.set("CropBox", sheet.clone());
+        for key in auxiliary_boxes {
+            page.set(key, sheet.clone());
+        }
         let contents = doc
             .get_dictionary(page_id)
             .map_err(|e| e.to_string())?
@@ -557,7 +638,12 @@ pub fn apply_print_placement(
             };
             let prefix = doc.add_object(Stream::new(
                 Dictionary::new(),
-                format!("q {scale:.8} 0 0 {scale:.8} {tx:.8} {ty:.8} cm\n").into_bytes(),
+                format!(
+                    "q {scale:.8} 0 0 {scale:.8} {:.8} {:.8} cm\n",
+                    tx - crop[0] * scale,
+                    ty - crop[1] * scale
+                )
+                .into_bytes(),
             ));
             let suffix = doc.add_object(Stream::new(Dictionary::new(), b"\nQ\n".to_vec()));
             streams.insert(0, Object::Reference(prefix));
@@ -580,41 +666,57 @@ pub fn apply_print_placement(
                 .and_then(Object::as_array)
                 .map_err(|e| e.to_string())?
                 .clone(),
-            Some(_) => return Err("Unsupported PDF annotation array for Page Zoom".into()),
+            Some(_) => return Err("Unsupported PDF annotation array for print placement".into()),
         };
         for entry in annot_entries {
             let id = entry
                 .as_reference()
-                .map_err(|_| "Page Zoom requires indirect PDF annotations")?;
+                .map_err(|_| "Print placement requires indirect PDF annotations")?;
             let dict = doc.get_dictionary_mut(id).map_err(|e| e.to_string())?;
-            for unsupported in [b"Vertices".as_slice(), b"InkList", b"L", b"CL"] {
-                if dict.has(unsupported) {
-                    return Err("Page Zoom does not yet support this annotation geometry".into());
-                }
-            }
             if let Ok(rect) = dict.get(b"Rect") {
                 let [x0, y0, x1, y1] = box_values(rect)?;
                 dict.set(
                     "Rect",
                     array(&[
-                        x0 * scale + tx,
-                        y0 * scale + ty,
-                        x1 * scale + tx,
-                        y1 * scale + ty,
+                        (x0 - crop[0]) * scale + tx,
+                        (y0 - crop[1]) * scale + ty,
+                        (x1 - crop[0]) * scale + tx,
+                        (y1 - crop[1]) * scale + ty,
                     ]),
                 );
             }
             if let Ok(quads) = dict.get(b"QuadPoints") {
                 let values = quads.as_array().map_err(|e| e.to_string())?;
-                if values.len() % 2 != 0 {
+                if values.len() % 8 != 0 {
                     return Err("Invalid PDF highlight quadrilateral".into());
                 }
-                let mut transformed = Vec::with_capacity(values.len());
-                for (index, value) in values.iter().enumerate() {
-                    let offset = if index % 2 == 0 { tx } else { ty };
-                    transformed.push(number(numeric(value)? * scale + offset));
+                dict.set(
+                    "QuadPoints",
+                    Object::Array(transform_pairs(values, crop, scale, tx, ty)?),
+                );
+            }
+            for key in [b"Vertices".as_slice(), b"L", b"CL"] {
+                if let Ok(points) = dict.get(key) {
+                    let values = points.as_array().map_err(|e| e.to_string())?;
+                    if (key == b"L" && values.len() != 4)
+                        || (key == b"CL" && !matches!(values.len(), 4 | 6))
+                    {
+                        return Err("Invalid PDF annotation point array".into());
+                    }
+                    dict.set(
+                        key,
+                        Object::Array(transform_pairs(values, crop, scale, tx, ty)?),
+                    );
                 }
-                dict.set("QuadPoints", Object::Array(transformed));
+            }
+            if let Ok(ink) = dict.get(b"InkList") {
+                let strokes = ink.as_array().map_err(|e| e.to_string())?;
+                let mut transformed = Vec::with_capacity(strokes.len());
+                for stroke in strokes {
+                    let values = stroke.as_array().map_err(|e| e.to_string())?;
+                    transformed.push(Object::Array(transform_pairs(values, crop, scale, tx, ty)?));
+                }
+                dict.set("InkList", Object::Array(transformed));
             }
         }
     }
@@ -624,9 +726,9 @@ pub fn apply_print_placement(
     let mut output = Vec::new();
     doc.save_to(&mut output).map_err(|e| e.to_string())?;
     let check =
-        Document::load_mem(&output).map_err(|e| format!("Zoomed print PDF did not reopen: {e}"))?;
+        Document::load_mem(&output).map_err(|e| format!("Placed print PDF did not reopen: {e}"))?;
     if check.get_pages().len() != doc.get_pages().len() {
-        return Err("Page Zoom changed the PDF page count".into());
+        return Err("Print placement changed the PDF page count".into());
     }
     Ok(output)
 }
@@ -1008,6 +1110,90 @@ mod tests {
         }
         for (actual, expected) in shrink_rect.into_iter().zip([216.0, 506.0, 256.0, 526.0]) {
             assert!((actual - expected).abs() < 0.01);
+        }
+    }
+
+    #[test]
+    fn placement_preserves_quarter_turn_and_rebases_crop_coordinates() {
+        let mut source = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *source.get_pages().values().next().unwrap();
+        let annot_id = source
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_reference()
+            .and_then(|id| source.get_object(id))
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let page = source.get_dictionary_mut(page_id).unwrap();
+        page.set("MediaBox", array(&[20.0, 30.0, 220.0, 330.0]));
+        page.set("CropBox", array(&[40.0, 60.0, 200.0, 300.0]));
+        page.set("Rotate", 90);
+        let annot = source.get_dictionary_mut(annot_id).unwrap();
+        annot.set("Rect", array(&[50.0, 70.0, 90.0, 110.0]));
+        annot.set(
+            "QuadPoints",
+            array(&[50.0, 110.0, 90.0, 110.0, 50.0, 70.0, 90.0, 70.0]),
+        );
+        let mut bytes = Vec::new();
+        source.save_to(&mut bytes).unwrap();
+        let result = apply_print_placement(&bytes, PrintPaper::A4, PrintScale::Fit, 100).unwrap();
+        let output = Document::load_mem(&result).unwrap();
+        let page_id = *output.get_pages().values().next().unwrap();
+        let (crop, rotation) = print_page_geometry(&output, page_id).unwrap();
+        assert_eq!(rotation, 90);
+        assert!((crop[2] - 595.2756).abs() < 0.01);
+        assert!((crop[3] - 841.8898).abs() < 0.01);
+        let fit = (595.2756_f64 / 160.0).min(841.8898 / 240.0);
+        let tx = (595.2756 - 160.0 * fit) / 2.0;
+        let ty = (841.8898 - 240.0 * fit) / 2.0;
+        let annotation = output.get_page_annotations(page_id).unwrap()[0];
+        let rect = box_values(annotation.get(b"Rect").unwrap()).unwrap();
+        for (actual, expected) in rect.into_iter().zip([
+            10.0 * fit + tx,
+            10.0 * fit + ty,
+            50.0 * fit + tx,
+            50.0 * fit + ty,
+        ]) {
+            assert!((actual - expected).abs() < 0.01);
+        }
+        let quad = annotation.get(b"QuadPoints").unwrap().as_array().unwrap();
+        assert!((numeric(&quad[0]).unwrap() - (10.0 * fit + tx)).abs() < 0.01);
+        assert!((numeric(&quad[1]).unwrap() - (50.0 * fit + ty)).abs() < 0.01);
+        assert_eq!(
+            opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(result))
+                .unwrap()
+                .page_count(),
+            1
+        );
+    }
+
+    #[test]
+    fn placement_keeps_each_supported_page_rotation() {
+        for rotation in [0, 90, 180, 270] {
+            let mut source = Document::load_mem(&source_pdf()).unwrap();
+            let page = *source.get_pages().values().next().unwrap();
+            source
+                .get_dictionary_mut(page)
+                .unwrap()
+                .set("Rotate", rotation);
+            let mut bytes = Vec::new();
+            source.save_to(&mut bytes).unwrap();
+            let result =
+                apply_print_placement(&bytes, PrintPaper::A4, PrintScale::Fit, 100).unwrap();
+            let output = Document::load_mem(&result).unwrap();
+            let page = *output.get_pages().values().next().unwrap();
+            assert_eq!(print_page_geometry(&output, page).unwrap().1, rotation);
+            assert_eq!(
+                opds_engine_probe::ParsedPdf::open(std::sync::Arc::new(result))
+                    .unwrap()
+                    .page_count(),
+                1
+            );
         }
     }
 }
