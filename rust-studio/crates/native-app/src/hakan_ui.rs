@@ -4,15 +4,15 @@
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
 use super::{annotation_layer, AnnotationTool, App, Message, RibbonTab};
 use iced::widget::{
-    button, column, container, image, row, scrollable, svg, text, text_input, tooltip, Space,
+    button, column, container, image, mouse_area, row, rule, scrollable, svg, text, text_input,
+    tooltip, Space,
 };
-use iced::{Background, Border, Color, Element, Fill, Theme};
+use iced::{Background, Border, Color, Element, Fill, Padding, Theme};
 use std::time::Duration;
 
 pub const ROW_H: f32 = 26.0;
-const LARGE_ICON: f32 = ROW_H * 1.5;
 const LARGE_W: f32 = ROW_H * 2.2;
-const TOOL_BAR_H: f32 = 3.0 * ROW_H + 18.0;
+const PDF_RIBBON_H: f32 = 94.0;
 
 fn tool_btn_style(theme: &Theme, is_active: bool, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
@@ -51,6 +51,11 @@ macro_rules! icon_asset {
             "/vendor/opencadstudio/assets/icons/",
             $path
         )) as &'static [u8]
+    };
+}
+macro_rules! pdf_icon {
+    ($name:literal) => {
+        include_bytes!(concat!("../../../assets/ribbon/home/", $name, ".svg")) as &'static [u8]
     };
 }
 const OPEN: &[u8] = icon_asset!("ui/folder_open.svg");
@@ -99,11 +104,21 @@ fn large_tool_active(
     action: Option<Message>,
     active: bool,
 ) -> Element<'static, Message> {
+    large_tool_sized(label, bytes, action, active, LARGE_W)
+}
+
+fn large_tool_sized(
+    label: &'static str,
+    bytes: &'static [u8],
+    action: Option<Message>,
+    active: bool,
+    width: f32,
+) -> Element<'static, Message> {
     let btn = button(
         column![
-            container(icon_state(bytes, LARGE_ICON, action.is_some()))
+            container(icon_state(bytes, 24.0, action.is_some()))
                 .width(Fill)
-                .height(Fill)
+                .height(30)
                 .align_x(iced::Center)
                 .align_y(iced::Center),
             text(label).size(10).width(Fill).align_x(iced::Center),
@@ -114,14 +129,92 @@ fn large_tool_active(
         .height(Fill),
     )
     .on_press_maybe(action)
-    .style(move |theme, status| tool_btn_style(theme, active, status))
-    .width(LARGE_W)
-    .height(Fill)
-    .padding(4);
+    .style(move |_, status| pdf_tool_style(active, status))
+    .width(width)
+    .height(66)
+    .padding([3, 3]);
     tooltip(btn, text(label).size(11), tooltip::Position::Bottom)
         .gap(6)
         .delay(Duration::from_millis(400))
         .into()
+}
+
+// Hakan's labeled-small ribbon item, sized to the PDF app's 22/33 px rows.
+fn labeled_tool(
+    label: &'static str,
+    bytes: &'static [u8],
+    action: Option<Message>,
+    width: f32,
+    height: f32,
+) -> Element<'static, Message> {
+    let btn = button(
+        row![
+            icon_state(
+                bytes,
+                if height > 22.0 { 18.0 } else { 14.0 },
+                action.is_some()
+            ),
+            text(label).size(11)
+        ]
+        .spacing(6)
+        .align_y(iced::Center),
+    )
+    .on_press_maybe(action)
+    .style(|_, status| pdf_tool_style(false, status))
+    .width(width)
+    .height(height)
+    .padding([2, 4]);
+    tooltip(btn, text(label).size(11), tooltip::Position::Bottom)
+        .gap(6)
+        .delay(Duration::from_millis(400))
+        .into()
+}
+
+fn stack_tools(tools: Vec<Element<'static, Message>>) -> Element<'static, Message> {
+    tools
+        .into_iter()
+        .fold(column![].spacing(1), |c, tool| c.push(tool))
+        .into()
+}
+
+fn pdf_tool_style(active: bool, status: button::Status) -> button::Style {
+    let (background, border) = if active {
+        (
+            Some(Color::from_rgba8(217, 119, 6, 0.20)),
+            Color::from_rgba8(217, 119, 6, 0.40),
+        )
+    } else if status == button::Status::Hovered {
+        (
+            Some(Color::from_rgba8(217, 119, 6, 0.15)),
+            Color::from_rgba8(217, 119, 6, 0.30),
+        )
+    } else {
+        (None, Color::TRANSPARENT)
+    };
+    button::Style {
+        background: background.map(Background::Color),
+        text_color: if active {
+            Color::from_rgb8(217, 119, 6)
+        } else {
+            Color::from_rgba8(
+                250,
+                250,
+                249,
+                if status == button::Status::Disabled {
+                    0.4
+                } else {
+                    0.6
+                },
+            )
+        },
+        border: Border {
+            color: border,
+            width: 1.0,
+            radius: 2.0.into(),
+        },
+        shadow: iced::Shadow::default(),
+        snap: false,
+    }
 }
 
 // Port of OpenCADStudio quick_access_btn: same sizing and tooltip placement.
@@ -152,28 +245,216 @@ fn quick_access(
 fn group(title: &'static str, tools: Vec<Element<'static, Message>>) -> Element<'static, Message> {
     let tools_el = tools
         .into_iter()
-        .fold(row![].spacing(2).height(Fill).align_y(iced::Top), |r, e| {
+        .fold(row![].spacing(1).height(76).align_y(iced::Top), |r, e| {
             r.push(e)
         });
-    container(
-        column![
-            tools_el,
-            text(title).size(10).color(Color::from_rgb8(160, 160, 165))
-        ]
-        .align_x(iced::Center)
-        .spacing(0)
-        .padding([3u16, 4])
-        .height(TOOL_BAR_H),
-    )
-    .style(|theme: &Theme| container::Style {
-        border: Border {
-            color: theme.extended_palette().background.strong.color,
-            width: 0.5,
-            ..Default::default()
-        },
-        ..Default::default()
-    })
+    row![
+        container(
+            column![
+                tools_el,
+                text(title.to_uppercase())
+                    .size(9)
+                    .color(Color::from_rgba8(217, 119, 6, 0.8))
+            ]
+            .align_x(iced::Center)
+            .spacing(0)
+            .padding(Padding {
+                top: 4.0,
+                bottom: 0.0,
+                left: 6.0,
+                right: 6.0
+            })
+            .height(PDF_RIBBON_H),
+        ),
+        rule::vertical(1).style(|_| rule::Style {
+            color: Color::from_rgb8(70, 70, 77),
+            radius: 0.0.into(),
+            fill_mode: rule::FillMode::Full,
+            snap: true
+        })
+    ]
+    .height(PDF_RIBBON_H)
     .into()
+}
+
+fn tab_style(active: bool, status: button::Status) -> button::Style {
+    button::Style {
+        background: if active {
+            Some(Color::from_rgb8(54, 54, 62).into())
+        } else if status == button::Status::Hovered {
+            Some(Color::from_rgba8(217, 119, 6, 0.10).into())
+        } else {
+            None
+        },
+        text_color: if active || status == button::Status::Hovered {
+            Color::from_rgb8(250, 250, 249)
+        } else {
+            Color::from_rgba8(250, 250, 249, 0.6)
+        },
+        border: Border {
+            color: if active {
+                Color::from_rgba8(217, 119, 6, 0.25)
+            } else {
+                Color::TRANSPARENT
+            },
+            width: 1.0,
+            radius: 4.0.into(),
+        },
+        shadow: iced::Shadow::default(),
+        snap: false,
+    }
+}
+
+fn window_control(label: &'static str, action: Message, close: bool) -> Element<'static, Message> {
+    button(text(label).size(13))
+        .on_press(action)
+        .width(30)
+        .height(30)
+        .padding(0)
+        .style(move |_, status| button::Style {
+            background: match (close, status) {
+                (true, button::Status::Hovered) => Some(Color::from_rgb8(190, 42, 44).into()),
+                (_, button::Status::Hovered) => Some(Color::from_rgb8(76, 76, 82).into()),
+                _ => None,
+            },
+            text_color: Color::from_rgb8(250, 250, 249),
+            ..Default::default()
+        })
+        .into()
+}
+
+fn ribbon_home(
+    has_doc: bool,
+    page: usize,
+    count: usize,
+    scale: f64,
+    selecting: bool,
+) -> Vec<Element<'static, Message>> {
+    vec![
+        group(
+            "Document",
+            vec![
+                large_tool_sized("New", pdf_icon!("newDocIcon"), None, false, 44.0),
+                large_tool_sized("IFC-report", pdf_icon!("ifcExportIcon"), None, false, 52.0),
+                large_tool_sized("To CAD", pdf_icon!("cadExportIcon"), None, false, 48.0),
+                large_tool_sized("E-mail", pdf_icon!("emailIcon"), None, false, 45.0),
+                large_tool_sized("Raster-PDF", pdf_icon!("rasterPdfIcon"), None, false, 57.0),
+            ],
+        ),
+        group(
+            "Tools",
+            vec![
+                large_tool_sized("Hand", pdf_icon!("handIcon"), None, false, 44.0),
+                large_tool_sized(
+                    "Select",
+                    pdf_icon!("selectTextIcon"),
+                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Select)),
+                    selecting,
+                    44.0,
+                ),
+                large_tool_sized("Screenshot", pdf_icon!("screenshotIcon"), None, false, 58.0),
+            ],
+        ),
+        group(
+            "View",
+            vec![
+                stack_tools(vec![
+                    labeled_tool(
+                        "Zoom In",
+                        pdf_icon!("zoomInIcon"),
+                        has_doc.then_some(Message::Zoom((scale * 1.25).min(8.0))),
+                        84.0,
+                        22.0,
+                    ),
+                    labeled_tool(
+                        "Zoom Out",
+                        pdf_icon!("zoomOutIcon"),
+                        has_doc.then_some(Message::Zoom((scale / 1.25).max(0.1))),
+                        84.0,
+                        22.0,
+                    ),
+                    labeled_tool("Fit Width", pdf_icon!("fitWidthIcon"), None, 84.0, 22.0),
+                ]),
+                stack_tools(vec![
+                    labeled_tool(
+                        "100%",
+                        pdf_icon!("actualSizeIcon"),
+                        has_doc.then_some(Message::Zoom(1.0)),
+                        78.0,
+                        22.0,
+                    ),
+                    labeled_tool("Fit Page", pdf_icon!("fitPageIcon"), None, 78.0, 22.0),
+                ]),
+            ],
+        ),
+        group(
+            "Navigate",
+            vec![
+                stack_tools(vec![
+                    labeled_tool(
+                        "First",
+                        pdf_icon!("firstPageIcon"),
+                        (has_doc && page > 0).then_some(Message::GoToPage(0)),
+                        76.0,
+                        33.0,
+                    ),
+                    labeled_tool(
+                        "Previous",
+                        pdf_icon!("prevPageIcon"),
+                        (has_doc && page > 0).then_some(Message::GoToPage(page.saturating_sub(1))),
+                        76.0,
+                        33.0,
+                    ),
+                ]),
+                stack_tools(vec![
+                    labeled_tool(
+                        "Next",
+                        pdf_icon!("nextPageIcon"),
+                        (has_doc && page + 1 < count).then_some(Message::GoToPage(page + 1)),
+                        76.0,
+                        33.0,
+                    ),
+                    labeled_tool(
+                        "Last",
+                        pdf_icon!("lastPageIcon"),
+                        (has_doc && count > 0 && page + 1 < count)
+                            .then_some(Message::GoToPage(count.saturating_sub(1))),
+                        76.0,
+                        33.0,
+                    ),
+                ]),
+            ],
+        ),
+        group(
+            "Find",
+            vec![large_tool_sized(
+                "Find",
+                pdf_icon!("findIcon"),
+                None,
+                false,
+                44.0,
+            )],
+        ),
+        group(
+            "Settings",
+            vec![
+                large_tool_sized(
+                    "Preferences",
+                    pdf_icon!("preferencesIcon"),
+                    None,
+                    false,
+                    70.0,
+                ),
+                large_tool_sized(
+                    "Previous version",
+                    pdf_icon!("previousVersionIcon"),
+                    None,
+                    false,
+                    65.0,
+                ),
+            ],
+        ),
+    ]
 }
 
 fn surface(theme: &Theme) -> container::Style {
@@ -189,48 +470,88 @@ pub fn view(app: &App) -> Element<'_, Message> {
         let v = d.model.view();
         (v.page(), v.page_count(), v.viewport().scale())
     });
-    let mut top = row![
-        quick_access(OPEN, "Open", Some(Message::ShowOpen)),
-        quick_access(SAVE, "Save", None),
-        quick_access(PRINT, "Print", None),
-        quick_access(
-            icon_asset!("ui/undo.svg"),
-            "Undo",
-            app.document
-                .as_ref()
-                .filter(|d| d.model.can_undo())
-                .map(|_| Message::Undo)
-        ),
-        quick_access(
-            icon_asset!("ui/redo.svg"),
-            "Redo",
-            app.document
-                .as_ref()
-                .filter(|d| d.model.can_redo())
-                .map(|_| Message::Redo)
-        ),
-    ]
+    let mut top = row![button(text("File").size(12))
+        .on_press(Message::ShowOpen)
+        .style(|_, status| button::Style {
+            background: Some(
+                Color::from_rgb8(
+                    if status == button::Status::Hovered {
+                        234
+                    } else {
+                        217
+                    },
+                    if status == button::Status::Hovered {
+                        88
+                    } else {
+                        119
+                    },
+                    if status == button::Status::Hovered {
+                        12
+                    } else {
+                        6
+                    }
+                )
+                .into()
+            ),
+            text_color: Color::from_rgb8(54, 54, 62),
+            border: Border {
+                radius: 0.0.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .width(58)
+        .height(28)
+        .padding([5, 16])]
     .spacing(2)
-    .align_y(iced::Center);
+    .align_y(iced::Alignment::End);
     for tab in RibbonTab::ALL {
         let active = tab == app.active_ribbon;
         top = top.push(
             button(text(tab.label()).size(12))
                 .on_press(Message::SelectRibbon(tab))
-                .style(move |theme, status| tool_btn_style(theme, active, status))
-                .padding([5, 14]),
+                .style(move |_, status| tab_style(active, status))
+                .height(28)
+                .padding([5, 16]),
         );
     }
-    let top = container(top).width(Fill).padding([2, 4]).style(surface);
-    let mut groups = row![group(
-        "Document",
-        vec![
-            large_tool("Open", OPEN, Some(Message::ShowOpen)),
-            large_tool("Save", SAVE, None),
-            large_tool("Print", PRINT, None),
-        ]
-    )]
-    .spacing(0);
+    top = top.push(Space::new().width(Fill)).push(
+        button(text("⌃").size(12))
+            .on_press(Message::ToggleRibbonCollapsed)
+            .style(|_, status| tab_style(false, status))
+            .width(22)
+            .height(28)
+            .padding(0),
+    );
+    let top = container(top)
+        .width(Fill)
+        .height(28)
+        .padding([0, 2])
+        .style(|_| container::Style {
+            background: Some(Color::from_rgb8(62, 62, 70).into()),
+            ..Default::default()
+        });
+    let mut groups = row![].spacing(0);
+    if app.active_ribbon == RibbonTab::Home {
+        for item in ribbon_home(
+            has_doc,
+            page,
+            count,
+            scale,
+            app.annotation_tool_activated && app.annotation_tool == AnnotationTool::Select,
+        ) {
+            groups = groups.push(item);
+        }
+    } else {
+        groups = groups.push(group(
+            "Document",
+            vec![
+                large_tool("Open", OPEN, Some(Message::ShowOpen)),
+                large_tool("Save", SAVE, None),
+                large_tool("Print", PRINT, None),
+            ],
+        ));
+    }
     if app.active_ribbon == RibbonTab::Drawing {
         groups = groups.push(group(
             "Draw",
@@ -284,66 +605,136 @@ pub fn view(app: &App) -> Element<'_, Message> {
             )],
         ));
     }
-    groups = groups
-        .push(group(
-            "View",
-            vec![
-                large_tool(
-                    "Zoom in",
-                    ZOOM_IN,
-                    has_doc.then_some(Message::Zoom((scale * 1.25).min(8.0))),
-                ),
-                large_tool(
-                    "Zoom out",
-                    ZOOM_OUT,
-                    has_doc.then_some(Message::Zoom((scale / 1.25).max(0.1))),
-                ),
-                large_tool(
-                    "100%",
-                    icon_asset!("zoom_ext.svg"),
-                    has_doc.then_some(Message::Zoom(1.0)),
-                ),
-            ],
-        ))
-        .push(group(
-            "Navigate",
-            vec![
-                large_tool(
-                    "Previous",
-                    PREV,
-                    (has_doc && page > 0).then_some(Message::GoToPage(page.saturating_sub(1))),
-                ),
-                large_tool(
-                    "Next",
-                    NEXT,
-                    (has_doc && page + 1 < count).then_some(Message::GoToPage(page + 1)),
-                ),
-            ],
-        ))
-        .push(group(
-            "Panels",
-            vec![
-                large_tool("Pages", DOC, Some(Message::TogglePages)),
-                large_tool(
-                    "Properties",
-                    icon_asset!("properties.svg"),
-                    Some(Message::ToggleProperties),
-                ),
-            ],
-        ));
+    if app.active_ribbon != RibbonTab::Home {
+        groups = groups
+            .push(group(
+                "View",
+                vec![
+                    large_tool(
+                        "Zoom in",
+                        ZOOM_IN,
+                        has_doc.then_some(Message::Zoom((scale * 1.25).min(8.0))),
+                    ),
+                    large_tool(
+                        "Zoom out",
+                        ZOOM_OUT,
+                        has_doc.then_some(Message::Zoom((scale / 1.25).max(0.1))),
+                    ),
+                    large_tool(
+                        "100%",
+                        icon_asset!("zoom_ext.svg"),
+                        has_doc.then_some(Message::Zoom(1.0)),
+                    ),
+                ],
+            ))
+            .push(group(
+                "Navigate",
+                vec![
+                    large_tool(
+                        "Previous",
+                        PREV,
+                        (has_doc && page > 0).then_some(Message::GoToPage(page.saturating_sub(1))),
+                    ),
+                    large_tool(
+                        "Next",
+                        NEXT,
+                        (has_doc && page + 1 < count).then_some(Message::GoToPage(page + 1)),
+                    ),
+                ],
+            ))
+            .push(group(
+                "Panels",
+                vec![
+                    large_tool("Pages", DOC, Some(Message::TogglePages)),
+                    large_tool(
+                        "Properties",
+                        icon_asset!("properties.svg"),
+                        Some(Message::ToggleProperties),
+                    ),
+                ],
+            ));
+    }
     let ribbon = container(
         scrollable(groups).direction(scrollable::Direction::Horizontal(
             scrollable::Scrollbar::new(),
         )),
     )
     .width(Fill)
-    .style(surface);
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb8(54, 54, 62).into()),
+        ..Default::default()
+    });
     let name = app
         .document
         .as_ref()
         .and_then(|d| std::path::Path::new(&d.path).file_name())
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "Start".into());
+    let app_icon = image(image::Handle::from_rgba(
+        16,
+        16,
+        include_bytes!("../../../assets/ribbon/title-icon.rgba").to_vec(),
+    ))
+    .width(16)
+    .height(16);
+    let title_tools = row![
+        app_icon,
+        quick_access(OPEN, "Open", Some(Message::ShowOpen)),
+        quick_access(SAVE, "Save", None),
+        quick_access(PRINT, "Print", None),
+        quick_access(pdf_icon!("preferencesIcon"), "Settings", None),
+        quick_access(
+            icon_asset!("ui/undo.svg"),
+            "Undo",
+            app.document
+                .as_ref()
+                .filter(|d| d.model.can_undo())
+                .map(|_| Message::Undo)
+        ),
+        quick_access(
+            icon_asset!("ui/redo.svg"),
+            "Redo",
+            app.document
+                .as_ref()
+                .filter(|d| d.model.can_redo())
+                .map(|_| Message::Redo)
+        ),
+    ]
+    .spacing(2)
+    .align_y(iced::Center);
+    let title_text = format!("Open PDF Studio v2026.39.0  {name}");
+    let drag_region = mouse_area(container(text(title_text).size(12)).center(Fill).height(30))
+        .on_press(Message::DragWindow)
+        .on_double_click(Message::MaximizeWindow);
+    let titlebar = container(
+        row![
+            container(title_tools)
+                .width(272)
+                .height(30)
+                .padding([0, 8])
+                .align_y(iced::Center),
+            drag_region,
+            container(
+                row![
+                    Space::new().width(Fill),
+                    window_control("−", Message::MinimizeWindow, false),
+                    window_control("□", Message::MaximizeWindow, false),
+                    window_control("×", Message::CloseWindow, true),
+                ]
+                .align_y(iced::Center),
+            )
+            .width(272)
+            .height(30),
+        ]
+        .height(30)
+        .align_y(iced::Center),
+    )
+    .width(Fill)
+    .height(30)
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb8(53, 53, 61).into()),
+        ..Default::default()
+    });
     let tab = container(
         row![
             icon(DOC, 14.0),
@@ -470,6 +861,22 @@ pub fn view(app: &App) -> Element<'_, Message> {
     let status = container(
         row![
             text(&app.message).size(11),
+            quick_access(
+                icon_asset!("ui/undo.svg"),
+                "Undo",
+                app.document
+                    .as_ref()
+                    .filter(|d| d.model.can_undo())
+                    .map(|_| Message::Undo)
+            ),
+            quick_access(
+                icon_asset!("ui/redo.svg"),
+                "Redo",
+                app.document
+                    .as_ref()
+                    .filter(|d| d.model.can_redo())
+                    .map(|_| Message::Redo)
+            ),
             Space::new().width(Fill),
             quick_access(
                 PREV,
@@ -495,10 +902,14 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .padding([2, 8])
     .width(Fill)
     .style(surface);
-    let content: Element<'_, Message> = column![top, ribbon, tabs, workspace, status]
-        .width(Fill)
-        .height(Fill)
-        .into();
+    let content: Element<'_, Message> = if app.ribbon_collapsed {
+        column![titlebar, top, tabs, workspace, status]
+    } else {
+        column![titlebar, top, ribbon, tabs, workspace, status]
+    }
+    .width(Fill)
+    .height(Fill)
+    .into();
     if app.open_dialog {
         let dialog = container(
             column![

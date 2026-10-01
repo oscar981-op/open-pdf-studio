@@ -3,7 +3,7 @@
 mod annotation_layer;
 mod hakan_ui;
 use iced::widget::image;
-use iced::{color, Element, Task, Theme};
+use iced::{color, window, Element, Task, Theme};
 use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::{Annotation, DocumentModel, Edit, Kind, Rect};
 use opds_native_core::{DocumentId, RenderTicket};
@@ -41,6 +41,12 @@ fn main() -> iced::Result {
     iced::application(boot, App::update, App::view)
         .title("Open PDF Studio Rust")
         .theme(theme)
+        .window(window::Settings {
+            size: iced::Size::new(1200.0, 832.0),
+            min_size: Some(iced::Size::new(760.0, 500.0)),
+            decorations: false,
+            ..Default::default()
+        })
         .run()
 }
 
@@ -55,7 +61,9 @@ struct App {
     open_dialog: bool,
     hide_pages: bool,
     hide_properties: bool,
+    ribbon_collapsed: bool,
     annotation_tool: AnnotationTool,
+    annotation_tool_activated: bool,
     next_annotation_id: u64,
 }
 
@@ -139,9 +147,9 @@ impl RibbonTab {
             Self::Home => "Home",
             Self::View => "View",
             Self::Drawing => "Drawing",
-            Self::Comment => "Comment",
-            Self::Organize => "Organize",
-            Self::Help => "Help",
+            Self::Comment => "Annotation",
+            Self::Organize => "Edit & Combine PDFs",
+            Self::Help => "Settings",
         }
     }
 }
@@ -156,9 +164,15 @@ enum Message {
     Open,
     Loaded(u64, Result<(String, Arc<ParsedPdf>, f32, Raster), String>),
     Zoom(f64),
+    WheelZoom(f32),
     GoToPage(usize),
     Rendered(RenderTicket, Result<Raster, String>),
     SelectRibbon(RibbonTab),
+    ToggleRibbonCollapsed,
+    DragWindow,
+    MinimizeWindow,
+    MaximizeWindow,
+    CloseWindow,
     SelectAnnotationTool(AnnotationTool),
     SelectAnnotation(Option<u64>),
     MoveAnnotation(u64, [f64; 2]),
@@ -178,7 +192,17 @@ impl App {
             Message::ToggleProperties => self.hide_properties = !self.hide_properties,
             Message::PathChanged(value) => self.path_input = value,
             Message::SelectRibbon(tab) => self.active_ribbon = tab,
-            Message::SelectAnnotationTool(tool) => self.annotation_tool = tool,
+            Message::ToggleRibbonCollapsed => self.ribbon_collapsed = !self.ribbon_collapsed,
+            Message::DragWindow => return window::oldest().and_then(window::drag),
+            Message::MinimizeWindow => {
+                return window::oldest().and_then(|id| window::minimize(id, true));
+            }
+            Message::MaximizeWindow => return window::oldest().and_then(window::toggle_maximize),
+            Message::CloseWindow => return window::oldest().and_then(window::close),
+            Message::SelectAnnotationTool(tool) => {
+                self.annotation_tool = tool;
+                self.annotation_tool_activated = true;
+            }
             Message::SelectAnnotation(id) => {
                 if let Some(document) = &mut self.document {
                     document.selected_annotation = id.filter(|id| {
@@ -337,6 +361,16 @@ impl App {
             Message::Zoom(scale) => {
                 if let Some(document) = &mut self.document {
                     if document.model.zoom_at(scale, [0.0, 0.0]).is_err() {
+                        return Task::none();
+                    }
+                }
+                return self.render_current_page();
+            }
+            Message::WheelZoom(amount) => {
+                if let Some(document) = &mut self.document {
+                    let scale = document.model.view().viewport().scale();
+                    let next = (scale * 1.15_f64.powf(f64::from(amount))).clamp(0.1, 8.0);
+                    if document.model.zoom_at(next, [0.0, 0.0]).is_err() {
                         return Task::none();
                     }
                 }

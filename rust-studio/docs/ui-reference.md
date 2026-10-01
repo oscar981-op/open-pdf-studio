@@ -17,6 +17,14 @@ zijn vervangen door PDF-commands. De SVG's worden rechtstreeks uit de
 gekopieerde assets geladen. De native-app crate vermeldt GPL-3.0-only;
 de overige Rust-crates behouden hun bestaande licentievermelding.
 
+Voor de Home-ribbon zijn de PDF-specifieke SVG's uit de bestaande
+`open-pdf-studio/js/solid/components/ribbon/ribbonIcons.js` en `HomeTab.jsx`
+zonder vormwijziging onder `../assets/ribbon/home/` opgenomen. Het 16 px
+titelicoon onder `../assets/ribbon/title-icon.rgba` is afgeleid van
+`open-pdf-studio/public/icon.png`. Deze assets komen uit de bestaande Open
+PDF Studio-codebasis. Hakan's helpers, groepsopbouw en CAD-iconen blijven de
+technische basis voor de overige UI-delen.
+
 Openen, paginawissel, zoom en paneelzichtbaarheid zijn aangesloten. Niet
 gemigreerde editoracties zijn uitgeschakeld. De oorspronkelijke dock-,
 properties-, menu- en dialoogcode staat klaar in de bronkopie, maar is nog

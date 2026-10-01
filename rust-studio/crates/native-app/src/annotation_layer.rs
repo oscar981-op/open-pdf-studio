@@ -1,7 +1,7 @@
 //! Native page overlay: PDF pixels stay cached while annotations are drawn separately.
 use super::{AnnotationTool, Message};
-use iced::mouse;
 use iced::widget::canvas::{self, Canvas, Frame, Geometry, Stroke};
+use iced::{keyboard, mouse};
 use iced::{Color, Element, Point, Rectangle, Renderer, Size, Theme};
 use opds_native_core::annotations::{DocumentModel, Kind, Rect};
 
@@ -17,6 +17,7 @@ pub struct Layer<'a> {
 pub struct State {
     drawing: Option<(Point, Point)>,
     moving: Option<MoveState>,
+    modifiers: keyboard::Modifiers,
 }
 
 struct MoveState {
@@ -45,6 +46,23 @@ impl canvas::Program<Message> for Layer<'_> {
         cursor: mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         match event {
+            canvas::Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {
+                state.modifiers = *modifiers;
+                None
+            }
+            canvas::Event::Mouse(mouse::Event::WheelScrolled { delta })
+                if state.modifiers.control() && cursor.is_over(bounds) =>
+            {
+                let amount = match delta {
+                    mouse::ScrollDelta::Lines { y, .. } => *y,
+                    mouse::ScrollDelta::Pixels { y, .. } => *y / 40.0,
+                };
+                if amount == 0.0 {
+                    None
+                } else {
+                    Some(canvas::Action::publish(Message::WheelZoom(amount)).and_capture())
+                }
+            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = cursor.position_in(bounds)?;
                 if self.tool == AnnotationTool::Select {
