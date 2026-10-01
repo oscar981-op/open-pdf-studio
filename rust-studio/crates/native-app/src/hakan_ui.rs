@@ -58,6 +58,12 @@ macro_rules! pdf_icon {
         include_bytes!(concat!("../../../assets/ribbon/home/", $name, ".svg")) as &'static [u8]
     };
 }
+macro_rules! annotation_icon {
+    ($name:literal) => {
+        include_bytes!(concat!("../../../assets/ribbon/annotation/", $name, ".svg"))
+            as &'static [u8]
+    };
+}
 const OPEN: &[u8] = icon_asset!("ui/folder_open.svg");
 const SAVE: &[u8] = icon_asset!("ui/save.svg");
 const PRINT: &[u8] = icon_asset!("ui/print.svg");
@@ -154,7 +160,9 @@ fn labeled_tool(
                 if height > 22.0 { 18.0 } else { 14.0 },
                 action.is_some()
             ),
-            text(label).size(11)
+            text(label)
+                .size(11)
+                .wrapping(iced::widget::text::Wrapping::None)
         ]
         .spacing(6)
         .align_y(iced::Center),
@@ -457,6 +465,188 @@ fn ribbon_home(
     ]
 }
 
+fn annotation_properties() -> Element<'static, Message> {
+    let label = |name| text(name).size(9).color(Color::WHITE);
+    let color = container(Space::new().width(20).height(10)).style(|_| container::Style {
+        background: Some(Color::from_rgb8(239, 30, 31).into()),
+        border: Border {
+            color: Color::from_rgb8(126, 126, 131),
+            width: 1.0,
+            radius: 0.0.into(),
+        },
+        ..Default::default()
+    });
+    let field = container(text("2  ▴").size(10))
+        .width(39)
+        .height(19)
+        .align_x(iced::Center)
+        .align_y(iced::Center)
+        .style(|_| container::Style {
+            background: Some(Color::from_rgb8(75, 75, 81).into()),
+            border: Border {
+                color: Color::from_rgb8(115, 115, 120),
+                width: 1.0,
+                radius: 0.0.into(),
+            },
+            ..Default::default()
+        });
+    column![
+        row![label("COLOR"), color]
+            .spacing(9)
+            .align_y(iced::Center)
+            .height(23),
+        row![label("WIDTH"), field]
+            .spacing(9)
+            .align_y(iced::Center)
+            .height(23),
+    ]
+    .width(78)
+    .into()
+}
+
+// Layout and icon source: Open PDF Studio's CommentTab.jsx and ribbonIcons.js.
+// Group composition remains Hakan Seven's OpenCADStudio ribbon port above.
+fn ribbon_annotation(has_doc: bool, highlighting: bool) -> Vec<Element<'static, Message>> {
+    vec![
+        group(
+            "Drawing",
+            vec![large_tool_sized(
+                "Highlight",
+                annotation_icon!("highlightIcon"),
+                has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Highlight)),
+                highlighting,
+                51.0,
+            )],
+        ),
+        group(
+            "Text",
+            vec![
+                large_tool_sized(
+                    "Text Box",
+                    annotation_icon!("textboxIcon"),
+                    None,
+                    false,
+                    48.0,
+                ),
+                large_tool_sized(
+                    "Callout",
+                    annotation_icon!("calloutIcon"),
+                    None,
+                    false,
+                    48.0,
+                ),
+                large_tool_sized("Note", annotation_icon!("noteIcon"), None, false, 40.0),
+            ],
+        ),
+        group(
+            "Stamp",
+            vec![
+                large_tool_sized("Stamp", annotation_icon!("stampIcon"), None, false, 49.0),
+                large_tool_sized(
+                    "Signature",
+                    annotation_icon!("signatureIcon"),
+                    None,
+                    false,
+                    53.0,
+                ),
+                large_tool_sized(
+                    "Parametric\nSymbol",
+                    annotation_icon!("stampIcon"),
+                    None,
+                    false,
+                    60.0,
+                ),
+            ],
+        ),
+        group(
+            "Redaction",
+            vec![
+                large_tool_sized(
+                    "Redact",
+                    annotation_icon!("redactionIcon"),
+                    None,
+                    false,
+                    52.0,
+                ),
+                large_tool_sized(
+                    "Apply",
+                    annotation_icon!("applyRedactionsIcon"),
+                    None,
+                    false,
+                    45.0,
+                ),
+            ],
+        ),
+        group("Properties", vec![annotation_properties()]),
+        group(
+            "Edit",
+            vec![stack_tools(vec![
+                labeled_tool(
+                    "Clear Page",
+                    annotation_icon!("clearPageIcon"),
+                    None,
+                    87.0,
+                    31.0,
+                ),
+                labeled_tool(
+                    "Clear All",
+                    annotation_icon!("clearAllIcon"),
+                    None,
+                    87.0,
+                    31.0,
+                ),
+            ])],
+        ),
+        group(
+            "Measure",
+            vec![
+                stack_tools(vec![
+                    labeled_tool(
+                        "Distance",
+                        annotation_icon!("measureDistanceIcon"),
+                        None,
+                        81.0,
+                        31.0,
+                    ),
+                    labeled_tool(
+                        "Area",
+                        annotation_icon!("measureAreaIcon"),
+                        None,
+                        81.0,
+                        31.0,
+                    ),
+                ]),
+                stack_tools(vec![
+                    labeled_tool(
+                        "Perimeter",
+                        annotation_icon!("measurePerimeterIcon"),
+                        None,
+                        81.0,
+                        31.0,
+                    ),
+                    labeled_tool(
+                        "Angle",
+                        annotation_icon!("measureAngleIcon"),
+                        None,
+                        81.0,
+                        31.0,
+                    ),
+                ]),
+            ],
+        ),
+        group(
+            "Quantities",
+            vec![large_tool_sized(
+                "Quantities",
+                annotation_icon!("scheduleIcon"),
+                None,
+                false,
+                70.0,
+            )],
+        ),
+    ]
+}
+
 fn surface(theme: &Theme) -> container::Style {
     container::Style {
         background: Some(theme.extended_palette().background.base.color.into()),
@@ -542,6 +732,13 @@ pub fn view(app: &App) -> Element<'_, Message> {
         ) {
             groups = groups.push(item);
         }
+    } else if app.active_ribbon == RibbonTab::Comment {
+        for item in ribbon_annotation(
+            has_doc,
+            app.annotation_tool_activated && app.annotation_tool == AnnotationTool::Highlight,
+        ) {
+            groups = groups.push(item);
+        }
     } else {
         groups = groups.push(group(
             "Document",
@@ -567,45 +764,8 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 large_tool("Circle", icon_asset!("circle/circle.svg"), None),
             ],
         ));
-    } else if app.active_ribbon == RibbonTab::Comment {
-        groups = groups.push(group(
-            "Annotation",
-            vec![
-                large_tool_active(
-                    "Select",
-                    icon_asset!("blocks/select_objects.svg"),
-                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Select)),
-                    app.annotation_tool == AnnotationTool::Select,
-                ),
-                large_tool_active(
-                    "Rectangle",
-                    icon_asset!("shapes/rect.svg"),
-                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Rectangle)),
-                    app.annotation_tool == AnnotationTool::Rectangle,
-                ),
-                large_tool_active(
-                    "Highlight",
-                    icon_asset!("blocks/quick_select.svg"),
-                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Highlight)),
-                    app.annotation_tool == AnnotationTool::Highlight,
-                ),
-                large_tool("Text", icon_asset!("text.svg"), None),
-                large_tool("Measure", icon_asset!("measure.svg"), None),
-            ],
-        ));
-        groups = groups.push(group(
-            "Edit",
-            vec![large_tool(
-                "Delete",
-                icon_asset!("ui/trash.svg"),
-                app.document
-                    .as_ref()
-                    .and_then(|d| d.selected_annotation)
-                    .map(|_| Message::RemoveSelectedAnnotation),
-            )],
-        ));
     }
-    if app.active_ribbon != RibbonTab::Home {
+    if !matches!(app.active_ribbon, RibbonTab::Home | RibbonTab::Comment) {
         groups = groups
             .push(group(
                 "View",

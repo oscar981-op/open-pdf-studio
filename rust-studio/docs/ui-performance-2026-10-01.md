@@ -4,7 +4,7 @@ Dezelfde schermbreedte van circa 1200 px is gebruikt voor visuele vergelijking v
 
 | Gebied | OpenCADStudio | Bestaande PDF-app | Huidige Rust-shell |
 | --- | --- | --- | --- |
-| Ribbon | Dicht, meerdere rijen en gegroepeerde tools | Dicht, zes tabs en veel PDF-tools | Home: titelbalk 30 px, tabs 28 px, groepen 94 px; groepsscheidingen op circa dezelfde x-posities. Andere tabs blijven voorlopig een gedeeltelijke Hakan-port |
+| Ribbon | Dicht, meerdere rijen en gegroepeerde tools | Dicht, zes tabs en veel PDF-tools | Home en Annotation: titelbalk 30 px, tabs 28 px, groepen 94 px; groepsscheidingen op circa dezelfde x-posities. Andere tabs blijven voorlopig een gedeeltelijke Hakan-port |
 | Documenten | CAD-tekeningen en tabs | Meerdere PDF-tabs, meldingsbalk | Eén PDF-tab, geen meldingsbalk |
 | Zijpanelen | Eigenschappen, objectlijst | Uitgebreide linker en rechter panelen | Tekstuele paginalijst, eenvoudige eigenschappen |
 | Pagina/viewport | CAD-canvas | PDF met selectie- en annotatielagen | PDF-bitmap met eerste native annotatie-overlay |
@@ -31,7 +31,7 @@ Via XTEST zijn toetsenbord- en muisgebeurtenissen naar het native venster gestuu
 
 Na de eerste UI-test is Ctrl+scroll uitgebreid met een muisanker op beide assen. De scrollpositie wordt pas na de geaccepteerde PDF-render aangepast; het anker wordt berekend vanaf de daadwerkelijk getoonde bitmap, ook wanneer nieuwe wielgebeurtenissen eerdere renders inhalen. In de venstertest bleef tekst bij 92% → 122% onder de muis. Vier snelle wielstappen brachten de pagina naar 283% en vier stappen terug herstelden 92% en de oorspronkelijke paginapositie. Op `Technische tekening.pdf` in een venster van 1000 × 700 px werd 23% → 40% → 23% via de UI getest; de tekening keerde terug op dezelfde positie en een rechthoekannotatie bleef plaatsbaar. De actieve CAD-toolknoppen in andere tabs gebruiken nog de oudere layout. Uitgeschakelde knoppen kunnen nog niet functioneel worden getest.
 
-De Annotation-ribbon is daarna op 1200 px naast de bestaande app vastgelegd. De oorspronkelijke groepen zijn Drawing, Text, Stamp, Redaction, Properties, Edit, Measure en Quantities. De Rust-tab toont nog Document, Annotation, Edit, View, Navigate en Panels met Hakan-iconen; hier is de afwijking veel groter dan in Home. De volgende visuele port moet deze groepindeling en PDF-iconen overnemen zonder de werkende overlayacties te verliezen.
+De Annotation-ribbon is op 1200 px naast de bestaande app vastgelegd. De acht groepen Drawing, Text, Stamp, Redaction, Properties, Edit, Measure en Quantities, met 15 PDF-iconen, zijn in de Hakan/Iced-port opgenomen. De gemeten groepsscheidingen in Rust liggen nu bij circa 64/215/391/493/593/693/870 px, tegenover 64/214/391/493/593/693/870 px in de bestaande app. Highlight is via de echte UI getest: slepen maakte een annotatie aan; Ctrl+scroll bracht de pagina met die annotatie van 92% naar 122% met cursorvast anker. Text Box, Callout, Note, Stamp, Signature, Parametric Symbol, redactie, property-invoer, wissen, meten en Quantities zijn nog uitgeschakeld. Zijpanelen en documentgebied zijn nog duidelijk anders. De schermafbeeldingen staan lokaal in `/tmp/opds-original-annotation-ribbon.png` en `/tmp/opds-rust-annotation-ribbon-final2.png`.
 
 ## Meting
 

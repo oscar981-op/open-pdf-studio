@@ -6,7 +6,7 @@ Een afzonderlijke herbouw naast de bestaande applicatie. Branch: `feat/rust-nati
 
 De applicatie, interface, PDF-engine en applicatiebibliotheken worden Rust. De **huidige Open PDF Studio-UI** is de exacte doelreferentie. De UI-code van Hakan Seven's OpenCADStudio wordt rechtstreeks hergebruikt als basis: ribbonhelpers en SVG-iconen zijn aangesloten, de overige UI-bronnen zijn lokaal opgenomen voor verdere migratie. De bestaande app blijft de functionele referentie voor de migratie.
 
-**Dit is een werkend native venster, nog geen volledige PDF-editor.** Het venster kan een PDF openen, pagina's met Hayro renderen, door pagina's bladeren en via ribbon of Ctrl+scroll zoomen. De Home-ribbon en titelbalk volgen nu de afmetingen en icoonvolgorde van de bestaande app op een 1200 px breed venster; de overige tabs, panelen en functies zijn nog niet visueel of functioneel gelijk. De eerste crate `opds-native-core` bevat documentgebonden render-tickets, pagina-selectie, zoom, annotaties en undo/redo, met regressietests. Deze crate heeft geen externe dependencies en verbiedt eigen unsafe-code. Een herbruikbare Rust-PDF-renderer (`opds-engine-probe` als library met CLI-harnas) rendert lokale PDF’s voor de enginekeuze.
+**Dit is een werkend native venster, nog geen volledige PDF-editor.** Het venster kan een PDF openen, pagina's met Hayro renderen, door pagina's bladeren en via ribbon of Ctrl+scroll zoomen. De Home- en Annotation-ribbon en titelbalk volgen de afmetingen en icoonvolgorde van de bestaande app op een 1200 px breed venster; andere tabs, panelen en functies zijn nog niet visueel of functioneel gelijk. De eerste crate `opds-native-core` bevat documentgebonden render-tickets, pagina-selectie, zoom, annotaties en undo/redo, met regressietests. Deze crate heeft geen externe dependencies en verbiedt eigen unsafe-code. Een herbruikbare Rust-PDF-renderer (`opds-engine-probe` als library met CLI-harnas) rendert lokale PDF’s voor de enginekeuze.
 
 ```sh
 cd rust-studio
@@ -23,7 +23,7 @@ cargo run --release --bin opds-native-app -- "/pad/naar/tekening.pdf"
 ```
 
 Open toont nu een afzonderlijk invoervenster voor het PDF-pad. Een bestandsbrowser ontbreekt nog.
-Gebruik voor interactie altijd de release-build: de debug-build rendert zware PDF's veel trager en vertraagt ook de ribbon. Onder Annotation kunnen Rectangle en Highlight met slepen op de pagina worden geplaatst. Select kan annotaties aanwijzen en verslepen; de acht grepen van een selectie wijzigen de grootte. Delete verwijdert de selectie. Het eigenschappenpaneel toont type, pagina, positie en afmetingen. De overlay, selectie, wijzigingen en undo/redo zijn Rust. Ctrl+scroll zoomt op de pagina rond de muispositie. Tekst invoeren, PDF-opslag en printen ontbreken nog.
+Gebruik voor interactie altijd de release-build: de debug-build rendert zware PDF's veel trager en vertraagt ook de ribbon. Onder Annotation kan Highlight met slepen op de pagina worden geplaatst. Rectangle staat onder Drawing; Select staat onder Home en kan annotaties aanwijzen en verslepen; de acht grepen van een selectie wijzigen de grootte. Delete verwijdert de selectie. Het eigenschappenpaneel toont type, pagina, positie en afmetingen. De overlay, selectie, wijzigingen en undo/redo zijn Rust. Ctrl+scroll zoomt op de pagina rond de muispositie. Tekst invoeren, PDF-opslag en printen ontbreken nog.
 
 - [Architectuur en dependencybeleid](docs/architecture.md)
 - [Exacte UI-pariteit met huidige app](docs/current-ui-parity.md)
