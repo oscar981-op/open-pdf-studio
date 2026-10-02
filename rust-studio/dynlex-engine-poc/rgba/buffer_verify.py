@@ -2,6 +2,7 @@
 """Build and pixel-check the experimental in-process DynLex buffer kernel."""
 
 import argparse
+import json
 import statistics
 import time
 import shutil
@@ -25,7 +26,17 @@ def main():
                         help="repeat each dense page in one Rust process to time kernel calls")
     parser.add_argument("--bench-runs", type=int, default=0,
                         help="paired full-process PDF-to-RGBA runs on dense fixtures")
+    parser.add_argument("--bench-memory", action="store_true",
+                        help="measure per-process peak RSS with /usr/bin/time (Linux)")
+    parser.add_argument("--bench-json", type=Path,
+                        help="write raw paired full-process samples to JSON")
     args = parser.parse_args()
+    if args.bench_memory and args.bench_runs < 1:
+        parser.error("--bench-memory requires --bench-runs")
+    time_binary = Path("/usr/bin/time")
+    if args.bench_memory and not time_binary.is_file():
+        parser.error("/usr/bin/time is required for --bench-memory")
+    measurements = {}
     paths = {name: getattr(args, name).resolve(strict=True)
              for name in ("compiler", "opt", "llc", "rustc", "adapter", "hayro")}
     adapter_rlib = paths["adapter"].parent / "libopds_opdl_adapter.rlib"
@@ -79,21 +90,40 @@ def main():
                                            capture_output=True, text=True)
                     print(f"{mode}: {timed.stderr.strip()}")
                 if dense and args.bench_runs > 0:
-                    direct_samples, hayro_samples = [], []
+                    samples = {"direct": [], "hayro": []}
                     for index in range(args.bench_runs):
                         jobs = (("direct", [probe, str(number), pdf, direct_output]),
                                 ("hayro", [paths["hayro"], pdf, "1", hayro_output, "1"]))
                         for label, command in (jobs if index % 2 == 0 else reversed(jobs)):
+                            peak_path = work / "peak-kib.txt"
+                            if args.bench_memory:
+                                command = [time_binary, "-f", "%M", "-o", peak_path, *command]
                             start = time.perf_counter_ns()
                             subprocess.run(command, check=True, capture_output=True)
-                            sample = (time.perf_counter_ns() - start) / 1_000_000
-                            (direct_samples if label == "direct" else hayro_samples).append(sample)
+                            sample = {"wall_ms": (time.perf_counter_ns() - start) / 1_000_000}
+                            if args.bench_memory:
+                                sample["peak_rss_kib"] = int(peak_path.read_text().strip())
+                            samples[label].append(sample)
+                    direct_samples = [item["wall_ms"] for item in samples["direct"]]
+                    hayro_samples = [item["wall_ms"] for item in samples["hayro"]]
                     paired = [a - b for a, b in zip(direct_samples, hayro_samples)]
+                    measurements[mode] = {"page": f"{width}x{height}",
+                                          "dense": True, "os_cache_cleared": False,
+                                          "time_wrapper": args.bench_memory, "samples": samples}
                     print(f"{mode} dense direct/Hayro median ms: "
                           f"{statistics.median(direct_samples):.2f}/"
                           f"{statistics.median(hayro_samples):.2f}; "
                           f"paired delta {statistics.median(paired):+.2f}; "
                           f"direct wins {sum(delta < 0 for delta in paired)}/{args.bench_runs}")
+                    if args.bench_memory:
+                        direct_peak = [item["peak_rss_kib"] for item in samples["direct"]]
+                        hayro_peak = [item["peak_rss_kib"] for item in samples["hayro"]]
+                        print(f"{mode} peak RSS median KiB: "
+                              f"{statistics.median(direct_peak):.0f}/"
+                              f"{statistics.median(hayro_peak):.0f}; "
+                              f"first-process wall ms: "
+                              f"{direct_samples[0]:.2f}/{hayro_samples[0]:.2f} "
+                              f"(OS cache not cleared)")
                 checked += width * height
         valid = (work / "scene.opdl").read_bytes()
         bad = {
@@ -109,6 +139,8 @@ def main():
             result = subprocess.run([probe, "3", input_path, output_path], capture_output=True)
             if result.returncode == 0 or output_path.exists():
                 raise RuntimeError(f"invalid scene accepted: {name}")
+        if args.bench_json:
+            args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
         print(f"9 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes rejected")
 
 

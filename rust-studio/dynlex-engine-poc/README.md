@@ -337,3 +337,29 @@ renderen en RGBA-schrijfkosten, maar alleen voor de kleine, strikt ondersteunde
 PDF-subset. De OS-cache was warm en piekgeheugen en koude cache zijn nog niet
 gepaard gemeten. Dit bewijst geen snelheidswinst op echte tekeningen of in de
 app. De bestaande Hayro-route blijft ongewijzigd.
+
+## Gepaard procesgeheugen
+
+`buffer_verify.py --bench-runs 15 --bench-memory --bench-json /pad/naar/metingen.json`
+meet nu per proces de piek-RSS via Linux `/usr/bin/time -f %M` en bewaart
+iedere gepaarde ruwe sample. Beide routes lopen beurtelings eerst. De gemeten
+wandtijd bevat bij deze optie ook de identieke `time`-wrapper; vergelijk die
+niet rechtstreeks met eerdere runs zonder wrapper. De eerste procesaanroep
+wordt apart gerapporteerd, maar de PDF, binaries en bibliotheken kunnen dan al
+in de OS-cache staan. De harness wist de OS-cache niet en doet dus **geen**
+echte koude-cacheclaim.
+
+Op de dichte 1024×768-fixture, 15 warme procesparen met deze optie, waren de
+medianen als volgt (directe DynLex-route / Hayro):
+
+| Agent | Wandtijd | Piek-RSS | Winstparen |
+| --- | ---: | ---: | ---: |
+| Raster | 25,37 / 38,08 ms | 9.112 / 14.928 KiB | 15/15 |
+| Vector | 20,30 / 25,93 ms | 5.372 / 12.548 KiB | 13/15 |
+| Hybride | 28,51 / 37,02 ms | 9.288 / 15.020 KiB | 13/15 |
+
+De meting omvat PDF-parsing, OPDL-opbouw, kernel, processtart en uitvoer naar
+bestand. De lagere piek-RSS en wandtijd zijn op deze kleine fixture
+reproduceerbaar, maar representeren geen algemene PDF-ondersteuning. Een
+volgende stap is grotere en complexere PDF-pagina's ondersteunen, pixelpariteit
+behouden en pas dan app-geheugen en werkelijk koude start meten.
