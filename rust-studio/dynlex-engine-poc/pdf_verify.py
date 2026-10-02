@@ -27,6 +27,27 @@ def median_runs(command, cwd, runs):
     return round(statistics.median(samples), 3)
 
 
+def paired_pipeline_runs(adapter_command, dynlex_command, hayro_command, cwd, runs):
+    """Alternate order to reduce systematic warmup and thermal-order bias."""
+    pipeline_samples = []
+    hayro_samples = []
+
+    def pipeline():
+        started = time.perf_counter_ns()
+        timed(adapter_command, cwd)
+        timed(dynlex_command, cwd)
+        return (time.perf_counter_ns() - started) / 1_000_000
+
+    for index in range(runs):
+        if index % 2 == 0:
+            pipeline_samples.append(pipeline())
+            hayro_samples.append(timed(hayro_command, cwd)[0])
+        else:
+            hayro_samples.append(timed(hayro_command, cwd)[0])
+            pipeline_samples.append(pipeline())
+    return pipeline_samples, hayro_samples
+
+
 def first_difference(actual, expected):
     return next((index for index, (a, b) in enumerate(zip(actual, expected)) if a != b), None)
 
@@ -89,14 +110,11 @@ def main():
                 pdf.write_bytes(build_pdf(mode, width=width, height=height, dense=args.dense))
                 adapter_ms = median_runs([adapter, pdf, opdl], work, args.runs)
                 dynlex_ms = median_runs([binary], work, args.runs)
-                pipeline_samples = []
-                for _ in range(args.runs):
-                    started = time.perf_counter_ns()
-                    timed([adapter, pdf, opdl], work)
-                    timed([binary], work)
-                    pipeline_samples.append((time.perf_counter_ns() - started) / 1_000_000)
+                pipeline_samples, hayro_samples = paired_pipeline_runs(
+                    [adapter, pdf, opdl], [binary], [hayro, pdf, "1", hayro_output, "1"],
+                    work, args.runs)
                 pipeline_ms = round(statistics.median(pipeline_samples), 3)
-                hayro_ms = median_runs([hayro, pdf, "1", hayro_output, "1"], work, args.runs)
+                hayro_ms = round(statistics.median(hayro_samples), 3)
                 expected = reference_rgba(mode, width, height, dense=args.dense)
                 actual = output.read_bytes()
                 if actual != expected:
@@ -116,6 +134,11 @@ def main():
                     "dynlex_median_ms": dynlex_ms,
                     "adapter_plus_dynlex_median_ms": pipeline_ms,
                     "hayro_pdf_to_rgba_median_ms": hayro_ms,
+                    "paired_pipeline_wins": sum(p < h for p, h in zip(pipeline_samples, hayro_samples)),
+                    "paired_median_delta_ms": round(statistics.median(
+                        p - h for p, h in zip(pipeline_samples, hayro_samples)), 3),
+                    "paired_pipeline_samples_ms": [round(value, 3) for value in pipeline_samples],
+                    "paired_hayro_samples_ms": [round(value, 3) for value in hayro_samples],
                     "adapter_peak_rss_kib": adapter_rss,
                     "dynlex_peak_rss_kib": dynlex_rss,
                     "hayro_peak_rss_kib": hayro_rss,

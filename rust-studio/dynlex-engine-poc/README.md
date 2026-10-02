@@ -219,6 +219,27 @@ OPDL-v1-fixture met alpha en clipping slaagde opnieuw. De waarden zijn
 procesmedianen met warme cache; het kleine verschil voor hybride/raster kan
 meetruis zijn. De winst voor de volledige PDF-route blijft onbewezen.
 
+Voor de **volledige route** wisselt `pdf_verify.py` de uitvoervolgorde van
+adapter+DynLex en Hayro nu per ronde af. Het JSON-rapport bewaart beide
+reeksen, het aantal rondes waarin DynLex sneller was en de mediaan van de
+gepaarde tijdsverschillen. Dit verkleint systematische volgordebias maar is
+nog steeds een warme proces-/bestands-cacheproef, zonder app-integratie. Een
+15-runsmeting op de huidige renderer gaf:
+
+| Fixture | Raster | Vector | Hybride |
+| --- | ---: | ---: | ---: |
+| 256×192, DynLex-winst/rondes | 4/15 | 6/15 | 7/15 |
+| 512×384, DynLex-winst/rondes | 5/15 | 12/15 | 6/15 |
+| 1024×768 dicht, DynLex-winst/rondes | 5/15 | 13/15 | 5/15 |
+| 1024×768 dicht, gepaard mediaanverschil | +1,4 ms | −2,9 ms | +3,9 ms |
+
+Positief verschil betekent dat adapter+DynLex langer duurde. Vector wordt
+op deze beperkte, grotere fixtures vaak sneller; raster en hybride blijven
+meestal achter. De kleine pagina's worden sterk door processtart gedomineerd.
+Eerdere tabellen hierboven waren niet afwisselend gepaard gemeten en zijn
+daarom geen directe trendvergelijking met deze tabel. De volledige beeldkopie
+en de tweeprocessenroute blijven belangrijke onderzoekspunten.
+
 De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,
