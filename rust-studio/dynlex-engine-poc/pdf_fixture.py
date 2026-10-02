@@ -38,7 +38,7 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b""):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None):
     content = bytearray(pre_content)
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
@@ -65,6 +65,16 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
                        f"1 0.50196078 0 rg\n20 {height - 70} 100 45 re\nf\n"
                        f"0 0 0 RG\n20 {height - 60 - 0.5:g} m\n130 {height - 60 - 0.5:g} l\nS\n"
                        f"80.5 {height - 20} m\n80.5 {height - 110} l\nS\n".encode())
+    if clip_case and mode != "raster":
+        if clip_case == "double":
+            content.extend(f"70 {height - 100} 60 50 re\nW\nn\n"
+                           f"1 0 0 rg\n60 {height - 85} 60 40 re\nf\n"
+                           f"1 1 1 RG\n75.5 {height - 45} m\n75.5 {height - 110} l\nS\n".encode())
+        elif clip_case == "empty":
+            content.extend(f"150 {height - 160} 40 40 re\nW\nn\n"
+                           f"1 0 0 rg\n10 {height - 90} 200 80 re\nf\n".encode())
+        else:
+            raise ValueError(f"unknown clip case: {clip_case}")
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
     has_image = mode != "vector"
@@ -94,7 +104,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     return bytes(pdf)
 
 
-def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False):
+def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None):
     rgba = bytearray()
     rects = rectangles(width, height, dense)
     strokes = lines(width, height)
@@ -119,6 +129,11 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                         color = (255, 128, 0)
                     if (40 <= x < 100 and y == 60) or (x == 80 and 40 <= y < 90):
                         color = (0, 0, 0)
+                    if clip_case == "double":
+                        if 70 <= x < 100 and 50 <= y < 85:
+                            color = (255, 0, 0)
+                        if x == 75 and 50 <= y < 90:
+                            color = (255, 255, 255)
             rgba.extend((*color, 255))
     return bytes(rgba)
 

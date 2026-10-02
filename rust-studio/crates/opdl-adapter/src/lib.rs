@@ -221,13 +221,15 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
             "W" if depth == 0
                 && op.operands.is_empty()
                 && pending_rect.is_some()
-                && !pending_clip
-                && clip.is_none() =>
+                && !pending_clip =>
             {
                 pending_clip = true;
             }
             "n" if depth == 0 && op.operands.is_empty() && pending_clip => {
-                clip = pending_rect.take();
+                let rect = pending_rect
+                    .take()
+                    .ok_or_else(|| fail("clip without rectangle"))?;
+                clip = Some(intersect_rect(rect, clip).unwrap_or([0, 0, 0, 0]));
                 pending_clip = false;
             }
             "f" if (depth == 0 || translation.is_some())

@@ -370,8 +370,8 @@ De Rust-adapter begrijpt nu voor gevulde rechthoeken een lokale PDF-
 `q 1 0 0 1 tx ty cm ... re f Q`-groep met gehele verschuiving. De vertaling
 wordt vóór schermcoördinaten toegepast en mag de rechthoek niet buiten de
 pagina brengen. De bestaande full-page image-matrix blijft apart; schalen,
-rotatie, schuine matrices, fractionele verschuivingen en getransformeerde
-lijnen blijven expliciet afgewezen. Er is nog geen algemene graphics-state-
+rotatie, schuine matrices en fractionele verschuivingen blijven expliciet
+afgewezen. Er is nog geen algemene graphics-state-
 stack of vectorpadparser.
 
 Twee aanvullende echte PDF-fixtures (vector en hybride) met een verschoven
@@ -393,17 +393,29 @@ CLI, Hayro en onafhankelijke pixelreferentie blijven op elf PDF-pagina's
 schalen, fractionele verschuivingen en vormen buiten de pagina worden
 afgewezen. Dit is nog geen algemene PDF-padrenderer.
 
-## Eén rechthoekig PDF-clipvak
+## Rechthoekige PDF-clipvakken
 
-De beperkte PDF-adapter accepteert nu eenmaal per pagina `re W n` buiten
-`q`/`Q`. Vanaf dat punt snijdt hij elke volgende gevulde rechthoek en
-asgerichte 1-pixelstreek op het clipvak bij, terwijl eerder getekende
-raster- en vectorlagen intact blijven. Beeld-XObjects na zo'n clipvak,
-meerdere clipvakken, `W*`, niet-rechthoekige paden, clip-state-herstel en
-transparantie blijven afgewezen. Er is dus nog geen algemene PDF-clipping.
+De beperkte PDF-adapter accepteert `re W n` buiten `q`/`Q`. Vanaf dat
+punt snijdt hij elke volgende gevulde rechthoek en asgerichte
+1-pixelstreek op het clipvak bij, terwijl eerder getekende raster- en
+vectorlagen intact blijven. Opeenvolgende clipvakken nemen hun doorsnede.
+Beeld-XObjects na een clipvak, `W*`, niet-rechthoekige paden,
+clip-state-herstel en transparantie blijven afgewezen. Er is dus nog
+geen algemene PDF-clipping.
 
 Twee nieuwe echte PDF-fixtures testen vector en hybride met een clipvak dat
 een gevulde rechthoek en twee lijnen deels doorsnijdt. Dertien pagina's,
 3.293.184 pixels, zijn bytegelijk voor directe DynLex-probe, DynLex-CLI,
-Hayro en onafhankelijke referentie. Afgekapt `W` zonder `n`, `W*`, een
-herhaald clipvak en een beeldlaag ná clipping worden geweigerd.
+Hayro en onafhankelijke referentie. Afgekapt `W` zonder `n`, `W*`, een clip zonder pad en een beeldlaag ná
+clipping worden geweigerd.
+
+## Doorsnede van meerdere clipvakken
+
+De adapter neemt nu bij herhaalde `re W n`-opdrachten de doorsnede met
+het bestaande clipgebied. Een lege doorsnede wordt als leeg clipvak
+bewaard; latere vectoropdrachten leveren dan geen pixels of ongeldige
+OPDL-opdracht op. Vier extra echte PDF-fixtures (vector/hybride met
+overlap en met lege doorsnede) brengen de controle op 17 pagina's en
+3.489.792 pixels. Directe DynLex-probe, CLI, Hayro en onafhankelijke
+referentie blijven bytegelijk. Clipping binnen `q`/`Q` met herstel van
+de vorige clip-state blijft buiten de huidige subset.
