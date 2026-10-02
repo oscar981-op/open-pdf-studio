@@ -1251,13 +1251,14 @@ pub fn view(app: &App) -> Element<'_, Message> {
                         .spacing(4),
                 )
                 .width(Fill)
+                .height(206)
                 .padding(7)
                 .on_press(Message::GoToPage(index))
                 .style(move |t, s| tool_btn_style(t, index == page, s)),
             );
         }
         workspace = workspace.push(
-            container(scrollable(pages))
+            container(scrollable(pages).on_scroll(Message::ThumbnailsScrolled))
                 .width(200)
                 .height(Fill)
                 .style(surface),

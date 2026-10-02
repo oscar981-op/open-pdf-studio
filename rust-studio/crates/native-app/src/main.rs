@@ -19,6 +19,8 @@ use std::sync::Arc;
 
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_THUMBNAILS: usize = 12;
+const THUMBNAIL_ROW_STEP: f32 = 213.0;
+const THUMBNAIL_HEADER_HEIGHT: f32 = 22.0;
 const HORIZONTAL_PAN_MARGIN: f32 = 512.0;
 
 fn thumbnail_scale(width: f32, height: f32) -> Result<f32, String> {
@@ -30,6 +32,15 @@ fn thumbnail_scale(width: f32, height: f32) -> Result<f32, String> {
         return Err("Page is too large for a thumbnail".into());
     }
     Ok(scale)
+}
+
+fn thumbnail_page_at_scroll(y: f32, page_count: usize) -> usize {
+    if page_count == 0 {
+        return 0;
+    }
+    ((y - THUMBNAIL_HEADER_HEIGHT).max(0.0) / THUMBNAIL_ROW_STEP)
+        .floor()
+        .min((page_count - 1) as f32) as usize
 }
 
 fn theme(_: &App) -> Theme {
@@ -268,7 +279,7 @@ mod print_range_tests {
 
 #[cfg(test)]
 mod thumbnail_tests {
-    use super::thumbnail_scale;
+    use super::{thumbnail_page_at_scroll, thumbnail_scale};
 
     #[test]
     fn fits_large_landscape_and_portrait_pages_without_upscaling() {
@@ -277,6 +288,14 @@ mod thumbnail_tests {
         assert_eq!(thumbnail_scale(50.0, 50.0).unwrap(), 1.0);
         assert!(thumbnail_scale(20000.0, 200.0).is_err());
         assert!(thumbnail_scale(f32::NAN, 100.0).is_err());
+    }
+
+    #[test]
+    fn scroll_focus_tracks_visible_thumbnail_card() {
+        assert_eq!(thumbnail_page_at_scroll(0.0, 100), 0);
+        assert_eq!(thumbnail_page_at_scroll(22.0 + 213.0 * 9.0, 100), 9);
+        assert_eq!(thumbnail_page_at_scroll(100_000.0, 100), 99);
+        assert_eq!(thumbnail_page_at_scroll(100.0, 0), 0);
     }
 }
 
@@ -295,6 +314,7 @@ struct OpenDocument {
     thumbnails: VecDeque<(usize, image::Handle)>,
     thumbnail_in_flight: Option<usize>,
     thumbnail_failed: HashSet<usize>,
+    thumbnail_focus: usize,
 }
 
 struct CachedPage {
@@ -408,6 +428,7 @@ enum Message {
         anchor: [f32; 2],
     },
     PageScrolled(scrollable::Viewport),
+    ThumbnailsScrolled(scrollable::Viewport),
     GoToPage(usize),
     Rendered(RenderTicket, Result<Raster, String>),
     ThumbnailRendered(u64, usize, Result<Raster, String>),
@@ -759,6 +780,16 @@ impl App {
             Message::ToggleProperties => self.hide_properties = !self.hide_properties,
             Message::PageScrolled(viewport) => {
                 self.page_scroll_offset = viewport.absolute_offset();
+            }
+            Message::ThumbnailsScrolled(viewport) => {
+                let Some(document) = &mut self.document else {
+                    return Task::none();
+                };
+                document.thumbnail_focus = thumbnail_page_at_scroll(
+                    viewport.absolute_offset().y,
+                    document.pdf.page_count(),
+                );
+                return self.render_nearby_thumbnail();
             }
             Message::PathChanged(value) => self.path_input = value,
             Message::SelectRibbon(tab) => self.active_ribbon = tab,
@@ -1166,6 +1197,7 @@ impl App {
                             thumbnails: VecDeque::new(),
                             thumbnail_in_flight: None,
                             thumbnail_failed: HashSet::new(),
+                            thumbnail_focus: 0,
                         };
                         document.cache_bitmap(0, initial_scale, raster);
                         self.document = Some(document);
@@ -1261,6 +1293,7 @@ impl App {
                         return Task::none();
                     }
                     document.selected_annotation = None;
+                    document.thumbnail_focus = page;
                     if self.active_ribbon == RibbonTab::Format {
                         self.active_ribbon = RibbonTab::Comment;
                     }
@@ -1315,8 +1348,14 @@ impl App {
             return Task::none();
         }
         let current = document.model.view().page();
+        let focus = document.thumbnail_focus;
         let count = document.pdf.page_count();
         let candidate = [
+            Some(focus),
+            focus.checked_add(1),
+            focus.checked_sub(1),
+            focus.checked_add(2),
+            focus.checked_sub(2),
             current.checked_add(1),
             current.checked_sub(1),
             current.checked_add(2),
@@ -1326,6 +1365,7 @@ impl App {
         .flatten()
         .find(|&page| {
             page < count
+                && !(page == document.displayed_page && document.bitmap.is_some())
                 && !document
                     .thumbnails
                     .iter()
