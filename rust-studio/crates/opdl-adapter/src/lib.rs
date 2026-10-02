@@ -130,34 +130,36 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut pending_rect = None;
     let mut pending_clip = false;
     let mut clip = None;
-    let mut saved_clip: Option<Option<[u32; 4]>> = None;
+    let mut saved_clips: Vec<Option<[u32; 4]>> = Vec::new();
     let mut path_start = None;
     let mut pending_line = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
     for op in &content.operations {
         match op.operator.as_str() {
             "q" if op.operands.is_empty()
-                && depth == 0
+                && depth < 2
+                && !image_matrix
+                && translation.is_none()
                 && pending_rect.is_none()
                 && !pending_clip
                 && path_start.is_none()
                 && pending_line.is_none() =>
             {
-                saved_clip = Some(clip);
-                depth = 1
+                saved_clips.push(clip);
+                depth += 1;
             }
             "Q" if op.operands.is_empty()
-                && depth == 1
+                && depth > 0
                 && pending_rect.is_none()
                 && !pending_clip
                 && path_start.is_none()
                 && pending_line.is_none()
                 && (!image_matrix || image.is_some()) =>
             {
-                clip = saved_clip
-                    .take()
+                clip = saved_clips
+                    .pop()
                     .ok_or_else(|| fail("restore without save"))?;
-                depth = 0;
+                depth -= 1;
                 translation = None;
                 image_matrix = false;
             }
@@ -330,7 +332,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
         || pending_line.is_some()
         || image_matrix
         || translation.is_some()
-        || saved_clip.is_some()
+        || !saved_clips.is_empty()
     {
         return Err(fail("incomplete fixture content stream"));
     }

@@ -77,6 +77,12 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
             content.extend(f"1 0 0 rg\nq\n70 {height - 80} 20 20 re\nW\nn\n"
                            f"50 {height - 90} 50 40 re\nf\nQ\n"
                            f"0 0 1 rg\n50 {height - 100} 50 20 re\nf\n".encode())
+        elif clip_case == "nested":
+            content.extend(f"1 0 0 rg\nq\n60 {height - 90} 40 40 re\nW\nn\n"
+                           f"q\n70 {height - 80} 20 20 re\nW\nn\n"
+                           f"50 {height - 90} 50 40 re\nf\nQ\n"
+                           f"50 {height - 100} 50 20 re\nf\nQ\n"
+                           f"0 0 1 rg\n40 {height - 70} 20 20 re\nf\n".encode())
         else:
             raise ValueError(f"unknown clip case: {clip_case}")
     content.extend(extra_content)
@@ -142,6 +148,11 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                         if 70 <= x < 90 and 60 <= y < 80:
                             color = (255, 0, 0)
                         if 50 <= x < 100 and 80 <= y < 90:
+                            color = (0, 0, 255)
+                    if clip_case == "nested":
+                        if (70 <= x < 90 and 60 <= y < 80) or (60 <= x < 100 and 80 <= y < 90):
+                            color = (255, 0, 0)
+                        if 40 <= x < 60 and 50 <= y < 70:
                             color = (0, 0, 255)
             rgba.extend((*color, 255))
     return bytes(rgba)

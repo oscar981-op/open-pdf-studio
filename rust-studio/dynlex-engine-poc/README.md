@@ -400,7 +400,7 @@ De beperkte PDF-adapter accepteert `re W n` op de pagina en in één
 1-pixelstreek op het clipvak bij, terwijl eerder getekende raster- en
 vectorlagen intact blijven. Opeenvolgende clipvakken nemen hun doorsnede.
 Beeld-XObjects na een clipvak, `W*`, niet-rechthoekige paden,
-geneste graphics-state-groepen en transparantie blijven afgewezen. Er is dus
+graphics-state-groepen dieper dan twee niveaus en transparantie blijven afgewezen. Er is dus
 nog geen algemene PDF-clipping.
 
 Twee nieuwe echte PDF-fixtures testen vector en hybride met een clipvak dat
@@ -424,12 +424,24 @@ referentie blijven bytegelijk.
 Eén `q`/`Q`-groep bewaart nu het bestaande clipvak. Een `re W n`
 binnen de groep verkleint dat vak tijdelijk; na `Q` wordt de eerdere
 clip hersteld. Dezelfde groep blijft bruikbaar voor de bestaande
-gehele translatie of full-page beeldlaag. Geneste groepen, kleur- of
-lijnstijlwijziging binnen de groep, niet-rechthoekige clip en beelden
+gehele translatie of full-page beeldlaag. Groepen dieper dan twee niveaus, kleur- of lijnstijlwijziging binnen
+de groep, niet-rechthoekige clip en beelden
 ná een actief clipvak blijven buiten de veilige subset.
 
 Twee extra echte PDF-fixtures tekenen eerst binnen een tijdelijk
 kleiner clipvak en daarna buiten dat kleinere, maar binnen het herstelde
 oudervak. Negentien pagina's/3.588.096 pixels blijven bytegelijk tussen
 de directe DynLex-probe, DynLex-CLI, Hayro en de onafhankelijke referentie.
-Een geneste `q` en een onafgesloten clippad worden geweigerd.
+Een derde geneste `q` en een onafgesloten clippad worden geweigerd.
+
+## Twee niveaus cliptoestand
+
+De adapter bewaart nu maximaal twee `q`/`Q`-niveaus voor een begrensde
+rechthoekige clip. De binnenste clip wordt bij haar `Q` hersteld naar de
+buitenste; de tweede `Q` herstelt het oorspronkelijke paginaclipvak.
+De twee extra vector-/hybride fixtures kleuren elk van deze drie gebieden
+afzonderlijk. Daarmee komen 21 PDF-pagina's/3.686.400 pixels exact overeen
+tussen directe DynLex-probe, CLI, Hayro en onafhankelijke referentie.
+Een derde genest niveau blijft afgewezen. Dit is nog geen algemene
+PDF-graphics-state-stack: CTM-, kleur- en lijnstijlinstellingen binnen
+een geneste groep worden nog niet volledig opgeslagen of hersteld.

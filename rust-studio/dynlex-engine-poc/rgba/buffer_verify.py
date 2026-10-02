@@ -163,7 +163,7 @@ def main():
                     == hayro_output.read_bytes() == expected):
                 raise RuntimeError(f"pixel mismatch: clipped {mode}")
             checked += width * height
-        for clip_case in ("double", "empty", "restore"):
+        for clip_case in ("double", "empty", "restore", "nested"):
             for mode, number in MODES[1:]:
                 width, height = 256, 192
                 pdf = work / f"{clip_case}-{mode}.pdf"
@@ -194,7 +194,7 @@ def main():
             "missing-clip-end": b"10 10 20 20 re\nW\n",
             "unsupported-evenodd-clip": b"10 10 20 20 re\nW*\nn\n",
             "missing-clip-path": b"W\nn\n",
-            "nested-save": b"q\nq\nQ\nQ\n",
+            "too-deep-save": b"q\nq\nq\nQ\nQ\nQ\n",
             "unfinished-group-clip": b"q\n10 10 20 20 re\nW\nQ\n",
         }
         for name, content in invalid_transforms.items():
@@ -228,7 +228,7 @@ def main():
                 raise RuntimeError(f"invalid scene accepted: {name}")
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
-        print(f"19 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes and 11 unsupported transforms/path states rejected")
+        print(f"21 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes and 11 unsupported transforms/path states rejected")
 
 
 if __name__ == "__main__":
