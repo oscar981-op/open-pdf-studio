@@ -208,6 +208,17 @@ is zichtbaar; hybride heeft in deze run een regressie. De eerste procesrun
 varieerde sterk en is geen cold-cache-meting. Een volgende optimalisatie moet
 de hybride regressie onderzoeken en de volledige PDF-route opnieuw meten.
 
+De regressieproef liet zien dat dezelfde witte-vulvertakking in de hybride
+binary niet helpt. Daarom geldt `memset` nu alleen voor de vectoragent; raster
+en hybride gebruiken hun eerdere beeldinitialisatie. Een afwisselende A/B-run
+tegen `727abdb8` op de dichte fixture gaf hybride 17,4→16,4 ms, maar vector
+12,1→13,7 ms. Tegen de versie vóór witte-vuloptimalisatie (`e1c37358`)
+bleef vector 14,9→13,0 ms sneller en hybride 17,9→17,6 ms ongeveer gelijk;
+raster varieerde van 16,4→17,2 ms. Alle bitmaps waren bytegelijk, en de
+OPDL-v1-fixture met alpha en clipping slaagde opnieuw. De waarden zijn
+procesmedianen met warme cache; het kleine verschil voor hybride/raster kan
+meetruis zijn. De winst voor de volledige PDF-route blijft onbewezen.
+
 De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,

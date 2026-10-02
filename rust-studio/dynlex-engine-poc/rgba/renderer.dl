@@ -88,7 +88,7 @@ function run renderer with mode mode:
                     @intrinsic("call", "libc", "exit", void, 2)
             set checked to checked + 1
         set rgba to allocate (width * height * 4) bytes
-        if mode = 2 or image_length = 0:
+        if mode = 2:
             discard @intrinsic("call", "libc", "memset", a pointer to a byte, rgba, 255, width * height * 4)
         else:
             set y to 0
