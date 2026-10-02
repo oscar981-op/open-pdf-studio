@@ -57,6 +57,9 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
                 content.extend(f"{pdf_x:g} {height - y0} m\n{pdf_x:g} {height - y1} l\nS\n".encode())
     if translated and mode != "raster":
         content.extend(f"0 1 0 rg\nq\n1 0 0 1 10 7 cm\n20 {height - 50} 50 30 re\nf\nQ\n".encode())
+        content.extend(f"1 0 1 RG\nq\n1 0 0 1 10 7 cm\n"
+                       f"20 {height - 60 - 0.5:g} m\n100 {height - 60 - 0.5:g} l\nS\n"
+                       f"110.5 {height - 70} m\n110.5 {height - 120} l\nS\nQ\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
     has_image = mode != "vector"
@@ -101,8 +104,11 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                 for x0, y0, x1, y1, ink in strokes:
                     if (y0 == y1 and x0 <= x < x1 and y == y0) or (x0 == x1 and x == x0 and y0 <= y < y1):
                         color = ink
-                if translated and 30 <= x < 80 and 13 <= y < 43:
-                    color = (0, 255, 0)
+                if translated:
+                    if 30 <= x < 80 and 13 <= y < 43:
+                        color = (0, 255, 0)
+                    if (30 <= x < 110 and y == 53) or (x == 120 and 63 <= y < 113):
+                        color = (255, 0, 255)
             rgba.extend((*color, 255))
     return bytes(rgba)
 

@@ -380,3 +380,15 @@ Directe DynLex-probe, DynLex-CLI, Hayro en onafhankelijke pixelreferentie zijn
 bytegelijk. Schaal-, fractionele en buiten-de-pagina-transformaties worden
 geweigerd. Dit is een kleine uitbreiding van de veilige testsubset, geen
 ondersteuning voor willekeurige PDF-transformaties.
+
+## Verschoven asgerichte lijnen
+
+Dezelfde gehele `cm`-translatie werkt nu ook voor horizontale en verticale
+1-pixelstreken met butt caps (`m l S`). Beide eindpunten worden naar de
+paginacoördinaten verschoven voordat de bestaande begrensde lijnconversie
+plaatsvindt. De vector- en hybride PDF-fixtures bevatten naast de rechthoek
+ook een horizontale en een verticale verschoven lijn. Directe DynLex-probe,
+CLI, Hayro en onafhankelijke pixelreferentie blijven op elf PDF-pagina's
+(3.194.880 pixels) bytegelijk. Diagonale lijnen, onafgemaakte lijnpaden,
+schalen, fractionele verschuivingen en vormen buiten de pagina worden
+afgewezen. Dit is nog geen algemene PDF-padrenderer.

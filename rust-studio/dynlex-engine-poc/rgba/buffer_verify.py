@@ -148,6 +148,8 @@ def main():
             "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
             "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",
             "out-of-page": b"q\n1 0 0 1 250 0 cm\n10 10 30 30 re\nf\nQ\n",
+            "diagonal-stroke": b"q\n1 0 0 1 10 7 cm\n20 20 m\n30 30 l\nS\nQ\n",
+            "unfinished-stroke": b"q\n1 0 0 1 10 7 cm\n20 20 m\nQ\n",
         }
         for name, content in invalid_transforms.items():
             invalid_pdf = work / f"invalid-{name}.pdf"
@@ -173,7 +175,7 @@ def main():
                 raise RuntimeError(f"invalid scene accepted: {name}")
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
-        print(f"11 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes and 3 unsupported transforms rejected")
+        print(f"11 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes and 5 unsupported transforms/path states rejected")
 
 
 if __name__ == "__main__":

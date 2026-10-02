@@ -132,6 +132,8 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
             "Q" if op.operands.is_empty()
                 && depth == 1
                 && pending_rect.is_none()
+                && path_start.is_none()
+                && pending_line.is_none()
                 && ((image_matrix && image.is_some()) || translation.is_some()) =>
             {
                 depth = 0;
@@ -154,7 +156,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     translation = Some([e, f]);
                 } else {
                     return Err(fail(
-                        "only integer translation of vector rectangles is supported",
+                        "only integer translation of vector rectangles and axis-aligned strokes is supported",
                     ));
                 }
             }
@@ -234,19 +236,25 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     *target = (channel * 255.0).round() as u8;
                 }
             }
-            "m" if depth == 0
+            "m" if (depth == 0 || translation.is_some())
                 && pending_rect.is_none()
                 && path_start.is_none()
                 && pending_line.is_none() =>
             {
-                path_start = Some(operands::<2>(&op.operands)?);
+                let [x, y] = operands::<2>(&op.operands)?;
+                let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
+                path_start = Some([x + tx, y + ty]);
             }
-            "l" if depth == 0 && pending_line.is_none() => {
+            "l" if (depth == 0 || translation.is_some()) && pending_line.is_none() => {
                 let start = path_start.take().ok_or_else(|| fail("line without move"))?;
-                let end = operands::<2>(&op.operands)?;
-                pending_line = Some((start, end));
+                let [x, y] = operands::<2>(&op.operands)?;
+                let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
+                pending_line = Some((start, [x + tx, y + ty]));
             }
-            "S" if depth == 0 && op.operands.is_empty() && one_pixel_stroke => {
+            "S" if (depth == 0 || translation.is_some())
+                && op.operands.is_empty()
+                && one_pixel_stroke =>
+            {
                 let (start, end) = pending_line
                     .take()
                     .ok_or_else(|| fail("stroke without line"))?;
