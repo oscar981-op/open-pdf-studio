@@ -277,3 +277,43 @@ gebruiken bovendien libc voor bestandstoegang en allocatie. De keuze om de engin
 in DynLex te schrijven wijzigt dus de eerdere eis dat **alle** applicatiecode
 en afhankelijkheden Rust zijn. De bestaande Rust-engine blijft voorlopig
 functioneel en ongewijzigd totdat een DynLex-kernel op echte PDF's is bewezen.
+
+## Eerste in-process DynLex-bufferkernel
+
+[`rgba/buffer_kernel.dl`](rgba/buffer_kernel.dl) rendert vertrouwde OPDL-v2-
+buffers naar een door Rust beheerde RGBA-buffer. De afzonderlijke CLI-renderer
+blijft de referentie. [`rgba/build_buffer.py`](rgba/build_buffer.py) laat DynLex
+0.0.1 LLVM-IR uitsturen, voegt een stabiele `opds_render_buffer`-C-ABI-wrapper
+toe en bouwt met LLVM 20 een statische library. DynLex 0.0.1 kan zelf geen
+gedeelde library uitsturen. De Rust-probe valideert vóór de FFI-aanroep de
+volledige header, lengte, clip en alle opdrachten; de DynLex-functie zelf
+vertrouwt die validatie. Intern staan twaalf controlebytes vóór de pixels in
+de uitvoerbuffer. Dit is een POC-contract, **geen veilige algemene PDF- of
+OPDL-API** en nog geen koppeling met de applicatie.
+
+Op deze Linux-machine is `llc-20`/`opt-20` tijdelijk uit het Ubuntu-pakket
+`llvm-20` onder `/tmp/opds-llvm20` uitgepakt; geen systeeminstallatie is
+aangepast. Met een eigen, passende LLVM-20-toolchain zijn de controles zo te
+herhalen:
+
+```sh
+cd rust-studio
+python3 dynlex-engine-poc/rgba/buffer_verify.py \
+  --compiler /pad/naar/dynlex/bin/dynlex \
+  --opt /pad/naar/opt-20 --llc /pad/naar/llc-20 \
+  --rustc /pad/naar/rustc \
+  --adapter target/release/opds-opdl-adapter \
+  --hayro target/release/opds-engine-probe --bench-calls 100
+```
+
+Negen echte PDF-fixtures op 256×192, 512×384 en dicht 1024×768 kwamen
+pixel voor pixel overeen met CLI-DynLex, Hayro en de onafhankelijke referentie:
+in totaal 3.096.576 gecontroleerde pixels. Vier ongeldige OPDL-bestanden
+werden door de Rust-validator afgewezen. In één Rust-proces, met 100 calls op
+de reeds ingelezen dichte display-list, was de kernelcall gemiddeld circa
+2,43 ms raster, 0,66 ms vector en 2,72 ms hybride. Dit sluit PDF-parsing,
+OPDL-opbouw, processtart en bestand-I/O uit en is **niet** vergelijkbaar met
+de volledige Hayro-tijden hierboven. De volgende stap is de Rust-adapter en
+deze bufferkernel in hetzelfde proces verbinden, zodat het OPDL-tussenbestand
+verdwijnt, gevolgd door een gepaarde eind-tot-eind-meting. De compiler- en
+LLVM-versies, FFI-ABI en onbetrouwbare invoer vereisen nog hardening.
