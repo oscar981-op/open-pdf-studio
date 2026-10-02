@@ -80,7 +80,7 @@ is de exacte acceptatietest. De v1-lezer accepteert alleen vertrouwde
 testfixtures en heeft nog geen productierijpe beveiliging voor willekeurige PDF-
 of display-list-input.
 
-## Eerste route vanaf echte PDF's
+## Eerste route vanaf echte PDF's en OPDL v2
 
 De tijdelijke pure-Rust CLI `opds-opdl-adapter` leest via `lopdf` een **strikt
 beperkte** PDF-subset: één pagina van maximaal 1024×1024 pt met nuloorsprong,
@@ -93,9 +93,16 @@ pixelrenderer en de bestaande Rust/Hayro-engine blijft de app-renderer.
 [`pdf_fixture.py`](pdf_fixture.py) maakt drie **echte PDF's** met image-XObject
 en/of `re`/`f`-padoperators. [`pdf_verify.py`](pdf_verify.py) zet elke PDF om
 naar OPDL, rendert met de passende DynLex-agent en vergelijkt alle 49.152
-RGBA-pixels met zowel een onafhankelijke sceneberekening als Hayro. Alle drie
-kwamen exact overeen. Een extra fixture met een onbekende padoperator wordt
-afgewezen.
+RGBA-pixels op 256×192 en 196.608 op 512×384 met zowel een onafhankelijke
+sceneberekening als Hayro. Alle drie kwamen op beide groottes exact overeen.
+Een extra fixture met een onbekende padoperator wordt afgewezen. De oudere
+synthetische OPDL-v1-fixture blijft eveneens bytegelijk renderen.
+
+OPDL **v2** laat de RGB-laag weg als zij ontbreekt. De vector-PDF is nu 517–523
+bytes en de overeenkomstige display-list **112 bytes** in plaats van 147 KiB.
+De DynLex-kern initialiseert dan wit en tekent de vectoropdrachten rechtstreeks
+over hun begrensde rechthoek, in laagvolgorde. Er worden geen opdrachten meer
+voor elke paginapixel gedecodeerd. Raster en hybride behouden hun echte RGB-laag.
 
 ```sh
 cd rust-studio
@@ -103,26 +110,32 @@ cargo build --release -p opds-opdl-adapter -p opds-engine-probe --locked
 python3 dynlex-engine-poc/pdf_verify.py \
   --compiler /pad/naar/dynlex/bin/dynlex \
   --adapter target/release/opds-opdl-adapter \
-  --hayro target/release/opds-engine-probe --runs 7
+  --hayro target/release/opds-engine-probe --runs 15
 ```
 
 De Hayro-probe kan voor deze controle `.rgba` direct schrijven, zodat beide
-routes dezelfde ruwe uitvoer produceren. Eerste lokale zeven-runsmeting
-inclusief processtart, PDF-lezen en RGBA-schrijven (ms, medianen):
+routes dezelfde ruwe uitvoer produceren. Lokale 15-runsmeting inclusief
+processtart, PDF-lezen en RGBA-schrijven (ms, medianen):
 
-| PDF | Rust-adapter + DynLex | Hayro PDF→RGBA | Pixelverschil |
-| --- | ---: | ---: | ---: |
-| Raster | 5,9 | 5,5 | 0 |
-| Vector | 8,2 | 4,8 | 0 |
-| Hybride | 9,0 | 4,8 | 0 |
+| Grootte | PDF | Adapter + DynLex | Hayro PDF→RGBA | Pixelverschil |
+| --- | --- | ---: | ---: | ---: |
+| 256×192 | Raster | 6,1 | 5,7 | 0 |
+| 256×192 | Vector | 4,6 | 3,9 | 0 |
+| 256×192 | Hybride | 6,2 | 6,1 | 0 |
+| 512×384 | Raster | 12,2 | 14,6 | 0 |
+| 512×384 | Vector | 8,9 | 9,6 | 0 |
+| 512×384 | Hybride | 11,6 | 10,5 | 0 |
 
 De tweeprocessenroute, kleine fixtures, warme OS-cache en meetruis beperken
-deze cijfers. Op vector/hybride was de POC in deze proef **langzamer** dan
-Hayro; voor raster geeft één proef geen overtuigend voordeel. De vector-PDF
-bevat 517 bytes, maar OPDL v1 materialiseert daarvoor nog een volledige witte
-RGB-laag van 147 KiB. DynLex-compilatie duurde bovendien 7,7–7,9 seconden
-per agent. Er zijn nog geen grote tekeningen,
-geheugenpieken, cachingstrategieën of brede PDF-functies vergeleken.
+deze cijfers. Op 512×384 is raster/vector in deze proef iets sneller dan
+Hayro en hybride iets langzamer; op 256×192 is geen overtuigend voordeel te
+zien. De CLI-route bestaat uit twee processen en schrijft een tussenbestand,
+terwijl Hayro één proces gebruikt. DynLex-compilatie kostte 6,8–7,1 seconden
+per agent en is niet in de looptijd inbegrepen. De runner registreert ook
+piek-RSS per proces: op 512×384 respectievelijk circa 4,5 MiB adapter, 2,7 MiB
+DynLex en 8,2 MiB Hayro voor hybride. Die afzonderlijke waarden mogen niet
+als één geïntegreerde app-geheugenmeting worden vergeleken. Er zijn nog geen
+grote tekeningen, cachingstrategieën of brede PDF-functies gemeten.
 
 De volgende grens is de echte PDF-subset uitbreiden met algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten

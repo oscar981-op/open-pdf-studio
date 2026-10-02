@@ -175,10 +175,10 @@ fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     if depth != 0 || pending_rect.is_some() || (image_matrix && image.is_none()) {
         return Err(fail("incomplete fixture content stream"));
     }
-    let image = image.unwrap_or_else(|| vec![255; width as usize * height as usize * 3]);
+    let image = image.unwrap_or_default();
     let mut output = Vec::with_capacity(40 + image.len() + commands.len() * 24);
     output.extend_from_slice(b"OPDL");
-    for value in [1, width, height, 0, 0, width, height, image.len() as u32] {
+    for value in [2, width, height, 0, 0, width, height, image.len() as u32] {
         output.extend_from_slice(&value.to_le_bytes());
     }
     output.extend_from_slice(&image);

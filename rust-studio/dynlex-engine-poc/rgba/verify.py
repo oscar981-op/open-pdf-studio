@@ -123,7 +123,7 @@ def main():
             if args.artifacts:
                 (args.artifacts / f"{name}.png").write_bytes(png(actual))
             wrong_version = bytearray(scene)
-            struct.pack_into("<I", wrong_version, 4, 2)
+            struct.pack_into("<I", wrong_version, 4, 3)
             unknown_command = bytearray(scene)
             struct.pack_into("<I", unknown_command, 36 + WIDTH * HEIGHT * 3 + 4, 99)
             bad_scenes = {
