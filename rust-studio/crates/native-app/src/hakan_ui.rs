@@ -1702,30 +1702,46 @@ pub fn view(app: &App) -> Element<'_, Message> {
         ]
         .into()
     } else if app.open_dialog {
-        let mut files = column![].spacing(3);
-        for entry in &app.browser_entries {
+        let indices = super::visible_browser_indices(&app.browser_entries, &app.browser_query);
+        let visible = super::browser_window(app.browser_scroll_y, indices.len());
+        let mut files = column![].spacing(0);
+        if visible.start > 0 {
+            files = files.push(Space::new().height(visible.start as f32 * super::BROWSER_ROW_STEP));
+        }
+        for position in visible.clone() {
+            let entry = &app.browser_entries[indices[position]];
             let action = if entry.is_dir {
                 Message::BrowseDirectory(entry.path.clone())
             } else {
                 Message::SelectPdf(entry.path.clone())
             };
             files = files.push(
-                button(
-                    row![
-                        text(if entry.is_dir { "▸" } else { "PDF" }).size(11),
-                        text(&entry.name).size(12),
-                    ]
-                    .spacing(10),
+                container(
+                    button(
+                        row![
+                            text(if entry.is_dir { "▸" } else { "PDF" }).size(11),
+                            text(&entry.name).size(12),
+                        ]
+                        .spacing(10),
+                    )
+                    .on_press(action)
+                    .width(Fill)
+                    .height(34)
+                    .padding([5, 9]),
                 )
-                .on_press(action)
                 .width(Fill)
-                .padding([7, 9]),
+                .height(super::BROWSER_ROW_STEP),
+            );
+        }
+        if visible.end < indices.len() {
+            files = files.push(
+                Space::new().height((indices.len() - visible.end) as f32 * super::BROWSER_ROW_STEP),
             );
         }
         if app.browser_busy {
             files = files.push(text("Loading folder…").size(12));
-        } else if app.browser_entries.is_empty() && app.browser_error.is_empty() {
-            files = files.push(text("No PDF files in this folder").size(12));
+        } else if indices.is_empty() && app.browser_error.is_empty() {
+            files = files.push(text("No matching folders or PDF files").size(12));
         }
         let parent = app
             .browser_dir
@@ -1740,7 +1756,15 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     button("Refresh").on_press(Message::BrowseDirectory(app.browser_dir.clone()))
                 ]
                 .spacing(8),
-                container(scrollable(files).height(320)).height(320),
+                text_input("Search this folder", &app.browser_query)
+                    .on_input(Message::BrowserSearchChanged),
+                container(
+                    scrollable(files)
+                        .id(iced::widget::Id::new("pdf-file-browser"))
+                        .on_scroll(Message::BrowserScrolled)
+                        .height(320),
+                )
+                .height(320),
                 text(&app.browser_error)
                     .size(11)
                     .color(Color::from_rgb8(240, 125, 110)),

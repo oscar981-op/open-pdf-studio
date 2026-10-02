@@ -24,6 +24,8 @@ const THUMBNAIL_ROW_STEP: f32 = 213.0;
 const THUMBNAIL_CARD_HEIGHT: f32 = 206.0;
 const THUMBNAIL_HEADER_HEIGHT: f32 = 30.0;
 const THUMBNAIL_WINDOW_SIZE: usize = 12;
+const BROWSER_ROW_STEP: f32 = 36.0;
+const BROWSER_WINDOW_SIZE: usize = 20;
 const HORIZONTAL_PAN_MARGIN: f32 = 512.0;
 
 fn thumbnail_scale(width: f32, height: f32) -> Result<f32, String> {
@@ -87,6 +89,25 @@ fn list_pdf_directory(path: &Path) -> Result<Vec<BrowserEntry>, String> {
     Ok(entries)
 }
 
+fn visible_browser_indices(entries: &[BrowserEntry], query: &str) -> Vec<usize> {
+    let query = query.trim().to_lowercase();
+    entries
+        .iter()
+        .enumerate()
+        .filter_map(|(index, entry)| {
+            (query.is_empty() || entry.name.to_lowercase().contains(&query)).then_some(index)
+        })
+        .collect()
+}
+
+fn browser_window(scroll_y: f32, visible_count: usize) -> std::ops::Range<usize> {
+    let focus = (scroll_y.max(0.0) / BROWSER_ROW_STEP).floor() as usize;
+    let start = focus
+        .saturating_sub(3)
+        .min(visible_count.saturating_sub(BROWSER_WINDOW_SIZE));
+    start..start.saturating_add(BROWSER_WINDOW_SIZE).min(visible_count)
+}
+
 fn theme(_: &App) -> Theme {
     Theme::custom(
         "Open PDF Studio",
@@ -141,6 +162,13 @@ fn scroll_thumbnail_to(page: usize) -> Task<Message> {
     )
 }
 
+fn scroll_browser_to(y: f32) -> Task<Message> {
+    iced::widget::operation::scroll_to(
+        iced::widget::Id::new("pdf-file-browser"),
+        scrollable::AbsoluteOffset { x: 0.0, y },
+    )
+}
+
 #[derive(Default)]
 struct App {
     path_input: String,
@@ -148,6 +176,8 @@ struct App {
     browser_entries: Vec<BrowserEntry>,
     browser_busy: bool,
     browser_error: String,
+    browser_query: String,
+    browser_scroll_y: f32,
     next_browse: u64,
     active_ribbon: RibbonTab,
     document: Option<OpenDocument>,
@@ -369,7 +399,7 @@ mod thumbnail_tests {
 
 #[cfg(test)]
 mod browser_tests {
-    use super::list_pdf_directory;
+    use super::{browser_window, list_pdf_directory, visible_browser_indices};
 
     #[test]
     fn directory_browser_filters_pdfs_and_places_folders_first() {
@@ -391,6 +421,12 @@ mod browser_tests {
         assert_eq!(names, ["A Folder", "z Folder", "b.PDF", "C.pdf"]);
         assert!(entries[0].is_dir && entries[1].is_dir);
         assert!(!entries[2].is_dir && !entries[3].is_dir);
+        assert_eq!(visible_browser_indices(&entries, "FOLDER"), [0, 1]);
+        assert_eq!(visible_browser_indices(&entries, "pdf"), [2, 3]);
+        assert_eq!(visible_browser_indices(&entries, "c.PDf"), [3]);
+        assert_eq!(browser_window(36.0 * 200.0, 1_000), 197..217);
+        assert_eq!(browser_window(36.0 * 999.0, 1_000), 980..1_000);
+        assert_eq!(browser_window(0.0, 4), 0..4);
         std::fs::remove_dir_all(root).unwrap();
     }
 }
@@ -489,6 +525,8 @@ enum Message {
     BrowseDirectory(PathBuf),
     Browsed(u64, Result<Vec<BrowserEntry>, String>),
     SelectPdf(PathBuf),
+    BrowserSearchChanged(String),
+    BrowserScrolled(scrollable::Viewport),
     ShowSave,
     CancelSave,
     SavePathChanged(String),
@@ -579,6 +617,8 @@ impl App {
                 let token = self.next_browse;
                 self.browser_dir = path.clone();
                 self.browser_entries.clear();
+                self.browser_query.clear();
+                self.browser_scroll_y = 0.0;
                 self.browser_busy = true;
                 self.browser_error.clear();
                 return Task::perform(async move { list_pdf_directory(&path) }, move |result| {
@@ -596,10 +636,19 @@ impl App {
                     }
                     Err(error) => self.browser_error = error,
                 }
+                return scroll_browser_to(0.0);
             }
             Message::SelectPdf(path) => {
                 self.path_input = path.to_string_lossy().into_owned();
                 return self.update(Message::Open);
+            }
+            Message::BrowserSearchChanged(query) => {
+                self.browser_query = query;
+                self.browser_scroll_y = 0.0;
+                return scroll_browser_to(0.0);
+            }
+            Message::BrowserScrolled(viewport) => {
+                self.browser_scroll_y = viewport.absolute_offset().y;
             }
             Message::ShowSave => {
                 if let Some(document) = &self.document {
