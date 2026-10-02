@@ -176,6 +176,26 @@ Hayro 29,5/17,7/32,9 ms. De directe rendererwinst is dus bescheiden en
 proces-, I/O- en cachekosten blijven belangrijk; geen claim dat de hele engine
 nu sneller is.
 
+De A/B-proef is nu reproduceerbaar met
+[`rgba/ab_bench.py`](rgba/ab_bench.py). Die compileert twee Git-versies van
+de renderer met dezelfde DynLex-compiler, geeft beide identieke OPDL-invoer,
+controleert de volledige RGBA-uitvoer tegen de onafhankelijke referentie en
+wisselt de uitvoervolgorde per run af:
+
+```sh
+python3 dynlex-engine-poc/rgba/ab_bench.py \
+  --compiler /pad/naar/dynlex/bin/dynlex \
+  --adapter target/release/opds-opdl-adapter \
+  --baseline-ref '70722565^' --candidate-ref 70722565 \
+  --size 1024x768 --dense --runs 30
+```
+
+Een herhaling gaf als warme rendererprocesmedianen raster 17,4→17,5 ms,
+vector 16,2→14,9 ms en hybride 18,1→16,5 ms. De runner meldt de eerste
+procesrun afzonderlijk, maar wist de OS-bestandscache niet: dit is **geen**
+echte cold-cache-meting. Compiler- en adaptertijd tellen niet mee in deze
+directe renderervergelijking.
+
 De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,
