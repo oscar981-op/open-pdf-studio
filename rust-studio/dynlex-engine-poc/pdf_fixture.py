@@ -11,12 +11,18 @@ LINES = ((32, 32, 224, 32, (0, 255, 255)),
          (180, 18, 180, 170, (255, 0, 255)))
 
 
-def rectangles(width, height):
+def rectangles(width, height, dense=False):
     if width % WIDTH or height % HEIGHT:
         raise ValueError("fixture sizes must be integer multiples of 256x192")
     sx, sy = width // WIDTH, height // HEIGHT
+    base = RECTS
+    if dense:
+        inks = ((255, 0, 0), (0, 0, 255), (255, 255, 0), (0, 255, 0))
+        base = tuple((8 + col * 30, 8 + row * 29, 27 + col * 30, 27 + row * 29,
+                      inks[(row + col) % len(inks)])
+                     for row in range(6) for col in range(8))
     return tuple((x0 * sx, y0 * sy, x1 * sx, y1 * sy, ink)
-                 for x0, y0, x1, y1, ink in RECTS)
+                 for x0, y0, x1, y1, ink in base)
 
 
 def lines(width, height):
@@ -32,12 +38,12 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False):
     content = bytearray()
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
     if mode != "raster":
-        for x0, y0, x1, y1, (r, g, b) in rectangles(width, height):
+        for x0, y0, x1, y1, (r, g, b) in rectangles(width, height, dense):
             content.extend(f"{r / 255:g} {g / 255:g} {b / 255:g} rg\n"
                            f"{x0} {height - y1} {x1 - x0} {y1 - y0} re\nf\n".encode())
         content.extend(b"1 w\n")
@@ -78,9 +84,9 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT):
     return bytes(pdf)
 
 
-def reference_rgba(mode, width=WIDTH, height=HEIGHT):
+def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False):
     rgba = bytearray()
-    rects = rectangles(width, height)
+    rects = rectangles(width, height, dense)
     strokes = lines(width, height)
     for y in range(height):
         for x in range(width):

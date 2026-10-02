@@ -141,6 +141,28 @@ DynLex en 8,0 MiB Hayro voor hybride. Die afzonderlijke waarden mogen niet
 als één geïntegreerde app-geheugenmeting worden vergeleken. Er zijn nog geen
 grote tekeningen, cachingstrategieën of brede PDF-functies gemeten.
 
+Een aparte **dichtere 1024×768-fixture** gebruikt 48 gekleurde gevulde
+rechthoeken en twee lijnen in de vector- en hybride pagina. `pdf_verify.py`
+kan deze met `--sizes 1024x768 --dense --runs 15` reproduceren. Alle
+786.432 pixels per agent zijn opnieuw exact gelijk aan Hayro en de
+onafhankelijke scenereferentie. Warme-cache medianen inclusief processtart,
+PDF-lezen en RGBA-schrijven:
+
+| PDF | Adapter | DynLex | Adapter + DynLex | Hayro | OPDL |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Raster | 17,2 ms | 16,7 ms | 32,6 ms | 31,6 ms | 2,36 MB |
+| Vector | 2,5 ms | 14,8 ms | 18,9 ms | 17,2 ms | 1.240 B |
+| Hybride | 18,9 ms | 20,8 ms | 37,4 ms | 31,6 ms | 2,36 MB |
+
+De afzonderlijke medianen tellen niet exact op tot de gemeten pijplijnmediaan.
+Op deze fixture is de vectorrenderer de grootste stap van het vectorpad;
+voor raster en hybride kost ook de volledige RGB-laag inlezen en kopiëren veel.
+De tweeprocessenroute is hier op alle drie de pagina's niet sneller dan Hayro.
+Dit blijft een kleine, kunstmatige PDF-subset zonder tekst, complexe paden,
+transparantie of echte technische tekeningen. De volgende snelheidsstap moet
+gericht de volledige beeldkopie en rendererloops profileren voordat verdere
+optimalisatieclaims zinvol zijn.
+
 De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,

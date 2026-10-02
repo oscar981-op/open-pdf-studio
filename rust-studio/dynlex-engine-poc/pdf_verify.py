@@ -46,6 +46,7 @@ def main():
     parser.add_argument("--hayro", type=Path, required=True)
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--sizes", default="256x192,512x384")
+    parser.add_argument("--dense", action="store_true", help="use 48 colored rectangles plus two strokes")
     parser.add_argument("--artifacts", type=Path)
     parser.add_argument("--output", type=Path, help="write machine-readable result JSON")
     args = parser.parse_args()
@@ -64,7 +65,8 @@ def main():
         if not (0 < width <= 1024 and 0 < height <= 1024) or width % WIDTH or height % HEIGHT:
             parser.error("sizes must be multiples of 256x192 within 1024x1024")
         sizes.append((width, height))
-    report = {"scope": "restricted-real-PDF-fixtures", "runs": args.runs, "sizes": {}}
+    report = {"scope": "restricted-real-PDF-fixtures", "runs": args.runs,
+              "dense": args.dense, "sizes": {}}
     if args.artifacts:
         args.artifacts.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="opds-dynlex-real-pdf-") as temporary:
@@ -84,7 +86,7 @@ def main():
                 output = work / "output.rgba"
                 hayro_output = work / f"{mode}-hayro.rgba"
                 binary = work / mode
-                pdf.write_bytes(build_pdf(mode, width=width, height=height))
+                pdf.write_bytes(build_pdf(mode, width=width, height=height, dense=args.dense))
                 adapter_ms = median_runs([adapter, pdf, opdl], work, args.runs)
                 dynlex_ms = median_runs([binary], work, args.runs)
                 pipeline_samples = []
@@ -95,7 +97,7 @@ def main():
                     pipeline_samples.append((time.perf_counter_ns() - started) / 1_000_000)
                 pipeline_ms = round(statistics.median(pipeline_samples), 3)
                 hayro_ms = median_runs([hayro, pdf, "1", hayro_output, "1"], work, args.runs)
-                expected = reference_rgba(mode, width, height)
+                expected = reference_rgba(mode, width, height, dense=args.dense)
                 actual = output.read_bytes()
                 if actual != expected:
                     raise RuntimeError(f"{mode}/{label}: DynLex differs from independent PDF scene at byte {first_difference(actual, expected)}")
