@@ -163,6 +163,19 @@ transparantie of echte technische tekeningen. De volgende snelheidsstap moet
 gericht de volledige beeldkopie en rendererloops profileren voordat verdere
 optimalisatieclaims zinvol zijn.
 
+De eerste gerichte rendererwijziging schrijft volledig dekkende vectoropdrachten
+rechtstreeks naar RGBA; alleen gedeeltelijk transparante opdrachten lezen de
+achtergrond en rekenen drie mengkanalen uit. De OPDL-v1-fixture inclusief
+alpha-laag en alle drie de dichte PDF-fixtures bleven pixelgelijk. Een
+afwisselende A/B-proef van de oude en nieuwe `-O3`-binaries, elk 30 gemeten
+warme procesruns op dezelfde OPDL-bestanden, gaf voor alleen de DynLex-renderer
+op 1024×768: vector 15,7→14,6 ms en hybride 18,2→16,8 ms. De volledige
+PDF→RGBA-route varieert meer: in een afzonderlijke 15-run proef waren de
+medianen na de wijziging raster/vector/hybride 35,1/17,3/32,5 ms tegenover
+Hayro 29,5/17,7/32,9 ms. De directe rendererwinst is dus bescheiden en
+proces-, I/O- en cachekosten blijven belangrijk; geen claim dat de hele engine
+nu sneller is.
+
 De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,
