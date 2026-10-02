@@ -108,6 +108,10 @@ fn browser_window(scroll_y: f32, visible_count: usize) -> std::ops::Range<usize>
     start..start.saturating_add(BROWSER_WINDOW_SIZE).min(visible_count)
 }
 
+fn annotations_changed(model: &DocumentModel, saved: &[Annotation]) -> bool {
+    !model.items().eq(saved.iter())
+}
+
 fn theme(_: &App) -> Theme {
     Theme::custom(
         "Open PDF Studio",
@@ -138,6 +142,8 @@ fn main() -> iced::Result {
     iced::application(boot, App::update, App::view)
         .title("Open PDF Studio Rust")
         .theme(theme)
+        .subscription(|_| iced::event::listen_with(window_event_to_message))
+        .exit_on_close_request(false)
         .font(include_bytes!("../../../assets/fonts/LiberationSans-Regular.ttf").as_slice())
         .window(window::Settings {
             size: iced::Size::new(1200.0, 832.0),
@@ -146,6 +152,15 @@ fn main() -> iced::Result {
             ..Default::default()
         })
         .run()
+}
+
+fn window_event_to_message(
+    event: iced::Event,
+    _status: iced::event::Status,
+    _window: window::Id,
+) -> Option<Message> {
+    matches!(event, iced::Event::Window(window::Event::CloseRequested))
+        .then_some(Message::CloseWindow)
 }
 
 fn scroll_page_to(offset: scrollable::AbsoluteOffset) -> Task<Message> {
@@ -185,6 +200,8 @@ struct App {
     busy: bool,
     message: String,
     open_dialog: bool,
+    confirm_discard: Option<PendingAction>,
+    allow_discard_once: bool,
     save_dialog: bool,
     save_path_input: String,
     save_busy: bool,
@@ -259,6 +276,13 @@ enum PrintDestination {
     #[default]
     PdfFile,
     VirtualIpp,
+}
+
+#[derive(Debug, Clone)]
+enum PendingAction {
+    Open,
+    Close,
+    Exit,
 }
 
 fn print_pages(
@@ -431,11 +455,119 @@ mod browser_tests {
     }
 }
 
+#[cfg(test)]
+mod unsaved_annotation_tests {
+    use super::*;
+
+    #[test]
+    fn saved_snapshot_remains_dirty_if_text_changes_during_save() {
+        let mut model = DocumentModel::new(DocumentId(1), 1).unwrap();
+        assert!(!annotations_changed(&model, &[]));
+        let original = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 10.0,
+                y: 10.0,
+                width: 100.0,
+                height: 40.0,
+            },
+            kind: Kind::Text {
+                value: "Before".into(),
+                color_rgb: [0, 0, 0],
+                font_size: 16,
+                align: TextAlign::Left,
+            },
+        };
+        model.apply(Edit::Add(original.clone())).unwrap();
+        assert!(annotations_changed(&model, &[]));
+        let save_started = vec![original.clone()];
+        let mut edited = original;
+        if let Kind::Text { value, .. } = &mut edited.kind {
+            *value = "After".into();
+        }
+        model.apply(Edit::Replace(edited)).unwrap();
+        assert!(annotations_changed(&model, &save_started));
+        model.undo().unwrap();
+        assert!(!annotations_changed(&model, &save_started));
+    }
+
+    #[test]
+    fn completed_save_from_previous_document_does_not_mark_current_one_clean() {
+        let mut app = App::default();
+        app.next_load = 2;
+        app.save_busy = true;
+        app.message = "Current document".into();
+        let _ = app.update(Message::Saved(1, Ok(("old.pdf".into(), Vec::new()))));
+        assert!(!app.save_busy);
+        assert_eq!(app.message, "Current document");
+    }
+
+    #[test]
+    fn close_requires_explicit_discard_for_unsaved_annotation() {
+        let bytes = Arc::new(
+            include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let mut model = DocumentModel::new(DocumentId(1), pdf.page_count()).unwrap();
+        model
+            .apply(Edit::Add(Annotation {
+                id: 1,
+                page: 0,
+                bounds: Rect {
+                    x: 10.0,
+                    y: 10.0,
+                    width: 20.0,
+                    height: 20.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [255, 0, 0],
+                },
+            }))
+            .unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "source.pdf".into(),
+                source_bytes: bytes,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                displayed_page: 0,
+                selected_annotation: None,
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            ..App::default()
+        };
+        app.path_input = "next.pdf".into();
+        let _ = app.update(Message::Open);
+        assert!(matches!(app.confirm_discard, Some(PendingAction::Open)));
+        assert!(app.document.is_some());
+        let _ = app.update(Message::CancelDiscard);
+        let _ = app.update(Message::Close);
+        assert!(matches!(app.confirm_discard, Some(PendingAction::Close)));
+        assert!(app.document.is_some());
+        let _ = app.update(Message::CancelDiscard);
+        assert!(app.document.is_some());
+        let _ = app.update(Message::Close);
+        let _ = app.update(Message::ConfirmDiscard);
+        assert!(app.document.is_none());
+    }
+}
+
 struct OpenDocument {
     path: String,
     source_bytes: Arc<Vec<u8>>,
     pdf: Arc<ParsedPdf>,
     model: DocumentModel,
+    last_saved_annotations: Vec<Annotation>,
     bitmap: Option<image::Handle>,
     bitmap_size: (u32, u32),
     bitmap_page_points: (f32, f32),
@@ -459,6 +591,10 @@ struct CachedPage {
 }
 
 impl OpenDocument {
+    fn is_dirty(&self) -> bool {
+        annotations_changed(&self.model, &self.last_saved_annotations)
+    }
+
     fn cache_bitmap(&mut self, page: usize, scale: f32, raster: Raster) {
         self.bitmap_size = (raster.width, raster.height);
         self.bitmap_page_points = (raster.page_width_pt, raster.page_height_pt);
@@ -531,7 +667,7 @@ enum Message {
     CancelSave,
     SavePathChanged(String),
     SaveAs,
-    Saved(Result<String, String>),
+    Saved(u64, Result<(String, Vec<Annotation>), String>),
     ShowPrint,
     CancelPrint,
     PrintPathChanged(String),
@@ -551,6 +687,8 @@ enum Message {
     PrintScaledPreviewReady(u64, Result<Arc<ParsedPdf>, String>),
     PrintPreviewReady(u64, usize, Result<Raster, String>),
     CancelOpen,
+    ConfirmDiscard,
+    CancelDiscard,
     TogglePages,
     ToggleProperties,
     PathChanged(String),
@@ -595,6 +733,10 @@ enum Message {
 }
 
 impl App {
+    fn has_unsaved_work(&self) -> bool {
+        self.text_dialog || self.document.as_ref().is_some_and(OpenDocument::is_dirty)
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ShowOpen => {
@@ -688,6 +830,8 @@ impl App {
                 }
                 let source = Arc::clone(&document.source_bytes);
                 let annotations: Vec<_> = document.model.items().cloned().collect();
+                let saved_annotations = annotations.clone();
+                let token = self.next_load;
                 self.save_dialog = false;
                 self.save_busy = true;
                 self.message = "Saving PDF…".into();
@@ -695,9 +839,9 @@ impl App {
                     async move {
                         let bytes = pdf_save::export_annotations(&source, &annotations)?;
                         pdf_save::save_new(std::path::Path::new(&path), &bytes)?;
-                        Ok(path)
+                        Ok((path, saved_annotations))
                     },
-                    Message::Saved,
+                    move |result| Message::Saved(token, result),
                 );
                 if let Some(offset) = self.save_scroll_offset.take() {
                     self.page_scroll_offset = offset;
@@ -705,10 +849,18 @@ impl App {
                 }
                 return save;
             }
-            Message::Saved(result) => {
+            Message::Saved(token, result) => {
                 self.save_busy = false;
+                if token != self.next_load {
+                    return Task::none();
+                }
                 match result {
-                    Ok(path) => self.message = format!("Saved PDF: {path}"),
+                    Ok((path, annotations)) => {
+                        if let Some(document) = &mut self.document {
+                            document.last_saved_annotations = annotations;
+                        }
+                        self.message = format!("Saved PDF: {path}");
+                    }
                     Err(error) => self.message = format!("Save As failed: {error}"),
                 }
             }
@@ -965,6 +1117,23 @@ impl App {
                 self.open_dialog = false;
                 self.next_browse = self.next_browse.wrapping_add(1);
             }
+            Message::CancelDiscard => self.confirm_discard = None,
+            Message::ConfirmDiscard => {
+                let Some(action) = self.confirm_discard.take() else {
+                    return Task::none();
+                };
+                return match action {
+                    PendingAction::Open => {
+                        self.allow_discard_once = true;
+                        self.update(Message::Open)
+                    }
+                    PendingAction::Close => {
+                        self.allow_discard_once = true;
+                        self.update(Message::Close)
+                    }
+                    PendingAction::Exit => window::oldest().and_then(window::close),
+                };
+            }
             Message::TogglePages => {
                 self.hide_pages = !self.hide_pages;
                 return self.render_nearby_thumbnail();
@@ -991,7 +1160,17 @@ impl App {
                 return window::oldest().and_then(|id| window::minimize(id, true));
             }
             Message::MaximizeWindow => return window::oldest().and_then(window::toggle_maximize),
-            Message::CloseWindow => return window::oldest().and_then(window::close),
+            Message::CloseWindow => {
+                if self.save_busy {
+                    self.message = "Wait for Save As to finish".into();
+                    return Task::none();
+                }
+                if self.has_unsaved_work() {
+                    self.confirm_discard = Some(PendingAction::Exit);
+                    return Task::none();
+                }
+                return window::oldest().and_then(window::close);
+            }
             Message::SelectAnnotationTool(tool) => {
                 self.annotation_tool = tool;
                 self.annotation_tool_activated = true;
@@ -1326,11 +1505,20 @@ impl App {
                 }
             }
             Message::Open => {
+                if self.save_busy {
+                    self.message = "Wait for Save As to finish".into();
+                    return Task::none();
+                }
                 let path = self.path_input.trim().to_owned();
                 if path.is_empty() {
                     self.message = "Enter a PDF path".into();
                     return Task::none();
                 }
+                if !self.allow_discard_once && self.has_unsaved_work() {
+                    self.confirm_discard = Some(PendingAction::Open);
+                    return Task::none();
+                }
+                self.allow_discard_once = false;
                 self.open_dialog = false;
                 self.next_load += 1;
                 let token = self.next_load;
@@ -1379,6 +1567,7 @@ impl App {
                             source_bytes,
                             pdf,
                             model,
+                            last_saved_annotations: Vec::new(),
                             bitmap: None,
                             bitmap_size: (0, 0),
                             bitmap_page_points: (0.0, 0.0),
@@ -1525,6 +1714,15 @@ impl App {
                 }
             }
             Message::Close => {
+                if self.save_busy {
+                    self.message = "Wait for Save As to finish".into();
+                    return Task::none();
+                }
+                if !self.allow_discard_once && self.has_unsaved_work() {
+                    self.confirm_discard = Some(PendingAction::Close);
+                    return Task::none();
+                }
+                self.allow_discard_once = false;
                 self.next_load += 1;
                 self.document = None;
                 self.active_ribbon = RibbonTab::Home;

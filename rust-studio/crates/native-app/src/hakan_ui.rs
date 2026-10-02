@@ -1394,7 +1394,39 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .width(Fill)
     .height(Fill)
     .into();
-    if app.print_dialog {
+    if let Some(action) = &app.confirm_discard {
+        let action_label = match action {
+            super::PendingAction::Open => "open another PDF",
+            super::PendingAction::Close => "close this PDF",
+            super::PendingAction::Exit => "exit",
+        };
+        let dialog = container(
+            column![
+                text("Unsaved annotations").size(20),
+                text(format!(
+                    "Save As first to keep your changes. Discard them and {action_label}?"
+                ))
+                .size(12),
+                row![
+                    button("Keep editing").on_press(Message::CancelDiscard),
+                    button("Discard changes").on_press(Message::ConfirmDiscard),
+                ]
+                .spacing(8),
+            ]
+            .spacing(16)
+            .padding(24),
+        )
+        .width(480)
+        .style(surface);
+        iced::widget::stack![
+            content,
+            iced::widget::opaque(container(dialog).center(Fill).style(|_| container::Style {
+                background: Some(Color::from_rgba(0.0, 0.0, 0.0, 0.55).into()),
+                ..Default::default()
+            }))
+        ]
+        .into()
+    } else if app.print_dialog {
         let current = app
             .document
             .as_ref()
