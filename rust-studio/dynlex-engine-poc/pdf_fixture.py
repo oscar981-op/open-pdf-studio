@@ -38,8 +38,8 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False):
-    content = bytearray()
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b""):
+    content = bytearray(pre_content)
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
     if mode != "raster":
@@ -60,6 +60,11 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         content.extend(f"1 0 1 RG\nq\n1 0 0 1 10 7 cm\n"
                        f"20 {height - 60 - 0.5:g} m\n100 {height - 60 - 0.5:g} l\nS\n"
                        f"110.5 {height - 70} m\n110.5 {height - 120} l\nS\nQ\n".encode())
+    if clipped and mode != "raster":
+        content.extend(f"40 {height - 90} 60 50 re\nW\nn\n"
+                       f"1 0.50196078 0 rg\n20 {height - 70} 100 45 re\nf\n"
+                       f"0 0 0 RG\n20 {height - 60 - 0.5:g} m\n130 {height - 60 - 0.5:g} l\nS\n"
+                       f"80.5 {height - 20} m\n80.5 {height - 110} l\nS\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
     has_image = mode != "vector"
@@ -89,7 +94,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     return bytes(pdf)
 
 
-def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False):
+def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False):
     rgba = bytearray()
     rects = rectangles(width, height, dense)
     strokes = lines(width, height)
@@ -109,6 +114,11 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                         color = (0, 255, 0)
                     if (30 <= x < 110 and y == 53) or (x == 120 and 63 <= y < 113):
                         color = (255, 0, 255)
+                if clipped:
+                    if 40 <= x < 100 and 40 <= y < 70:
+                        color = (255, 128, 0)
+                    if (40 <= x < 100 and y == 60) or (x == 80 and 40 <= y < 90):
+                        color = (0, 0, 0)
             rgba.extend((*color, 255))
     return bytes(rgba)
 

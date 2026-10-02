@@ -392,3 +392,18 @@ CLI, Hayro en onafhankelijke pixelreferentie blijven op elf PDF-pagina's
 (3.194.880 pixels) bytegelijk. Diagonale lijnen, onafgemaakte lijnpaden,
 schalen, fractionele verschuivingen en vormen buiten de pagina worden
 afgewezen. Dit is nog geen algemene PDF-padrenderer.
+
+## Eén rechthoekig PDF-clipvak
+
+De beperkte PDF-adapter accepteert nu eenmaal per pagina `re W n` buiten
+`q`/`Q`. Vanaf dat punt snijdt hij elke volgende gevulde rechthoek en
+asgerichte 1-pixelstreek op het clipvak bij, terwijl eerder getekende
+raster- en vectorlagen intact blijven. Beeld-XObjects na zo'n clipvak,
+meerdere clipvakken, `W*`, niet-rechthoekige paden, clip-state-herstel en
+transparantie blijven afgewezen. Er is dus nog geen algemene PDF-clipping.
+
+Twee nieuwe echte PDF-fixtures testen vector en hybride met een clipvak dat
+een gevulde rechthoek en twee lijnen deels doorsnijdt. Dertien pagina's,
+3.293.184 pixels, zijn bytegelijk voor directe DynLex-probe, DynLex-CLI,
+Hayro en onafhankelijke referentie. Afgekapt `W` zonder `n`, `W*`, een
+herhaald clipvak en een beeldlaag ná clipping worden geweigerd.

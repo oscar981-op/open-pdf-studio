@@ -38,6 +38,18 @@ fn operands<const N: usize>(items: &[Object]) -> Result<[f64; N], Box<dyn Error>
     Ok(result)
 }
 
+fn intersect_rect(rect: [u32; 4], clip: Option<[u32; 4]>) -> Option<[u32; 4]> {
+    let [left, top, right, bottom] = rect;
+    let [clip_left, clip_top, clip_right, clip_bottom] = clip.unwrap_or([0, 0, LIMIT, LIMIT]);
+    let result = [
+        left.max(clip_left),
+        top.max(clip_top),
+        right.min(clip_right),
+        bottom.min(clip_bottom),
+    ];
+    (result[0] < result[2] && result[1] < result[3]).then_some(result)
+}
+
 fn image_bytes<'a>(
     document: &'a Document,
     resources: &'a lopdf::Dictionary,
@@ -116,6 +128,8 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut stroke_color = [0_u8; 3];
     let mut one_pixel_stroke = false;
     let mut pending_rect = None;
+    let mut pending_clip = false;
+    let mut clip = None;
     let mut path_start = None;
     let mut pending_line = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
@@ -145,6 +159,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 if [a, b, c, d, e, f] == [f64::from(width), 0.0, 0.0, f64::from(height), 0.0, 0.0]
                     && image.is_none()
                     && commands.is_empty()
+                    && clip.is_none()
                 {
                     image_matrix = true;
                 } else if [a, b, c, d] == [1.0, 0.0, 0.0, 1.0]
@@ -203,11 +218,28 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 }
                 pending_rect = Some([x, height - y - h, x + w, height - y]);
             }
-            "f" if (depth == 0 || translation.is_some()) && op.operands.is_empty() => {
+            "W" if depth == 0
+                && op.operands.is_empty()
+                && pending_rect.is_some()
+                && !pending_clip
+                && clip.is_none() =>
+            {
+                pending_clip = true;
+            }
+            "n" if depth == 0 && op.operands.is_empty() && pending_clip => {
+                clip = pending_rect.take();
+                pending_clip = false;
+            }
+            "f" if (depth == 0 || translation.is_some())
+                && op.operands.is_empty()
+                && !pending_clip =>
+            {
                 let rect = pending_rect
                     .take()
                     .ok_or_else(|| fail("fill without rectangle"))?;
-                commands.push((1, rect, [color[0], color[1], color[2], 255]));
+                if let Some(rect) = intersect_rect(rect, clip) {
+                    commands.push((1, rect, [color[0], color[1], color[2], 255]));
+                }
                 if commands.len() > 64 {
                     return Err(fail("too many commands"));
                 }
@@ -274,11 +306,13 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 if rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height {
                     return Err(fail("stroke outside page or empty"));
                 }
-                commands.push((
-                    3,
-                    rect,
-                    [stroke_color[0], stroke_color[1], stroke_color[2], 255],
-                ));
+                if let Some(rect) = intersect_rect(rect, clip) {
+                    commands.push((
+                        3,
+                        rect,
+                        [stroke_color[0], stroke_color[1], stroke_color[2], 255],
+                    ));
+                }
                 if commands.len() > 64 {
                     return Err(fail("too many commands"));
                 }
@@ -288,6 +322,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     }
     if depth != 0
         || pending_rect.is_some()
+        || pending_clip
         || path_start.is_some()
         || pending_line.is_some()
         || image_matrix

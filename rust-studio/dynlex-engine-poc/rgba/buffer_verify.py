@@ -144,12 +144,34 @@ def main():
                     == hayro_output.read_bytes() == expected):
                 raise RuntimeError(f"pixel mismatch: translated {mode}")
             checked += width * height
+        for mode, number in MODES[1:]:
+            width, height = 256, 192
+            pdf = work / f"clipped-{mode}.pdf"
+            scene = work / "scene.opdl"
+            direct_output = work / "direct.rgba"
+            cli_output = work / "output.rgba"
+            hayro_output = work / "hayro.rgba"
+            pdf.write_bytes(build_pdf(mode, width=width, height=height, clipped=True))
+            subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
+            subprocess.run([probe, str(number), pdf, direct_output],
+                           check=True, capture_output=True)
+            subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+            subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"],
+                           check=True, capture_output=True)
+            expected = reference_rgba(mode, width, height, clipped=True)
+            if not (direct_output.read_bytes() == cli_output.read_bytes()
+                    == hayro_output.read_bytes() == expected):
+                raise RuntimeError(f"pixel mismatch: clipped {mode}")
+            checked += width * height
         invalid_transforms = {
             "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
             "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",
             "out-of-page": b"q\n1 0 0 1 250 0 cm\n10 10 30 30 re\nf\nQ\n",
             "diagonal-stroke": b"q\n1 0 0 1 10 7 cm\n20 20 m\n30 30 l\nS\nQ\n",
             "unfinished-stroke": b"q\n1 0 0 1 10 7 cm\n20 20 m\nQ\n",
+            "missing-clip-end": b"10 10 20 20 re\nW\n",
+            "unsupported-evenodd-clip": b"10 10 20 20 re\nW*\nn\n",
+            "repeated-clip": b"10 10 20 20 re\nW\nn\n15 15 20 20 re\nW\nn\n",
         }
         for name, content in invalid_transforms.items():
             invalid_pdf = work / f"invalid-{name}.pdf"
@@ -159,6 +181,13 @@ def main():
                                       capture_output=True)
             if rejected.returncode == 0 or invalid_output.exists():
                 raise RuntimeError(f"unsupported transform accepted: {name}")
+        clipped_image = work / "clip-before-image.pdf"
+        clipped_image.write_bytes(build_pdf("raster", pre_content=b"10 10 20 20 re\nW\nn\n"))
+        clipped_image_output = work / "clip-before-image.opdl"
+        rejected = subprocess.run([paths["adapter"], clipped_image, clipped_image_output],
+                                  capture_output=True)
+        if rejected.returncode == 0 or clipped_image_output.exists():
+            raise RuntimeError("clipped image accepted without image clipping")
         valid = (work / "scene.opdl").read_bytes()
         bad = {
             "truncated": valid[:-1],
@@ -175,7 +204,7 @@ def main():
                 raise RuntimeError(f"invalid scene accepted: {name}")
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
-        print(f"11 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes and 5 unsupported transforms/path states rejected")
+        print(f"13 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes and 9 unsupported transforms/path states rejected")
 
 
 if __name__ == "__main__":
