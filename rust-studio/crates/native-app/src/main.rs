@@ -13,11 +13,24 @@ use opds_native_core::annotations::{
     Annotation, DocumentModel, Edit, Kind, Rect, TextAlign, DEFAULT_TEXT_FONT_SIZE, TEXT_FONT_SIZES,
 };
 use opds_native_core::{DocumentId, RenderTicket};
+use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
+const MAX_THUMBNAILS: usize = 12;
 const HORIZONTAL_PAN_MARGIN: f32 = 512.0;
+
+fn thumbnail_scale(width: f32, height: f32) -> Result<f32, String> {
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return Err("Invalid PDF page dimensions".into());
+    }
+    let scale = (128.0 / width).min(170.0 / height).min(1.0);
+    if scale < 0.01 {
+        return Err("Page is too large for a thumbnail".into());
+    }
+    Ok(scale)
+}
 
 fn theme(_: &App) -> Theme {
     Theme::custom(
@@ -253,6 +266,20 @@ mod print_range_tests {
     }
 }
 
+#[cfg(test)]
+mod thumbnail_tests {
+    use super::thumbnail_scale;
+
+    #[test]
+    fn fits_large_landscape_and_portrait_pages_without_upscaling() {
+        assert!((thumbnail_scale(3000.0, 2000.0).unwrap() - 128.0 / 3000.0).abs() < 1e-6);
+        assert!((thumbnail_scale(600.0, 1200.0).unwrap() - 170.0 / 1200.0).abs() < 1e-6);
+        assert_eq!(thumbnail_scale(50.0, 50.0).unwrap(), 1.0);
+        assert!(thumbnail_scale(20000.0, 200.0).is_err());
+        assert!(thumbnail_scale(f32::NAN, 100.0).is_err());
+    }
+}
+
 struct OpenDocument {
     path: String,
     source_bytes: Arc<Vec<u8>>,
@@ -265,6 +292,9 @@ struct OpenDocument {
     displayed_page: usize,
     selected_annotation: Option<u64>,
     page_cache: VecDeque<CachedPage>,
+    thumbnails: VecDeque<(usize, image::Handle)>,
+    thumbnail_in_flight: Option<usize>,
+    thumbnail_failed: HashSet<usize>,
 }
 
 struct CachedPage {
@@ -380,6 +410,7 @@ enum Message {
     PageScrolled(scrollable::Viewport),
     GoToPage(usize),
     Rendered(RenderTicket, Result<Raster, String>),
+    ThumbnailRendered(u64, usize, Result<Raster, String>),
     SelectRibbon(RibbonTab),
     ToggleRibbonCollapsed,
     DragWindow,
@@ -721,7 +752,10 @@ impl App {
                 }
             }
             Message::CancelOpen => self.open_dialog = false,
-            Message::TogglePages => self.hide_pages = !self.hide_pages,
+            Message::TogglePages => {
+                self.hide_pages = !self.hide_pages;
+                return self.render_nearby_thumbnail();
+            }
             Message::ToggleProperties => self.hide_properties = !self.hide_properties,
             Message::PageScrolled(viewport) => {
                 self.page_scroll_offset = viewport.absolute_offset();
@@ -1129,6 +1163,9 @@ impl App {
                             displayed_page: 0,
                             selected_annotation: None,
                             page_cache: VecDeque::new(),
+                            thumbnails: VecDeque::new(),
+                            thumbnail_in_flight: None,
+                            thumbnail_failed: HashSet::new(),
                         };
                         document.cache_bitmap(0, initial_scale, raster);
                         self.document = Some(document);
@@ -1137,7 +1174,10 @@ impl App {
                             y: 0.0,
                         };
                         self.pending_zoom_offset = None;
-                        return scroll_page_to(self.page_scroll_offset);
+                        return Task::batch([
+                            scroll_page_to(self.page_scroll_offset),
+                            self.render_nearby_thumbnail(),
+                        ]);
                     }
                     Err(error) => self.message = format!("PDF open/render failed: {error}"),
                 }
@@ -1150,6 +1190,34 @@ impl App {
                     }
                 }
                 return self.render_current_page();
+            }
+            Message::ThumbnailRendered(token, page, result) => {
+                if token != self.next_load {
+                    return Task::none();
+                }
+                let Some(document) = &mut self.document else {
+                    return Task::none();
+                };
+                if document.thumbnail_in_flight != Some(page) {
+                    return Task::none();
+                }
+                document.thumbnail_in_flight = None;
+                match result {
+                    Ok(raster) => {
+                        document.thumbnails.retain(|(cached, _)| *cached != page);
+                        document.thumbnails.push_back((
+                            page,
+                            image::Handle::from_rgba(raster.width, raster.height, raster.rgba),
+                        ));
+                        while document.thumbnails.len() > MAX_THUMBNAILS {
+                            document.thumbnails.pop_front();
+                        }
+                    }
+                    Err(_) => {
+                        document.thumbnail_failed.insert(page);
+                    }
+                }
+                return self.render_nearby_thumbnail();
             }
             Message::WheelZoom { amount, anchor } => {
                 if let Some(document) = &mut self.document {
@@ -1197,7 +1265,7 @@ impl App {
                         self.active_ribbon = RibbonTab::Comment;
                     }
                 }
-                return self.render_current_page();
+                return Task::batch([self.render_current_page(), self.render_nearby_thumbnail()]);
             }
             Message::Rendered(ticket, result) => {
                 let Some(document) = &mut self.document else {
@@ -1237,6 +1305,47 @@ impl App {
             }
         }
         Task::none()
+    }
+
+    fn render_nearby_thumbnail(&mut self) -> Task<Message> {
+        let Some(document) = &mut self.document else {
+            return Task::none();
+        };
+        if self.hide_pages || document.thumbnail_in_flight.is_some() {
+            return Task::none();
+        }
+        let current = document.model.view().page();
+        let count = document.pdf.page_count();
+        let candidate = [
+            current.checked_add(1),
+            current.checked_sub(1),
+            current.checked_add(2),
+            current.checked_sub(2),
+        ]
+        .into_iter()
+        .flatten()
+        .find(|&page| {
+            page < count
+                && !document
+                    .thumbnails
+                    .iter()
+                    .any(|(cached, _)| *cached == page)
+                && !document.thumbnail_failed.contains(&page)
+        });
+        let Some(page) = candidate else {
+            return Task::none();
+        };
+        document.thumbnail_in_flight = Some(page);
+        let pdf = Arc::clone(&document.pdf);
+        let token = self.next_load;
+        Task::perform(
+            async move {
+                let (width, height) = pdf.page_dimensions(page + 1).map_err(|e| e.to_string())?;
+                let scale = thumbnail_scale(width, height)?;
+                pdf.render_page(page + 1, scale).map_err(|e| e.to_string())
+            },
+            move |result| Message::ThumbnailRendered(token, page, result),
+        )
     }
 
     fn render_current_page(&mut self) -> Task<Message> {

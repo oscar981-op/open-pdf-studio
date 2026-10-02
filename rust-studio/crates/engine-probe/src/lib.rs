@@ -149,7 +149,7 @@ fn validate_request(page_number: usize, scale: f32) -> Result<(), RenderError> {
     if page_number == 0 {
         return Err(RenderError::InvalidPage);
     }
-    if !scale.is_finite() || !(0.1..=8.0).contains(&scale) {
+    if !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
         return Err(RenderError::InvalidScale);
     }
     Ok(())
@@ -182,6 +182,10 @@ mod tests {
             render_page(vec![], 1, 9.0).unwrap_err(),
             RenderError::InvalidScale
         );
+        assert_eq!(
+            render_page(vec![], 1, 0.005).unwrap_err(),
+            RenderError::InvalidScale
+        );
     }
 
     #[test]
@@ -193,7 +197,10 @@ mod tests {
         assert!(Arc::strong_count(&bytes) >= 2);
         assert!(pdf.page_count() >= 1);
         let first = pdf.render_page(1, 0.5).unwrap();
+        let thumbnail = pdf.render_page(1, 0.05).unwrap();
         let second = pdf.render_page(1, 1.0).unwrap();
+        assert!(thumbnail.width < first.width);
+        assert!(thumbnail.height < first.height);
         assert!(second.width >= first.width);
         assert!(second.height >= first.height);
         assert_eq!(first.parse_ms, 0);

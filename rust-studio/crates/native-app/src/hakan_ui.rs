@@ -1216,25 +1216,49 @@ pub fn view(app: &App) -> Element<'_, Message> {
         };
     let mut workspace = row![].height(Fill);
     if !app.hide_pages {
-        let mut pages = column![text("Pages").size(12)].spacing(4).padding(8);
+        let mut pages = column![text("Thumbnails").size(12)].spacing(7).padding(8);
         for index in 0..count {
+            let handle = app.document.as_ref().and_then(|document| {
+                if document.displayed_page == index {
+                    document.bitmap.clone()
+                } else {
+                    document
+                        .thumbnails
+                        .iter()
+                        .find(|(page, _)| *page == index)
+                        .map(|(_, handle)| handle.clone())
+                }
+            });
+            let preview: Element<'_, Message> = if let Some(handle) = handle {
+                image(handle).width(128).height(170).into()
+            } else {
+                container(text("Page preview").size(11))
+                    .width(128)
+                    .height(170)
+                    .align_x(iced::Center)
+                    .align_y(iced::Center)
+                    .style(|_| container::Style {
+                        background: Some(Color::from_rgb8(238, 238, 238).into()),
+                        text_color: Some(Color::from_rgb8(100, 100, 100)),
+                        ..Default::default()
+                    })
+                    .into()
+            };
             pages = pages.push(
                 button(
-                    row![
-                        icon(DOC, 16.0),
-                        text(format!("Page {}", index + 1)).size(12)
-                    ]
-                    .spacing(10),
+                    column![preview, text(format!("{}", index + 1)).size(11)]
+                        .align_x(iced::Center)
+                        .spacing(4),
                 )
                 .width(Fill)
-                .padding(8)
+                .padding(7)
                 .on_press(Message::GoToPage(index))
                 .style(move |t, s| tool_btn_style(t, index == page, s)),
             );
         }
         workspace = workspace.push(
             container(scrollable(pages))
-                .width(180)
+                .width(200)
                 .height(Fill)
                 .style(surface),
         );
