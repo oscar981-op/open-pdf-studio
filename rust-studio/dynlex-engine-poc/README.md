@@ -313,7 +313,27 @@ werden door de Rust-validator afgewezen. In één Rust-proces, met 100 calls op
 de reeds ingelezen dichte display-list, was de kernelcall gemiddeld circa
 2,43 ms raster, 0,66 ms vector en 2,72 ms hybride. Dit sluit PDF-parsing,
 OPDL-opbouw, processtart en bestand-I/O uit en is **niet** vergelijkbaar met
-de volledige Hayro-tijden hierboven. De volgende stap is de Rust-adapter en
-deze bufferkernel in hetzelfde proces verbinden, zodat het OPDL-tussenbestand
-verdwijnt, gevolgd door een gepaarde eind-tot-eind-meting. De compiler- en
-LLVM-versies, FFI-ABI en onbetrouwbare invoer vereisen nog hardening.
+de volledige Hayro-tijden hierboven. De compiler- en LLVM-versies, FFI-ABI en onbetrouwbare invoer vereisen nog
+hardening.
+
+## Directe PDF-naar-RGBA-probe
+
+De beperkte adapter is nu ook een Rust-library. `buffer_probe.rs` accepteert
+naast OPDL-v2 een `.pdf`: dezelfde Rust-procesaanroep leest de PDF, bouwt OPDL
+in geheugen op, valideert die en roept de DynLex-bufferkernel aan. De oude
+adapter-CLI en CLI-renderer blijven beschikbaar. Bouw eerst de release-adapter
+(`cargo build --release -p opds-opdl-adapter --locked` vanuit `rust-studio`);
+`buffer_verify.py` linkt de library automatisch en kan met `--bench-runs 15`
+de volledige probeprocesroute afwisselend naast Hayro meten.
+
+Negen PDF-pagina's op drie resoluties waren bytegelijk voor directe probe,
+OPDL-probe, DynLex-CLI, Hayro en onafhankelijke referentie (3.096.576 pixels).
+De vier ongeldige OPDL-inputs werden nog steeds geweigerd. Op de dichte
+1024×768-fixture, 15 afwisselende warme procesruns per agent, waren de
+medianen directe route/Hayro respectievelijk raster 24,48/31,70 ms, vector
+15,55/19,98 ms en hybride 23,50/30,74 ms. Direct won 15/15, 13/15 en
+14/15 gepaarde rondes. Dit omvat processtart, PDF-lezen/parsen, OPDL-opbouw,
+renderen en RGBA-schrijfkosten, maar alleen voor de kleine, strikt ondersteunde
+PDF-subset. De OS-cache was warm en piekgeheugen en koude cache zijn nog niet
+gepaard gemeten. Dit bewijst geen snelheidswinst op echte tekeningen of in de
+app. De bestaande Hayro-route blijft ongewijzigd.

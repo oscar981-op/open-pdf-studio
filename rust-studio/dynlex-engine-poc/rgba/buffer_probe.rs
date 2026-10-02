@@ -77,13 +77,18 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
     if args.len() != 4 && args.len() != 5 {
-        return Err("usage: buffer_probe MODE INPUT.opdl OUTPUT.rgba [REPEAT]".into());
+        return Err("usage: buffer_probe MODE INPUT.opdl|INPUT.pdf OUTPUT.rgba [REPEAT]".into());
     }
     let mode: i32 = args[1].parse()?;
     if !(1..=3).contains(&mode) {
         return Err("mode must be 1=raster, 2=vector or 3=hybrid".into());
     }
-    let scene = fs::read(&args[2])?;
+    let input = Path::new(&args[2]);
+    let scene = if input.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+        opds_opdl_adapter::page_to_opdl(input)?
+    } else {
+        fs::read(input)?
+    };
     let (width, height) = validate(&scene)?;
     let mut output = vec![0_u8; 12 + width * height * 4];
     let repeat: usize = if args.len() == 5 { args[4].parse()? } else { 1 };
