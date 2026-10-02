@@ -38,13 +38,13 @@ fn operands<const N: usize>(items: &[Object]) -> Result<[f64; N], Box<dyn Error>
     Ok(result)
 }
 
-fn image_bytes(
-    document: &Document,
-    resources: &lopdf::Dictionary,
+fn image_bytes<'a>(
+    document: &'a Document,
+    resources: &'a lopdf::Dictionary,
     name: &[u8],
     width: u32,
     height: u32,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+) -> Result<&'a [u8], Box<dyn Error>> {
     if name != b"Im0" {
         return Err(fail("only /Im0 is supported"));
     }
@@ -72,7 +72,7 @@ fn image_bytes(
     if content.len() != width as usize * height as usize * 3 {
         return Err(fail("wrong RGB image byte length"));
     }
-    Ok(content.clone())
+    Ok(content.as_slice())
 }
 
 fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {

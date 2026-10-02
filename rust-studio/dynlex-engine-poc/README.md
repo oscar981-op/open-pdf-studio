@@ -240,6 +240,18 @@ Eerdere tabellen hierboven waren niet afwisselend gepaard gemeten en zijn
 daarom geen directe trendvergelijking met deze tabel. De volledige beeldkopie
 en de tweeprocessenroute blijven belangrijke onderzoekspunten.
 
+De tijdelijke Rust-adapter kopieerde voor raster/hybride eerst de volledige
+RGB-XObject naar een `Vec` en daarna nogmaals naar OPDL. Hij leent die bytes nu
+uit het al geparseerde `lopdf`-document totdat de OPDL-buffer is opgebouwd.
+Een directe afwisselende A/B-proef met 30 warme adapterruns op de dichte
+1024×768-fixture gaf raster 17,3→14,9 ms en hybride 16,6→15,6 ms; de OPDL-
+uitvoer was bytegelijk. Piek-RSS van het adapterproces daalde in de
+verificatie van circa 11,4 naar 9,0 MiB voor raster en 11,6 naar 9,3 MiB
+voor hybride. De volledige 15-runs PDF→RGBA-proef na deze wijziging bleef
+op dezelfde fixture voor raster/hybride ongeveer 1–3 ms trager dan Hayro,
+terwijl vector 14 van 15 gepaarde rondes won. Adapter en DynLex blijven twee
+processen; deze winst in de testadapter bewijst geen voordeel in de app.
+
 De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,
