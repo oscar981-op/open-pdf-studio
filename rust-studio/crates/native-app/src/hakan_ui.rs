@@ -1216,8 +1216,18 @@ pub fn view(app: &App) -> Element<'_, Message> {
         };
     let mut workspace = row![].height(Fill);
     if !app.hide_pages {
-        let mut pages = column![text("Thumbnails").size(12)].spacing(7).padding(8);
-        for index in 0..count {
+        let focus = app.document.as_ref().map_or(0, |d| d.thumbnail_focus);
+        let visible = super::thumbnail_window(focus, count);
+        let mut pages = column![container(text("Thumbnails").size(12))
+            .height(22)
+            .align_y(iced::Center)]
+        .spacing(0)
+        .padding(8);
+        if visible.start > 0 {
+            pages =
+                pages.push(Space::new().height(visible.start as f32 * super::THUMBNAIL_ROW_STEP));
+        }
+        for index in visible.clone() {
             let handle = app.document.as_ref().and_then(|document| {
                 if document.displayed_page == index {
                     document.bitmap.clone()
@@ -1245,23 +1255,36 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     .into()
             };
             pages = pages.push(
-                button(
-                    column![preview, text(format!("{}", index + 1)).size(11)]
-                        .align_x(iced::Center)
-                        .spacing(4),
+                container(
+                    button(
+                        column![preview, text(format!("{}", index + 1)).size(11)]
+                            .align_x(iced::Center)
+                            .spacing(4),
+                    )
+                    .width(Fill)
+                    .height(super::THUMBNAIL_CARD_HEIGHT)
+                    .padding(7)
+                    .on_press(Message::GoToPage(index))
+                    .style(move |t, s| tool_btn_style(t, index == page, s)),
                 )
                 .width(Fill)
-                .height(206)
-                .padding(7)
-                .on_press(Message::GoToPage(index))
-                .style(move |t, s| tool_btn_style(t, index == page, s)),
+                .height(super::THUMBNAIL_ROW_STEP),
+            );
+        }
+        if visible.end < count {
+            pages = pages.push(
+                Space::new().height((count - visible.end) as f32 * super::THUMBNAIL_ROW_STEP),
             );
         }
         workspace = workspace.push(
-            container(scrollable(pages).on_scroll(Message::ThumbnailsScrolled))
-                .width(200)
-                .height(Fill)
-                .style(surface),
+            container(
+                scrollable(pages)
+                    .id(iced::widget::Id::new("pdf-thumbnails"))
+                    .on_scroll(Message::ThumbnailsScrolled),
+            )
+            .width(200)
+            .height(Fill)
+            .style(surface),
         );
     }
     workspace = workspace.push(container(center).width(Fill).height(Fill));

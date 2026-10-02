@@ -20,7 +20,9 @@ use std::sync::Arc;
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_THUMBNAILS: usize = 12;
 const THUMBNAIL_ROW_STEP: f32 = 213.0;
-const THUMBNAIL_HEADER_HEIGHT: f32 = 22.0;
+const THUMBNAIL_CARD_HEIGHT: f32 = 206.0;
+const THUMBNAIL_HEADER_HEIGHT: f32 = 30.0;
+const THUMBNAIL_WINDOW_SIZE: usize = 12;
 const HORIZONTAL_PAN_MARGIN: f32 = 512.0;
 
 fn thumbnail_scale(width: f32, height: f32) -> Result<f32, String> {
@@ -41,6 +43,13 @@ fn thumbnail_page_at_scroll(y: f32, page_count: usize) -> usize {
     ((y - THUMBNAIL_HEADER_HEIGHT).max(0.0) / THUMBNAIL_ROW_STEP)
         .floor()
         .min((page_count - 1) as f32) as usize
+}
+
+fn thumbnail_window(focus: usize, page_count: usize) -> std::ops::Range<usize> {
+    let start = focus
+        .saturating_sub(3)
+        .min(page_count.saturating_sub(THUMBNAIL_WINDOW_SIZE));
+    start..start.saturating_add(THUMBNAIL_WINDOW_SIZE).min(page_count)
 }
 
 fn theme(_: &App) -> Theme {
@@ -85,6 +94,16 @@ fn main() -> iced::Result {
 
 fn scroll_page_to(offset: scrollable::AbsoluteOffset) -> Task<Message> {
     iced::widget::operation::scroll_to(iced::widget::Id::new("pdf-page-scroll"), offset)
+}
+
+fn scroll_thumbnail_to(page: usize) -> Task<Message> {
+    iced::widget::operation::scroll_to(
+        iced::widget::Id::new("pdf-thumbnails"),
+        scrollable::AbsoluteOffset {
+            x: 0.0,
+            y: THUMBNAIL_HEADER_HEIGHT + page as f32 * THUMBNAIL_ROW_STEP,
+        },
+    )
 }
 
 #[derive(Default)]
@@ -279,7 +298,7 @@ mod print_range_tests {
 
 #[cfg(test)]
 mod thumbnail_tests {
-    use super::{thumbnail_page_at_scroll, thumbnail_scale};
+    use super::{thumbnail_page_at_scroll, thumbnail_scale, thumbnail_window};
 
     #[test]
     fn fits_large_landscape_and_portrait_pages_without_upscaling() {
@@ -293,9 +312,18 @@ mod thumbnail_tests {
     #[test]
     fn scroll_focus_tracks_visible_thumbnail_card() {
         assert_eq!(thumbnail_page_at_scroll(0.0, 100), 0);
-        assert_eq!(thumbnail_page_at_scroll(22.0 + 213.0 * 9.0, 100), 9);
+        assert_eq!(thumbnail_page_at_scroll(30.0 + 213.0 * 9.0, 100), 9);
         assert_eq!(thumbnail_page_at_scroll(100_000.0, 100), 99);
         assert_eq!(thumbnail_page_at_scroll(100.0, 0), 0);
+        assert_eq!(thumbnail_window(0, 100), 0..12);
+        assert_eq!(thumbnail_window(50, 100), 47..59);
+        assert_eq!(thumbnail_window(99, 100), 88..100);
+        assert_eq!(thumbnail_window(10, 4), 0..4);
+        for focus in 0..100 {
+            let window = thumbnail_window(focus, 100);
+            assert!(window.contains(&focus));
+            assert!(window.len() <= 12);
+        }
     }
 }
 
@@ -1208,6 +1236,7 @@ impl App {
                         self.pending_zoom_offset = None;
                         return Task::batch([
                             scroll_page_to(self.page_scroll_offset),
+                            scroll_thumbnail_to(0),
                             self.render_nearby_thumbnail(),
                         ]);
                     }
@@ -1298,7 +1327,11 @@ impl App {
                         self.active_ribbon = RibbonTab::Comment;
                     }
                 }
-                return Task::batch([self.render_current_page(), self.render_nearby_thumbnail()]);
+                return Task::batch([
+                    self.render_current_page(),
+                    self.render_nearby_thumbnail(),
+                    scroll_thumbnail_to(page),
+                ]);
             }
             Message::Rendered(ticket, result) => {
                 let Some(document) = &mut self.document else {
