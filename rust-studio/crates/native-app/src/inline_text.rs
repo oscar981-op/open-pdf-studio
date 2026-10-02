@@ -3,9 +3,14 @@
 //! rendering needs a separate check because its glyphs are hidden here.
 use super::{text_layout, Message};
 use iced::advanced::text::editor::{Cursor, Position};
+use iced::advanced::{
+    layout, mouse as advanced_mouse, overlay, renderer, widget, Clipboard, Layout, Shell, Widget,
+};
 use iced::widget::canvas::{self, Canvas, Frame, Geometry};
 use iced::widget::text_editor;
-use iced::{keyboard, mouse, Color, Element, Point, Rectangle, Renderer, Size, Theme};
+use iced::{
+    keyboard, mouse, Color, Element, Event, Length, Point, Rectangle, Renderer, Size, Theme, Vector,
+};
 use opds_native_core::annotations::TextAlign;
 
 pub struct Aligned<'a> {
@@ -41,6 +46,182 @@ pub fn view<'a>(
     .width(width)
     .height(height)
     .into()
+}
+
+/// Forward the editor's IME request with the cursor used by the aligned
+/// canvas. Iced/winit paints preedit outside the widget at this rectangle.
+pub fn with_aligned_ime<'a>(
+    content: Element<'a, Message>,
+    draft: &'a text_editor::Content,
+    align: TextAlign,
+    size: f32,
+    line_height: f32,
+) -> Element<'a, Message> {
+    Element::new(AlignedIme {
+        content,
+        draft,
+        align,
+        size,
+        line_height,
+    })
+}
+
+struct AlignedIme<'a> {
+    content: Element<'a, Message>,
+    draft: &'a text_editor::Content,
+    align: TextAlign,
+    size: f32,
+    line_height: f32,
+}
+
+impl AlignedIme<'_> {
+    fn cursor_rectangle(&self, bounds: Rectangle) -> Option<Rectangle> {
+        let face = text_layout::font_face()?;
+        let value = self
+            .draft
+            .lines()
+            .map(|line| line.text)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let lines =
+            text_layout::wrap_text(&value, f64::from(bounds.width), f64::from(self.size), face);
+        let cursor = self.draft.cursor().position;
+        for (index, line) in lines.iter().enumerate() {
+            let next_same_source = lines
+                .get(index + 1)
+                .is_some_and(|next| next.source_line == line.source_line);
+            if line.source_line != cursor.line
+                || cursor.column < line.start_byte
+                || (cursor.column >= line.end_byte && next_same_source)
+            {
+                continue;
+            }
+            let prefix = line
+                .text
+                .get(
+                    ..cursor
+                        .column
+                        .saturating_sub(line.start_byte)
+                        .min(line.text.len()),
+                )
+                .unwrap_or("");
+            let start = match self.align {
+                TextAlign::Left => 0.0,
+                TextAlign::Center => (bounds.width - line.width as f32) / 2.0,
+                TextAlign::Right => bounds.width - line.width as f32,
+            };
+            return Some(Rectangle::new(
+                Point::new(
+                    bounds.x
+                        + start
+                        + text_layout::text_width(face, prefix, f64::from(self.size)) as f32,
+                    bounds.y + index as f32 * self.line_height,
+                ),
+                Size::new(1.0, self.line_height),
+            ));
+        }
+        None
+    }
+}
+
+impl Widget<Message, Theme, Renderer> for AlignedIme<'_> {
+    fn tag(&self) -> widget::tree::Tag {
+        self.content.as_widget().tag()
+    }
+    fn state(&self) -> widget::tree::State {
+        self.content.as_widget().state()
+    }
+    fn children(&self) -> Vec<widget::Tree> {
+        self.content.as_widget().children()
+    }
+    fn diff(&self, tree: &mut widget::Tree) {
+        self.content.as_widget().diff(tree);
+    }
+    fn size(&self) -> Size<Length> {
+        self.content.as_widget().size()
+    }
+    fn layout(
+        &mut self,
+        tree: &mut widget::Tree,
+        renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        self.content.as_widget_mut().layout(tree, renderer, limits)
+    }
+    fn operate(
+        &mut self,
+        tree: &mut widget::Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        self.content
+            .as_widget_mut()
+            .operate(tree, layout, renderer, operation);
+    }
+    fn update(
+        &mut self,
+        tree: &mut widget::Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: advanced_mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        self.content.as_widget_mut().update(
+            tree, event, layout, cursor, renderer, clipboard, shell, viewport,
+        );
+        if matches!(
+            event,
+            Event::Window(iced::window::Event::RedrawRequested(_))
+        ) {
+            if let iced::advanced::InputMethod::Enabled { cursor, .. } = shell.input_method_mut() {
+                if let Some(aligned_cursor) = self.cursor_rectangle(layout.bounds()) {
+                    *cursor = aligned_cursor;
+                }
+            }
+        }
+    }
+    fn mouse_interaction(
+        &self,
+        tree: &widget::Tree,
+        layout: Layout<'_>,
+        cursor: advanced_mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &Renderer,
+    ) -> advanced_mouse::Interaction {
+        self.content
+            .as_widget()
+            .mouse_interaction(tree, layout, cursor, viewport, renderer)
+    }
+    fn draw(
+        &self,
+        tree: &widget::Tree,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: advanced_mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        self.content
+            .as_widget()
+            .draw(tree, renderer, theme, style, layout, cursor, viewport);
+    }
+    fn overlay<'a>(
+        &'a mut self,
+        tree: &'a mut widget::Tree,
+        layout: Layout<'a>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'a, Message, Theme, Renderer>> {
+        self.content
+            .as_widget_mut()
+            .overlay(tree, layout, renderer, viewport, translation)
+    }
 }
 
 impl Aligned<'_> {
@@ -286,6 +467,41 @@ impl canvas::Program<Message> for Aligned<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ime_cursor_follows_wrapped_aligned_unicode_caret() {
+        let mut content = text_editor::Content::with_text("Café Ω longword");
+        content.move_to(Cursor {
+            position: Position {
+                line: 0,
+                column: "Café Ω longword".len(),
+            },
+            selection: None,
+        });
+        let bounds = Rectangle::new(Point::new(20.0, 30.0), Size::new(90.0, 100.0));
+        let face = text_layout::font_face().unwrap();
+        let value = content.text();
+        let lines = text_layout::wrap_text(&value, 90.0, 16.0, face);
+        assert!(lines.len() > 1);
+        let last = lines.last().unwrap();
+        for align in [TextAlign::Center, TextAlign::Right] {
+            let wrapper = AlignedIme {
+                content: iced::widget::text("").into(),
+                draft: &content,
+                align,
+                size: 16.0,
+                line_height: 20.0,
+            };
+            let caret = wrapper.cursor_rectangle(bounds).unwrap();
+            let expected_x = match align {
+                TextAlign::Center => bounds.x + (bounds.width + last.width as f32) / 2.0,
+                TextAlign::Right => bounds.x + bounds.width,
+                TextAlign::Left => unreachable!(),
+            };
+            assert!((caret.x - expected_x).abs() < 0.5);
+            assert_eq!(caret.y, bounds.y + (lines.len() - 1) as f32 * 20.0);
+        }
+    }
 
     #[test]
     fn unicode_hit_test_returns_utf8_boundaries() {

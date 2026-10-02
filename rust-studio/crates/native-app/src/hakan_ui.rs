@@ -1142,23 +1142,29 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     let editor: Element<'_, Message> = if app.text_align == TextAlign::Left {
                         editor.into()
                     } else {
-                        iced::widget::stack![
-                            editor,
-                            inline_text::view(
-                                &app.text_draft,
-                                app.text_align,
-                                f32::from(app.text_font_size) * scale_y,
-                                f32::from(app.text_font_size + 4) * scale_y,
-                                Color::from_rgb8(
-                                    app.text_color[0],
-                                    app.text_color[1],
-                                    app.text_color[2]
+                        inline_text::with_aligned_ime(
+                            iced::widget::stack![
+                                editor,
+                                inline_text::view(
+                                    &app.text_draft,
+                                    app.text_align,
+                                    f32::from(app.text_font_size) * scale_y,
+                                    f32::from(app.text_font_size + 4) * scale_y,
+                                    Color::from_rgb8(
+                                        app.text_color[0],
+                                        app.text_color[1],
+                                        app.text_color[2]
+                                    ),
+                                    w,
+                                    h,
                                 ),
-                                w,
-                                h,
-                            ),
-                        ]
-                        .into()
+                            ]
+                            .into(),
+                            &app.text_draft,
+                            app.text_align,
+                            f32::from(app.text_font_size) * scale_y,
+                            f32::from(app.text_font_size + 4) * scale_y,
+                        )
                     };
                     let input = column![
                         container(editor).width(w),
