@@ -196,6 +196,18 @@ procesrun afzonderlijk, maar wist de OS-bestandscache niet: dit is **geen**
 echte cold-cache-meting. Compiler- en adaptertijd tellen niet mee in deze
 directe renderervergelijking.
 
+Een volgende proef vervangt uitsluitend het vullen van een volledig witte
+achtergrond door `memset`; de RGB-beeldkopie bleef in het bestaande pad. De
+eerste poging om ook die kopie in een lineaire pixel-loop onder te brengen gaf
+in de dichte A/B-proef geen consistente verbetering en is teruggedraaid.
+Met `rgba/ab_bench.py --baseline-ref e1c37358 --size 1024x768 --dense
+--runs 30` waren de warme procesmedianen voor wit-vullen raster 17,2→16,6,
+vector 14,2→12,9 en hybride 17,4→18,3 ms. Alle RGBA-bytes, inclusief de
+oudere v1-fixture met clipping en alpha, bleven gelijk. Vooral de vectorwinst
+is zichtbaar; hybride heeft in deze run een regressie. De eerste procesrun
+varieerde sterk en is geen cold-cache-meting. Een volgende optimalisatie moet
+de hybride regressie onderzoeken en de volledige PDF-route opnieuw meten.
+
 De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,
