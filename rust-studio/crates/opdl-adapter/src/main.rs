@@ -112,14 +112,20 @@ fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut image_matrix = false;
     let mut image = None;
     let mut color = [0_u8; 3];
+    let mut stroke_color = [0_u8; 3];
+    let mut one_pixel_stroke = false;
     let mut pending_rect = None;
+    let mut path_start = None;
+    let mut pending_line = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
     for op in &content.operations {
         match op.operator.as_str() {
             "q" if op.operands.is_empty()
                 && depth == 0
                 && commands.is_empty()
-                && pending_rect.is_none() =>
+                && pending_rect.is_none()
+                && path_start.is_none()
+                && pending_line.is_none() =>
             {
                 depth = 1
             }
@@ -143,7 +149,11 @@ fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     height,
                 )?);
             }
-            "rg" if depth == 0 && pending_rect.is_none() => {
+            "rg" if depth == 0
+                && pending_rect.is_none()
+                && path_start.is_none()
+                && pending_line.is_none() =>
+            {
                 let rgb = operands::<3>(&op.operands)?;
                 for (target, channel) in color.iter_mut().zip(rgb) {
                     if !channel.is_finite() || !(0.0..=1.0).contains(&channel) {
@@ -152,7 +162,11 @@ fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     *target = (channel * 255.0).round() as u8;
                 }
             }
-            "re" if depth == 0 && pending_rect.is_none() => {
+            "re" if depth == 0
+                && pending_rect.is_none()
+                && path_start.is_none()
+                && pending_line.is_none() =>
+            {
                 let [x, y, w, h] = operands::<4>(&op.operands)?;
                 let [x, y, w, h] = [exact_u32(x)?, exact_u32(y)?, exact_u32(w)?, exact_u32(h)?];
                 if x + w > width || y + h > height {
@@ -169,10 +183,80 @@ fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     return Err(fail("too many commands"));
                 }
             }
+            "w" if depth == 0
+                && pending_rect.is_none()
+                && path_start.is_none()
+                && pending_line.is_none() =>
+            {
+                let [weight] = operands::<1>(&op.operands)?;
+                if weight != 1.0 {
+                    return Err(fail("only one-pixel butt-cap strokes are supported"));
+                }
+                one_pixel_stroke = true;
+            }
+            "RG" if depth == 0
+                && pending_rect.is_none()
+                && path_start.is_none()
+                && pending_line.is_none() =>
+            {
+                let rgb = operands::<3>(&op.operands)?;
+                for (target, channel) in stroke_color.iter_mut().zip(rgb) {
+                    if !channel.is_finite() || !(0.0..=1.0).contains(&channel) {
+                        return Err(fail("invalid stroke RGB channel"));
+                    }
+                    *target = (channel * 255.0).round() as u8;
+                }
+            }
+            "m" if depth == 0
+                && pending_rect.is_none()
+                && path_start.is_none()
+                && pending_line.is_none() =>
+            {
+                path_start = Some(operands::<2>(&op.operands)?);
+            }
+            "l" if depth == 0 && pending_line.is_none() => {
+                let start = path_start.take().ok_or_else(|| fail("line without move"))?;
+                let end = operands::<2>(&op.operands)?;
+                pending_line = Some((start, end));
+            }
+            "S" if depth == 0 && op.operands.is_empty() && one_pixel_stroke => {
+                let (start, end) = pending_line
+                    .take()
+                    .ok_or_else(|| fail("stroke without line"))?;
+                let rect = if start[1] == end[1] {
+                    let left = exact_u32(start[0].min(end[0]))?;
+                    let right = exact_u32(start[0].max(end[0]))?;
+                    let top = exact_u32(f64::from(height) - start[1] - 0.5)?;
+                    [left, top, right, top + 1]
+                } else if start[0] == end[0] {
+                    let left = exact_u32(start[0] - 0.5)?;
+                    let top = height - exact_u32(start[1].max(end[1]))?;
+                    let bottom = height - exact_u32(start[1].min(end[1]))?;
+                    [left, top, left + 1, bottom]
+                } else {
+                    return Err(fail("only horizontal or vertical strokes are supported"));
+                };
+                if rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height {
+                    return Err(fail("stroke outside page or empty"));
+                }
+                commands.push((
+                    3,
+                    rect,
+                    [stroke_color[0], stroke_color[1], stroke_color[2], 255],
+                ));
+                if commands.len() > 64 {
+                    return Err(fail("too many commands"));
+                }
+            }
             _ => return Err(fail("PDF operator is outside the supported fixture subset")),
         }
     }
-    if depth != 0 || pending_rect.is_some() || (image_matrix && image.is_none()) {
+    if depth != 0
+        || pending_rect.is_some()
+        || path_start.is_some()
+        || pending_line.is_some()
+        || (image_matrix && image.is_none())
+    {
         return Err(fail("incomplete fixture content stream"));
     }
     let image = image.unwrap_or_default();

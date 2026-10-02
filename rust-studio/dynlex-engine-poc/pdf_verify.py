@@ -122,12 +122,18 @@ def main():
                     shutil.copy2(pdf, args.artifacts / f"{label}-{mode}.pdf")
                     shutil.copy2(opdl, args.artifacts / f"{label}-{mode}.opdl")
                     shutil.copy2(hayro_output, args.artifacts / f"{label}-{mode}-hayro.rgba")
-        bad = work / "unsupported.pdf"
-        bad.write_bytes(build_pdf("hybrid", b"0 0 m\n"))
-        (work / "scene.opdl").unlink(missing_ok=True)
-        rejected = subprocess.run([adapter, bad, work / "scene.opdl"], cwd=work, capture_output=True)
-        if rejected.returncode == 0 or (work / "scene.opdl").exists():
-            raise RuntimeError("adapter silently accepted an unsupported PDF operator")
+        bad_cases = {
+            "unsupported-operator": b"0 0 c\n",
+            "diagonal-stroke": b"0 0 m\n10 10 l\nS\n",
+            "wide-stroke": b"2 w\n",
+        }
+        for reason, extra in bad_cases.items():
+            bad = work / f"{reason}.pdf"
+            bad.write_bytes(build_pdf("hybrid", extra))
+            (work / "scene.opdl").unlink(missing_ok=True)
+            rejected = subprocess.run([adapter, bad, work / "scene.opdl"], cwd=work, capture_output=True)
+            if rejected.returncode == 0 or (work / "scene.opdl").exists():
+                raise RuntimeError(f"adapter silently accepted {reason}")
     rendered = json.dumps(report, indent=2)
     print(rendered)
     if args.output:

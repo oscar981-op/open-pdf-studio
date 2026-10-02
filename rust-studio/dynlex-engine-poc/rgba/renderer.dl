@@ -74,12 +74,17 @@ function run renderer with mode mode:
             set checked_top to unsigned word at (checked_offset + 8) in scene
             set checked_right to unsigned word at (checked_offset + 12) in scene
             set checked_bottom to unsigned word at (checked_offset + 16) in scene
-            if checked_kind != 1 and checked_kind != 2:
+            if checked_kind < 1 or checked_kind > 3:
+                @intrinsic("call", "libc", "exit", void, 2)
+            if version = 1 and checked_kind = 3:
                 @intrinsic("call", "libc", "exit", void, 2)
             if checked_left > checked_right or checked_right > width or checked_top > checked_bottom or checked_bottom > height:
                 @intrinsic("call", "libc", "exit", void, 2)
             if checked_kind = 2:
                 if (checked_right - checked_left) != (checked_bottom - checked_top):
+                    @intrinsic("call", "libc", "exit", void, 2)
+            if checked_kind = 3:
+                if (checked_right - checked_left) != 1 and (checked_bottom - checked_top) != 1:
                     @intrinsic("call", "libc", "exit", void, 2)
             set checked to checked + 1
         set rgba to allocate (width * height * 4) bytes
@@ -131,7 +136,7 @@ function run renderer with mode mode:
                         set draw_x to clip_left
                     loop while draw_x < stop_x:
                         set hit to 0
-                        if kind = 1:
+                        if kind = 1 or kind = 3:
                             set hit to 1
                         if kind = 2:
                             set line_x to left + (draw_y - top)

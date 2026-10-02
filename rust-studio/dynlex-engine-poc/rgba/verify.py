@@ -126,10 +126,13 @@ def main():
             struct.pack_into("<I", wrong_version, 4, 3)
             unknown_command = bytearray(scene)
             struct.pack_into("<I", unknown_command, 36 + WIDTH * HEIGHT * 3 + 4, 99)
+            newer_command_in_v1 = bytearray(scene)
+            struct.pack_into("<I", newer_command_in_v1, 36 + WIDTH * HEIGHT * 3 + 4, 3)
             bad_scenes = {
                 "wrong-version": wrong_version,
                 "truncated": scene[:-10],
                 "unknown-command": unknown_command,
+                "newer-command-in-v1": newer_command_in_v1,
             }
             for reason, bad in bad_scenes.items():
                 (work / "scene.opdl").write_bytes(bad)

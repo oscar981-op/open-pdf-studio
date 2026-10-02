@@ -7,6 +7,8 @@ WIDTH, HEIGHT = 256, 192
 RECTS = ((25, 20, 190, 24, (255, 0, 0)),
          (50, 45, 62, 110, (0, 0, 255)),
          (90, 75, 220, 130, (255, 255, 0)))
+LINES = ((32, 32, 224, 32, (0, 255, 255)),
+         (180, 18, 180, 170, (255, 0, 255)))
 
 
 def rectangles(width, height):
@@ -15,6 +17,14 @@ def rectangles(width, height):
     sx, sy = width // WIDTH, height // HEIGHT
     return tuple((x0 * sx, y0 * sy, x1 * sx, y1 * sy, ink)
                  for x0, y0, x1, y1, ink in RECTS)
+
+
+def lines(width, height):
+    if width % WIDTH or height % HEIGHT:
+        raise ValueError("fixture sizes must be integer multiples of 256x192")
+    sx, sy = width // WIDTH, height // HEIGHT
+    return tuple((x0 * sx, y0 * sy, x1 * sx, y1 * sy, ink)
+                 for x0, y0, x1, y1, ink in LINES)
 
 
 def image_rgb(width, height):
@@ -30,6 +40,15 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT):
         for x0, y0, x1, y1, (r, g, b) in rectangles(width, height):
             content.extend(f"{r / 255:g} {g / 255:g} {b / 255:g} rg\n"
                            f"{x0} {height - y1} {x1 - x0} {y1 - y0} re\nf\n".encode())
+        content.extend(b"1 w\n")
+        for x0, y0, x1, y1, (r, g, b) in lines(width, height):
+            content.extend(f"{r / 255:g} {g / 255:g} {b / 255:g} RG\n".encode())
+            if y0 == y1:
+                pdf_y = height - y0 - 0.5
+                content.extend(f"{x0} {pdf_y:g} m\n{x1} {pdf_y:g} l\nS\n".encode())
+            else:
+                pdf_x = x0 + 0.5
+                content.extend(f"{pdf_x:g} {height - y0} m\n{pdf_x:g} {height - y1} l\nS\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
     has_image = mode != "vector"
@@ -62,6 +81,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT):
 def reference_rgba(mode, width=WIDTH, height=HEIGHT):
     rgba = bytearray()
     rects = rectangles(width, height)
+    strokes = lines(width, height)
     for y in range(height):
         for x in range(width):
             color = (255, 255, 255) if mode == "vector" else (
@@ -69,6 +89,9 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT):
             if mode != "raster":
                 for x0, y0, x1, y1, ink in rects:
                     if x0 <= x < x1 and y0 <= y < y1:
+                        color = ink
+                for x0, y0, x1, y1, ink in strokes:
+                    if (y0 == y1 and x0 <= x < x1 and y == y0) or (x0 == x1 and x == x0 and y0 <= y < y1):
                         color = ink
             rgba.extend((*color, 255))
     return bytes(rgba)

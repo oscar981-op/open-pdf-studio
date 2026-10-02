@@ -84,22 +84,26 @@ of display-list-input.
 
 De tijdelijke pure-Rust CLI `opds-opdl-adapter` leest via `lopdf` een **strikt
 beperkte** PDF-subset: één pagina van maximaal 1024×1024 pt met nuloorsprong,
-een optionele ongecomprimeerde volledige RGB8-afbeelding en daarop gevulde,
-pixeluitgelijnde rechthoeken. De adapter verwerpt onbekende PDF-operators,
+een optionele ongecomprimeerde volledige RGB8-afbeelding, gevulde,
+pixeluitgelijnde rechthoeken en horizontale/verticale, precies één pixel brede
+`m`/`l`/`S`-lijnen op halve-pixelcoördinaten. Vul- en lijnkleur zijn afzonderlijk.
+De adapter verwerpt diagonale, bredere of niet-uitgelijnde lijnen en onbekende PDF-operators,
 rotatie, CropBox, annotaties, filters, niet-volledige afbeeldingsmatrices en
 onbekende XObjects. Dit is bewust een testadapter; de DynLex-kern blijft de
 pixelrenderer en de bestaande Rust/Hayro-engine blijft de app-renderer.
 
-[`pdf_fixture.py`](pdf_fixture.py) maakt drie **echte PDF's** met image-XObject
-en/of `re`/`f`-padoperators. [`pdf_verify.py`](pdf_verify.py) zet elke PDF om
+[`pdf_fixture.py`](pdf_fixture.py) maakt drie **echte PDF's** met image-XObject,
+`re`/`f`-rechthoeken en twee gekleurde `m`/`l`/`S`-lijnen. OPDL v2 bewaart
+een lijn als opdrachtsoort 3 met zijn exacte pixelstrook; v1 verwerpt die soort.
+[`pdf_verify.py`](pdf_verify.py) zet elke PDF om
 naar OPDL, rendert met de passende DynLex-agent en vergelijkt alle 49.152
 RGBA-pixels op 256×192 en 196.608 op 512×384 met zowel een onafhankelijke
 sceneberekening als Hayro. Alle drie kwamen op beide groottes exact overeen.
-Een extra fixture met een onbekende padoperator wordt afgewezen. De oudere
+Fixtures met een onbekende padoperator, diagonale lijn of brede lijn worden afgewezen. De oudere
 synthetische OPDL-v1-fixture blijft eveneens bytegelijk renderen.
 
-OPDL **v2** laat de RGB-laag weg als zij ontbreekt. De vector-PDF is nu 517–523
-bytes en de overeenkomstige display-list **112 bytes** in plaats van 147 KiB.
+OPDL **v2** laat de RGB-laag weg als zij ontbreekt. De vector-PDF met twee lijnen
+is nu 590–596 bytes en de overeenkomstige display-list **160 bytes**.
 De DynLex-kern initialiseert dan wit en tekent de vectoropdrachten rechtstreeks
 over hun begrensde rechthoek, in laagvolgorde. Er worden geen opdrachten meer
 voor elke paginapixel gedecodeerd. Raster en hybride behouden hun echte RGB-laag.
@@ -119,25 +123,25 @@ processtart, PDF-lezen en RGBA-schrijven (ms, medianen):
 
 | Grootte | PDF | Adapter + DynLex | Hayro PDF→RGBA | Pixelverschil |
 | --- | --- | ---: | ---: | ---: |
-| 256×192 | Raster | 6,1 | 5,7 | 0 |
-| 256×192 | Vector | 4,6 | 3,9 | 0 |
-| 256×192 | Hybride | 6,2 | 6,1 | 0 |
-| 512×384 | Raster | 12,2 | 14,6 | 0 |
-| 512×384 | Vector | 8,9 | 9,6 | 0 |
-| 512×384 | Hybride | 11,6 | 10,5 | 0 |
+| 256×192 | Raster | 6,8 | 5,5 | 0 |
+| 256×192 | Vector | 5,2 | 6,0 | 0 |
+| 256×192 | Hybride | 6,0 | 7,4 | 0 |
+| 512×384 | Raster | 12,7 | 12,6 | 0 |
+| 512×384 | Vector | 6,3 | 8,0 | 0 |
+| 512×384 | Hybride | 11,2 | 13,0 | 0 |
 
 De tweeprocessenroute, kleine fixtures, warme OS-cache en meetruis beperken
-deze cijfers. Op 512×384 is raster/vector in deze proef iets sneller dan
-Hayro en hybride iets langzamer; op 256×192 is geen overtuigend voordeel te
-zien. De CLI-route bestaat uit twee processen en schrijft een tussenbestand,
-terwijl Hayro één proces gebruikt. DynLex-compilatie kostte 6,8–7,1 seconden
+deze cijfers. In deze run zijn vector en hybride op 512×384 sneller dan Hayro,
+terwijl raster ongeveer gelijk uitkomt; eerdere runs wisselden van rangorde.
+Dit bewijst geen algemeen snelheidsvoordeel. De CLI-route bestaat uit twee processen en schrijft een tussenbestand,
+terwijl Hayro één proces gebruikt. DynLex-compilatie kostte 6,9–7,0 seconden
 per agent en is niet in de looptijd inbegrepen. De runner registreert ook
-piek-RSS per proces: op 512×384 respectievelijk circa 4,5 MiB adapter, 2,7 MiB
-DynLex en 8,2 MiB Hayro voor hybride. Die afzonderlijke waarden mogen niet
+piek-RSS per proces: op 512×384 respectievelijk circa 4,4 MiB adapter, 2,7 MiB
+DynLex en 8,0 MiB Hayro voor hybride. Die afzonderlijke waarden mogen niet
 als één geïntegreerde app-geheugenmeting worden vergeleken. Er zijn nog geen
 grote tekeningen, cachingstrategieën of brede PDF-functies gemeten.
 
-De volgende grens is de echte PDF-subset uitbreiden met algemene paden en
+De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,
 met koude/warme cache, piekgeheugen en beeldverschillen worden gemeten. Een
