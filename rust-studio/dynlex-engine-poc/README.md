@@ -80,12 +80,55 @@ is de exacte acceptatietest. De v1-lezer accepteert alleen vertrouwde
 testfixtures en heeft nog geen productierijpe beveiliging voor willekeurige PDF-
 of display-list-input.
 
-De volgende grens is een PDF-front-end die echte afbeeldings- en padobjecten
-naar OPDL omzet, plus text, clipping paths, transformaties, fonts en volledige
-transparantie. Daarna meten we dezelfde raster-, vector- en gemengde
-PDF-pagina's op identieke resolutie, warme en koude cache, piekgeheugen en
-beeldverschillen tegen de bestaande Hayro-renderer. Een snelle synthetische
-kernel is daarvoor nog geen bewijs.
+## Eerste route vanaf echte PDF's
+
+De tijdelijke pure-Rust CLI `opds-opdl-adapter` leest via `lopdf` een **strikt
+beperkte** PDF-subset: één pagina van maximaal 1024×1024 pt met nuloorsprong,
+een optionele ongecomprimeerde volledige RGB8-afbeelding en daarop gevulde,
+pixeluitgelijnde rechthoeken. De adapter verwerpt onbekende PDF-operators,
+rotatie, CropBox, annotaties, filters, niet-volledige afbeeldingsmatrices en
+onbekende XObjects. Dit is bewust een testadapter; de DynLex-kern blijft de
+pixelrenderer en de bestaande Rust/Hayro-engine blijft de app-renderer.
+
+[`pdf_fixture.py`](pdf_fixture.py) maakt drie **echte PDF's** met image-XObject
+en/of `re`/`f`-padoperators. [`pdf_verify.py`](pdf_verify.py) zet elke PDF om
+naar OPDL, rendert met de passende DynLex-agent en vergelijkt alle 49.152
+RGBA-pixels met zowel een onafhankelijke sceneberekening als Hayro. Alle drie
+kwamen exact overeen. Een extra fixture met een onbekende padoperator wordt
+afgewezen.
+
+```sh
+cd rust-studio
+cargo build --release -p opds-opdl-adapter -p opds-engine-probe --locked
+python3 dynlex-engine-poc/pdf_verify.py \
+  --compiler /pad/naar/dynlex/bin/dynlex \
+  --adapter target/release/opds-opdl-adapter \
+  --hayro target/release/opds-engine-probe --runs 7
+```
+
+De Hayro-probe kan voor deze controle `.rgba` direct schrijven, zodat beide
+routes dezelfde ruwe uitvoer produceren. Eerste lokale zeven-runsmeting
+inclusief processtart, PDF-lezen en RGBA-schrijven (ms, medianen):
+
+| PDF | Rust-adapter + DynLex | Hayro PDF→RGBA | Pixelverschil |
+| --- | ---: | ---: | ---: |
+| Raster | 5,9 | 5,5 | 0 |
+| Vector | 8,2 | 4,8 | 0 |
+| Hybride | 9,0 | 4,8 | 0 |
+
+De tweeprocessenroute, kleine fixtures, warme OS-cache en meetruis beperken
+deze cijfers. Op vector/hybride was de POC in deze proef **langzamer** dan
+Hayro; voor raster geeft één proef geen overtuigend voordeel. De vector-PDF
+bevat 517 bytes, maar OPDL v1 materialiseert daarvoor nog een volledige witte
+RGB-laag van 147 KiB. DynLex-compilatie duurde bovendien 7,7–7,9 seconden
+per agent. Er zijn nog geen grote tekeningen,
+geheugenpieken, cachingstrategieën of brede PDF-functies vergeleken.
+
+De volgende grens is de echte PDF-subset uitbreiden met algemene paden en
+transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
+dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,
+met koude/warme cache, piekgeheugen en beeldverschillen worden gemeten. Een
+snelle synthetische kernel is daarvoor geen bewijs.
 
 DynLex compileert volgens het [upstream project](https://github.com/OpenAEC-Foundation/dynlex)
 via LLVM; de huidige compiler is in C++ gebouwd. De DynLex-testprogramma's

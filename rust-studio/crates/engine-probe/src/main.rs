@@ -31,9 +31,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("extra argument".into());
     }
     let raster = render_page(std::fs::read(&path)?, page_number, scale)?;
-    let image = image::RgbaImage::from_raw(raster.width, raster.height, raster.rgba)
-        .ok_or("invalid output dimensions")?;
-    image.save(&output)?;
+    if output
+        .extension()
+        .is_some_and(|extension| extension == "rgba")
+    {
+        std::fs::write(&output, &raster.rgba)?;
+    } else {
+        let image = image::RgbaImage::from_raw(raster.width, raster.height, raster.rgba)
+            .ok_or("invalid output dimensions")?;
+        image.save(&output)?;
+    }
     println!("file={:?} page={} total_pages={} pt={}x{} pixels={}x{} parse_ms={} render_ms={} output={:?}",
         path, page_number, raster.total_pages, raster.page_width_pt, raster.page_height_pt,
         raster.width, raster.height, raster.parse_ms, raster.render_ms, output);

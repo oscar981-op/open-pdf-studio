@@ -2173,6 +2173,13 @@ name = "opds-native-core"
 version = "0.1.0"
 
 [[package]]
+name = "opds-opdl-adapter"
+version = "0.1.0"
+dependencies = [
+ "lopdf",
+]
+
+[[package]]
 name = "orbclient"
 version = "0.3.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
