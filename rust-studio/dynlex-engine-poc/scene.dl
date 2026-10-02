@@ -1,0 +1,15 @@
+# A deliberately small display-list kernel. Coordinates are device pixels.
+# These samples stand in for a decoded image tile and repeated vector strokes.
+function raster sample at x y:
+    execute:
+        return ((x * 17 + y * 31) mod 256)
+
+function vector sample at x y:
+    execute:
+        if (x mod 97) < 2:
+            return 255
+        if (y mod 83) < 2:
+            return 255
+        if ((x + y) mod 131) < 2:
+            return 180
+        return 0

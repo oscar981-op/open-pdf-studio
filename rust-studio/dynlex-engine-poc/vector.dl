@@ -1,0 +1,15 @@
+import lib/std.dl
+import scene.dl
+
+set checksum to 0 as a 64 bit integer
+set pass to 0
+loop while pass < 4:
+    set y to 0
+    loop while y < 768:
+        set x to 0
+        loop while x < 1024:
+            set checksum to checksum + ((vector sample at x y) as a 64 bit integer)
+            set x to x + 1
+        set y to y + 1
+    set pass to pass + 1
+print checksum as a line

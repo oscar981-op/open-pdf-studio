@@ -30,6 +30,7 @@ Gebruik voor interactie altijd de release-build: de debug-build rendert zware PD
 - [Overgenomen UI-code van Hakan](docs/ui-reference.md)
 - [Migratie en acceptatie](docs/migration.md)
 - [Eerste engineproef en meetgrenzen](docs/phase1-2026-09-30.md)
+- [DynLex-enginekernel-POC met raster-, vector- en hybride agent](dynlex-engine-poc/README.md)
 - [UI- en snelheidsvergelijking](docs/ui-performance-2026-10-01.md)
 - [Eerste native Print-pad en vergelijking](docs/print-2026-10-01.md)
 - [Preview van geïmporteerde annotaties zonder appearance](docs/imported-annotations-2026-10-01.md)
