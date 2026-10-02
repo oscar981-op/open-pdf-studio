@@ -252,6 +252,19 @@ op dezelfde fixture voor raster/hybride ongeveer 1–3 ms trager dan Hayro,
 terwijl vector 14 van 15 gepaarde rondes won. Adapter en DynLex blijven twee
 processen; deze winst in de testadapter bewijst geen voordeel in de app.
 
+Een in-process proef kan niet met de huidige CLI-renderer worden geclaimd:
+DynLex 0.0.1 biedt `--emit-llvm`, maar de huidige bron exporteert in die IR
+alleen `main` en leest/schrijft zelf bestanden. Een echte koppeling vergt een
+nieuwe kernel-functie met buffer-invoer/-uitvoer en een expliciete ABI.
+`pdf_verify.py` kan nu met `--scratch-dir /dev/shm` een tijdelijke tmpfs-map
+gebruiken om bestandskosten te onderzoeken. Op dezelfde dichte 1024×768-
+fixture gaf een afzonderlijke 15-runs tmpfs-proef raster/vector/hybride
+27,1/11,6/26,1 ms voor adapter+DynLex en 25,9/14,9/29,2 ms voor Hayro;
+de gepaarde winsttellers waren 9/14/9 van 15. Ook Hayro werd in die run
+sneller dan in de ext4-run. De runs zijn niet onderling afwisselend uitgevoerd,
+dus dit is **geen** geïsoleerde meting van de OPDL-tussenbestandskosten of
+een bewijs van een in-process snelheidswinst. Beide routes bleven pixelgelijk.
+
 De volgende grens is de echte PDF-subset uitbreiden met diagonale/algemene paden en
 transformaties, clipping paths, tekst/fonts en transparantie. Daarna moeten
 dezelfde raster-, vector- en gemengde productiebestanden op identieke resolutie,

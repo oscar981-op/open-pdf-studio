@@ -70,6 +70,7 @@ def main():
     parser.add_argument("--dense", action="store_true", help="use 48 colored rectangles plus two strokes")
     parser.add_argument("--artifacts", type=Path)
     parser.add_argument("--output", type=Path, help="write machine-readable result JSON")
+    parser.add_argument("--scratch-dir", type=Path, help="parent for temporary benchmark files")
     args = parser.parse_args()
     if not args.compiler or args.runs < 1:
         parser.error("provide a DynLex compiler and at least one run")
@@ -86,11 +87,13 @@ def main():
         if not (0 < width <= 1024 and 0 < height <= 1024) or width % WIDTH or height % HEIGHT:
             parser.error("sizes must be multiples of 256x192 within 1024x1024")
         sizes.append((width, height))
+    scratch = args.scratch_dir.resolve(strict=True) if args.scratch_dir else None
     report = {"scope": "restricted-real-PDF-fixtures", "runs": args.runs,
-              "dense": args.dense, "sizes": {}}
+              "dense": args.dense, "scratch_dir": str(scratch) if scratch else "system-default",
+              "sizes": {}}
     if args.artifacts:
         args.artifacts.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="opds-dynlex-real-pdf-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="opds-dynlex-real-pdf-", dir=scratch) as temporary:
         work = Path(temporary)
         (work / "lib").symlink_to(stdlib, target_is_directory=True)
         for source in ("renderer", *MODES):
