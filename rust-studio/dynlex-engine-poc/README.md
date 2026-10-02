@@ -363,3 +363,20 @@ bestand. De lagere piek-RSS en wandtijd zijn op deze kleine fixture
 reproduceerbaar, maar representeren geen algemene PDF-ondersteuning. Een
 volgende stap is grotere en complexere PDF-pagina's ondersteunen, pixelpariteit
 behouden en pas dan app-geheugen en werkelijk koude start meten.
+
+## Beperkte PDF-translatie
+
+De Rust-adapter begrijpt nu voor gevulde rechthoeken een lokale PDF-
+`q 1 0 0 1 tx ty cm ... re f Q`-groep met gehele verschuiving. De vertaling
+wordt vóór schermcoördinaten toegepast en mag de rechthoek niet buiten de
+pagina brengen. De bestaande full-page image-matrix blijft apart; schalen,
+rotatie, schuine matrices, fractionele verschuivingen en getransformeerde
+lijnen blijven expliciet afgewezen. Er is nog geen algemene graphics-state-
+stack of vectorpadparser.
+
+Twee aanvullende echte PDF-fixtures (vector en hybride) met een verschoven
+rechthoek brengen de verificatie op elf pagina's en 3.194.880 pixels.
+Directe DynLex-probe, DynLex-CLI, Hayro en onafhankelijke pixelreferentie zijn
+bytegelijk. Schaal-, fractionele en buiten-de-pagina-transformaties worden
+geweigerd. Dit is een kleine uitbreiding van de veilige testsubset, geen
+ondersteuning voor willekeurige PDF-transformaties.

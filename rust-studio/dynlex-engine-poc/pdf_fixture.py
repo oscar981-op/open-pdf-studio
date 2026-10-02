@@ -38,7 +38,7 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False):
     content = bytearray()
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
@@ -55,6 +55,8 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False):
             else:
                 pdf_x = x0 + 0.5
                 content.extend(f"{pdf_x:g} {height - y0} m\n{pdf_x:g} {height - y1} l\nS\n".encode())
+    if translated and mode != "raster":
+        content.extend(f"0 1 0 rg\nq\n1 0 0 1 10 7 cm\n20 {height - 50} 50 30 re\nf\nQ\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
     has_image = mode != "vector"
@@ -84,7 +86,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False):
     return bytes(pdf)
 
 
-def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False):
+def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False):
     rgba = bytearray()
     rects = rectangles(width, height, dense)
     strokes = lines(width, height)
@@ -99,6 +101,8 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False):
                 for x0, y0, x1, y1, ink in strokes:
                     if (y0 == y1 and x0 <= x < x1 and y == y0) or (x0 == x1 and x == x0 and y0 <= y < y1):
                         color = ink
+                if translated and 30 <= x < 80 and 13 <= y < 43:
+                    color = (0, 255, 0)
             rgba.extend((*color, 255))
     return bytes(rgba)
 

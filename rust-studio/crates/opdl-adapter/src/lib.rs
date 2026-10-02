@@ -110,6 +110,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let content = Content::decode(&document.get_page_content(page_id)?)?;
     let mut depth = 0_u8;
     let mut image_matrix = false;
+    let mut translation: Option<[f64; 2]> = None;
     let mut image = None;
     let mut color = [0_u8; 3];
     let mut stroke_color = [0_u8; 3];
@@ -122,20 +123,40 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
         match op.operator.as_str() {
             "q" if op.operands.is_empty()
                 && depth == 0
-                && commands.is_empty()
                 && pending_rect.is_none()
                 && path_start.is_none()
                 && pending_line.is_none() =>
             {
                 depth = 1
             }
-            "Q" if op.operands.is_empty() && depth == 1 && image.is_some() => depth = 0,
-            "cm" if depth == 1 && image.is_none() => {
+            "Q" if op.operands.is_empty()
+                && depth == 1
+                && pending_rect.is_none()
+                && ((image_matrix && image.is_some()) || translation.is_some()) =>
+            {
+                depth = 0;
+                translation = None;
+                image_matrix = false;
+            }
+            "cm" if depth == 1 && !image_matrix && translation.is_none() => {
                 let [a, b, c, d, e, f] = operands::<6>(&op.operands)?;
-                if [a, b, c, d, e, f] != [f64::from(width), 0.0, 0.0, f64::from(height), 0.0, 0.0] {
-                    return Err(fail("only a full-page image transform is supported"));
+                if [a, b, c, d, e, f] == [f64::from(width), 0.0, 0.0, f64::from(height), 0.0, 0.0]
+                    && image.is_none()
+                    && commands.is_empty()
+                {
+                    image_matrix = true;
+                } else if [a, b, c, d] == [1.0, 0.0, 0.0, 1.0]
+                    && e.fract() == 0.0
+                    && f.fract() == 0.0
+                    && e.abs() <= f64::from(LIMIT)
+                    && f.abs() <= f64::from(LIMIT)
+                {
+                    translation = Some([e, f]);
+                } else {
+                    return Err(fail(
+                        "only integer translation of vector rectangles is supported",
+                    ));
                 }
-                image_matrix = true;
             }
             "Do" if depth == 1 && image_matrix && image.is_none() => {
                 let [name] = op.operands.as_slice() else {
@@ -162,19 +183,25 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     *target = (channel * 255.0).round() as u8;
                 }
             }
-            "re" if depth == 0
+            "re" if (depth == 0 || translation.is_some())
                 && pending_rect.is_none()
                 && path_start.is_none()
                 && pending_line.is_none() =>
             {
                 let [x, y, w, h] = operands::<4>(&op.operands)?;
-                let [x, y, w, h] = [exact_u32(x)?, exact_u32(y)?, exact_u32(w)?, exact_u32(h)?];
+                let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
+                let [x, y, w, h] = [
+                    exact_u32(x + tx)?,
+                    exact_u32(y + ty)?,
+                    exact_u32(w)?,
+                    exact_u32(h)?,
+                ];
                 if x + w > width || y + h > height {
                     return Err(fail("rectangle outside page"));
                 }
                 pending_rect = Some([x, height - y - h, x + w, height - y]);
             }
-            "f" if depth == 0 && op.operands.is_empty() => {
+            "f" if (depth == 0 || translation.is_some()) && op.operands.is_empty() => {
                 let rect = pending_rect
                     .take()
                     .ok_or_else(|| fail("fill without rectangle"))?;
@@ -255,7 +282,8 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
         || pending_rect.is_some()
         || path_start.is_some()
         || pending_line.is_some()
-        || (image_matrix && image.is_none())
+        || image_matrix
+        || translation.is_some()
     {
         return Err(fail("incomplete fixture content stream"));
     }

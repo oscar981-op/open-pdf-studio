@@ -125,6 +125,38 @@ def main():
                               f"{direct_samples[0]:.2f}/{hayro_samples[0]:.2f} "
                               f"(OS cache not cleared)")
                 checked += width * height
+        for mode, number in MODES[1:]:
+            width, height = 256, 192
+            pdf = work / f"translated-{mode}.pdf"
+            scene = work / "scene.opdl"
+            direct_output = work / "direct.rgba"
+            cli_output = work / "output.rgba"
+            hayro_output = work / "hayro.rgba"
+            pdf.write_bytes(build_pdf(mode, width=width, height=height, translated=True))
+            subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
+            subprocess.run([probe, str(number), pdf, direct_output],
+                           check=True, capture_output=True)
+            subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+            subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"],
+                           check=True, capture_output=True)
+            expected = reference_rgba(mode, width, height, translated=True)
+            if not (direct_output.read_bytes() == cli_output.read_bytes()
+                    == hayro_output.read_bytes() == expected):
+                raise RuntimeError(f"pixel mismatch: translated {mode}")
+            checked += width * height
+        invalid_transforms = {
+            "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
+            "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",
+            "out-of-page": b"q\n1 0 0 1 250 0 cm\n10 10 30 30 re\nf\nQ\n",
+        }
+        for name, content in invalid_transforms.items():
+            invalid_pdf = work / f"invalid-{name}.pdf"
+            invalid_pdf.write_bytes(build_pdf("vector", extra_content=content))
+            invalid_output = work / f"invalid-{name}.opdl"
+            rejected = subprocess.run([paths["adapter"], invalid_pdf, invalid_output],
+                                      capture_output=True)
+            if rejected.returncode == 0 or invalid_output.exists():
+                raise RuntimeError(f"unsupported transform accepted: {name}")
         valid = (work / "scene.opdl").read_bytes()
         bad = {
             "truncated": valid[:-1],
@@ -141,7 +173,7 @@ def main():
                 raise RuntimeError(f"invalid scene accepted: {name}")
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
-        print(f"9 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes rejected")
+        print(f"11 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 4 invalid scenes and 3 unsupported transforms rejected")
 
 
 if __name__ == "__main__":
