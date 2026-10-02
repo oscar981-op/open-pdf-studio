@@ -130,6 +130,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut pending_rect = None;
     let mut pending_clip = false;
     let mut clip = None;
+    let mut saved_clip: Option<Option<[u32; 4]>> = None;
     let mut path_start = None;
     let mut pending_line = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
@@ -138,18 +139,24 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
             "q" if op.operands.is_empty()
                 && depth == 0
                 && pending_rect.is_none()
+                && !pending_clip
                 && path_start.is_none()
                 && pending_line.is_none() =>
             {
+                saved_clip = Some(clip);
                 depth = 1
             }
             "Q" if op.operands.is_empty()
                 && depth == 1
                 && pending_rect.is_none()
+                && !pending_clip
                 && path_start.is_none()
                 && pending_line.is_none()
-                && ((image_matrix && image.is_some()) || translation.is_some()) =>
+                && (!image_matrix || image.is_some()) =>
             {
+                clip = saved_clip
+                    .take()
+                    .ok_or_else(|| fail("restore without save"))?;
                 depth = 0;
                 translation = None;
                 image_matrix = false;
@@ -200,7 +207,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     *target = (channel * 255.0).round() as u8;
                 }
             }
-            "re" if (depth == 0 || translation.is_some())
+            "re" if !image_matrix
                 && pending_rect.is_none()
                 && path_start.is_none()
                 && pending_line.is_none() =>
@@ -218,24 +225,21 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 }
                 pending_rect = Some([x, height - y - h, x + w, height - y]);
             }
-            "W" if depth == 0
+            "W" if !image_matrix
                 && op.operands.is_empty()
                 && pending_rect.is_some()
                 && !pending_clip =>
             {
                 pending_clip = true;
             }
-            "n" if depth == 0 && op.operands.is_empty() && pending_clip => {
+            "n" if !image_matrix && op.operands.is_empty() && pending_clip => {
                 let rect = pending_rect
                     .take()
                     .ok_or_else(|| fail("clip without rectangle"))?;
                 clip = Some(intersect_rect(rect, clip).unwrap_or([0, 0, 0, 0]));
                 pending_clip = false;
             }
-            "f" if (depth == 0 || translation.is_some())
-                && op.operands.is_empty()
-                && !pending_clip =>
-            {
+            "f" if !image_matrix && op.operands.is_empty() && !pending_clip => {
                 let rect = pending_rect
                     .take()
                     .ok_or_else(|| fail("fill without rectangle"))?;
@@ -270,7 +274,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     *target = (channel * 255.0).round() as u8;
                 }
             }
-            "m" if (depth == 0 || translation.is_some())
+            "m" if !image_matrix
                 && pending_rect.is_none()
                 && path_start.is_none()
                 && pending_line.is_none() =>
@@ -279,16 +283,13 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
                 path_start = Some([x + tx, y + ty]);
             }
-            "l" if (depth == 0 || translation.is_some()) && pending_line.is_none() => {
+            "l" if !image_matrix && pending_line.is_none() => {
                 let start = path_start.take().ok_or_else(|| fail("line without move"))?;
                 let [x, y] = operands::<2>(&op.operands)?;
                 let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
                 pending_line = Some((start, [x + tx, y + ty]));
             }
-            "S" if (depth == 0 || translation.is_some())
-                && op.operands.is_empty()
-                && one_pixel_stroke =>
-            {
+            "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
                 let (start, end) = pending_line
                     .take()
                     .ok_or_else(|| fail("stroke without line"))?;
@@ -329,6 +330,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
         || pending_line.is_some()
         || image_matrix
         || translation.is_some()
+        || saved_clip.is_some()
     {
         return Err(fail("incomplete fixture content stream"));
     }

@@ -395,19 +395,19 @@ afgewezen. Dit is nog geen algemene PDF-padrenderer.
 
 ## Rechthoekige PDF-clipvakken
 
-De beperkte PDF-adapter accepteert `re W n` buiten `q`/`Q`. Vanaf dat
-punt snijdt hij elke volgende gevulde rechthoek en asgerichte
+De beperkte PDF-adapter accepteert `re W n` op de pagina en in één
+`q`/`Q`-groep. Vanaf dat punt snijdt hij elke volgende gevulde rechthoek en asgerichte
 1-pixelstreek op het clipvak bij, terwijl eerder getekende raster- en
 vectorlagen intact blijven. Opeenvolgende clipvakken nemen hun doorsnede.
 Beeld-XObjects na een clipvak, `W*`, niet-rechthoekige paden,
-clip-state-herstel en transparantie blijven afgewezen. Er is dus nog
-geen algemene PDF-clipping.
+geneste graphics-state-groepen en transparantie blijven afgewezen. Er is dus
+nog geen algemene PDF-clipping.
 
 Twee nieuwe echte PDF-fixtures testen vector en hybride met een clipvak dat
 een gevulde rechthoek en twee lijnen deels doorsnijdt. Dertien pagina's,
 3.293.184 pixels, zijn bytegelijk voor directe DynLex-probe, DynLex-CLI,
-Hayro en onafhankelijke referentie. Afgekapt `W` zonder `n`, `W*`, een clip zonder pad en een beeldlaag ná
-clipping worden geweigerd.
+Hayro en onafhankelijke referentie. Afgekapt `W` zonder `n`, `W*`,
+een clip zonder pad en een beeldlaag ná clipping worden geweigerd.
 
 ## Doorsnede van meerdere clipvakken
 
@@ -417,5 +417,19 @@ bewaard; latere vectoropdrachten leveren dan geen pixels of ongeldige
 OPDL-opdracht op. Vier extra echte PDF-fixtures (vector/hybride met
 overlap en met lege doorsnede) brengen de controle op 17 pagina's en
 3.489.792 pixels. Directe DynLex-probe, CLI, Hayro en onafhankelijke
-referentie blijven bytegelijk. Clipping binnen `q`/`Q` met herstel van
-de vorige clip-state blijft buiten de huidige subset.
+referentie blijven bytegelijk.
+
+## Cliptoestand bewaren en herstellen
+
+Eén `q`/`Q`-groep bewaart nu het bestaande clipvak. Een `re W n`
+binnen de groep verkleint dat vak tijdelijk; na `Q` wordt de eerdere
+clip hersteld. Dezelfde groep blijft bruikbaar voor de bestaande
+gehele translatie of full-page beeldlaag. Geneste groepen, kleur- of
+lijnstijlwijziging binnen de groep, niet-rechthoekige clip en beelden
+ná een actief clipvak blijven buiten de veilige subset.
+
+Twee extra echte PDF-fixtures tekenen eerst binnen een tijdelijk
+kleiner clipvak en daarna buiten dat kleinere, maar binnen het herstelde
+oudervak. Negentien pagina's/3.588.096 pixels blijven bytegelijk tussen
+de directe DynLex-probe, DynLex-CLI, Hayro en de onafhankelijke referentie.
+Een geneste `q` en een onafgesloten clippad worden geweigerd.
