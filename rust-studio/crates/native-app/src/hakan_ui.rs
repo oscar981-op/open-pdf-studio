@@ -1702,9 +1702,48 @@ pub fn view(app: &App) -> Element<'_, Message> {
         ]
         .into()
     } else if app.open_dialog {
+        let mut files = column![].spacing(3);
+        for entry in &app.browser_entries {
+            let action = if entry.is_dir {
+                Message::BrowseDirectory(entry.path.clone())
+            } else {
+                Message::SelectPdf(entry.path.clone())
+            };
+            files = files.push(
+                button(
+                    row![
+                        text(if entry.is_dir { "▸" } else { "PDF" }).size(11),
+                        text(&entry.name).size(12),
+                    ]
+                    .spacing(10),
+                )
+                .on_press(action)
+                .width(Fill)
+                .padding([7, 9]),
+            );
+        }
+        if app.browser_busy {
+            files = files.push(text("Loading folder…").size(12));
+        } else if app.browser_entries.is_empty() && app.browser_error.is_empty() {
+            files = files.push(text("No PDF files in this folder").size(12));
+        }
+        let parent = app
+            .browser_dir
+            .parent()
+            .map(|path| Message::BrowseDirectory(path.to_path_buf()));
         let dialog = container(
             column![
                 text("Open PDF").size(20),
+                text(app.browser_dir.to_string_lossy()).size(11),
+                row![
+                    button("↑ Parent").on_press_maybe(parent),
+                    button("Refresh").on_press(Message::BrowseDirectory(app.browser_dir.clone()))
+                ]
+                .spacing(8),
+                container(scrollable(files).height(320)).height(320),
+                text(&app.browser_error)
+                    .size(11)
+                    .color(Color::from_rgb8(240, 125, 110)),
                 text_input("Path to PDF file", &app.path_input)
                     .on_input(Message::PathChanged)
                     .on_submit(Message::Open),
@@ -1717,7 +1756,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .spacing(16)
             .padding(24),
         )
-        .width(520)
+        .width(620)
         .style(surface);
         iced::widget::stack![
             content,

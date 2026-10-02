@@ -15,6 +15,7 @@ use opds_native_core::annotations::{
 use opds_native_core::{DocumentId, RenderTicket};
 use std::collections::HashSet;
 use std::collections::VecDeque;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
@@ -50,6 +51,40 @@ fn thumbnail_window(focus: usize, page_count: usize) -> std::ops::Range<usize> {
         .saturating_sub(3)
         .min(page_count.saturating_sub(THUMBNAIL_WINDOW_SIZE));
     start..start.saturating_add(THUMBNAIL_WINDOW_SIZE).min(page_count)
+}
+
+#[derive(Debug, Clone)]
+struct BrowserEntry {
+    name: String,
+    path: PathBuf,
+    is_dir: bool,
+}
+
+fn list_pdf_directory(path: &Path) -> Result<Vec<BrowserEntry>, String> {
+    let mut entries = Vec::new();
+    for entry in std::fs::read_dir(path).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let file_type = entry.file_type().map_err(|error| error.to_string())?;
+        let is_dir = file_type.is_dir();
+        let is_pdf = file_type.is_file()
+            && entry
+                .path()
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"));
+        if is_dir || is_pdf {
+            entries.push(BrowserEntry {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                path: entry.path(),
+                is_dir,
+            });
+        }
+    }
+    entries.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    Ok(entries)
 }
 
 fn theme(_: &App) -> Theme {
@@ -109,6 +144,11 @@ fn scroll_thumbnail_to(page: usize) -> Task<Message> {
 #[derive(Default)]
 struct App {
     path_input: String,
+    browser_dir: PathBuf,
+    browser_entries: Vec<BrowserEntry>,
+    browser_busy: bool,
+    browser_error: String,
+    next_browse: u64,
     active_ribbon: RibbonTab,
     document: Option<OpenDocument>,
     next_load: u64,
@@ -327,6 +367,34 @@ mod thumbnail_tests {
     }
 }
 
+#[cfg(test)]
+mod browser_tests {
+    use super::list_pdf_directory;
+
+    #[test]
+    fn directory_browser_filters_pdfs_and_places_folders_first() {
+        let root = std::env::temp_dir().join(format!(
+            "opds-browser-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("z Folder")).unwrap();
+        std::fs::create_dir(root.join("A Folder")).unwrap();
+        std::fs::write(root.join("b.PDF"), b"%PDF-1.7").unwrap();
+        std::fs::write(root.join("C.pdf"), b"%PDF-1.7").unwrap();
+        std::fs::write(root.join("d.txt"), b"ignore").unwrap();
+        let entries = list_pdf_directory(&root).unwrap();
+        let names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        assert_eq!(names, ["A Folder", "z Folder", "b.PDF", "C.pdf"]);
+        assert!(entries[0].is_dir && entries[1].is_dir);
+        assert!(!entries[2].is_dir && !entries[3].is_dir);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
 struct OpenDocument {
     path: String,
     source_bytes: Arc<Vec<u8>>,
@@ -418,6 +486,9 @@ impl RibbonTab {
 #[derive(Debug, Clone)]
 enum Message {
     ShowOpen,
+    BrowseDirectory(PathBuf),
+    Browsed(u64, Result<Vec<BrowserEntry>, String>),
+    SelectPdf(PathBuf),
     ShowSave,
     CancelSave,
     SavePathChanged(String),
@@ -488,7 +559,48 @@ enum Message {
 impl App {
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::ShowOpen => self.open_dialog = true,
+            Message::ShowOpen => {
+                self.open_dialog = true;
+                let initial = self
+                    .document
+                    .as_ref()
+                    .and_then(|document| {
+                        Path::new(&document.path)
+                            .parent()
+                            .filter(|parent| !parent.as_os_str().is_empty())
+                            .and_then(|parent| parent.canonicalize().ok())
+                    })
+                    .or_else(|| std::env::current_dir().ok())
+                    .unwrap_or_else(|| PathBuf::from("."));
+                return self.update(Message::BrowseDirectory(initial));
+            }
+            Message::BrowseDirectory(path) => {
+                self.next_browse = self.next_browse.wrapping_add(1);
+                let token = self.next_browse;
+                self.browser_dir = path.clone();
+                self.browser_entries.clear();
+                self.browser_busy = true;
+                self.browser_error.clear();
+                return Task::perform(async move { list_pdf_directory(&path) }, move |result| {
+                    Message::Browsed(token, result)
+                });
+            }
+            Message::Browsed(token, result) => {
+                if token != self.next_browse || !self.open_dialog {
+                    return Task::none();
+                }
+                self.browser_busy = false;
+                match result {
+                    Ok(entries) => {
+                        self.browser_entries = entries;
+                    }
+                    Err(error) => self.browser_error = error,
+                }
+            }
+            Message::SelectPdf(path) => {
+                self.path_input = path.to_string_lossy().into_owned();
+                return self.update(Message::Open);
+            }
             Message::ShowSave => {
                 if let Some(document) = &self.document {
                     let path = std::path::Path::new(&document.path);
@@ -800,7 +912,10 @@ impl App {
                     Err(error) => self.message = format!("Print to PDF failed: {error}"),
                 }
             }
-            Message::CancelOpen => self.open_dialog = false,
+            Message::CancelOpen => {
+                self.open_dialog = false;
+                self.next_browse = self.next_browse.wrapping_add(1);
+            }
             Message::TogglePages => {
                 self.hide_pages = !self.hide_pages;
                 return self.render_nearby_thumbnail();
