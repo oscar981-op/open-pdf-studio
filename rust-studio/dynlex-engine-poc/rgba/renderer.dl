@@ -1,0 +1,131 @@
+import lib/array.dl
+
+# OPDL v1: magic, eight little-endian u32 header values, RGB image bytes,
+# u32 command count, then 24-byte commands in drawing order.
+function unsigned byte at index in data:
+    execute:
+        set value to (item index of data) as an integer
+        if value < 0:
+            return value + 256
+        return value
+
+function unsigned word at index in data:
+    execute:
+        return (unsigned byte at index in data) + ((unsigned byte at (index + 1) in data) * 256) + ((unsigned byte at (index + 2) in data) * 65536) + ((unsigned byte at (index + 3) in data) * 16777216)
+
+function blend background with foreground at opacity:
+    execute:
+        return (foreground * opacity + background * (255 - opacity) + 127) / 255
+
+function run renderer with mode mode:
+    execute:
+        set input to @intrinsic("call", "libc", "fopen", a pointer to a byte, "scene.opdl", "rb")
+        if input = (0 as a pointer to a byte):
+            @intrinsic("call", "libc", "exit", void, 2)
+        discard @intrinsic("call", "libc", "fseek", an integer, input, 0, 2)
+        set size to @intrinsic("call", "libc", "ftell", a 64 bit integer, input)
+        discard @intrinsic("call", "libc", "fseek", an integer, input, 0, 0)
+        if size < 40:
+            discard @intrinsic("call", "libc", "fclose", an integer, input)
+            @intrinsic("call", "libc", "exit", void, 2)
+        set scene to allocate size bytes
+        set got to @intrinsic("call", "libc", "fread", a 64 bit integer, scene, 1, size, input)
+        discard @intrinsic("call", "libc", "fclose", an integer, input)
+        if got != size:
+            @intrinsic("call", "libc", "free", void, scene)
+            @intrinsic("call", "libc", "exit", void, 2)
+        if (unsigned byte at 0 in scene) != 79 or (unsigned byte at 1 in scene) != 80 or (unsigned byte at 2 in scene) != 68 or (unsigned byte at 3 in scene) != 76:
+            @intrinsic("call", "libc", "free", void, scene)
+            @intrinsic("call", "libc", "exit", void, 2)
+        set version to unsigned word at 4 in scene
+        set width to unsigned word at 8 in scene
+        set height to unsigned word at 12 in scene
+        set clip_left to unsigned word at 16 in scene
+        set clip_top to unsigned word at 20 in scene
+        set clip_right to unsigned word at 24 in scene
+        set clip_bottom to unsigned word at 28 in scene
+        set image_length to unsigned word at 32 in scene
+        set count_offset to 36 + image_length
+        if version != 1:
+            @intrinsic("call", "libc", "exit", void, 2)
+        if width < 1 or width > 1024 or height < 1 or height > 1024:
+            @intrinsic("call", "libc", "exit", void, 2)
+        if image_length != width * height * 3:
+            @intrinsic("call", "libc", "exit", void, 2)
+        if clip_left > clip_right or clip_right > width or clip_top > clip_bottom or clip_bottom > height:
+            @intrinsic("call", "libc", "exit", void, 2)
+        if (count_offset + 4) > size:
+            @intrinsic("call", "libc", "exit", void, 2)
+        set command_count to unsigned word at count_offset in scene
+        set command_start to count_offset + 4
+        if command_count > 64 or (command_start + command_count * 24) != size:
+            @intrinsic("call", "libc", "free", void, scene)
+            @intrinsic("call", "libc", "exit", void, 2)
+        set checked to 0
+        loop while checked < command_count:
+            set checked_offset to command_start + checked * 24
+            set checked_kind to unsigned word at checked_offset in scene
+            set checked_left to unsigned word at (checked_offset + 4) in scene
+            set checked_top to unsigned word at (checked_offset + 8) in scene
+            set checked_right to unsigned word at (checked_offset + 12) in scene
+            set checked_bottom to unsigned word at (checked_offset + 16) in scene
+            if checked_kind != 1 and checked_kind != 2:
+                @intrinsic("call", "libc", "exit", void, 2)
+            if checked_left > checked_right or checked_right > width or checked_top > checked_bottom or checked_bottom > height:
+                @intrinsic("call", "libc", "exit", void, 2)
+            if checked_kind = 2:
+                if (checked_right - checked_left) != (checked_bottom - checked_top):
+                    @intrinsic("call", "libc", "exit", void, 2)
+            set checked to checked + 1
+        set rgba to allocate (width * height * 4) bytes
+        set y to 0
+        loop while y < height:
+            set x to 0
+            loop while x < width:
+                set red to 255
+                set green to 255
+                set blue to 255
+                if x >= clip_left and x < clip_right and y >= clip_top and y < clip_bottom:
+                    if mode != 2:
+                        set image_index to 36 + ((y * width + x) * 3)
+                        set red to unsigned byte at image_index in scene
+                        set green to unsigned byte at (image_index + 1) in scene
+                        set blue to unsigned byte at (image_index + 2) in scene
+                    if mode != 1:
+                        set command to 0
+                        loop while command < command_count:
+                            set offset to command_start + command * 24
+                            set kind to unsigned word at offset in scene
+                            set left to unsigned word at (offset + 4) in scene
+                            set top to unsigned word at (offset + 8) in scene
+                            set right to unsigned word at (offset + 12) in scene
+                            set bottom to unsigned word at (offset + 16) in scene
+                            set hit to 0
+                            if kind = 1:
+                                if x >= left and x < right and y >= top and y < bottom:
+                                    set hit to 1
+                            if kind = 2:
+                                if x >= left and x < right and y >= top and y < bottom:
+                                    set line_x to left + (y - top)
+                                    if x = line_x or x + 1 = line_x or x = line_x + 1:
+                                        set hit to 1
+                            if hit = 1:
+                                set opacity to unsigned byte at (offset + 23) in scene
+                                set red to blend red with (unsigned byte at (offset + 20) in scene) at opacity
+                                set green to blend green with (unsigned byte at (offset + 21) in scene) at opacity
+                                set blue to blend blue with (unsigned byte at (offset + 22) in scene) at opacity
+                            set command to command + 1
+                set pixel_index to (y * width + x) * 4
+                store (red as a byte) into rgba at pixel_index
+                store (green as a byte) into rgba at (pixel_index + 1)
+                store (blue as a byte) into rgba at (pixel_index + 2)
+                store (255 as a byte) into rgba at (pixel_index + 3)
+                set x to x + 1
+            set y to y + 1
+        set output to @intrinsic("call", "libc", "fopen", a pointer to a byte, "output.rgba", "wb")
+        if output != (0 as a pointer to a byte):
+            set written to @intrinsic("call", "libc", "fwrite", a 64 bit integer, rgba, 1, width * height * 4, output)
+            discard @intrinsic("call", "libc", "fclose", an integer, output)
+            print written as a line
+        @intrinsic("call", "libc", "free", void, rgba)
+        @intrinsic("call", "libc", "free", void, scene)

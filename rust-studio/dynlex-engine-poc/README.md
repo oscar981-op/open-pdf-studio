@@ -50,18 +50,46 @@ PDFium of de bestaande app: die verwerken echte PDF-objecten, fonts en beelden.
 De bestaande Rust/Poppler-corpusmeting staat in
 [`../docs/engine-probe-results.json`](../docs/engine-probe-results.json).
 
-## Volgende functionele grens
+## RGBA-proef met OPDL v1 (2 oktober 2026)
 
-De volgende POC-stap is een vast, versieerbaar display-list-formaat met een
-gedecodeerde afbeeldingslaag, lijnen/paden, clipping en laagvolgorde. Alle drie
-de agenten moeten dan een RGBA-bitmap produceren; de hybride uitvoer moet
-pixelgewijs aan een referentierender voldoen. Pas daarna meten we dezelfde
-echte raster-, vector- en gemengde PDF-pagina's met identieke resolutie, warme
-en koude cache, piekgeheugen en beeldverschillen. PDF-parser, font- en
-transparantiecorrectheid blijven afzonderlijke acceptatiecriteria.
+[`rgba/verify.py`](rgba/verify.py) maakt een vaste 256×192-display-list. Het
+`OPDL`-formaat heeft een magic, versie 1, paginabreedte/-hoogte, een clipvak en
+de lengte van een RGB-beeldlaag in een 36-byte little-endian header. Daarna
+volgen de beeldbytes, een opdrachtenteller en 24 bytes per tekenopdracht.
+Opdracht 1 is een gevuld rechthoekpad; opdracht 2 is voorlopig een 45°-lijn
+van drie pixels breed. Elke opdracht heeft een RGBA-kleur. De hybride agent
+tekent ze in bestandsvolgorde over het beeld, met integer-alpha-compositing;
+de andere agenten tekenen alleen hun eigen laag. Buiten het clipvak is de
+pagina wit. Dit is een expliciet **tussenformaat**, nog geen PDF-interpreter.
+
+```sh
+python3 rgba/verify.py --compiler /pad/naar/dynlex/bin/dynlex \
+  --runs 5 --artifacts /tmp/opds-dynlex-rgba-qa
+```
+
+De drie DynLex-programma's schrijven een rauwe RGBA-bitmap. De Python-runner
+berekent alle 49.152 pixels per agent opnieuw en vergelijkt **iedere byte**.
+Hij weigert ook een verkeerde formaatversie, een afgekapt bestand en een
+onbekende opdracht. In de eerste vijf-runsproef waren de mediane
+proceslooptijden inclusief lezen en schrijven 3,1 ms (raster), 7,5 ms
+(vector) en 7,6 ms (hybride); de compileertijd was circa 7,7 seconden
+**per agent**. Deze getallen zijn uitsluitend voor deze kleine synthetische
+fixture en kunnen niet tegen de oudere checksumproef of een echte PDF-render
+worden afgezet. De optionele PNG's zijn voor visuele controle; de bytevergelijking
+is de exacte acceptatietest. De v1-lezer accepteert alleen vertrouwde
+testfixtures en heeft nog geen productierijpe beveiliging voor willekeurige PDF-
+of display-list-input.
+
+De volgende grens is een PDF-front-end die echte afbeeldings- en padobjecten
+naar OPDL omzet, plus text, clipping paths, transformaties, fonts en volledige
+transparantie. Daarna meten we dezelfde raster-, vector- en gemengde
+PDF-pagina's op identieke resolutie, warme en koude cache, piekgeheugen en
+beeldverschillen tegen de bestaande Hayro-renderer. Een snelle synthetische
+kernel is daarvoor nog geen bewijs.
 
 DynLex compileert volgens het [upstream project](https://github.com/OpenAEC-Foundation/dynlex)
-via LLVM; de huidige compiler is in C++ gebouwd. De keuze om de enginekernel
+via LLVM; de huidige compiler is in C++ gebouwd. De DynLex-testprogramma's
+gebruiken bovendien libc voor bestandstoegang en allocatie. De keuze om de enginekernel
 in DynLex te schrijven wijzigt dus de eerdere eis dat **alle** applicatiecode
 en afhankelijkheden Rust zijn. De bestaande Rust-engine blijft voorlopig
 functioneel en ongewijzigd totdat een DynLex-kernel op echte PDF's is bewezen.
