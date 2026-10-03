@@ -172,7 +172,7 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                         elif abs(lane) == 1:
                             coverage = 64
                     if coverage:
-                        color = tuple((channel * (255 - coverage) + 127) // 255 for channel in color)
+                        color = tuple((channel * (255 - coverage) + 255) // 256 for channel in color)
             rgba.extend((*color, 255))
     return bytes(rgba)
 

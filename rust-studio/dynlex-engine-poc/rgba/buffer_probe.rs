@@ -67,8 +67,10 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
         if (kind == 2 || kind == 4) && right - left != bottom - top {
             return Err("invalid diagonal command".into());
         }
-        if kind == 4 && right - left < 2 {
-            return Err("invalid antialiased diagonal command".into());
+        if kind == 4 {
+            if right - left < 2 || scene.get(offset + 20..offset + 24) != Some(&[0, 0, 0, 255]) {
+                return Err("invalid antialiased black diagonal command".into());
+            }
         }
         if kind == 3 && right - left != 1 && bottom - top != 1 {
             return Err("invalid stroke command".into());

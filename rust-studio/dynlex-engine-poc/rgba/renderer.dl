@@ -18,6 +18,12 @@ function blend background with foreground at opacity:
     execute:
         return (foreground * opacity + background * (255 - opacity) + 127) / 255
 
+# Match the 8-bit approximate div_255 used by Hayro's Vello CPU backend.
+# This narrow path is only used for black 45-degree PDF strokes.
+function blend background with antialiased black at opacity:
+    execute:
+        return (background * (255 - opacity) + 255) / 256
+
 function run renderer with mode mode:
     execute:
         set input to @intrinsic("call", "libc", "fopen", a pointer to a byte, "scene.opdl", "rb")
@@ -83,8 +89,17 @@ function run renderer with mode mode:
             if checked_kind = 2 or checked_kind = 4:
                 if (checked_right - checked_left) != (checked_bottom - checked_top):
                     @intrinsic("call", "libc", "exit", void, 2)
-            if checked_kind = 4 and (checked_right - checked_left) < 2:
-                @intrinsic("call", "libc", "exit", void, 2)
+            if checked_kind = 4:
+                if (checked_right - checked_left) < 2:
+                    @intrinsic("call", "libc", "exit", void, 2)
+                if (unsigned byte at (checked_offset + 20) in scene) != 0:
+                    @intrinsic("call", "libc", "exit", void, 2)
+                if (unsigned byte at (checked_offset + 21) in scene) != 0:
+                    @intrinsic("call", "libc", "exit", void, 2)
+                if (unsigned byte at (checked_offset + 22) in scene) != 0:
+                    @intrinsic("call", "libc", "exit", void, 2)
+                if (unsigned byte at (checked_offset + 23) in scene) != 255:
+                    @intrinsic("call", "libc", "exit", void, 2)
             if checked_kind = 3:
                 if (checked_right - checked_left) != 1 and (checked_bottom - checked_top) != 1:
                     @intrinsic("call", "libc", "exit", void, 2)
@@ -175,9 +190,14 @@ function run renderer with mode mode:
                                 set old_red to unsigned byte at pixel_index in rgba
                                 set old_green to unsigned byte at (pixel_index + 1) in rgba
                                 set old_blue to unsigned byte at (pixel_index + 2) in rgba
-                                store ((blend old_red with ink_red at effective_opacity) as a byte) into rgba at pixel_index
-                                store ((blend old_green with ink_green at effective_opacity) as a byte) into rgba at (pixel_index + 1)
-                                store ((blend old_blue with ink_blue at effective_opacity) as a byte) into rgba at (pixel_index + 2)
+                                if kind = 4:
+                                    store ((blend old_red with antialiased black at effective_opacity) as a byte) into rgba at pixel_index
+                                    store ((blend old_green with antialiased black at effective_opacity) as a byte) into rgba at (pixel_index + 1)
+                                    store ((blend old_blue with antialiased black at effective_opacity) as a byte) into rgba at (pixel_index + 2)
+                                else:
+                                    store ((blend old_red with ink_red at effective_opacity) as a byte) into rgba at pixel_index
+                                    store ((blend old_green with ink_green at effective_opacity) as a byte) into rgba at (pixel_index + 1)
+                                    store ((blend old_blue with ink_blue at effective_opacity) as a byte) into rgba at (pixel_index + 2)
                         set draw_x to draw_x + 1
                     set draw_y to draw_y + 1
                 set command to command + 1

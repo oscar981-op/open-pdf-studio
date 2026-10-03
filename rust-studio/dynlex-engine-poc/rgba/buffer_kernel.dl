@@ -105,9 +105,14 @@ function render {cstring:scene} into {cstring:rgba}:
                                 set old_red to unsigned byte at pixel_index in pixels
                                 set old_green to unsigned byte at (pixel_index + 1) in pixels
                                 set old_blue to unsigned byte at (pixel_index + 2) in pixels
-                                store ((blend old_red with ink_red at effective_opacity) as a byte) into pixels at pixel_index
-                                store ((blend old_green with ink_green at effective_opacity) as a byte) into pixels at (pixel_index + 1)
-                                store ((blend old_blue with ink_blue at effective_opacity) as a byte) into pixels at (pixel_index + 2)
+                                if kind = 4:
+                                    store ((blend old_red with antialiased black at effective_opacity) as a byte) into pixels at pixel_index
+                                    store ((blend old_green with antialiased black at effective_opacity) as a byte) into pixels at (pixel_index + 1)
+                                    store ((blend old_blue with antialiased black at effective_opacity) as a byte) into pixels at (pixel_index + 2)
+                                else:
+                                    store ((blend old_red with ink_red at effective_opacity) as a byte) into pixels at pixel_index
+                                    store ((blend old_green with ink_green at effective_opacity) as a byte) into pixels at (pixel_index + 1)
+                                    store ((blend old_blue with ink_blue at effective_opacity) as a byte) into pixels at (pixel_index + 2)
                         set draw_x to draw_x + 1
                     set draw_y to draw_y + 1
                 set command to command + 1
