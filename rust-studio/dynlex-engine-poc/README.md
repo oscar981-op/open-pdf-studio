@@ -525,8 +525,9 @@ aparte `export_path_v3`-proef schrijft de geometrie van één compleet,
 geïsoleerd PDF-pad; de normale v2-route weigert curven nog steeds.
 De [experimentele OPDL-v4-strokelijst](opdl-v4-stroke-2026-10-03.md) voegt
 expliciete dekkende RGB-lijnstijl en `Stroke`-grenzen voor meerdere paden toe.
-Ook v4 heeft voorlopig alleen een Rust-encoder/validator, geen PDF-export of
-DynLex-renderer.
+Een aparte `export_strokes_v4`-proef schrijft inmiddels meerdere echte
+PDF-strokes met kleur en breedte in volgorde. V4 heeft nog geen DynLex-renderer;
+de normale PDF-adapter/app blijven de v2-route gebruiken.
 
 [`rgba/curve_probe.py`](rgba/curve_probe.py) legt daarom twee kleine echte
 PDF-Bézierstroken vast tegen de bestaande Hayro-renderer. Herhaal met

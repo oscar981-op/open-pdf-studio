@@ -4,8 +4,9 @@
 pub mod paint_v4;
 pub mod path_v3;
 
-pub fn page_to_v3_path(path: &std::path::Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    use path_v3::PathList;
+fn load_path_probe(
+    path: &std::path::Path,
+) -> Result<(u32, u32, Content), Box<dyn std::error::Error>> {
     let bytes = std::fs::read(path)?;
     if bytes.len() > 16_000_000 {
         return Err(fail("path probe PDF is too large"));
@@ -60,6 +61,12 @@ pub fn page_to_v3_path(path: &std::path::Path) -> Result<Vec<u8>, Box<dyn std::e
         return Err(fail("compound operands are outside path probe"));
     }
     let content = Content::decode(&content_bytes)?;
+    Ok((x1 as u32, y1 as u32, content))
+}
+
+pub fn page_to_v3_path(path: &std::path::Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    use path_v3::PathList;
+    let (width, height, content) = load_path_probe(path)?;
     let mut staged: Option<PathStage> = None;
     let mut segments = None;
     let mut finished = false;
@@ -110,11 +117,95 @@ pub fn page_to_v3_path(path: &std::path::Path) -> Result<Vec<u8>, Box<dyn std::e
         return Err(fail("path probe requires a complete stroke"));
     }
     let list = PathList {
-        width: x1 as u32,
-        height: y1 as u32,
+        width,
+        height,
         segments: segments.ok_or_else(|| fail("missing path geometry"))?,
     };
     list.encode()
+}
+
+pub fn page_to_v4_strokes(path: &std::path::Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    use paint_v4::{Command, DisplayList, MAX_RECORDS};
+    let (width, height, content) = load_path_probe(path)?;
+    let mut commands = Vec::new();
+    let mut staged: Option<PathStage> = None;
+    let mut rgb = None;
+    let mut line_width = None;
+    for op in content.operations {
+        match op.operator.as_str() {
+            "RG" if staged.is_none() => {
+                let channels = operands::<3>(&op.operands)?;
+                let mut color = [0_u8; 3];
+                for (target, channel) in color.iter_mut().zip(channels) {
+                    if !channel.is_finite() || !(0.0..=1.0).contains(&channel) {
+                        return Err(fail("invalid PDF stroke color"));
+                    }
+                    *target = (channel * 255.0).round() as u8;
+                }
+                rgb = Some(color);
+            }
+            "w" if staged.is_none() => {
+                let [value] = operands::<1>(&op.operands)?;
+                if !value.is_finite() || value <= 0.0 || value > 1_000.0 {
+                    return Err(fail("invalid PDF stroke width"));
+                }
+                line_width = Some(value);
+            }
+            "m" if staged.is_none() => {
+                if rgb.is_none() || line_width.is_none() {
+                    return Err(fail("v4 probe requires explicit RGB and width"));
+                }
+                let [x, y] = operands::<2>(&op.operands)?;
+                staged = Some(PathStage::start([x, y]));
+            }
+            "l" => {
+                let [x, y] = operands::<2>(&op.operands)?;
+                staged
+                    .as_mut()
+                    .ok_or_else(|| fail("line without move"))?
+                    .line_to([x, y])?;
+            }
+            "c" => {
+                let [a, b, c, d, e, f] = operands::<6>(&op.operands)?;
+                staged
+                    .as_mut()
+                    .ok_or_else(|| fail("cubic without move"))?
+                    .cubic_to([[a, b], [c, d], [e, f]])?;
+            }
+            "h" if op.operands.is_empty() => {
+                staged
+                    .as_mut()
+                    .ok_or_else(|| fail("close without move"))?
+                    .close()?;
+            }
+            "S" if op.operands.is_empty() => {
+                let path = staged.take().ok_or_else(|| fail("stroke without move"))?;
+                if !path.has_draw_segment() {
+                    return Err(fail("stroke without line or curve"));
+                }
+                let path_commands = path.to_v3_segments();
+                if commands.len() + path_commands.len() + 2 > MAX_RECORDS {
+                    return Err(fail("too many OPDL-v4 commands"));
+                }
+                commands.push(Command::StrokeStyle {
+                    rgb: rgb.ok_or_else(|| fail("missing stroke RGB"))?,
+                    width: line_width.ok_or_else(|| fail("missing stroke width"))?,
+                });
+                commands.extend(path_commands.into_iter().map(Command::Path));
+                commands.push(Command::Stroke);
+            }
+            _ => return Err(fail("operator outside isolated v4 stroke probe subset")),
+        }
+    }
+    if staged.is_some() || commands.is_empty() {
+        return Err(fail("incomplete v4 stroke probe"));
+    }
+    DisplayList {
+        width,
+        height,
+        commands,
+    }
+    .encode()
 }
 
 use lopdf::{

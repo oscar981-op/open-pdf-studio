@@ -1,9 +1,10 @@
 # Experimentele OPDL-v4-strokelijst
 
 `crates/opdl-adapter/src/paint_v4.rs` bewaart meerdere strokepaden in
-bestandsvolgorde. Dit is een **alleen gevalideerd opslagcontract**: er is nog
-geen PDF→v4-exporter, DynLex-v4-renderer of app-koppeling. De gewone PDF-adapter
-blijft OPDL-v2 schrijven en weigert curven.
+bestandsvolgorde. Een aparte `export_strokes_v4`-proef leest nu geïsoleerde
+PDF-strokes met expliciete `RG`-kleur en `w`-lijnbreedte. Dit is een
+**niet-renderend opslagcontract**: er is nog geen DynLex-v4-renderer of
+app-koppeling. De gewone PDF-adapter blijft OPDL-v2 schrijven en weigert curven.
 
 De header blijft 20 bytes: `OPDL`, versie `u32=4`, paginabreedte `u32`,
 paginahoogte `u32` en recordaantal `u32`, little-endian. Elk record begint met
@@ -35,3 +36,23 @@ vast, maar een renderer mag deze lijst pas tekenen na pixelvergelijking met
 Hayro op echte PDF's. De bestaande v3-geometrie-export en
 [`curve-reference-2026-10-03.json`](rgba/curve-reference-2026-10-03.json)
 blijven daarvoor afzonderlijke referenties.
+
+De PDF-proef gebruikt de begrensde `PathStage` en accepteert één ongecropte,
+ongeroteerde pagina met nul-oorsprong en uitsluitend `RG`, `w`, `m`, `l`, `c`,
+`h`, `S`. Kleur en breedte moeten vóór het eerste pad expliciet staan. De
+actuele stijl wordt vóór elk afgesloten pad in de lijst geschreven; zo blijven
+PDF-strokegrenzen en verfvolgorde expliciet. Clip, transformatie, alpha,
+andere PDF-operators en een onafgemaakt pad worden afgewezen.
+
+```sh
+cd rust-studio
+cargo build --release -p opds-opdl-adapter
+python3 dynlex-engine-poc/verify_strokes_v4.py \
+  --exporter target/release/export_strokes_v4 \
+  --v2-adapter target/release/opds-opdl-adapter
+```
+
+De echte PDF-fixture heeft op 1684×2384 punten een rode 1pt-Bézierstroke en
+daarboven een blauwe 2pt-lijn. De proef controleert alle acht v4-recordtags,
+RGB-bytes, breedtes, curvepunten en de afwijzing door de normale v2-adapter.
+Zeven ongeldige kleur-/breedte-/padtoestanden geven geen uitvoerbestand.
