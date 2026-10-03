@@ -55,6 +55,31 @@ algemene `lopdf::Object`-waarden voordat de eigen, beperkte interpreter ze
 verwerkt. Een toekomstige snellere decoder moet dezelfde PDF-grenzen en
 foutafwijzing behouden en met alle pixel- en regressiefixtures worden vergeleken.
 
+## Begrensde canonieke decoder
+
+De adapter heeft nu een snelle route voor de door de fixturegenerator gebruikte
+vorm: één ondersteunde numerieke operator per regel, enkele spaties en hoogstens
+één afsluitende regeleinde. De route bouwt dezelfde `lopdf`-operaties op en
+controleert door opnieuw te serialiseren dat alle invoerbytes overeenkomen.
+Andere syntaxis valt terug op `lopdf::Content::decode`; de bestaande interpreter
+blijft daarna dezelfde PDF-states en operatoren afwijzen. De omgevingsvariabele
+`OPDS_OPDL_LEGACY_DECODE=1` schakelt voor A/B tijdelijk de snelle route uit.
+
+Vijftien afwisselend gepaarde warme procesruns op dezelfde 6.005-opdrachten-PDF
+geven onderstaande medianen. De ruwe paren staan in
+[`bench-many-decode-ab-2026-10-03.json`](bench-many-decode-ab-2026-10-03.json).
+
+| Modus | Snelle/lopdf operator-decoder | Mediaan procesverschil snel−lopdf | Snelle route wint |
+| --- | ---: | ---: | ---: |
+| Vector | 4,82 / 9,41 ms | −6,06 ms | 15/15 |
+| Hybride | 4,95 / 12,61 ms | −8,04 ms | 13/15 |
+
+Alle 23 PDF-fixtures blijven op 3.784.704 pixels exact gelijk aan DynLex CLI,
+Hayro en de onafhankelijke referentie; acht ongeldige OPDL-scenes en veertien
+niet-ondersteunde PDF-states worden geweigerd. De meting gebruikt een kleine,
+synthetisch herhaalde PDF met warme OS-cache. De canonieke route dekt geen
+algemene PDF-content en bewijst geen winst op echte A1-tekeningen.
+
 Reproduceer met `rgba/buffer_verify.py` en `--bench-many-calls 100
 --bench-many-runs 15 --bench-memory --bench-json UITVOER.json`, plus de in de
 README genoemde DynLex 0.0.1- en LLVM20-toolchainargumenten.

@@ -1,11 +1,127 @@
 //! Narrow fixture adapter, not a general PDF interpreter.
 #![forbid(unsafe_code)]
 
-use lopdf::{content::Content, Document, Object, Stream};
+use lopdf::{
+    content::{Content, Operation},
+    Document, Object, Stream,
+};
 use std::{error::Error, fs, path::Path, time::Instant};
 
 const LIMIT: u32 = 1024;
 const MAX_COMMANDS: usize = 16_384;
+
+// The fixture generator writes one canonical, whitespace-separated operation per
+// line. Other PDF syntax stays on lopdf's general parser path.
+fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
+    if bytes.is_empty() || bytes.len() > 2_000_000 {
+        return None;
+    }
+    let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    if bytes.is_empty() {
+        return None;
+    }
+    let mut operations = Vec::new();
+    for line in bytes.split(|byte| *byte == b'\n') {
+        if line.is_empty() {
+            return None;
+        }
+        let mut words = line.split(|byte| *byte == b' ');
+        let mut operands = Vec::new();
+        let mut operator = None;
+        while let Some(word) = words.next() {
+            if word.is_empty() || !word.is_ascii() {
+                return None;
+            }
+            let first = word[0];
+            if first.is_ascii_digit() || first == b'-' || first == b'+' || first == b'.' {
+                if operator.is_some() {
+                    return None;
+                }
+                let token = std::str::from_utf8(word).ok()?;
+                let object = if let Ok(value) = token.parse::<i64>() {
+                    Object::Integer(value)
+                } else if token
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || byte == b'-' || byte == b'.')
+                    && token.contains('.')
+                {
+                    Object::Real(token.parse::<f32>().ok()?)
+                } else {
+                    return None;
+                };
+                operands.push(object);
+                if operands.len() > 6 {
+                    return None;
+                }
+            } else if first == b'/' && word == b"/Im0" && operator.is_none() {
+                operands.push(Object::Name(b"Im0".to_vec()));
+            } else {
+                if words.next().is_some() {
+                    return None;
+                }
+                let name = std::str::from_utf8(word).ok()?;
+                if !matches!(
+                    name,
+                    "q" | "Q"
+                        | "cm"
+                        | "Do"
+                        | "rg"
+                        | "re"
+                        | "W"
+                        | "n"
+                        | "f"
+                        | "w"
+                        | "RG"
+                        | "m"
+                        | "l"
+                        | "S"
+                ) {
+                    return None;
+                }
+                operator = Some(name.to_owned());
+                break;
+            }
+        }
+        operations.push(Operation {
+            operator: operator?,
+            operands,
+        });
+        if operations.len() > 40_000 {
+            return None;
+        }
+    }
+    let content = Content { operations };
+    (content.encode().ok()?.as_slice() == bytes).then_some(content)
+}
+
+#[cfg(test)]
+mod fast_decode_tests {
+    use super::*;
+
+    #[test]
+    fn canonical_subset_matches_general_decoder() {
+        let bytes = b"1 0 0 rg\n10 20 30 40 re\nf\n/Im0 Do";
+        let fast = decode_canonical_content(bytes).expect("canonical input");
+        let general = Content::decode(bytes).expect("general parser");
+        assert_eq!(fast.encode().unwrap(), general.encode().unwrap());
+        assert!(decode_canonical_content(b"1 0 0 rg\n").is_some());
+    }
+
+    #[test]
+    fn noncanonical_syntax_falls_back() {
+        for bytes in [
+            b"1  0 0 rg".as_slice(),
+            b"1 0 0 rg\n\n".as_slice(),
+            b"%comment\n1 0 0 rg".as_slice(),
+            b"1e3 0 0 rg".as_slice(),
+            b"1 0 0 xx".as_slice(),
+            b"/Other Do".as_slice(),
+            b"(text) Tj".as_slice(),
+        ] {
+            assert!(decode_canonical_content(bytes).is_none(), "{bytes:?}");
+        }
+    }
+}
 
 fn fail(message: &str) -> Box<dyn Error> {
     message.to_owned().into()
@@ -144,7 +260,13 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
     let content_bytes = document.get_page_content(page_id)?;
     timings.content_ms = started.elapsed().as_secs_f64() * 1000.0;
     let started = Instant::now();
-    let content = Content::decode(&content_bytes)?;
+    let content = if std::env::var_os("OPDS_OPDL_LEGACY_DECODE").is_some() {
+        Content::decode(&content_bytes)?
+    } else if let Some(content) = decode_canonical_content(&content_bytes) {
+        content
+    } else {
+        Content::decode(&content_bytes)?
+    };
     timings.operator_decode_ms = started.elapsed().as_secs_f64() * 1000.0;
     timings.page_decode_ms = timings.content_ms + timings.operator_decode_ms;
     let mut depth = 0_u8;

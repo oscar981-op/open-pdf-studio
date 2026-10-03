@@ -2,6 +2,7 @@
 """Build and pixel-check the experimental in-process DynLex buffer kernel."""
 
 import argparse
+import os
 import json
 import statistics
 import time
@@ -30,6 +31,8 @@ def main():
                         help="repeat the 6000-command kernel call in one process")
     parser.add_argument("--bench-many-runs", type=int, default=0,
                         help="paired full-process runs on 6000-command fixtures")
+    parser.add_argument("--bench-many-ab-runs", type=int, default=0,
+                        help="alternate fast and lopdf decoders on 6000-command fixtures")
     parser.add_argument("--bench-memory", action="store_true",
                         help="measure per-process peak RSS with /usr/bin/time (Linux)")
     parser.add_argument("--bench-json", type=Path,
@@ -37,7 +40,7 @@ def main():
     args = parser.parse_args()
     if args.bench_memory and args.bench_runs < 1 and args.bench_many_runs < 1:
         parser.error("--bench-memory requires --bench-runs or --bench-many-runs")
-    if args.bench_many_calls < 0 or args.bench_many_runs < 0:
+    if args.bench_many_calls < 0 or args.bench_many_runs < 0 or args.bench_many_ab_runs < 0:
         parser.error("benchmark counts must be nonnegative")
     time_binary = Path("/usr/bin/time")
     if args.bench_memory and not time_binary.is_file():
@@ -261,6 +264,36 @@ def main():
                           "(OS cache not cleared)")
                 if not (direct_output.read_bytes() == hayro_output.read_bytes() == expected):
                     raise RuntimeError(f"benchmark output changed: 6000 rectangles/{mode}")
+            if args.bench_many_ab_runs > 0:
+                samples = {"fast": [], "legacy": []}
+                for index in range(args.bench_many_ab_runs):
+                    jobs = ("fast", "legacy") if index % 2 == 0 else ("legacy", "fast")
+                    for label in jobs:
+                        env = os.environ.copy()
+                        env.pop("OPDS_OPDL_LEGACY_DECODE", None)
+                        if label == "legacy":
+                            env["OPDS_OPDL_LEGACY_DECODE"] = "1"
+                        start = time.perf_counter_ns()
+                        completed = subprocess.run(
+                            [probe, str(number), pdf, direct_output, "--profile"],
+                            env=env, check=True, capture_output=True, text=True)
+                        sample = {"wall_ms": (time.perf_counter_ns() - start) / 1_000_000,
+                                  "stages_ms": {key: float(value)
+                                                for part in completed.stderr.strip().split()
+                                                for key, value in (part.split("=", 1),)}}
+                        if direct_output.read_bytes() != expected:
+                            raise RuntimeError(f"{label} decoder changed pixels: {mode}")
+                        samples[label].append(sample)
+                paired = [a["wall_ms"] - b["wall_ms"]
+                          for a, b in zip(samples["fast"], samples["legacy"])]
+                measurements[f"many-{mode}-decode-ab"] = {
+                    "os_cache_cleared": False, "samples": samples,
+                }
+                print(f"{mode} fast/lopdf decoder median ms: "
+                      f"{statistics.median(item['stages_ms']['operator_decode_ms'] for item in samples['fast']):.2f}/"
+                      f"{statistics.median(item['stages_ms']['operator_decode_ms'] for item in samples['legacy']):.2f}; "
+                      f"process paired delta {statistics.median(paired):+.2f}; "
+                      f"fast wins {sum(delta < 0 for delta in paired)}/{args.bench_many_ab_runs}")
             checked += width * height
             checked_pages += 1
         for mode, number in MODES[1:]:
