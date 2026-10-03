@@ -509,5 +509,12 @@ oude losse toestanden voor beginpunt, lopende lijn en hoek zijn vervangen. Een
 fixture met 128 monotoon collineaire segmenten levert precies één OPDL-opdracht
 en is in vector en hybride uitvoer
 pixelgelijk aan Hayro. Reversals, drie of meer bochten en onbewezen joins blijven
-afgewezen; de buffer is een voorbereiding op bredere padgeometrie, geen
-ondersteuning voor algemene `c`-curven of `h`-sluitingen.
+afgewezen. `c`-Béziersegmenten worden nu met hun zes getallen en positie tussen
+`l`-segmenten begrensd in `PathStage` opgeslagen. Bij `S` weigert de adapter
+ieder pad met een curve expliciet: er is nog geen geverifieerde curve-rasterisatie
+of OPDL-curveopdracht. De buffer bereidt bredere padgeometrie voor, maar
+ondersteunt nog geen `h`-sluitingen of algemene PDF-paden.
+Een pad kan maximaal 16.384 lijn- en curvesegmenten samen stagen; de logische
+payload van 16.384 curve-items blijft onder 1 MiB, exclusief Vec-capaciteit.
+De 128-segment rechte fixture wordt nog altijd één OPDL-opdracht. Een
+algemene curve zou een nieuwe, geverifieerde OPDL-opdracht en pixeltest vereisen.

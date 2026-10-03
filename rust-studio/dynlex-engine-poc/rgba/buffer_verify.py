@@ -478,6 +478,9 @@ def main():
             "vertical-first-half-start": b"1 w\n60.5 111.5 m\n60.5 151.5 l\n100 151.5 l\nS\n",
             "vertical-first-half-end": b"1 w\n60.5 112 m\n60.5 151.5 l\n100.5 151.5 l\nS\n",
             "three-bends": b"1 w\n20 151.5 m\n60.5 151.5 l\n60.5 111.5 l\n100.5 111.5 l\n100.5 72 l\nS\n",
+            "cubic-stroke": b"1 w\n20 151.5 m\n30 151.5 40 111.5 60 111.5 c\nS\n",
+            "mixed-line-cubic-stroke": b"1 w\n20 151.5 m\n40 151.5 l\n45 151.5 50 111.5 60 111.5 c\n80 111.5 l\nS\n",
+            "cubic-without-move": b"1 w\n30 151.5 40 111.5 60 111.5 c\nS\n",
         }
         for name, content in invalid_transforms.items():
             invalid_pdf = work / f"invalid-{name}.pdf"

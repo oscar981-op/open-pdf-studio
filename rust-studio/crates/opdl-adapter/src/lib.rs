@@ -74,6 +74,7 @@ fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
                         | "RG"
                         | "m"
                         | "l"
+                        | "c"
                         | "S"
                 ) {
                     return None;
@@ -89,7 +90,7 @@ fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
             "m" | "l" => 2,
             "rg" | "RG" => 3,
             "re" => 4,
-            "cm" => 6,
+            "cm" | "c" => 6,
             _ => return None,
         };
         if operands.len() != arity
@@ -246,20 +247,38 @@ fn intersect_rect(rect: [u32; 4], clip: Option<[u32; 4]>) -> Option<[u32; 4]> {
 #[derive(Default)]
 struct PathStage {
     points: Vec<[f64; 2]>,
+    // Position among line endpoints preserves the order of mixed l/c paths.
+    cubics: Vec<(usize, [[f64; 2]; 3])>,
 }
 
 impl PathStage {
     fn start(point: [f64; 2]) -> Self {
         Self {
             points: vec![point],
+            cubics: Vec::new(),
         }
     }
 
     fn line_to(&mut self, point: [f64; 2]) -> Result<(), Box<dyn Error>> {
-        if self.points.len() > MAX_COMMANDS {
+        if self.points.len() + self.cubics.len() > MAX_COMMANDS {
             return Err(fail("too many staged path segments"));
         }
         self.points.push(point);
+        Ok(())
+    }
+
+    fn cubic_to(&mut self, controls_and_end: [[f64; 2]; 3]) -> Result<(), Box<dyn Error>> {
+        if self.points.len() + self.cubics.len() > MAX_COMMANDS {
+            return Err(fail("too many staged path segments"));
+        }
+        if controls_and_end
+            .iter()
+            .flatten()
+            .any(|value| !value.is_finite())
+        {
+            return Err(fail("non-finite cubic coordinate"));
+        }
+        self.cubics.push((self.points.len(), controls_and_end));
         Ok(())
     }
 
@@ -402,6 +421,35 @@ mod path_stage_tests {
         );
         path.line_to([100.0, 72.0]).unwrap();
         assert!(path.orthogonal_rects(256, 192).is_err());
+    }
+
+    #[test]
+    fn stages_mixed_cubics_in_order_but_never_classifies_them_as_lines() {
+        let mut path = PathStage::start([10.0, 20.0]);
+        path.line_to([20.0, 20.0]).unwrap();
+        path.cubic_to([[25.0, 20.0], [30.0, 25.0], [30.0, 30.0]])
+            .unwrap();
+        path.line_to([40.0, 30.0]).unwrap();
+        path.cubic_to([[45.0, 30.0], [50.0, 35.0], [50.0, 40.0]])
+            .unwrap();
+        assert_eq!(path.cubics[0].0, 2);
+        assert_eq!(path.cubics[1].0, 3);
+        assert_eq!(path.cubics[1].1[2], [50.0, 40.0]);
+        assert!(path
+            .cubic_to([[f64::NAN, 0.0], [0.0; 2], [0.0; 2]])
+            .is_err());
+    }
+
+    #[test]
+    fn limits_cubic_staging_without_creating_draw_commands() {
+        let mut path = PathStage::start([0.0, 0.0]);
+        let curve = [[1.0, 0.0], [2.0, 1.0], [3.0, 1.0]];
+        for _ in 0..MAX_COMMANDS {
+            path.cubic_to(curve).unwrap();
+        }
+        assert_eq!(path.cubics.len(), MAX_COMMANDS);
+        assert!(path.cubic_to(curve).is_err());
+        assert!(std::mem::size_of_val(&path.cubics[0]) <= 64);
     }
 }
 
@@ -666,10 +714,22 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                     .ok_or_else(|| fail("line without move"))?
                     .line_to(end)?;
             }
+            "c" if !image_matrix && pending_rect.is_none() => {
+                let [x1, y1, x2, y2, x3, y3] = operands::<6>(&op.operands)?;
+                let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
+                let curve = [[x1 + tx, y1 + ty], [x2 + tx, y2 + ty], [x3 + tx, y3 + ty]];
+                pending_path
+                    .as_mut()
+                    .ok_or_else(|| fail("cubic without move"))?
+                    .cubic_to(curve)?;
+            }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
                 let path = pending_path
                     .take()
                     .ok_or_else(|| fail("stroke without move"))?;
+                if !path.cubics.is_empty() {
+                    return Err(fail("cubic stroke rasterization is not yet verified"));
+                }
                 if path.points.len() >= 3 && path.collapsed_line().is_err() {
                     if clip.is_some() {
                         return Err(fail("orthogonal path with active clip is unsupported"));
