@@ -299,6 +299,19 @@ Op deze Linux-machine is `llc-20`/`opt-20` tijdelijk uit het Ubuntu-pakket
 aangepast. Met een eigen, passende LLVM-20-toolchain zijn de controles zo te
 herhalen:
 
+Op 4 oktober zijn de tools opnieuw buiten de repository onder
+`~/.cache/opds-toolchains/` opgehaald. De officiële DynLex-0.0.1-tarball
+`https://github.com/OpenAEC-Foundation/dynlex/releases/download/0.0.1/dynlex.tar.gz`
+heeft bovenstaande SHA-256. Het LLVM-20-pakket komt uit de officiële
+`apt.llvm.org` noble-20-index: bestandsnaam
+`llvm-20_20.1.8~++20250804090239+87f0227cb601-1~exp1~20250804210352.139_amd64.deb`,
+SHA-256 `48911311c972fa02d2d20978d0f7b8360f1681fbd0308560bdc06632583e60e5`.
+Uitpakken kan zonder systeeminstallatie met `dpkg-deb -x`. De herstelde paden
+zijn `~/.cache/opds-toolchains/dynlex-0.0.1/dynlex/bin/dynlex` en
+`~/.cache/opds-toolchains/llvm-20/root/usr/bin/{opt-20,llc-20}`; controleer
+beide hashes vóór gebruik. Dit zijn lokale toolchainbestanden, geen broncode
+in de repository.
+
 ```sh
 cd rust-studio
 python3 dynlex-engine-poc/rgba/buffer_verify.py \
@@ -528,6 +541,11 @@ expliciete dekkende RGB-lijnstijl en `Stroke`-grenzen voor meerdere paden toe.
 Een aparte `export_strokes_v4`-proef schrijft inmiddels meerdere echte
 PDF-strokes met kleur en breedte in volgorde. V4 heeft nog geen DynLex-renderer;
 de normale PDF-adapter/app blijven de v2-route gebruiken.
+Voor uitsluitend pixeluitgelijnde 1px-horizontale en verticale strokes zet
+`bridge_v4_axis` de v4-strokelijst om naar bestaande OPDL-v2-opdrachten. De
+DynLex-v2-kernel wordt met twee gekleurde strokes uit een echte PDF tegen Hayro
+en een onafhankelijke RGBA-referentie getest. Curven en 2pt-streken worden
+door de brug afgewezen.
 
 [`rgba/curve_probe.py`](rgba/curve_probe.py) legt daarom twee kleine echte
 PDF-Bézierstroken vast tegen de bestaande Hayro-renderer. Herhaal met

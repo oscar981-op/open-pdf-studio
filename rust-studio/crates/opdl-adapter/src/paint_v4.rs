@@ -33,6 +33,83 @@ fn valid_point(point: [f64; 2]) -> bool {
 }
 
 impl DisplayList {
+    /// Bridge only pixel-aligned 1px horizontal/vertical strokes to the
+    /// already verified DynLex OPDL-v2 kernel. No cubic, clip or image path.
+    pub fn to_v2_axis_strokes(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        self.validate()?;
+        if self.width > 1024 || self.height > 1024 {
+            return Err(invalid("v2 bridge page exceeds verified 1024px limit"));
+        }
+        let mut color = None;
+        let mut start = None;
+        let mut end = None;
+        let mut strokes = Vec::new();
+        let exact = |value: f64| -> Result<u32, Box<dyn Error>> {
+            if !value.is_finite() || value < 0.0 || value > 1024.0 || value.fract() != 0.0 {
+                return Err(invalid("unverified stroke coordinate"));
+            }
+            Ok(value as u32)
+        };
+        for command in &self.commands {
+            match command {
+                Command::StrokeStyle { rgb, width } if *width == 1.0 => color = Some(*rgb),
+                Command::Path(Segment::Move(point)) if start.is_none() => start = Some(*point),
+                Command::Path(Segment::Line(point)) if start.is_some() && end.is_none() => {
+                    end = Some(*point)
+                }
+                Command::Stroke if start.is_some() && end.is_some() => {
+                    let a = start.take().unwrap();
+                    let b = end.take().unwrap();
+                    let rect = if a[1] == b[1] {
+                        let left = exact(a[0].min(b[0]))?;
+                        let right = exact(a[0].max(b[0]))?;
+                        let top = exact(f64::from(self.height) - a[1] - 0.5)?;
+                        [left, top, right, top + 1]
+                    } else if a[0] == b[0] {
+                        let left = exact(a[0] - 0.5)?;
+                        let top = exact(f64::from(self.height) - a[1].max(b[1]))?;
+                        let bottom = exact(f64::from(self.height) - a[1].min(b[1]))?;
+                        [left, top, left + 1, bottom]
+                    } else {
+                        return Err(invalid("diagonal v4 stroke is not bridged"));
+                    };
+                    if rect[0] >= rect[2]
+                        || rect[1] >= rect[3]
+                        || rect[2] > self.width
+                        || rect[3] > self.height
+                    {
+                        return Err(invalid("stroke outside verified page"));
+                    }
+                    strokes.push((rect, color.ok_or_else(|| invalid("missing stroke RGB"))?));
+                }
+                _ => return Err(invalid("v4 command outside verified v2 axis subset")),
+            }
+        }
+        let mut bytes = Vec::with_capacity(40 + strokes.len() * 24);
+        bytes.extend_from_slice(b"OPDL");
+        for value in [
+            2,
+            self.width,
+            self.height,
+            0,
+            0,
+            self.width,
+            self.height,
+            0,
+            strokes.len() as u32,
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        for (rect, rgb) in strokes {
+            bytes.extend_from_slice(&3_u32.to_le_bytes());
+            for value in rect {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            bytes.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
+        }
+        Ok(bytes)
+    }
+
     fn validate(&self) -> Result<(), Box<dyn Error>> {
         if self.width == 0
             || self.height == 0
@@ -267,5 +344,48 @@ mod tests {
         }
         assert!(DisplayList::decode(&encoded[..encoded.len() - 1]).is_err());
         assert!(DisplayList::decode(&vec![0; MAX_BYTES + 1]).is_err());
+    }
+
+    #[test]
+    fn bridges_two_pixel_aligned_axis_strokes_only() {
+        let mut list = DisplayList {
+            width: 256,
+            height: 192,
+            commands: vec![
+                Command::StrokeStyle {
+                    rgb: [255, 0, 0],
+                    width: 1.0,
+                },
+                Command::Path(Segment::Move([20.0, 151.5])),
+                Command::Path(Segment::Line([100.0, 151.5])),
+                Command::Stroke,
+                Command::StrokeStyle {
+                    rgb: [0, 0, 255],
+                    width: 1.0,
+                },
+                Command::Path(Segment::Move([150.5, 160.0])),
+                Command::Path(Segment::Line([150.5, 60.0])),
+                Command::Stroke,
+            ],
+        };
+        let bytes = list.to_v2_axis_strokes().unwrap();
+        assert_eq!(bytes.len(), 40 + 2 * 24);
+        assert_eq!(u32::from_le_bytes(bytes[36..40].try_into().unwrap()), 2);
+        assert_eq!(
+            &bytes[44..60],
+            &[20, 0, 0, 0, 40, 0, 0, 0, 100, 0, 0, 0, 41, 0, 0, 0]
+        );
+        assert_eq!(&bytes[60..64], &[255, 0, 0, 255]);
+        list.commands[4] = Command::StrokeStyle {
+            rgb: [0, 0, 255],
+            width: 2.0,
+        };
+        assert!(list.to_v2_axis_strokes().is_err());
+        list.commands[4] = Command::StrokeStyle {
+            rgb: [0, 0, 255],
+            width: 1.0,
+        };
+        list.commands[6] = Command::Path(Segment::Cubic([[1.0, 2.0]; 3]));
+        assert!(list.to_v2_axis_strokes().is_err());
     }
 }
