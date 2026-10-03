@@ -518,6 +518,9 @@ Een pad kan maximaal 16.384 lijn- en curvesegmenten samen stagen; de logische
 payload van 16.384 curve-items blijft onder 1 MiB, exclusief Vec-capaciteit.
 De 128-segment rechte fixture wordt nog altijd één OPDL-opdracht. Een
 algemene curve zou een nieuwe, geverifieerde OPDL-opdracht en pixeltest vereisen.
+Een [afzonderlijke OPDL-v3-padcontainer](opdl-v3-path-2026-10-03.md) legt nu
+`m/l/c/h` met expliciete recordlengtes en strikte grenzen vast. De bestaande
+PDF-adapter en DynLex-renderers gebruiken dit formaat nog niet.
 
 [`rgba/curve_probe.py`](rgba/curve_probe.py) legt daarom twee kleine echte
 PDF-Bézierstroken vast tegen de bestaande Hayro-renderer. Herhaal met

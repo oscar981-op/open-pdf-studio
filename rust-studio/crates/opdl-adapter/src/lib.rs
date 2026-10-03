@@ -1,6 +1,8 @@
 //! Narrow fixture adapter, not a general PDF interpreter.
 #![forbid(unsafe_code)]
 
+pub mod path_v3;
+
 use lopdf::{
     content::{Content, Operation},
     Document, Object, Stream,
