@@ -452,17 +452,17 @@ OPDL-v2 heeft nu een afzonderlijk `kind=4` voor een stijgende 45°-
 1-pixelstreek met halfpixel-eindpunten en butt caps. De DynLex-CLI en
 bufferkernel tekenen drie dekkingstroken (64/233/64) en halve
 eindpunten (117). De oude synthetische `kind=2` blijft ongewijzigd.
-De Rust-adapter accepteert dit nieuwe primitief alleen voor zwarte inkt,
-zonder actief clipvak. Andere kleuren, hoeken, gespiegeld dalende lijnen,
+De Rust-adapter accepteert dit nieuwe primitief met dekkende RGB-inkt,
+zonder actief clipvak. Andere hoeken, gespiegeld dalende lijnen,
 brede streken en algemene PDF-paden worden geweigerd. De OPDL-validator
-weigert ook een gekleurd of niet-dekkend `kind=4`-commando.
+weigert een niet-dekkend `kind=4`-commando.
 
 De eerste vector-PDF was pixelgelijk aan Hayro. De overeenkomstige hybride
 PDF week op 110 randpixels licht af: DynLex gebruikte gewone afronding,
 terwijl Hayro's lokale `vello_cpu`-backend een 8-bit-benadering van delen
-door 255 gebruikt: `(waarde + 255) >> 8`. Alleen voor deze zwarte
-gecontroleerde diagonaal gebruikt de kernel nu dezelfde mengregel.
-Vector én hybride zijn daardoor bytegelijk aan Hayro en de onafhankelijke
-referentie. De volledige verificatie telt 23 PDF-pagina's en 3.784.704
-pixels; de oude OPDL-v1-fixture blijft ongewijzigd. Overige gekleurde
-of transparante diagonalen vereisen een eigen gecontroleerd compositiepad.
+door 255 gebruikt: `(waarde + 255) >> 8`. De kernel gebruikt voor deze
+gecontroleerde diagonaal dezelfde kleurmenging. Zwarte en rode 45°-streken
+zijn op vector- en hybride PDF-pagina's bytegelijk aan Hayro en de
+onafhankelijke referentie. De volledige verificatie telt 25 PDF-pagina's
+en 3.883.008 pixels; de oude OPDL-v1-fixture blijft ongewijzigd.
+Andere hoeken en transparante diagonalen vereisen een eigen gecontroleerd pad.

@@ -68,7 +68,7 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
             return Err("invalid diagonal command".into());
         }
         if kind == 4 {
-            if right - left < 2 || scene.get(offset + 20..offset + 24) != Some(&[0, 0, 0, 255]) {
+            if right - left < 2 || scene.get(offset + 23) != Some(&255) {
                 return Err("invalid antialiased black diagonal command".into());
             }
         }

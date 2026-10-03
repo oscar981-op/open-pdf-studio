@@ -306,7 +306,6 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     let bottom = height - exact_u32(start[1].min(end[1]))?;
                     (3, [left, top, left + 1, bottom])
                 } else if clip.is_none()
-                    && stroke_color == [0, 0, 0]
                     && end[0] > start[0]
                     && end[0] - start[0] == start[1] - end[1]
                     && start[0].fract() == 0.5

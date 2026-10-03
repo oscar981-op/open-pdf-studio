@@ -186,32 +186,27 @@ def main():
                     raise RuntimeError(f"pixel mismatch: {clip_case} clip/{mode}")
                 checked += width * height
         for mode, number in MODES[1:]:
+          for diagonal_color in ((0, 0, 0), (255, 0, 0)):
             width, height = 256, 192
-            pdf = work / f"diagonal-{mode}.pdf"
+            pdf = work / f"diagonal-{mode}-{diagonal_color[0]}.pdf"
             scene = work / "scene.opdl"
             direct_output = work / "direct.rgba"
             cli_output = work / "output.rgba"
             hayro_output = work / "hayro.rgba"
-            pdf.write_bytes(build_pdf(mode, width=width, height=height, diagonal=True))
+            pdf.write_bytes(build_pdf(mode, width=width, height=height, diagonal=True,
+                                      diagonal_color=diagonal_color))
             subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
             subprocess.run([probe, str(number), pdf, direct_output],
                            check=True, capture_output=True)
             subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
             subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"],
                            check=True, capture_output=True)
-            expected = reference_rgba(mode, width, height, diagonal=True)
+            expected = reference_rgba(mode, width, height, diagonal=True,
+                                      diagonal_color=diagonal_color)
             if not (direct_output.read_bytes() == cli_output.read_bytes()
                     == hayro_output.read_bytes() == expected):
-                raise RuntimeError(f"pixel mismatch: 45-degree AA/{mode}")
+                raise RuntimeError(f"pixel mismatch: 45-degree AA/{mode}/{diagonal_color}")
             checked += width * height
-        colored_diagonal = work / "colored-diagonal.pdf"
-        colored_diagonal.write_bytes(build_pdf("vector", extra_content=(
-            b"1 w\n1 0 0 RG\n20.5 151.5 m\n80.5 91.5 l\nS\n")))
-        colored_diagonal_output = work / "colored-diagonal.opdl"
-        rejected = subprocess.run([paths["adapter"], colored_diagonal, colored_diagonal_output],
-                                  capture_output=True)
-        if rejected.returncode == 0 or colored_diagonal_output.exists():
-            raise RuntimeError("colored diagonal accepted without color parity")
         invalid_transforms = {
             "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
             "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",
@@ -248,7 +243,7 @@ def main():
             "bad-aa-bounds": (valid[:-24] + (4).to_bytes(4, "little") + valid[-20:-8]
                               + (int.from_bytes(valid[-8:-4], "little") + 1).to_bytes(4, "little")
                               + valid[-4:]),
-            "bad-aa-color": valid[:-4] + bytes((255, 0, 0, 255)),
+            "bad-aa-alpha": valid[:-1] + bytes((128,)),
         }
         for name, content in bad.items():
             input_path = work / f"{name}.opdl"
@@ -259,7 +254,7 @@ def main():
                 raise RuntimeError(f"invalid scene accepted: {name}")
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
-        print(f"23 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 6 invalid scenes and 12 unsupported transforms/path states rejected")
+        print(f"25 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 6 invalid scenes and 12 unsupported transforms/path states rejected")
 
 
 if __name__ == "__main__":

@@ -19,10 +19,10 @@ function blend background with foreground at opacity:
         return (foreground * opacity + background * (255 - opacity) + 127) / 255
 
 # Match the 8-bit approximate div_255 used by Hayro's Vello CPU backend.
-# This narrow path is only used for black 45-degree PDF strokes.
-function blend background with antialiased black at opacity:
+# This narrow path matches Vello CPU's approximate 8-bit div_255.
+function blend background with antialiased foreground at opacity:
     execute:
-        return (background * (255 - opacity) + 255) / 256
+        return (foreground * opacity + background * (255 - opacity) + 255) / 256
 
 function run renderer with mode mode:
     execute:
@@ -91,12 +91,6 @@ function run renderer with mode mode:
                     @intrinsic("call", "libc", "exit", void, 2)
             if checked_kind = 4:
                 if (checked_right - checked_left) < 2:
-                    @intrinsic("call", "libc", "exit", void, 2)
-                if (unsigned byte at (checked_offset + 20) in scene) != 0:
-                    @intrinsic("call", "libc", "exit", void, 2)
-                if (unsigned byte at (checked_offset + 21) in scene) != 0:
-                    @intrinsic("call", "libc", "exit", void, 2)
-                if (unsigned byte at (checked_offset + 22) in scene) != 0:
                     @intrinsic("call", "libc", "exit", void, 2)
                 if (unsigned byte at (checked_offset + 23) in scene) != 255:
                     @intrinsic("call", "libc", "exit", void, 2)
@@ -191,9 +185,9 @@ function run renderer with mode mode:
                                 set old_green to unsigned byte at (pixel_index + 1) in rgba
                                 set old_blue to unsigned byte at (pixel_index + 2) in rgba
                                 if kind = 4:
-                                    store ((blend old_red with antialiased black at effective_opacity) as a byte) into rgba at pixel_index
-                                    store ((blend old_green with antialiased black at effective_opacity) as a byte) into rgba at (pixel_index + 1)
-                                    store ((blend old_blue with antialiased black at effective_opacity) as a byte) into rgba at (pixel_index + 2)
+                                    store ((blend old_red with antialiased ink_red at effective_opacity) as a byte) into rgba at pixel_index
+                                    store ((blend old_green with antialiased ink_green at effective_opacity) as a byte) into rgba at (pixel_index + 1)
+                                    store ((blend old_blue with antialiased ink_blue at effective_opacity) as a byte) into rgba at (pixel_index + 2)
                                 else:
                                     store ((blend old_red with ink_red at effective_opacity) as a byte) into rgba at pixel_index
                                     store ((blend old_green with ink_green at effective_opacity) as a byte) into rgba at (pixel_index + 1)

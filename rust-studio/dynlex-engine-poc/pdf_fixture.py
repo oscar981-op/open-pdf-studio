@@ -38,7 +38,7 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0)):
     content = bytearray(pre_content)
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
@@ -86,7 +86,8 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         else:
             raise ValueError(f"unknown clip case: {clip_case}")
     if diagonal and mode != "raster":
-        content.extend(f"1 w\n0 0 0 RG\n20.5 {height - 40.5:g} m\n"
+        r, g, b = diagonal_color
+        content.extend(f"1 w\n{r / 255:g} {g / 255:g} {b / 255:g} RG\n20.5 {height - 40.5:g} m\n"
                        f"80.5 {height - 100.5:g} l\nS\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
@@ -117,7 +118,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     return bytes(pdf)
 
 
-def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None, diagonal=False):
+def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None, diagonal=False, diagonal_color=(0, 0, 0)):
     rgba = bytearray()
     rects = rectangles(width, height, dense)
     strokes = lines(width, height)
@@ -172,7 +173,8 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                         elif abs(lane) == 1:
                             coverage = 64
                     if coverage:
-                        color = tuple((channel * (255 - coverage) + 255) // 256 for channel in color)
+                        color = tuple((ink * coverage + channel * (255 - coverage) + 255) // 256
+                                      for ink, channel in zip(diagonal_color, color))
             rgba.extend((*color, 255))
     return bytes(rgba)
 
