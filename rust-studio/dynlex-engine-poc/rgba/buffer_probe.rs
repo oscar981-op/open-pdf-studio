@@ -22,7 +22,7 @@ fn word(scene: &[u8], offset: usize) -> Result<usize, Box<dyn Error>> {
 }
 
 fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
-    if scene.len() < 40 || scene.len() > 3_147_312 || &scene[..4] != b"OPDL" || word(scene, 4)? != 2
+    if scene.len() < 40 || scene.len() > 3_538_984 || &scene[..4] != b"OPDL" || word(scene, 4)? != 2
     {
         return Err("invalid OPDL-v2 header".into());
     }
@@ -46,7 +46,7 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
     }
     let count_offset = 36 + image_len;
     let count = word(scene, count_offset)?;
-    if count > 64 || count_offset + 4 + count * 24 != scene.len() {
+    if count > 16_384 || count_offset + 4 + count * 24 != scene.len() {
         return Err("invalid OPDL command count or length".into());
     }
     for index in 0..count {

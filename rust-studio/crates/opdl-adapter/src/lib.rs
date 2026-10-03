@@ -5,6 +5,7 @@ use lopdf::{content::Content, Document, Object, Stream};
 use std::{error::Error, fs, path::Path};
 
 const LIMIT: u32 = 1024;
+const MAX_COMMANDS: usize = 16_384;
 
 fn fail(message: &str) -> Box<dyn Error> {
     message.to_owned().into()
@@ -248,7 +249,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 if let Some(rect) = intersect_rect(rect, clip) {
                     commands.push((1, rect, [color[0], color[1], color[2], 255]));
                 }
-                if commands.len() > 64 {
+                if commands.len() > MAX_COMMANDS {
                     return Err(fail("too many commands"));
                 }
             }
@@ -349,7 +350,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                         [stroke_color[0], stroke_color[1], stroke_color[2], 255],
                     ));
                 }
-                if commands.len() > 64 {
+                if commands.len() > MAX_COMMANDS {
                     return Err(fail("too many commands"));
                 }
             }

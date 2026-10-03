@@ -38,7 +38,7 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False):
     content = bytearray(pre_content)
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
@@ -92,6 +92,13 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         else:
             endpoints = f"20.5 {height - 40.5:g} m\n80.5 {height - 100.5:g} l"
         content.extend(f"1 w\n{r / 255:g} {g / 255:g} {b / 255:g} RG\n{endpoints}\nS\n".encode())
+    if many_rects and mode != "raster":
+        content.extend(b"1 0 0 rg\n")
+        for _ in range(60):
+            for row in range(10):
+                for column in range(10):
+                    x, y = 10 + 24 * column, 10 + 16 * row
+                    content.extend(f"{x} {height - y - 4} 4 4 re\nf\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
     has_image = mode != "vector"
@@ -121,7 +128,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     return bytes(pdf)
 
 
-def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False):
+def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False):
     rgba = bytearray()
     rects = rectangles(width, height, dense)
     strokes = lines(width, height)
@@ -179,6 +186,11 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                     if coverage:
                         color = tuple((ink * coverage + channel * (255 - coverage) + 255) // 256
                                       for ink, channel in zip(diagonal_color, color))
+                if many_rects:
+                    grid_x, grid_y = x - 10, y - 10
+                    if (0 <= grid_x < 240 and 0 <= grid_y < 160
+                            and grid_x % 24 < 4 and grid_y % 16 < 4):
+                        color = (255, 0, 0)
             rgba.extend((*color, 255))
     return bytes(rgba)
 

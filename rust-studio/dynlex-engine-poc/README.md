@@ -466,6 +466,19 @@ terwijl Hayro's lokale `vello_cpu`-backend een 8-bit-benadering van delen
 door 255 gebruikt: `(waarde + 255) >> 8`. De kernel gebruikt voor deze
 gecontroleerde diagonaal dezelfde kleurmenging. Zwarte en rode 45°-streken
 zijn in beide oriëntaties op vector- en hybride PDF-pagina's bytegelijk aan
-Hayro en de onafhankelijke referentie. De volledige verificatie telt
-29 PDF-pagina's en 4.079.616 pixels; de oude OPDL-v1-fixture blijft ongewijzigd.
+Hayro en de onafhankelijke referentie. De huidige `rgba/buffer_verify.py`
+controleert 19 fixtures/3.588.096 pixels, waaronder de grotere opdrachtfixture;
+de oude OPDL-v1-fixture blijft ongewijzigd.
 Andere hoeken en transparante diagonalen vereisen een eigen gecontroleerd pad.
+
+## Meer tekenopdrachten per pagina
+
+OPDL-v2 accepteert nu maximaal 16.384 tekenopdrachten in plaats van 64.
+De Rust-adapter en beide validators hanteren dezelfde grens; de CLI weigert
+bestanden groter dan 3.538.984 bytes vóór de geheugenallocatie. Een PDF-fixture
+met honderd rode rechthoeken, elk zestig keer herhaald (6.000 opdrachten),
+overschrijdt de oude grens en blijft in
+vector- en hybride uitvoer pixelgelijk aan Hayro en de onafhankelijke referentie.
+Dit verandert niets aan de huidige 1024×1024-pixellimiet of de beperkte
+PDF-operators. De echte A1-tekening heeft ook curven, tekst, transformaties
+en rotatie nodig voordat zij door deze route kan lopen.

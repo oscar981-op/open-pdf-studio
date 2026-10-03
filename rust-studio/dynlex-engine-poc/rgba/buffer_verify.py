@@ -63,6 +63,7 @@ def main():
             subprocess.run([paths["compiler"], f"{mode}.dl", "-O3", "-o", work / mode],
                            cwd=work, check=True, capture_output=True)
         checked = 0
+        checked_pages = 0
         for width, height, dense in ((256, 192, False), (512, 384, False), (1024, 768, True)):
             for mode, number in MODES:
                 pdf = work / f"{mode}.pdf"
@@ -125,6 +126,7 @@ def main():
                               f"{direct_samples[0]:.2f}/{hayro_samples[0]:.2f} "
                               f"(OS cache not cleared)")
                 checked += width * height
+                checked_pages += 1
         for mode, number in MODES[1:]:
             for diagonal_color in ((0, 0, 0), (255, 0, 0)):
                 for falling in (False, True):
@@ -139,6 +141,7 @@ def main():
                                               falling=falling))
                     subprocess.run([paths["adapter"], pdf, scene], check=True,
                                    capture_output=True)
+                    aa_scene = scene.read_bytes()
                     subprocess.run([probe, str(number), pdf, direct_output], check=True,
                                    capture_output=True)
                     subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
@@ -152,6 +155,34 @@ def main():
                             f"pixel mismatch: 45-degree AA/{mode}/{diagonal_color}/{falling}"
                         )
                     checked += width * height
+                    checked_pages += 1
+        for mode, number in MODES[1:]:
+            width, height = 256, 192
+            pdf = work / f"many-rectangles-{mode}.pdf"
+            scene = work / "scene.opdl"
+            direct_output = work / "direct.rgba"
+            cli_output = work / "output.rgba"
+            hayro_output = work / "hayro.rgba"
+            pdf.write_bytes(build_pdf(mode, many_rects=True))
+            subprocess.run([paths["adapter"], pdf, scene], check=True,
+                           capture_output=True)
+            opdl = scene.read_bytes()
+            command_offset = 36 + int.from_bytes(opdl[32:36], "little")
+            if int.from_bytes(opdl[command_offset:command_offset + 4], "little") <= 5_763:
+                raise RuntimeError("large command fixture did not exceed drawing stroke count")
+            direct_run = subprocess.run([probe, str(number), pdf, direct_output],
+                                        capture_output=True)
+            if direct_run.returncode:
+                raise RuntimeError(direct_run.stderr.decode())
+            subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+            subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
+                           capture_output=True)
+            expected = reference_rgba(mode, many_rects=True)
+            if not (direct_output.read_bytes() == cli_output.read_bytes()
+                    == hayro_output.read_bytes() == expected):
+                raise RuntimeError(f"pixel mismatch: 6000 rectangle draws/{mode}")
+            checked += width * height
+            checked_pages += 1
         invalid_transforms = {
             "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
             "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",
@@ -180,15 +211,20 @@ def main():
         if rejected.returncode == 0 or clipped_image_output.exists():
             raise RuntimeError("clipped image accepted without image clipping")
         valid = (work / "scene.opdl").read_bytes()
+        count_offset = 36 + int.from_bytes(valid[32:36], "little")
+        over_limit = (valid[:count_offset] + (16_385).to_bytes(4, "little")
+                      + valid[-24:] * 16_385)
         bad = {
             "truncated": valid[:-1],
             "bad-magic": b"BAD!" + valid[4:],
             "unsupported-version": valid[:4] + (1).to_bytes(4, "little") + valid[8:],
             "bad-command": valid[:-24] + (99).to_bytes(4, "little") + valid[-20:],
-            "bad-aa-bounds": (valid[:-24] + (4).to_bytes(4, "little") + valid[-20:-8]
-                              + (int.from_bytes(valid[-8:-4], "little") + 1).to_bytes(4, "little")
-                              + valid[-4:]),
-            "bad-aa-alpha": valid[:-1] + bytes((128,)),
+            "bad-aa-bounds": (aa_scene[:-24] + (4).to_bytes(4, "little") + aa_scene[-20:-8]
+                              + (int.from_bytes(aa_scene[-8:-4], "little") + 1).to_bytes(4, "little")
+                              + aa_scene[-4:]),
+            "bad-aa-alpha": aa_scene[:-1] + bytes((128,)),
+            "too-many-commands": over_limit,
+            "oversized-scene": valid + bytes(3_538_985 - len(valid)),
         }
         for name, content in bad.items():
             input_path = work / f"{name}.opdl"
@@ -197,9 +233,16 @@ def main():
             result = subprocess.run([probe, "3", input_path, output_path], capture_output=True)
             if result.returncode == 0 or output_path.exists():
                 raise RuntimeError(f"invalid scene accepted: {name}")
+            if name in ("too-many-commands", "oversized-scene"):
+                (work / "scene.opdl").write_bytes(content)
+                cli_output = work / "output.rgba"
+                cli_output.unlink(missing_ok=True)
+                result = subprocess.run([work / "vector"], cwd=work, capture_output=True)
+                if result.returncode == 0 or cli_output.exists():
+                    raise RuntimeError(f"CLI accepted invalid scene: {name}")
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
-        print(f"29 PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 6 invalid scenes and 12 unsupported transforms/path states rejected")
+        print(f"{checked_pages} PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 8 invalid scenes and 12 unsupported transforms/path states rejected")
 
 
 if __name__ == "__main__":

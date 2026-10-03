@@ -32,7 +32,7 @@ function run renderer with mode mode:
         discard @intrinsic("call", "libc", "fseek", an integer, input, 0, 2)
         set size to @intrinsic("call", "libc", "ftell", a 64 bit integer, input)
         discard @intrinsic("call", "libc", "fseek", an integer, input, 0, 0)
-        if size < 40:
+        if size < 40 or size > 3538984:
             discard @intrinsic("call", "libc", "fclose", an integer, input)
             @intrinsic("call", "libc", "exit", void, 2)
         set scene to allocate size bytes
@@ -69,7 +69,7 @@ function run renderer with mode mode:
             @intrinsic("call", "libc", "exit", void, 2)
         set command_count to unsigned word at count_offset in scene
         set command_start to count_offset + 4
-        if command_count > 64 or (command_start + command_count * 24) != size:
+        if command_count > 16384 or (command_start + command_count * 24) != size:
             @intrinsic("call", "libc", "free", void, scene)
             @intrinsic("call", "libc", "exit", void, 2)
         set checked to 0
