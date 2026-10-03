@@ -318,6 +318,32 @@ def main():
                     raise RuntimeError(f"pixel mismatch: collinear multi-segment/{mode}/{vertical_multi}")
                 checked += width * height
                 checked_pages += 1
+        for mode, number in MODES[1:]:
+            pdf = work / f"elbow-{mode}.pdf"
+            scene = work / "scene.opdl"
+            direct_output = work / "direct.rgba"
+            cli_output = work / "output.rgba"
+            hayro_output = work / "hayro.rgba"
+            elbow = b"1 w\n1 0 0 RG\n20 151.5 m\n60.5 151.5 l\n60.5 112 l\nS\n"
+            pdf.write_bytes(build_pdf(mode, extra_content=elbow))
+            subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
+            subprocess.run([probe, str(number), pdf, direct_output], check=True,
+                           capture_output=True)
+            subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+            subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
+                           capture_output=True)
+            expected = bytearray(reference_rgba(mode))
+            for x in range(20, 61):
+                offset = (40 * 256 + x) * 4
+                expected[offset:offset + 4] = b"\xff\x00\x00\xff"
+            for y in range(40, 80):
+                offset = (y * 256 + 60) * 4
+                expected[offset:offset + 4] = b"\xff\x00\x00\xff"
+            if not (direct_output.read_bytes() == cli_output.read_bytes()
+                    == hayro_output.read_bytes() == expected):
+                raise RuntimeError(f"pixel mismatch: right-down elbow/{mode}")
+            checked += 256 * 192
+            checked_pages += 1
         invalid_transforms = {
             "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
             "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",
@@ -331,6 +357,10 @@ def main():
             "unfinished-group-clip": b"q\n10 10 20 20 re\nW\nQ\n",
             "bent-multi-segment": b"1 w\n20 151.5 m\n60 151.5 l\n60 131.5 l\nS\n",
             "reversed-multi-segment": b"1 w\n20 151.5 m\n60 151.5 l\n40 151.5 l\nS\n",
+            "wrong-elbow-corner": b"1 w\n20 151.5 m\n60 151.5 l\n60 111.5 l\nS\n",
+            "half-elbow-end": b"1 w\n20 151.5 m\n60.5 151.5 l\n60.5 111.5 l\nS\n",
+            "third-elbow-segment": b"1 w\n20 151.5 m\n60.5 151.5 l\n60.5 112 l\n80.5 112 l\nS\n",
+            "reverse-elbow": b"1 w\n60.5 151.5 m\n20 151.5 l\n20 111.5 l\nS\n",
         }
         for name, content in invalid_transforms.items():
             invalid_pdf = work / f"invalid-{name}.pdf"
@@ -420,7 +450,8 @@ def main():
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
         print(f"{checked_pages} PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; "
-              "8 invalid scenes, 14 unsupported states and 10 syntax variants checked")
+              f"{len(bad)} invalid scenes, {len(invalid_transforms) + 1} unsupported states "
+              f"and {len(valid_syntax) + len(invalid_syntax)} syntax variants checked")
 
 
 if __name__ == "__main__":
