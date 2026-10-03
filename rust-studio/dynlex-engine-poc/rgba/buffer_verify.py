@@ -319,31 +319,35 @@ def main():
                 checked += width * height
                 checked_pages += 1
         for mode, number in MODES[1:]:
-            pdf = work / f"elbow-{mode}.pdf"
-            scene = work / "scene.opdl"
-            direct_output = work / "direct.rgba"
-            cli_output = work / "output.rgba"
-            hayro_output = work / "hayro.rgba"
-            elbow = b"1 w\n1 0 0 RG\n20 151.5 m\n60.5 151.5 l\n60.5 112 l\nS\n"
-            pdf.write_bytes(build_pdf(mode, extra_content=elbow))
-            subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
-            subprocess.run([probe, str(number), pdf, direct_output], check=True,
-                           capture_output=True)
-            subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
-            subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
-                           capture_output=True)
-            expected = bytearray(reference_rgba(mode))
-            for x in range(20, 61):
-                offset = (40 * 256 + x) * 4
-                expected[offset:offset + 4] = b"\xff\x00\x00\xff"
-            for y in range(40, 80):
-                offset = (y * 256 + 60) * 4
-                expected[offset:offset + 4] = b"\xff\x00\x00\xff"
-            if not (direct_output.read_bytes() == cli_output.read_bytes()
-                    == hayro_output.read_bytes() == expected):
-                raise RuntimeError(f"pixel mismatch: right-down elbow/{mode}")
-            checked += 256 * 192
-            checked_pages += 1
+            for upward in (False, True):
+                pdf = work / f"elbow-{mode}-{upward}.pdf"
+                scene = work / "scene.opdl"
+                direct_output = work / "direct.rgba"
+                cli_output = work / "output.rgba"
+                hayro_output = work / "hayro.rgba"
+                endpoint = 182 if upward else 112
+                elbow = (f"1 w\n1 0 0 RG\n20 151.5 m\n60.5 151.5 l\n"
+                         f"60.5 {endpoint} l\nS\n").encode()
+                pdf.write_bytes(build_pdf(mode, extra_content=elbow))
+                subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
+                subprocess.run([probe, str(number), pdf, direct_output], check=True,
+                               capture_output=True)
+                subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+                subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
+                               capture_output=True)
+                expected = bytearray(reference_rgba(mode))
+                for x in range(20, 61):
+                    offset = (40 * 256 + x) * 4
+                    expected[offset:offset + 4] = b"\xff\x00\x00\xff"
+                vertical_rows = range(10, 41) if upward else range(40, 80)
+                for y in vertical_rows:
+                    offset = (y * 256 + 60) * 4
+                    expected[offset:offset + 4] = b"\xff\x00\x00\xff"
+                if not (direct_output.read_bytes() == cli_output.read_bytes()
+                        == hayro_output.read_bytes() == expected):
+                    raise RuntimeError(f"pixel mismatch: rightward elbow/{mode}/{upward}")
+                checked += 256 * 192
+                checked_pages += 1
         invalid_transforms = {
             "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
             "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",

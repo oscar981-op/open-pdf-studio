@@ -558,26 +558,31 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                         || start[1] != corner[1]
                         || corner[0] != end[0]
                         || corner[0] <= start[0]
-                        || end[1] >= corner[1]
+                        || end[1] == corner[1]
                         || start[0].fract() != 0.0
                         || corner[0].fract() != 0.5
                         || corner[1].fract() != 0.5
                         || end[1].fract() != 0.0
                     {
-                        return Err(fail(
-                            "bent stroke outside supported right-down elbow subset",
-                        ));
+                        return Err(fail("bent stroke outside supported rightward elbow subset"));
                     }
                     let left = exact_u32(start[0])?;
                     let join_x = exact_u32(corner[0] - 0.5)?;
-                    let top = exact_u32(f64::from(height) - corner[1] - 0.5)?;
-                    let bottom = exact_u32(f64::from(height) - end[1])?;
-                    if join_x + 1 > width || bottom > height || left >= join_x || top >= bottom {
+                    let join_row = exact_u32(f64::from(height) - corner[1] - 0.5)?;
+                    let end_row = exact_u32(f64::from(height) - end[1])?;
+                    let vertical_top = join_row.min(end_row);
+                    let vertical_bottom = (join_row + 1).max(end_row);
+                    if join_x + 1 > width
+                        || vertical_bottom > height
+                        || left >= join_x
+                        || join_row + 1 > height
+                        || end_row.abs_diff(join_row) < 2
+                    {
                         return Err(fail("bent stroke outside page or empty"));
                     }
                     let ink = [stroke_color[0], stroke_color[1], stroke_color[2], 255];
-                    commands.push((3, [left, top, join_x + 1, top + 1], ink));
-                    commands.push((3, [join_x, top, join_x + 1, bottom], ink));
+                    commands.push((3, [left, join_row, join_x + 1, join_row + 1], ink));
+                    commands.push((3, [join_x, vertical_top, join_x + 1, vertical_bottom], ink));
                     if commands.len() > MAX_COMMANDS {
                         return Err(fail("too many commands"));
                     }
