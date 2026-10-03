@@ -346,6 +346,51 @@ def main():
                 raise RuntimeError(f"pixel mismatch: long monotone path/{mode}")
             checked += 256 * 192
             checked_pages += 1
+        two_bend_paths = {
+            "horizontal-s": b"20 151.5 m\n60.5 151.5 l\n60.5 111.5 l\n100 111.5 l\nS\n",
+            "horizontal-u": b"20 151.5 m\n60.5 151.5 l\n60.5 111.5 l\n20 111.5 l\nS\n",
+            "vertical-u": b"60.5 112 m\n60.5 151.5 l\n100.5 151.5 l\n100.5 112 l\nS\n",
+        }
+        for mode, number in MODES[1:]:
+            for shape, path in two_bend_paths.items():
+                pdf = work / f"two-bend-{shape}-{mode}.pdf"
+                scene = work / "scene.opdl"
+                direct_output = work / "direct.rgba"
+                cli_output = work / "output.rgba"
+                hayro_output = work / "hayro.rgba"
+                pdf.write_bytes(build_pdf(mode, extra_content=b"1 w\n1 0 0 RG\n" + path))
+                subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
+                subprocess.run([probe, str(number), pdf, direct_output], check=True,
+                               capture_output=True)
+                subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+                subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
+                               capture_output=True)
+                expected = bytearray(reference_rgba(mode))
+                ink = b"\xff\x00\x00\xff"
+                if shape.startswith("horizontal"):
+                    for x in range(20, 61):
+                        offset = (40 * 256 + x) * 4
+                        expected[offset:offset + 4] = ink
+                    for y in range(40, 81):
+                        offset = (y * 256 + 60) * 4
+                        expected[offset:offset + 4] = ink
+                    lower_cols = range(20, 61) if shape == "horizontal-u" else range(60, 100)
+                    for x in lower_cols:
+                        offset = (80 * 256 + x) * 4
+                        expected[offset:offset + 4] = ink
+                else:
+                    for y in range(40, 80):
+                        for x in (60, 100):
+                            offset = (y * 256 + x) * 4
+                            expected[offset:offset + 4] = ink
+                    for x in range(60, 101):
+                        offset = (40 * 256 + x) * 4
+                        expected[offset:offset + 4] = ink
+                if not (direct_output.read_bytes() == cli_output.read_bytes()
+                        == hayro_output.read_bytes() == expected):
+                    raise RuntimeError(f"pixel mismatch: two bends/{shape}/{mode}")
+                checked += 256 * 192
+                checked_pages += 1
         for mode, number in MODES[1:]:
             for upward in (False, True):
                 for leftward in (False, True):
@@ -432,6 +477,7 @@ def main():
             "short-left-elbow": b"1 w\n61 151.5 m\n60.5 151.5 l\n60.5 112 l\nS\n",
             "vertical-first-half-start": b"1 w\n60.5 111.5 m\n60.5 151.5 l\n100 151.5 l\nS\n",
             "vertical-first-half-end": b"1 w\n60.5 112 m\n60.5 151.5 l\n100.5 151.5 l\nS\n",
+            "three-bends": b"1 w\n20 151.5 m\n60.5 151.5 l\n60.5 111.5 l\n100.5 111.5 l\n100.5 72 l\nS\n",
         }
         for name, content in invalid_transforms.items():
             invalid_pdf = work / f"invalid-{name}.pdf"

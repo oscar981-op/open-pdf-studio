@@ -298,6 +298,59 @@ impl PathStage {
             *self.points.last().ok_or_else(|| fail("empty path"))?,
         ))
     }
+
+    fn orthogonal_rects(&self, width: u32, height: u32) -> Result<Vec<[u32; 4]>, Box<dyn Error>> {
+        if !(3..=4).contains(&self.points.len()) {
+            return Err(fail(
+                "only one or two verified orthogonal joins are supported",
+            ));
+        }
+        let mut rectangles = Vec::with_capacity(self.points.len() - 1);
+        let mut previous_horizontal = None;
+        for (index, pair) in self.points.windows(2).enumerate() {
+            let [a, b] = [pair[0], pair[1]];
+            let horizontal = a[1] == b[1] && a[0] != b[0];
+            let vertical = a[0] == b[0] && a[1] != b[1];
+            if (!horizontal && !vertical) || previous_horizontal == Some(horizontal) {
+                return Err(fail("unverified path join or segment"));
+            }
+            previous_horizontal = Some(horizontal);
+            let first = index == 0;
+            let last = index + 2 == self.points.len();
+            let rect = if horizontal {
+                if a[1].fract() != 0.5
+                    || a[0].fract() != if first { 0.0 } else { 0.5 }
+                    || b[0].fract() != if last { 0.0 } else { 0.5 }
+                    || (b[0] - a[0]).abs() < 2.0
+                {
+                    return Err(fail("horizontal path segment is not pixel aligned"));
+                }
+                let left = exact_u32(a[0].min(b[0]).floor())?;
+                let right = exact_u32(a[0].max(b[0]).ceil())?;
+                let row = exact_u32(f64::from(height) - a[1] - 0.5)?;
+                [left, row, right, row + 1]
+            } else {
+                if a[0].fract() != 0.5
+                    || a[1].fract() != if first { 0.0 } else { 0.5 }
+                    || b[1].fract() != if last { 0.0 } else { 0.5 }
+                    || (b[1] - a[1]).abs() < 2.0
+                {
+                    return Err(fail("vertical path segment is not pixel aligned"));
+                }
+                let column = exact_u32(a[0] - 0.5)?;
+                let y0 = f64::from(height) - a[1];
+                let y1 = f64::from(height) - b[1];
+                let top = exact_u32(y0.min(y1).floor())?;
+                let bottom = exact_u32(y0.max(y1).ceil())?;
+                [column, top, column + 1, bottom]
+            };
+            if rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height {
+                return Err(fail("path segment outside page or empty"));
+            }
+            rectangles.push(rect);
+        }
+        Ok(rectangles)
+    }
 }
 
 #[cfg(test)]
@@ -317,7 +370,7 @@ mod path_stage_tests {
     }
 
     #[test]
-    fn rejects_turn_and_reversal_until_join_rules_are_verified() {
+    fn collapsed_line_rejects_turn_and_reversal() {
         let mut bent = PathStage::start([20.0, 40.5]);
         bent.line_to([60.0, 40.5]).unwrap();
         bent.line_to([60.0, 80.5]).unwrap();
@@ -335,6 +388,20 @@ mod path_stage_tests {
             path.line_to([x as f64, 0.0]).unwrap();
         }
         assert!(path.line_to([0.0, 0.0]).is_err());
+    }
+
+    #[test]
+    fn orthogonal_path_maps_two_joins_and_rejects_more() {
+        let mut path = PathStage::start([20.0, 151.5]);
+        path.line_to([60.5, 151.5]).unwrap();
+        path.line_to([60.5, 111.5]).unwrap();
+        path.line_to([100.0, 111.5]).unwrap();
+        assert_eq!(
+            path.orthogonal_rects(256, 192).unwrap(),
+            [[20, 40, 61, 41], [60, 40, 61, 81], [60, 80, 100, 81]]
+        );
+        path.line_to([100.0, 72.0]).unwrap();
+        assert!(path.orthogonal_rects(256, 192).is_err());
     }
 }
 
@@ -603,99 +670,17 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                 let path = pending_path
                     .take()
                     .ok_or_else(|| fail("stroke without move"))?;
-                if path.points.len() == 3 && path.collapsed_line().is_err() {
-                    let [start, corner, end] = [path.points[0], path.points[1], path.points[2]];
-                    if start[0] == corner[0] && corner[1] == end[1] {
-                        if clip.is_some()
-                            || start[1] == corner[1]
-                            || end[0] == corner[0]
-                            || start[0].fract() != 0.5
-                            || start[1].fract() != 0.0
-                            || corner[0].fract() != 0.5
-                            || corner[1].fract() != 0.5
-                            || end[0].fract() != 0.0
-                        {
-                            return Err(fail(
-                                "bent stroke outside supported vertical elbow subset",
-                            ));
-                        }
-                        let join_x = exact_u32(corner[0] - 0.5)?;
-                        let end_x = exact_u32(end[0])?;
-                        let horizontal_left = join_x.min(end_x);
-                        let horizontal_right = if end_x < join_x { join_x + 1 } else { end_x };
-                        let join_row = exact_u32(f64::from(height) - corner[1] - 0.5)?;
-                        let start_row = exact_u32(f64::from(height) - start[1])?;
-                        let vertical_top = join_row.min(start_row);
-                        let vertical_bottom = (join_row + 1).max(start_row);
-                        if join_x + 1 > width
-                            || horizontal_right > width
-                            || vertical_bottom > height
-                            || join_row + 1 > height
-                            || end_x.abs_diff(join_x) < 2
-                            || start_row.abs_diff(join_row) < 2
-                        {
-                            return Err(fail("bent stroke outside page or empty"));
-                        }
-                        let ink = [stroke_color[0], stroke_color[1], stroke_color[2], 255];
-                        commands.push((
-                            3,
-                            [join_x, vertical_top, join_x + 1, vertical_bottom],
-                            ink,
-                        ));
-                        commands.push((
-                            3,
-                            [horizontal_left, join_row, horizontal_right, join_row + 1],
-                            ink,
-                        ));
-                        if commands.len() > MAX_COMMANDS {
-                            return Err(fail("too many commands"));
-                        }
-                        continue;
+                if path.points.len() >= 3 && path.collapsed_line().is_err() {
+                    if clip.is_some() {
+                        return Err(fail("orthogonal path with active clip is unsupported"));
                     }
-                    if clip.is_some()
-                        || start[1] != corner[1]
-                        || corner[0] != end[0]
-                        || corner[0] == start[0]
-                        || end[1] == corner[1]
-                        || start[0].fract() != 0.0
-                        || corner[0].fract() != 0.5
-                        || corner[1].fract() != 0.5
-                        || end[1].fract() != 0.0
-                    {
-                        return Err(fail(
-                            "bent stroke outside supported horizontal elbow subset",
-                        ));
-                    }
-                    let start_x = exact_u32(start[0])?;
-                    let join_x = exact_u32(corner[0] - 0.5)?;
-                    let horizontal_left = start_x.min(join_x);
-                    let horizontal_right = if start_x < join_x {
-                        join_x + 1
-                    } else {
-                        start_x
-                    };
-                    let join_row = exact_u32(f64::from(height) - corner[1] - 0.5)?;
-                    let end_row = exact_u32(f64::from(height) - end[1])?;
-                    let vertical_top = join_row.min(end_row);
-                    let vertical_bottom = (join_row + 1).max(end_row);
-                    if join_x + 1 > width
-                        || vertical_bottom > height
-                        || horizontal_right > width
-                        || join_row + 1 > height
-                        || start_x.abs_diff(join_x) < 2
-                        || end_row.abs_diff(join_row) < 2
-                    {
-                        return Err(fail("bent stroke outside page or empty"));
+                    let rectangles = path.orthogonal_rects(width, height)?;
+                    if commands.len() + rectangles.len() > MAX_COMMANDS {
+                        return Err(fail("too many commands"));
                     }
                     let ink = [stroke_color[0], stroke_color[1], stroke_color[2], 255];
-                    commands.push((
-                        3,
-                        [horizontal_left, join_row, horizontal_right, join_row + 1],
-                        ink,
-                    ));
-                    commands.push((3, [join_x, vertical_top, join_x + 1, vertical_bottom], ink));
-                    if commands.len() > MAX_COMMANDS {
-                        return Err(fail("too many commands"));
+                    for rect in rectangles {
+                        commands.push((3, rect, ink));
                     }
                     continue;
                 }

@@ -467,7 +467,7 @@ door 255 gebruikt: `(waarde + 255) >> 8`. De kernel gebruikt voor deze
 gecontroleerde diagonaal dezelfde kleurmenging. Zwarte en rode 45°-streken
 zijn in beide oriëntaties op vector- en hybride PDF-pagina's bytegelijk aan
 Hayro en de onafhankelijke referentie. De huidige `rgba/buffer_verify.py`
-controleert 41 fixtures/4.669.440 pixels, waaronder de grotere opdrachtfixture;
+controleert 47 fixtures/4.964.352 pixels, waaronder de grotere opdrachtfixture;
 de oude OPDL-v1-fixture blijft ongewijzigd.
 Andere hoeken en transparante diagonalen vereisen een eigen gecontroleerd pad.
 
@@ -491,23 +491,23 @@ dit zegt nog niets over grotere echte tekeningen.
 De adapter kan nu een PDF-stroke met meerdere **monotoon collineaire**
 `m/l/l/.../S`-segmenten als één asgerichte lijn samenvoegen. Horizontale en
 verticale fixtures komen in vector en hybride pixelgelijk met Hayro overeen.
-Een streng afgebakende uitzondering is een 1px L-stroke in acht richtingen:
-horizontaal of verticaal beginnen en vervolgens haaks links/rechts of
-omhoog/omlaag. Het horizontale buitenste eind ligt op een gehele x, het
-verticale op een gehele y en de bocht op een halve x en y. De benen zijn
-minstens twee pixels lang en er is geen clip. De adapter maakt twee dekkende
-OPDL-stroken;
-de gedeelde hoekpixel is volledig gevuld, zoals Hayro's join. Rode vector-
-en hybride PDF-fixtures zijn pixelgelijk aan Hayro en de onafhankelijke
-referentie. Een halfpixel-eindpunt gaf juist halve dekking en blijft geweigerd,
-net als andere padvolgorden, extra segmenten, curven en clipping. Dit is geen
-algemene padondersteuning.
+Een streng afgebakende uitzondering is een 1px-pad met één of twee haakse
+bochten. Het horizontale buitenste eind ligt op een gehele x, het verticale op
+een gehele y en iedere bocht op een halve x en y. De segmenten zijn minstens
+twee pixels lang en wisselen horizontaal/verticaal af; er is geen clip. Een
+begrensde regel maakt per segment een dekkende OPDL-strook, zodat de gedeelde
+hoekpixel volledig gevuld is zoals bij Hayro. De acht L-richtingen en drie
+twee-bochtenvormen zijn op vector- en hybride PDF-fixtures pixelgelijk aan
+Hayro en de onafhankelijke referentie. Halfpixel-buiteneindpunten, niet-haakse
+segmenten, drie of meer bochten, curven en clipping blijven geweigerd. Dit is
+geen algemene padondersteuning.
 
 De PDF-adapter bewaart `m/l/.../S` nu eerst als een begrensde reeks punten
 (maximaal 16.384 segmenten) en classificeert pas bij `S` of het pad een
-bewezen rechte lijn of L-vorm is. De oude losse toestanden voor beginpunt,
-lopende lijn en hoek zijn vervangen. Een fixture met 128 monotoon collineaire
-segmenten levert precies één OPDL-opdracht en is in vector en hybride uitvoer
-pixelgelijk aan Hayro. Reversals, twee bochten en onbewezen joins blijven
-afgewezen; de buffer is een voorbereiding op padgeometrie, geen ondersteuning
-voor algemene `c`-curven of `h`-sluitingen.
+bewezen rechte lijn of pixeluitgelijnd pad met hoogstens twee bochten is. De
+oude losse toestanden voor beginpunt, lopende lijn en hoek zijn vervangen. Een
+fixture met 128 monotoon collineaire segmenten levert precies één OPDL-opdracht
+en is in vector en hybride uitvoer
+pixelgelijk aan Hayro. Reversals, drie of meer bochten en onbewezen joins blijven
+afgewezen; de buffer is een voorbereiding op bredere padgeometrie, geen
+ondersteuning voor algemene `c`-curven of `h`-sluitingen.
