@@ -340,6 +340,46 @@ def main():
                                       capture_output=True)
             if rejected.returncode == 0 or invalid_output.exists():
                 raise RuntimeError(f"unsupported transform accepted: {name}")
+        legacy_env = os.environ.copy()
+        legacy_env["OPDS_OPDL_LEGACY_DECODE"] = "1"
+        syntax_pdf = work / "syntax-baseline.pdf"
+        syntax_pdf.write_bytes(build_pdf("vector"))
+        syntax_baseline = work / "syntax-baseline.opdl"
+        subprocess.run([paths["adapter"], syntax_pdf, syntax_baseline], check=True,
+                       capture_output=True)
+        valid_syntax = {
+            "comment": b"% harmless comment\n",
+            "spaces": b"1  0 0 rg\n",
+            "tabs": b"1\t0 0 rg\n",
+            "decimal": b"1.0 0 0 rg\n",
+        }
+        for name, prefix in valid_syntax.items():
+            pdf = work / f"syntax-valid-{name}.pdf"
+            pdf.write_bytes(build_pdf("vector", pre_content=prefix))
+            output = work / f"syntax-valid-{name}.opdl"
+            for env in (None, legacy_env):
+                subprocess.run([paths["adapter"], pdf, output], env=env, check=True,
+                               capture_output=True)
+                if output.read_bytes() != syntax_baseline.read_bytes():
+                    raise RuntimeError(f"fallback changed output: {name}")
+        invalid_syntax = {
+            "missing-operand": b"1 0 rg\n",
+            "unknown-operator": b"1 0 0 xx\n",
+            "string-operator": b"(text) Tj\n",
+            "array-operand": b"[1 2] re\n",
+            "unfinished-array": b"[1 2 re\n",
+            "extra-operand": b"1 0 0 1 rg\n",
+        }
+        for name, suffix in invalid_syntax.items():
+            pdf = work / f"syntax-invalid-{name}.pdf"
+            pdf.write_bytes(build_pdf("vector", extra_content=suffix))
+            output = work / f"syntax-invalid-{name}.opdl"
+            for env in (None, legacy_env):
+                output.unlink(missing_ok=True)
+                result = subprocess.run([paths["adapter"], pdf, output], env=env,
+                                        capture_output=True)
+                if result.returncode == 0 or output.exists():
+                    raise RuntimeError(f"invalid content accepted: {name}")
         clipped_image = work / "clip-before-image.pdf"
         clipped_image.write_bytes(build_pdf("raster", pre_content=b"10 10 20 20 re\nW\nn\n"))
         clipped_image_output = work / "clip-before-image.opdl"
@@ -379,7 +419,8 @@ def main():
                     raise RuntimeError(f"CLI accepted invalid scene: {name}")
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
-        print(f"{checked_pages} PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 8 invalid scenes and 14 unsupported transforms/path states rejected")
+        print(f"{checked_pages} PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; "
+              "8 invalid scenes, 14 unsupported states and 10 syntax variants checked")
 
 
 if __name__ == "__main__":

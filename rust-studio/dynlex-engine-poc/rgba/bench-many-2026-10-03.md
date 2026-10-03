@@ -80,6 +80,20 @@ niet-ondersteunde PDF-states worden geweigerd. De meting gebruikt een kleine,
 synthetisch herhaalde PDF met warme OS-cache. De canonieke route dekt geen
 algemene PDF-content en bewijst geen winst op echte A1-tekeningen.
 
+Na de A/B-meting is de invoergrens aangescherpt: de snelle decoder eist nu per
+operator het juiste aantal operanden. De verificatie biedt daarnaast commentaar,
+extra spaties, tabs en decimale schrijfwijzen aan beide decoderpaden aan en
+controleert gelijke OPDL-uitvoer. Ontbrekende of extra operanden, onbekende
+operatoren, strings en arrays worden in beide paden geweigerd. Een onafgemaakte
+array bleek door `lopdf` zonder fout te kunnen worden genegeerd; de beperkte
+adapter weigert daarom samengestelde PDF-operanden al vóór de algemene decoder,
+met behoud van commentaarregels. Dit is een veiligheidsgrens van de testadapter,
+geen claim dat hij willekeurige PDF-content volledig valideert.
+Een korte regressie-A/B na deze aanscherping (vijf paren, warme OS-cache)
+gaf decoder-medianen snel/lopdf 5,80/10,15 ms voor vector en 6,83/9,64 ms
+voor hybride; de snelle route won 4/5 en 5/5 paren. Dit is alleen een
+rookcontrole, geen vervanging van de vijftien-runmeting hierboven.
+
 Reproduceer met `rgba/buffer_verify.py` en `--bench-many-calls 100
 --bench-many-runs 15 --bench-memory --bench-json UITVOER.json`, plus de in de
 README genoemde DynLex 0.0.1- en LLVM20-toolchainargumenten.

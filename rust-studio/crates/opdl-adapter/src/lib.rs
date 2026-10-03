@@ -82,16 +82,46 @@ fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
                 break;
             }
         }
-        operations.push(Operation {
-            operator: operator?,
-            operands,
-        });
+        let operator = operator?;
+        let arity = match operator.as_str() {
+            "q" | "Q" | "W" | "n" | "f" | "S" => 0,
+            "Do" | "w" => 1,
+            "m" | "l" => 2,
+            "rg" | "RG" => 3,
+            "re" => 4,
+            "cm" => 6,
+            _ => return None,
+        };
+        if operands.len() != arity
+            || (operator == "Do" && operands[0].as_name().ok() != Some(b"Im0".as_slice()))
+        {
+            return None;
+        }
+        operations.push(Operation { operator, operands });
         if operations.len() > 40_000 {
             return None;
         }
     }
     let content = Content { operations };
     (content.encode().ok()?.as_slice() == bytes).then_some(content)
+}
+
+// This adapter cannot interpret compound PDF operands. Reject them before the
+// general parser, which may otherwise ignore an unfinished trailing object.
+fn has_compound_operand(bytes: &[u8]) -> bool {
+    let mut comment = false;
+    for &byte in bytes {
+        if comment {
+            if byte == b'\r' || byte == b'\n' {
+                comment = false;
+            }
+        } else if byte == b'%' {
+            comment = true;
+        } else if matches!(byte, b'[' | b']' | b'(' | b')' | b'<' | b'>' | b'{' | b'}') {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -117,9 +147,55 @@ mod fast_decode_tests {
             b"1 0 0 xx".as_slice(),
             b"/Other Do".as_slice(),
             b"(text) Tj".as_slice(),
+            b"[1 2] re".as_slice(),
+            b"1\t0 0 rg".as_slice(),
+            b"1 0 0 rg\r\n".as_slice(),
+            b"1 0 0 rg 2 0 0 rg".as_slice(),
+            b"1 0 rg".as_slice(),
+            b"1 0 0 rg\n/Im1 Do".as_slice(),
         ] {
             assert!(decode_canonical_content(bytes).is_none(), "{bytes:?}");
         }
+    }
+
+    #[test]
+    fn accepted_numeric_forms_match_lopdf_objects() {
+        for token in [
+            "0",
+            "1",
+            "-1",
+            "+1",
+            "01",
+            "0.0",
+            "1.25",
+            "-1.25",
+            ".5",
+            "1.",
+            "-0",
+            "99999999999999999999",
+            "1e3",
+            "1.2.3",
+            "NaN",
+            "inf",
+        ] {
+            let bytes = format!("{token} w");
+            if let Some(fast) = decode_canonical_content(bytes.as_bytes()) {
+                let general = Content::decode(bytes.as_bytes())
+                    .expect("fast decoder must not accept input rejected by lopdf");
+                assert_eq!(fast.operations.len(), general.operations.len(), "{token}");
+                for (left, right) in fast.operations.iter().zip(general.operations.iter()) {
+                    assert_eq!(left.operator, right.operator, "{token}");
+                    assert_eq!(left.operands, right.operands, "{token}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn compound_syntax_is_detected_outside_comments() {
+        assert!(has_compound_operand(b"[1 2 re\n"));
+        assert!(has_compound_operand(b"(text) Tj\n"));
+        assert!(!has_compound_operand(b"% [ignored]\n1 0 0 rg\n"));
     }
 }
 
@@ -258,6 +334,9 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
     }
     let resources = resources.ok_or_else(|| fail("missing resources"))?;
     let content_bytes = document.get_page_content(page_id)?;
+    if has_compound_operand(&content_bytes) {
+        return Err(fail("compound PDF operands are outside the fixture subset"));
+    }
     timings.content_ms = started.elapsed().as_secs_f64() * 1000.0;
     let started = Instant::now();
     let content = if std::env::var_os("OPDS_OPDL_LEGACY_DECODE").is_some() {
