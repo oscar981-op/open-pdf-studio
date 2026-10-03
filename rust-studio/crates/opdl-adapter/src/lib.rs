@@ -554,6 +554,53 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
             }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
                 if let Some((start, corner, end)) = pending_elbow.take() {
+                    if start[0] == corner[0] && corner[1] == end[1] {
+                        if clip.is_some()
+                            || start[1] == corner[1]
+                            || end[0] == corner[0]
+                            || start[0].fract() != 0.5
+                            || start[1].fract() != 0.0
+                            || corner[0].fract() != 0.5
+                            || corner[1].fract() != 0.5
+                            || end[0].fract() != 0.0
+                        {
+                            return Err(fail(
+                                "bent stroke outside supported vertical elbow subset",
+                            ));
+                        }
+                        let join_x = exact_u32(corner[0] - 0.5)?;
+                        let end_x = exact_u32(end[0])?;
+                        let horizontal_left = join_x.min(end_x);
+                        let horizontal_right = if end_x < join_x { join_x + 1 } else { end_x };
+                        let join_row = exact_u32(f64::from(height) - corner[1] - 0.5)?;
+                        let start_row = exact_u32(f64::from(height) - start[1])?;
+                        let vertical_top = join_row.min(start_row);
+                        let vertical_bottom = (join_row + 1).max(start_row);
+                        if join_x + 1 > width
+                            || horizontal_right > width
+                            || vertical_bottom > height
+                            || join_row + 1 > height
+                            || end_x.abs_diff(join_x) < 2
+                            || start_row.abs_diff(join_row) < 2
+                        {
+                            return Err(fail("bent stroke outside page or empty"));
+                        }
+                        let ink = [stroke_color[0], stroke_color[1], stroke_color[2], 255];
+                        commands.push((
+                            3,
+                            [join_x, vertical_top, join_x + 1, vertical_bottom],
+                            ink,
+                        ));
+                        commands.push((
+                            3,
+                            [horizontal_left, join_row, horizontal_right, join_row + 1],
+                            ink,
+                        ));
+                        if commands.len() > MAX_COMMANDS {
+                            return Err(fail("too many commands"));
+                        }
+                        continue;
+                    }
                     if clip.is_some()
                         || start[1] != corner[1]
                         || corner[0] != end[0]

@@ -467,7 +467,7 @@ door 255 gebruikt: `(waarde + 255) >> 8`. De kernel gebruikt voor deze
 gecontroleerde diagonaal dezelfde kleurmenging. Zwarte en rode 45°-streken
 zijn in beide oriëntaties op vector- en hybride PDF-pagina's bytegelijk aan
 Hayro en de onafhankelijke referentie. De huidige `rgba/buffer_verify.py`
-controleert 31 fixtures/4.177.920 pixels, waaronder de grotere opdrachtfixture;
+controleert 39 fixtures/4.571.136 pixels, waaronder de grotere opdrachtfixture;
 de oude OPDL-v1-fixture blijft ongewijzigd.
 Andere hoeken en transparante diagonalen vereisen een eigen gecontroleerd pad.
 
@@ -491,10 +491,12 @@ dit zegt nog niets over grotere echte tekeningen.
 De adapter kan nu een PDF-stroke met meerdere **monotoon collineaire**
 `m/l/l/.../S`-segmenten als één asgerichte lijn samenvoegen. Horizontale en
 verticale fixtures komen in vector en hybride pixelgelijk met Hayro overeen.
-Een streng afgebakende uitzondering is een horizontaal beginnende 1px L-stroke,
-links of rechts en daarna omhoog of omlaag: begin op een gehele x, bocht op
-een halve x en y, verticaal eind op een gehele y, zonder clip. De adapter maakt
-twee dekkende OPDL-stroken;
+Een streng afgebakende uitzondering is een 1px L-stroke in acht richtingen:
+horizontaal of verticaal beginnen en vervolgens haaks links/rechts of
+omhoog/omlaag. Het horizontale buitenste eind ligt op een gehele x, het
+verticale op een gehele y en de bocht op een halve x en y. De benen zijn
+minstens twee pixels lang en er is geen clip. De adapter maakt twee dekkende
+OPDL-stroken;
 de gedeelde hoekpixel is volledig gevuld, zoals Hayro's join. Rode vector-
 en hybride PDF-fixtures zijn pixelgelijk aan Hayro en de onafhankelijke
 referentie. Een halfpixel-eindpunt gaf juist halve dekking en blijft geweigerd,
