@@ -34,6 +34,27 @@ procespaaruitkomsten variëren, vooral bij hybride, en dragen geen algemene
 snelheidsclaim. De volgende profilerstap is lezen/parsen, operatorverwerking
 en OPDL-opbouw binnen `page_to_opdl` apart timen, daarna pas optimaliseren.
 
+## Interne adapterfasen
+
+Een vervolgmeting met vijftien gepaarde warme procesruns per modus staat in
+[`bench-many-stages-2026-10-03.json`](bench-many-stages-2026-10-03.json).
+De medianen in de DynLex-route waren:
+
+| Modus | PDF lezen | Document parsen | Pagina/content ophalen en operatoren decoderen | Eigen operatorverwerking | OPDL schrijven |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Vector | 0,16 | 0,23 | 11,94 | 0,59 | 0,22 ms |
+| Hybride | 0,35 | 0,39 | 11,89 | 0,57 | 0,34 ms |
+
+Een tweede, kleinere diagnostische run met vijf paren splitste de derde kolom:
+content ophalen kostte 0,16/0,14 ms en `lopdf::Content::decode` 15,41/13,89 ms
+voor vector/hybride. Ruwe samples staan in
+[`bench-many-detailed-2026-10-03.json`](bench-many-detailed-2026-10-03.json).
+De vijf-runwaarden dienen alleen om de bottleneck te lokaliseren; ze zijn geen
+A/B-snelheidsbewijs. De parser decodeert nu alle 6.005 PDF-operatoren naar
+algemene `lopdf::Object`-waarden voordat de eigen, beperkte interpreter ze
+verwerkt. Een toekomstige snellere decoder moet dezelfde PDF-grenzen en
+foutafwijzing behouden en met alle pixel- en regressiefixtures worden vergeleken.
+
 Reproduceer met `rgba/buffer_verify.py` en `--bench-many-calls 100
 --bench-many-runs 15 --bench-memory --bench-json UITVOER.json`, plus de in de
 README genoemde DynLex 0.0.1- en LLVM20-toolchainargumenten.

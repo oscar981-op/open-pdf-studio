@@ -1,0 +1,578 @@
+{
+  "many-vector-kernel": {
+    "commands": 6005,
+    "repeat": 100,
+    "kernel_ms_per_call": 0.4382,
+    "scope": "validated OPDL to RGBA; excludes PDF parsing and process startup"
+  },
+  "many-vector": {
+    "page": "256x192",
+    "commands": 6005,
+    "os_cache_cleared": false,
+    "time_wrapper": true,
+    "samples": {
+      "direct": [
+        {
+          "wall_ms": 18.797071,
+          "stages_ms": {
+            "load_ms": 12.5675,
+            "read_ms": 0.1183,
+            "document_ms": 0.1711,
+            "page_decode_ms": 9.4088,
+            "operators_ms": 0.6209,
+            "encode_ms": 0.2176,
+            "kernel_ms": 0.416,
+            "write_ms": 0.5039
+          },
+          "peak_rss_kib": 9604
+        },
+        {
+          "wall_ms": 22.816331,
+          "stages_ms": {
+            "load_ms": 15.9742,
+            "read_ms": 0.2136,
+            "document_ms": 0.2739,
+            "page_decode_ms": 12.9378,
+            "operators_ms": 0.5456,
+            "encode_ms": 0.2318,
+            "kernel_ms": 0.447,
+            "write_ms": 0.4513
+          },
+          "peak_rss_kib": 9604
+        },
+        {
+          "wall_ms": 18.889613,
+          "stages_ms": {
+            "load_ms": 12.6537,
+            "read_ms": 0.1447,
+            "document_ms": 0.1646,
+            "page_decode_ms": 9.988,
+            "operators_ms": 0.5715,
+            "encode_ms": 0.2263,
+            "kernel_ms": 0.4333,
+            "write_ms": 0.4566
+          },
+          "peak_rss_kib": 9568
+        },
+        {
+          "wall_ms": 21.855167,
+          "stages_ms": {
+            "load_ms": 15.2981,
+            "read_ms": 0.1536,
+            "document_ms": 0.2304,
+            "page_decode_ms": 12.0149,
+            "operators_ms": 0.6087,
+            "encode_ms": 0.2152,
+            "kernel_ms": 0.4413,
+            "write_ms": 0.4662
+          },
+          "peak_rss_kib": 9568
+        },
+        {
+          "wall_ms": 20.515007,
+          "stages_ms": {
+            "load_ms": 14.6955,
+            "read_ms": 0.1582,
+            "document_ms": 0.2024,
+            "page_decode_ms": 11.941,
+            "operators_ms": 0.5678,
+            "encode_ms": 0.2549,
+            "kernel_ms": 0.4305,
+            "write_ms": 0.446
+          },
+          "peak_rss_kib": 9556
+        },
+        {
+          "wall_ms": 23.780346,
+          "stages_ms": {
+            "load_ms": 16.9806,
+            "read_ms": 0.2536,
+            "document_ms": 0.2947,
+            "page_decode_ms": 13.3704,
+            "operators_ms": 0.593,
+            "encode_ms": 0.2088,
+            "kernel_ms": 0.4283,
+            "write_ms": 0.4774
+          },
+          "peak_rss_kib": 9612
+        },
+        {
+          "wall_ms": 26.08722,
+          "stages_ms": {
+            "load_ms": 19.1141,
+            "read_ms": 0.2187,
+            "document_ms": 0.2965,
+            "page_decode_ms": 16.0375,
+            "operators_ms": 0.5884,
+            "encode_ms": 0.2278,
+            "kernel_ms": 0.4014,
+            "write_ms": 0.4491
+          },
+          "peak_rss_kib": 9492
+        },
+        {
+          "wall_ms": 21.401641,
+          "stages_ms": {
+            "load_ms": 14.6598,
+            "read_ms": 0.149,
+            "document_ms": 0.1871,
+            "page_decode_ms": 11.4472,
+            "operators_ms": 0.651,
+            "encode_ms": 0.2249,
+            "kernel_ms": 1.8411,
+            "write_ms": 0.5323
+          },
+          "peak_rss_kib": 9568
+        },
+        {
+          "wall_ms": 20.00489,
+          "stages_ms": {
+            "load_ms": 14.6791,
+            "read_ms": 0.1546,
+            "document_ms": 0.1944,
+            "page_decode_ms": 11.9418,
+            "operators_ms": 0.5915,
+            "encode_ms": 0.2145,
+            "kernel_ms": 0.441,
+            "write_ms": 0.4678
+          },
+          "peak_rss_kib": 9604
+        },
+        {
+          "wall_ms": 17.317159,
+          "stages_ms": {
+            "load_ms": 11.9955,
+            "read_ms": 0.1165,
+            "document_ms": 0.1655,
+            "page_decode_ms": 9.1472,
+            "operators_ms": 0.7621,
+            "encode_ms": 0.2122,
+            "kernel_ms": 0.3851,
+            "write_ms": 0.4311
+          },
+          "peak_rss_kib": 9684
+        },
+        {
+          "wall_ms": 23.34031,
+          "stages_ms": {
+            "load_ms": 17.8591,
+            "read_ms": 0.1533,
+            "document_ms": 0.2292,
+            "page_decode_ms": 14.3727,
+            "operators_ms": 0.5956,
+            "encode_ms": 0.2333,
+            "kernel_ms": 0.4093,
+            "write_ms": 0.5045
+          },
+          "peak_rss_kib": 9616
+        },
+        {
+          "wall_ms": 19.794546,
+          "stages_ms": {
+            "load_ms": 13.495,
+            "read_ms": 0.186,
+            "document_ms": 0.2386,
+            "page_decode_ms": 10.7886,
+            "operators_ms": 0.556,
+            "encode_ms": 0.205,
+            "kernel_ms": 0.3736,
+            "write_ms": 0.493
+          },
+          "peak_rss_kib": 9608
+        },
+        {
+          "wall_ms": 20.05899,
+          "stages_ms": {
+            "load_ms": 14.3803,
+            "read_ms": 0.1605,
+            "document_ms": 0.1901,
+            "page_decode_ms": 11.7352,
+            "operators_ms": 0.535,
+            "encode_ms": 0.2266,
+            "kernel_ms": 0.4247,
+            "write_ms": 0.4448
+          },
+          "peak_rss_kib": 9488
+        },
+        {
+          "wall_ms": 27.045865,
+          "stages_ms": {
+            "load_ms": 21.5269,
+            "read_ms": 0.2137,
+            "document_ms": 0.2715,
+            "page_decode_ms": 18.5629,
+            "operators_ms": 0.5413,
+            "encode_ms": 0.2138,
+            "kernel_ms": 0.4218,
+            "write_ms": 0.4537
+          },
+          "peak_rss_kib": 9556
+        },
+        {
+          "wall_ms": 24.989154,
+          "stages_ms": {
+            "load_ms": 18.455,
+            "read_ms": 0.1867,
+            "document_ms": 0.2456,
+            "page_decode_ms": 15.5485,
+            "operators_ms": 0.5723,
+            "encode_ms": 0.2516,
+            "kernel_ms": 0.4123,
+            "write_ms": 0.4383
+          },
+          "peak_rss_kib": 9616
+        }
+      ],
+      "hayro": [
+        {
+          "wall_ms": 15.707205,
+          "peak_rss_kib": 7268
+        },
+        {
+          "wall_ms": 17.9893,
+          "peak_rss_kib": 7340
+        },
+        {
+          "wall_ms": 19.38928,
+          "peak_rss_kib": 7468
+        },
+        {
+          "wall_ms": 15.859278,
+          "peak_rss_kib": 7312
+        },
+        {
+          "wall_ms": 18.846292,
+          "peak_rss_kib": 7480
+        },
+        {
+          "wall_ms": 19.885417,
+          "peak_rss_kib": 7260
+        },
+        {
+          "wall_ms": 18.829572,
+          "peak_rss_kib": 7296
+        },
+        {
+          "wall_ms": 22.271563,
+          "peak_rss_kib": 7256
+        },
+        {
+          "wall_ms": 19.666515,
+          "peak_rss_kib": 7212
+        },
+        {
+          "wall_ms": 18.249303,
+          "peak_rss_kib": 7268
+        },
+        {
+          "wall_ms": 17.057266,
+          "peak_rss_kib": 7208
+        },
+        {
+          "wall_ms": 20.589408,
+          "peak_rss_kib": 7476
+        },
+        {
+          "wall_ms": 21.216347,
+          "peak_rss_kib": 7320
+        },
+        {
+          "wall_ms": 17.323339,
+          "peak_rss_kib": 7268
+        },
+        {
+          "wall_ms": 21.128587,
+          "peak_rss_kib": 7252
+        }
+      ]
+    }
+  },
+  "many-hybrid-kernel": {
+    "commands": 6005,
+    "repeat": 100,
+    "kernel_ms_per_call": 0.5783,
+    "scope": "validated OPDL to RGBA; excludes PDF parsing and process startup"
+  },
+  "many-hybrid": {
+    "page": "256x192",
+    "commands": 6005,
+    "os_cache_cleared": false,
+    "time_wrapper": true,
+    "samples": {
+      "direct": [
+        {
+          "wall_ms": 18.668149,
+          "stages_ms": {
+            "load_ms": 12.4083,
+            "read_ms": 0.2516,
+            "document_ms": 0.2826,
+            "page_decode_ms": 9.2616,
+            "operators_ms": 0.5764,
+            "encode_ms": 0.3195,
+            "kernel_ms": 0.5465,
+            "write_ms": 0.4757
+          },
+          "peak_rss_kib": 9876
+        },
+        {
+          "wall_ms": 20.845013,
+          "stages_ms": {
+            "load_ms": 15.1889,
+            "read_ms": 0.3524,
+            "document_ms": 0.387,
+            "page_decode_ms": 11.892,
+            "operators_ms": 0.5696,
+            "encode_ms": 0.3297,
+            "kernel_ms": 0.5612,
+            "write_ms": 0.4605
+          },
+          "peak_rss_kib": 9988
+        },
+        {
+          "wall_ms": 25.325549,
+          "stages_ms": {
+            "load_ms": 19.0112,
+            "read_ms": 0.4327,
+            "document_ms": 0.4784,
+            "page_decode_ms": 14.9989,
+            "operators_ms": 0.5933,
+            "encode_ms": 0.3388,
+            "kernel_ms": 0.5917,
+            "write_ms": 0.5244
+          },
+          "peak_rss_kib": 9996
+        },
+        {
+          "wall_ms": 21.306389,
+          "stages_ms": {
+            "load_ms": 15.2469,
+            "read_ms": 0.3979,
+            "document_ms": 0.4616,
+            "page_decode_ms": 11.8256,
+            "operators_ms": 0.5529,
+            "encode_ms": 0.3297,
+            "kernel_ms": 0.5937,
+            "write_ms": 0.4481
+          },
+          "peak_rss_kib": 10068
+        },
+        {
+          "wall_ms": 18.095491,
+          "stages_ms": {
+            "load_ms": 12.4438,
+            "read_ms": 0.248,
+            "document_ms": 0.2831,
+            "page_decode_ms": 9.1936,
+            "operators_ms": 0.5426,
+            "encode_ms": 0.3235,
+            "kernel_ms": 0.5855,
+            "write_ms": 0.4346
+          },
+          "peak_rss_kib": 10064
+        },
+        {
+          "wall_ms": 24.375425,
+          "stages_ms": {
+            "load_ms": 18.7454,
+            "read_ms": 0.2988,
+            "document_ms": 0.3233,
+            "page_decode_ms": 15.4809,
+            "operators_ms": 0.5675,
+            "encode_ms": 0.3369,
+            "kernel_ms": 0.5719,
+            "write_ms": 0.4567
+          },
+          "peak_rss_kib": 9952
+        },
+        {
+          "wall_ms": 18.73538,
+          "stages_ms": {
+            "load_ms": 12.9142,
+            "read_ms": 0.2828,
+            "document_ms": 0.2992,
+            "page_decode_ms": 9.5924,
+            "operators_ms": 0.5692,
+            "encode_ms": 0.3374,
+            "kernel_ms": 0.5689,
+            "write_ms": 0.4613
+          },
+          "peak_rss_kib": 9952
+        },
+        {
+          "wall_ms": 24.898733,
+          "stages_ms": {
+            "load_ms": 18.9051,
+            "read_ms": 0.4331,
+            "document_ms": 0.5192,
+            "page_decode_ms": 15.5938,
+            "operators_ms": 0.5481,
+            "encode_ms": 0.3248,
+            "kernel_ms": 0.523,
+            "write_ms": 0.4344
+          },
+          "peak_rss_kib": 9872
+        },
+        {
+          "wall_ms": 26.482956,
+          "stages_ms": {
+            "load_ms": 19.3794,
+            "read_ms": 0.5577,
+            "document_ms": 0.5408,
+            "page_decode_ms": 15.4716,
+            "operators_ms": 0.5609,
+            "encode_ms": 0.4463,
+            "kernel_ms": 0.5741,
+            "write_ms": 0.4631
+          },
+          "peak_rss_kib": 10040
+        },
+        {
+          "wall_ms": 23.356989,
+          "stages_ms": {
+            "load_ms": 17.2279,
+            "read_ms": 0.4152,
+            "document_ms": 0.5169,
+            "page_decode_ms": 13.2715,
+            "operators_ms": 0.6003,
+            "encode_ms": 0.3523,
+            "kernel_ms": 0.5866,
+            "write_ms": 0.4785
+          },
+          "peak_rss_kib": 9876
+        },
+        {
+          "wall_ms": 19.771977,
+          "stages_ms": {
+            "load_ms": 13.0119,
+            "read_ms": 0.3433,
+            "document_ms": 0.3483,
+            "page_decode_ms": 9.7278,
+            "operators_ms": 0.5631,
+            "encode_ms": 0.3611,
+            "kernel_ms": 0.5615,
+            "write_ms": 0.449
+          },
+          "peak_rss_kib": 9988
+        },
+        {
+          "wall_ms": 26.360665,
+          "stages_ms": {
+            "load_ms": 19.7038,
+            "read_ms": 0.3357,
+            "document_ms": 0.4059,
+            "page_decode_ms": 15.1556,
+            "operators_ms": 1.0671,
+            "encode_ms": 0.5015,
+            "kernel_ms": 0.6531,
+            "write_ms": 0.5168
+          },
+          "peak_rss_kib": 9872
+        },
+        {
+          "wall_ms": 21.095685,
+          "stages_ms": {
+            "load_ms": 14.8203,
+            "read_ms": 0.3209,
+            "document_ms": 0.3415,
+            "page_decode_ms": 10.9811,
+            "operators_ms": 0.6291,
+            "encode_ms": 0.3572,
+            "kernel_ms": 0.6165,
+            "write_ms": 0.5224
+          },
+          "peak_rss_kib": 9912
+        },
+        {
+          "wall_ms": 20.440126,
+          "stages_ms": {
+            "load_ms": 13.7206,
+            "read_ms": 0.3544,
+            "document_ms": 0.361,
+            "page_decode_ms": 10.3961,
+            "operators_ms": 0.5617,
+            "encode_ms": 0.34,
+            "kernel_ms": 0.6056,
+            "write_ms": 0.4625
+          },
+          "peak_rss_kib": 9940
+        },
+        {
+          "wall_ms": 22.456996,
+          "stages_ms": {
+            "load_ms": 15.4625,
+            "read_ms": 0.4068,
+            "document_ms": 0.4437,
+            "page_decode_ms": 12.0414,
+            "operators_ms": 0.545,
+            "encode_ms": 0.3348,
+            "kernel_ms": 0.5689,
+            "write_ms": 0.4666
+          },
+          "peak_rss_kib": 9936
+        }
+      ],
+      "hayro": [
+        {
+          "wall_ms": 24.7367,
+          "peak_rss_kib": 7832
+        },
+        {
+          "wall_ms": 19.574273,
+          "peak_rss_kib": 7640
+        },
+        {
+          "wall_ms": 18.271104,
+          "peak_rss_kib": 7664
+        },
+        {
+          "wall_ms": 18.68016,
+          "peak_rss_kib": 7640
+        },
+        {
+          "wall_ms": 19.231598,
+          "peak_rss_kib": 7632
+        },
+        {
+          "wall_ms": 18.972584,
+          "peak_rss_kib": 7616
+        },
+        {
+          "wall_ms": 17.164897,
+          "peak_rss_kib": 7680
+        },
+        {
+          "wall_ms": 15.156127,
+          "peak_rss_kib": 7632
+        },
+        {
+          "wall_ms": 21.602403,
+          "peak_rss_kib": 7764
+        },
+        {
+          "wall_ms": 16.617148,
+          "peak_rss_kib": 7856
+        },
+        {
+          "wall_ms": 31.499822,
+          "peak_rss_kib": 7628
+        },
+        {
+          "wall_ms": 26.433145,
+          "peak_rss_kib": 7844
+        },
+        {
+          "wall_ms": 16.600249,
+          "peak_rss_kib": 7628
+        },
+        {
+          "wall_ms": 23.35925,
+          "peak_rss_kib": 7652
+        },
+        {
+          "wall_ms": 17.281288,
+          "peak_rss_kib": 7544
+        }
+      ]
+    }
+  }
+}

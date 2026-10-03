@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 
 use lopdf::{content::Content, Document, Object, Stream};
-use std::{error::Error, fs, path::Path};
+use std::{error::Error, fs, path::Path, time::Instant};
 
 const LIMIT: u32 = 1024;
 const MAX_COMMANDS: usize = 16_384;
@@ -88,12 +88,33 @@ fn image_bytes<'a>(
     Ok(content.as_slice())
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AdapterTimings {
+    pub read_ms: f64,
+    pub document_ms: f64,
+    pub page_decode_ms: f64,
+    pub content_ms: f64,
+    pub operator_decode_ms: f64,
+    pub operators_ms: f64,
+    pub encode_ms: f64,
+}
+
 pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
+    Ok(page_to_opdl_with_timings(path)?.0)
+}
+
+pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings), Box<dyn Error>> {
+    let mut timings = AdapterTimings::default();
+    let started = Instant::now();
     let bytes = fs::read(path)?;
+    timings.read_ms = started.elapsed().as_secs_f64() * 1000.0;
     if bytes.len() > 16_000_000 {
         return Err(fail("fixture PDF is too large"));
     }
+    let started = Instant::now();
     let document = Document::load_mem(&bytes)?;
+    timings.document_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let started = Instant::now();
     let pages = document.get_pages();
     if pages.len() != 1 {
         return Err(fail("fixture must have exactly one page"));
@@ -120,7 +141,12 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
         return Err(fail("inherited resources are not in this subset"));
     }
     let resources = resources.ok_or_else(|| fail("missing resources"))?;
-    let content = Content::decode(&document.get_page_content(page_id)?)?;
+    let content_bytes = document.get_page_content(page_id)?;
+    timings.content_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let started = Instant::now();
+    let content = Content::decode(&content_bytes)?;
+    timings.operator_decode_ms = started.elapsed().as_secs_f64() * 1000.0;
+    timings.page_decode_ms = timings.content_ms + timings.operator_decode_ms;
     let mut depth = 0_u8;
     let mut image_matrix = false;
     let mut translation: Option<[f64; 2]> = None;
@@ -135,6 +161,7 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut path_start = None;
     let mut pending_line = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
+    let started = Instant::now();
     for op in &content.operations {
         match op.operator.as_str() {
             "q" if op.operands.is_empty()
@@ -385,6 +412,8 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     {
         return Err(fail("incomplete fixture content stream"));
     }
+    timings.operators_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let started = Instant::now();
     let image = image.unwrap_or_default();
     let mut output = Vec::with_capacity(40 + image.len() + commands.len() * 24);
     output.extend_from_slice(b"OPDL");
@@ -400,5 +429,6 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
         }
         output.extend_from_slice(&rgba);
     }
-    Ok(output)
+    timings.encode_ms = started.elapsed().as_secs_f64() * 1000.0;
+    Ok((output, timings))
 }

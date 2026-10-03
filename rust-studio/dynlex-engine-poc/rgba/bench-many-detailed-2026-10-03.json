@@ -1,0 +1,238 @@
+{
+  "many-vector-kernel": {
+    "commands": 6005,
+    "repeat": 20,
+    "kernel_ms_per_call": 0.5409,
+    "scope": "validated OPDL to RGBA; excludes PDF parsing and process startup"
+  },
+  "many-vector": {
+    "page": "256x192",
+    "commands": 6005,
+    "os_cache_cleared": false,
+    "time_wrapper": true,
+    "samples": {
+      "direct": [
+        {
+          "wall_ms": 20.583782,
+          "stages_ms": {
+            "load_ms": 14.714,
+            "read_ms": 0.2358,
+            "document_ms": 0.2906,
+            "page_decode_ms": 11.8338,
+            "content_ms": 0.1566,
+            "operator_decode_ms": 11.6772,
+            "operators_ms": 0.6677,
+            "encode_ms": 0.2245,
+            "kernel_ms": 0.3884,
+            "write_ms": 0.4295
+          },
+          "peak_rss_kib": 9744
+        },
+        {
+          "wall_ms": 19.373193,
+          "stages_ms": {
+            "load_ms": 13.6152,
+            "read_ms": 0.1195,
+            "document_ms": 0.178,
+            "page_decode_ms": 10.7361,
+            "content_ms": 0.0965,
+            "operator_decode_ms": 10.6396,
+            "operators_ms": 0.7337,
+            "encode_ms": 0.2116,
+            "kernel_ms": 0.3791,
+            "write_ms": 0.4379
+          },
+          "peak_rss_kib": 9696
+        },
+        {
+          "wall_ms": 24.977909,
+          "stages_ms": {
+            "load_ms": 19.4755,
+            "read_ms": 0.1368,
+            "document_ms": 0.2258,
+            "page_decode_ms": 16.5577,
+            "content_ms": 0.1262,
+            "operator_decode_ms": 16.4316,
+            "operators_ms": 0.6884,
+            "encode_ms": 0.2237,
+            "kernel_ms": 0.4139,
+            "write_ms": 0.4686
+          },
+          "peak_rss_kib": 9620
+        },
+        {
+          "wall_ms": 26.41766,
+          "stages_ms": {
+            "load_ms": 19.658,
+            "read_ms": 0.2149,
+            "document_ms": 0.3117,
+            "page_decode_ms": 15.9367,
+            "content_ms": 0.1658,
+            "operator_decode_ms": 15.7709,
+            "operators_ms": 0.7411,
+            "encode_ms": 0.2717,
+            "kernel_ms": 0.4351,
+            "write_ms": 0.579
+          },
+          "peak_rss_kib": 9776
+        },
+        {
+          "wall_ms": 24.41653,
+          "stages_ms": {
+            "load_ms": 18.5717,
+            "read_ms": 0.1977,
+            "document_ms": 0.2519,
+            "page_decode_ms": 15.5924,
+            "content_ms": 0.181,
+            "operator_decode_ms": 15.4114,
+            "operators_ms": 0.6814,
+            "encode_ms": 0.223,
+            "kernel_ms": 0.4211,
+            "write_ms": 0.407
+          },
+          "peak_rss_kib": 9684
+        }
+      ],
+      "hayro": [
+        {
+          "wall_ms": 19.159431,
+          "peak_rss_kib": 7312
+        },
+        {
+          "wall_ms": 18.510271,
+          "peak_rss_kib": 7280
+        },
+        {
+          "wall_ms": 14.388068,
+          "peak_rss_kib": 7312
+        },
+        {
+          "wall_ms": 20.177986,
+          "peak_rss_kib": 7340
+        },
+        {
+          "wall_ms": 23.399125,
+          "peak_rss_kib": 7268
+        }
+      ]
+    }
+  },
+  "many-hybrid-kernel": {
+    "commands": 6005,
+    "repeat": 20,
+    "kernel_ms_per_call": 0.5779,
+    "scope": "validated OPDL to RGBA; excludes PDF parsing and process startup"
+  },
+  "many-hybrid": {
+    "page": "256x192",
+    "commands": 6005,
+    "os_cache_cleared": false,
+    "time_wrapper": true,
+    "samples": {
+      "direct": [
+        {
+          "wall_ms": 25.70885,
+          "stages_ms": {
+            "load_ms": 18.4792,
+            "read_ms": 0.619,
+            "document_ms": 0.8157,
+            "page_decode_ms": 14.1103,
+            "content_ms": 0.2233,
+            "operator_decode_ms": 13.8871,
+            "operators_ms": 0.7852,
+            "encode_ms": 0.3551,
+            "kernel_ms": 0.5691,
+            "write_ms": 0.4778
+          },
+          "peak_rss_kib": 10120
+        },
+        {
+          "wall_ms": 25.889153,
+          "stages_ms": {
+            "load_ms": 19.7885,
+            "read_ms": 0.5981,
+            "document_ms": 0.7994,
+            "page_decode_ms": 15.7207,
+            "content_ms": 0.2285,
+            "operator_decode_ms": 15.4923,
+            "operators_ms": 0.6352,
+            "encode_ms": 0.3794,
+            "kernel_ms": 0.5653,
+            "write_ms": 0.454
+          },
+          "peak_rss_kib": 10188
+        },
+        {
+          "wall_ms": 26.809197,
+          "stages_ms": {
+            "load_ms": 20.2556,
+            "read_ms": 0.4197,
+            "document_ms": 0.4943,
+            "page_decode_ms": 16.5322,
+            "content_ms": 0.1283,
+            "operator_decode_ms": 16.4039,
+            "operators_ms": 0.6352,
+            "encode_ms": 0.3233,
+            "kernel_ms": 0.5594,
+            "write_ms": 0.446
+          },
+          "peak_rss_kib": 10092
+        },
+        {
+          "wall_ms": 23.358544,
+          "stages_ms": {
+            "load_ms": 17.079,
+            "read_ms": 0.4662,
+            "document_ms": 0.5345,
+            "page_decode_ms": 13.4532,
+            "content_ms": 0.1427,
+            "operator_decode_ms": 13.3105,
+            "operators_ms": 0.6496,
+            "encode_ms": 0.3519,
+            "kernel_ms": 0.5646,
+            "write_ms": 0.4503
+          },
+          "peak_rss_kib": 10088
+        },
+        {
+          "wall_ms": 21.71596,
+          "stages_ms": {
+            "load_ms": 15.8738,
+            "read_ms": 0.3969,
+            "document_ms": 0.4214,
+            "page_decode_ms": 11.9494,
+            "content_ms": 0.1101,
+            "operator_decode_ms": 11.8392,
+            "operators_ms": 0.755,
+            "encode_ms": 0.3399,
+            "kernel_ms": 0.6069,
+            "write_ms": 0.508
+          },
+          "peak_rss_kib": 10096
+        }
+      ],
+      "hayro": [
+        {
+          "wall_ms": 23.456636,
+          "peak_rss_kib": 7672
+        },
+        {
+          "wall_ms": 17.729579,
+          "peak_rss_kib": 7512
+        },
+        {
+          "wall_ms": 24.948789,
+          "peak_rss_kib": 7676
+        },
+        {
+          "wall_ms": 18.480511,
+          "peak_rss_kib": 7572
+        },
+        {
+          "wall_ms": 17.189671,
+          "peak_rss_kib": 7796
+        }
+      ]
+    }
+  }
+}

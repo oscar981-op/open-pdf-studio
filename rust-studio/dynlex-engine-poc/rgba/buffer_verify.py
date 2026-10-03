@@ -237,12 +237,20 @@ def main():
                 stage_medians = {
                     stage: statistics.median(item["stages_ms"][stage]
                                              for item in samples["direct"])
-                    for stage in ("load_ms", "kernel_ms", "write_ms")
+                    for stage in ("load_ms", "read_ms", "document_ms", "page_decode_ms", "content_ms", "operator_decode_ms",
+                                  "operators_ms", "encode_ms", "kernel_ms", "write_ms")
                 }
                 print(f"{mode} direct stage medians ms: "
                       f"load {stage_medians['load_ms']:.2f}, "
                       f"kernel {stage_medians['kernel_ms']:.2f}, "
                       f"write {stage_medians['write_ms']:.2f}")
+                print(f"{mode} PDF-to-OPDL detail ms: "
+                      f"read {stage_medians['read_ms']:.2f}, "
+                      f"document {stage_medians['document_ms']:.2f}, "
+                      f"page/content {stage_medians['content_ms']:.2f}, "
+                      f"operator decode {stage_medians['operator_decode_ms']:.2f}, "
+                      f"operators {stage_medians['operators_ms']:.2f}, "
+                      f"encode {stage_medians['encode_ms']:.2f}")
                 if args.bench_memory:
                     direct_peak = [item["peak_rss_kib"] for item in samples["direct"]]
                     hayro_peak = [item["peak_rss_kib"] for item in samples["hayro"]]

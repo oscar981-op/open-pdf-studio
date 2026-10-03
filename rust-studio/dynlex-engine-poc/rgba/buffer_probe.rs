@@ -91,10 +91,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     let input = Path::new(&args[2]);
     let profile = args.get(4).is_some_and(|value| value == "--profile");
     let load_started = Instant::now();
-    let scene = if input.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
-        opds_opdl_adapter::page_to_opdl(input)?
+    let (scene, adapter_timings) = if input.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+        if profile {
+            let (scene, timings) = opds_opdl_adapter::page_to_opdl_with_timings(input)?;
+            (scene, Some(timings))
+        } else {
+            (opds_opdl_adapter::page_to_opdl(input)?, None)
+        }
     } else {
-        fs::read(input)?
+        (fs::read(input)?, None)
     };
     let load_ms = load_started.elapsed().as_secs_f64() * 1000.0;
     let (width, height) = validate(&scene)?;
@@ -135,10 +140,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let write_started = Instant::now();
     fs::write(Path::new(&args[3]), &output[12..])?;
     if profile {
-        eprintln!(
-            "load_ms={load_ms:.4} kernel_ms={kernel_ms:.4} write_ms={:.4}",
-            write_started.elapsed().as_secs_f64() * 1000.0
-        );
+        let write_ms = write_started.elapsed().as_secs_f64() * 1000.0;
+        if let Some(timings) = adapter_timings {
+            eprintln!(
+                "load_ms={load_ms:.4} read_ms={:.4} document_ms={:.4} page_decode_ms={:.4} content_ms={:.4} operator_decode_ms={:.4} operators_ms={:.4} encode_ms={:.4} kernel_ms={kernel_ms:.4} write_ms={write_ms:.4}",
+                timings.read_ms, timings.document_ms, timings.page_decode_ms, timings.content_ms, timings.operator_decode_ms,
+                timings.operators_ms, timings.encode_ms
+            );
+        } else {
+            eprintln!("load_ms={load_ms:.4} kernel_ms={kernel_ms:.4} write_ms={write_ms:.4}");
+        }
     }
     Ok(())
 }
