@@ -82,21 +82,28 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
     if args.len() != 4 && args.len() != 5 {
-        return Err("usage: buffer_probe MODE INPUT.opdl|INPUT.pdf OUTPUT.rgba [REPEAT]".into());
+        return Err("usage: buffer_probe MODE INPUT.opdl|INPUT.pdf OUTPUT.rgba [REPEAT|--profile]".into());
     }
     let mode: i32 = args[1].parse()?;
     if !(1..=3).contains(&mode) {
         return Err("mode must be 1=raster, 2=vector or 3=hybrid".into());
     }
     let input = Path::new(&args[2]);
+    let profile = args.get(4).is_some_and(|value| value == "--profile");
+    let load_started = Instant::now();
     let scene = if input.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
         opds_opdl_adapter::page_to_opdl(input)?
     } else {
         fs::read(input)?
     };
+    let load_ms = load_started.elapsed().as_secs_f64() * 1000.0;
     let (width, height) = validate(&scene)?;
     let mut output = vec![0_u8; 12 + width * height * 4];
-    let repeat: usize = if args.len() == 5 { args[4].parse()? } else { 1 };
+    let repeat: usize = if args.len() == 5 && !profile {
+        args[4].parse()?
+    } else {
+        1
+    };
     if !(1..=10_000).contains(&repeat) {
         return Err("repeat must be between 1 and 10000".into());
     }
@@ -118,12 +125,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err(format!("DynLex buffer kernel rejected scene: {status}").into());
         }
     }
+    let kernel_ms = started.elapsed().as_secs_f64() * 1000.0;
     if repeat > 1 {
         eprintln!(
             "kernel_ms_per_call={:.4}",
-            started.elapsed().as_secs_f64() * 1000.0 / repeat as f64
+            kernel_ms / repeat as f64
         );
     }
+    let write_started = Instant::now();
     fs::write(Path::new(&args[3]), &output[12..])?;
+    if profile {
+        eprintln!(
+            "load_ms={load_ms:.4} kernel_ms={kernel_ms:.4} write_ms={:.4}",
+            write_started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
     Ok(())
 }

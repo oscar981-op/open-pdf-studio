@@ -483,6 +483,10 @@ Dit verandert niets aan de huidige 1024×1024-pixellimiet of de beperkte
 PDF-operators. De echte A1-tekening heeft ook curven, tekst, transformaties
 en rotatie nodig voordat zij door deze route kan lopen.
 
+De [gepaarde 6.005-opdrachtenmeting](rgba/bench-many-2026-10-03.md) laat op
+deze kleine warme fixture zien dat de volledige DynLex-route nog langzamer en
+groter is dan Hayro; de gemeten PDF→OPDL-fase domineert de kernelduur.
+
 De adapter kan nu een PDF-stroke met meerdere **monotoon collineaire**
 `m/l/l/.../S`-segmenten als één asgerichte lijn samenvoegen. Horizontale en
 verticale fixtures komen in vector en hybride pixelgelijk met Hayro overeen.

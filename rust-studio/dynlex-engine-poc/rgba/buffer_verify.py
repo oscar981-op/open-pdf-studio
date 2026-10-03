@@ -26,13 +26,19 @@ def main():
                         help="repeat each dense page in one Rust process to time kernel calls")
     parser.add_argument("--bench-runs", type=int, default=0,
                         help="paired full-process PDF-to-RGBA runs on dense fixtures")
+    parser.add_argument("--bench-many-calls", type=int, default=0,
+                        help="repeat the 6000-command kernel call in one process")
+    parser.add_argument("--bench-many-runs", type=int, default=0,
+                        help="paired full-process runs on 6000-command fixtures")
     parser.add_argument("--bench-memory", action="store_true",
                         help="measure per-process peak RSS with /usr/bin/time (Linux)")
     parser.add_argument("--bench-json", type=Path,
                         help="write raw paired full-process samples to JSON")
     args = parser.parse_args()
-    if args.bench_memory and args.bench_runs < 1:
-        parser.error("--bench-memory requires --bench-runs")
+    if args.bench_memory and args.bench_runs < 1 and args.bench_many_runs < 1:
+        parser.error("--bench-memory requires --bench-runs or --bench-many-runs")
+    if args.bench_many_calls < 0 or args.bench_many_runs < 0:
+        parser.error("benchmark counts must be nonnegative")
     time_binary = Path("/usr/bin/time")
     if args.bench_memory and not time_binary.is_file():
         parser.error("/usr/bin/time is required for --bench-memory")
@@ -181,6 +187,72 @@ def main():
             if not (direct_output.read_bytes() == cli_output.read_bytes()
                     == hayro_output.read_bytes() == expected):
                 raise RuntimeError(f"pixel mismatch: 6000 rectangle draws/{mode}")
+            if args.bench_many_calls > 1:
+                timed = subprocess.run([probe, str(number), scene, direct_output,
+                                        str(args.bench_many_calls)], check=True,
+                                       capture_output=True, text=True)
+                kernel_ms = float(timed.stderr.strip().split("=")[-1])
+                measurements[f"many-{mode}-kernel"] = {
+                    "commands": int.from_bytes(opdl[command_offset:command_offset + 4], "little"),
+                    "repeat": args.bench_many_calls,
+                    "kernel_ms_per_call": kernel_ms,
+                    "scope": "validated OPDL to RGBA; excludes PDF parsing and process startup",
+                }
+                print(f"{mode} 6000-command kernel ms/call: {kernel_ms:.4f}")
+            if args.bench_many_runs > 0:
+                samples = {"direct": [], "hayro": []}
+                for index in range(args.bench_many_runs):
+                    jobs = (("direct", [probe, str(number), pdf, direct_output, "--profile"]),
+                            ("hayro", [paths["hayro"], pdf, "1", hayro_output, "1"]))
+                    for label, command in (jobs if index % 2 == 0 else reversed(jobs)):
+                        peak_path = work / "peak-kib.txt"
+                        if args.bench_memory:
+                            command = [time_binary, "-f", "%M", "-o", peak_path, *command]
+                        start = time.perf_counter_ns()
+                        completed = subprocess.run(command, check=True, capture_output=True,
+                                                   text=True)
+                        sample = {"wall_ms": (time.perf_counter_ns() - start) / 1_000_000}
+                        if label == "direct":
+                            sample["stages_ms"] = {
+                                key: float(value)
+                                for part in completed.stderr.strip().split()
+                                for key, value in (part.split("=", 1),)
+                            }
+                        if args.bench_memory:
+                            sample["peak_rss_kib"] = int(peak_path.read_text().strip())
+                        samples[label].append(sample)
+                direct_ms = [item["wall_ms"] for item in samples["direct"]]
+                hayro_ms = [item["wall_ms"] for item in samples["hayro"]]
+                paired = [a - b for a, b in zip(direct_ms, hayro_ms)]
+                measurements[f"many-{mode}"] = {
+                    "page": f"{width}x{height}", "commands": int.from_bytes(
+                        opdl[command_offset:command_offset + 4], "little"),
+                    "os_cache_cleared": False, "time_wrapper": args.bench_memory,
+                    "samples": samples,
+                }
+                print(f"{mode} 6000-command direct/Hayro median ms: "
+                      f"{statistics.median(direct_ms):.2f}/{statistics.median(hayro_ms):.2f}; "
+                      f"paired delta {statistics.median(paired):+.2f}; "
+                      f"direct wins {sum(delta < 0 for delta in paired)}/{args.bench_many_runs}")
+                stage_medians = {
+                    stage: statistics.median(item["stages_ms"][stage]
+                                             for item in samples["direct"])
+                    for stage in ("load_ms", "kernel_ms", "write_ms")
+                }
+                print(f"{mode} direct stage medians ms: "
+                      f"load {stage_medians['load_ms']:.2f}, "
+                      f"kernel {stage_medians['kernel_ms']:.2f}, "
+                      f"write {stage_medians['write_ms']:.2f}")
+                if args.bench_memory:
+                    direct_peak = [item["peak_rss_kib"] for item in samples["direct"]]
+                    hayro_peak = [item["peak_rss_kib"] for item in samples["hayro"]]
+                    print(f"{mode} 6000-command peak RSS median KiB: "
+                          f"{statistics.median(direct_peak):.0f}/"
+                          f"{statistics.median(hayro_peak):.0f}; "
+                          f"first-process wall ms: {direct_ms[0]:.2f}/{hayro_ms[0]:.2f} "
+                          "(OS cache not cleared)")
+                if not (direct_output.read_bytes() == hayro_output.read_bytes() == expected):
+                    raise RuntimeError(f"benchmark output changed: 6000 rectangles/{mode}")
             checked += width * height
             checked_pages += 1
         for mode, number in MODES[1:]:
