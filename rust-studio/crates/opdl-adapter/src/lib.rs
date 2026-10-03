@@ -318,13 +318,28 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     let right = exact_u32(end[0] + 0.5)?;
                     let bottom = exact_u32(f64::from(height) - end[1] + 0.5)?;
                     (4, [left, top, right, bottom])
+                } else if clip.is_none()
+                    && end[0] > start[0]
+                    && end[0] - start[0] == end[1] - start[1]
+                    && start[0].fract() == 0.5
+                    && start[1].fract() == 0.5
+                    && end[0].fract() == 0.5
+                    && end[1].fract() == 0.5
+                {
+                    let left = exact_u32(start[0] - 0.5)?;
+                    let top = exact_u32(f64::from(height) - end[1] - 0.5)?;
+                    let right = exact_u32(end[0] + 0.5)?;
+                    let bottom = exact_u32(f64::from(height) - start[1] + 0.5)?;
+                    (5, [left, top, right, bottom])
                 } else {
                     return Err(fail("stroke outside supported axis or 45-degree subset"));
                 };
                 if rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height {
                     return Err(fail("stroke outside page or empty"));
                 }
-                if kind == 4 && (rect[2] - rect[0] != rect[3] - rect[1] || rect[2] - rect[0] < 2) {
+                if (kind == 4 || kind == 5)
+                    && (rect[2] - rect[0] != rect[3] - rect[1] || rect[2] - rect[0] < 2)
+                {
                     return Err(fail("invalid 45-degree stroke bounds"));
                 }
                 if let Some(rect) = intersect_rect(rect, clip) {

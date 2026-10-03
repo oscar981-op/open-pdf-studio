@@ -38,7 +38,7 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0)):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False):
     content = bytearray(pre_content)
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
@@ -87,8 +87,11 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
             raise ValueError(f"unknown clip case: {clip_case}")
     if diagonal and mode != "raster":
         r, g, b = diagonal_color
-        content.extend(f"1 w\n{r / 255:g} {g / 255:g} {b / 255:g} RG\n20.5 {height - 40.5:g} m\n"
-                       f"80.5 {height - 100.5:g} l\nS\n".encode())
+        if falling:
+            endpoints = f"20.5 {height - 100.5:g} m\n80.5 {height - 40.5:g} l"
+        else:
+            endpoints = f"20.5 {height - 40.5:g} m\n80.5 {height - 100.5:g} l"
+        content.extend(f"1 w\n{r / 255:g} {g / 255:g} {b / 255:g} RG\n{endpoints}\nS\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
     has_image = mode != "vector"
@@ -118,7 +121,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     return bytes(pdf)
 
 
-def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None, diagonal=False, diagonal_color=(0, 0, 0)):
+def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False):
     rgba = bytearray()
     rects = rectangles(width, height, dense)
     strokes = lines(width, height)
@@ -160,13 +163,14 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                             color = (0, 0, 255)
                 if diagonal:
                     row = y - 40
-                    lane = x - (20 + row)
+                    line_x = (80 - row) if falling else (20 + row)
+                    lane = x - line_x
                     coverage = 0
                     if 0 <= row <= 60:
                         if row in (0, 60):
                             if lane == 0:
                                 coverage = 117
-                            elif (row == 0 and lane == 1) or (row == 60 and lane == -1):
+                            elif (row == 0 and lane == (-1 if falling else 1)) or (row == 60 and lane == (1 if falling else -1)):
                                 coverage = 64
                         elif lane == 0:
                             coverage = 233
