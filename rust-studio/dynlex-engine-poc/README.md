@@ -1,5 +1,8 @@
 # DynLex PDF-engine POC: drie renderagents
 
+De [inventarisatie van echte PDF-tekeningen](real-pdf-inventory-2026-10-03.md)
+laat zien welke schaal- en padfuncties de huidige testsubset nog mist.
+
 Dit is de eerste **kernelproef**, geïsoleerd van de werkende Rust-app. De agenten
 zijn uitvoerstrategieën, geen aparte processen of AI-agenten:
 
