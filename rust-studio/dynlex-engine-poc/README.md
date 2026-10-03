@@ -467,7 +467,7 @@ door 255 gebruikt: `(waarde + 255) >> 8`. De kernel gebruikt voor deze
 gecontroleerde diagonaal dezelfde kleurmenging. Zwarte en rode 45°-streken
 zijn in beide oriëntaties op vector- en hybride PDF-pagina's bytegelijk aan
 Hayro en de onafhankelijke referentie. De huidige `rgba/buffer_verify.py`
-controleert 39 fixtures/4.571.136 pixels, waaronder de grotere opdrachtfixture;
+controleert 41 fixtures/4.669.440 pixels, waaronder de grotere opdrachtfixture;
 de oude OPDL-v1-fixture blijft ongewijzigd.
 Andere hoeken en transparante diagonalen vereisen een eigen gecontroleerd pad.
 
@@ -502,3 +502,12 @@ en hybride PDF-fixtures zijn pixelgelijk aan Hayro en de onafhankelijke
 referentie. Een halfpixel-eindpunt gaf juist halve dekking en blijft geweigerd,
 net als andere padvolgorden, extra segmenten, curven en clipping. Dit is geen
 algemene padondersteuning.
+
+De PDF-adapter bewaart `m/l/.../S` nu eerst als een begrensde reeks punten
+(maximaal 16.384 segmenten) en classificeert pas bij `S` of het pad een
+bewezen rechte lijn of L-vorm is. De oude losse toestanden voor beginpunt,
+lopende lijn en hoek zijn vervangen. Een fixture met 128 monotoon collineaire
+segmenten levert precies één OPDL-opdracht en is in vector en hybride uitvoer
+pixelgelijk aan Hayro. Reversals, twee bochten en onbewezen joins blijven
+afgewezen; de buffer is een voorbereiding op padgeometrie, geen ondersteuning
+voor algemene `c`-curven of `h`-sluitingen.

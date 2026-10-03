@@ -319,6 +319,34 @@ def main():
                 checked += width * height
                 checked_pages += 1
         for mode, number in MODES[1:]:
+            pdf = work / f"long-monotone-path-{mode}.pdf"
+            scene = work / "scene.opdl"
+            direct_output = work / "direct.rgba"
+            cli_output = work / "output.rgba"
+            hayro_output = work / "hayro.rgba"
+            path = b"1 w\n0 0 0 RG\n20 151.5 m\n" + b"".join(
+                f"{x} 151.5 l\n".encode() for x in range(21, 149)) + b"S\n"
+            pdf.write_bytes(build_pdf(mode, extra_content=path))
+            subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
+            staged_scene = scene.read_bytes()
+            count_offset = 36 + int.from_bytes(staged_scene[32:36], "little")
+            if int.from_bytes(staged_scene[count_offset:count_offset + 4], "little") != 6:
+                raise RuntimeError("128 collinear segments did not collapse to one OPDL command")
+            subprocess.run([probe, str(number), pdf, direct_output], check=True,
+                           capture_output=True)
+            subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+            subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
+                           capture_output=True)
+            expected = bytearray(reference_rgba(mode))
+            for x in range(20, 148):
+                offset = (40 * 256 + x) * 4
+                expected[offset:offset + 4] = b"\x00\x00\x00\xff"
+            if not (direct_output.read_bytes() == cli_output.read_bytes()
+                    == hayro_output.read_bytes() == expected):
+                raise RuntimeError(f"pixel mismatch: long monotone path/{mode}")
+            checked += 256 * 192
+            checked_pages += 1
+        for mode, number in MODES[1:]:
             for upward in (False, True):
                 for leftward in (False, True):
                     pdf = work / f"elbow-{mode}-{upward}-{leftward}.pdf"

@@ -243,6 +243,101 @@ fn intersect_rect(rect: [u32; 4], clip: Option<[u32; 4]>) -> Option<[u32; 4]> {
     (result[0] < result[2] && result[1] < result[3]).then_some(result)
 }
 
+#[derive(Default)]
+struct PathStage {
+    points: Vec<[f64; 2]>,
+}
+
+impl PathStage {
+    fn start(point: [f64; 2]) -> Self {
+        Self {
+            points: vec![point],
+        }
+    }
+
+    fn line_to(&mut self, point: [f64; 2]) -> Result<(), Box<dyn Error>> {
+        if self.points.len() > MAX_COMMANDS {
+            return Err(fail("too many staged path segments"));
+        }
+        self.points.push(point);
+        Ok(())
+    }
+
+    fn collapsed_line(&self) -> Result<([f64; 2], [f64; 2]), Box<dyn Error>> {
+        let [start, first, ..] = self.points.as_slice() else {
+            return Err(fail("stroke without line"));
+        };
+        if self.points.len() == 2 {
+            return Ok((*start, *first));
+        }
+        let axis = self.points.windows(2).find(|pair| pair[0] != pair[1]);
+        let Some(axis) = axis else {
+            return Ok((*start, *start));
+        };
+        let horizontal = axis[0][1] == axis[1][1];
+        let direction = if horizontal {
+            axis[1][0] - axis[0][0]
+        } else {
+            axis[1][1] - axis[0][1]
+        };
+        for pair in self.points.windows(2) {
+            let [a, b] = [pair[0], pair[1]];
+            let valid = if horizontal {
+                a[1] == start[1] && b[1] == start[1] && direction * (b[0] - a[0]) >= 0.0
+            } else {
+                a[0] == start[0] && b[0] == start[0] && direction * (b[1] - a[1]) >= 0.0
+            };
+            if !valid {
+                return Err(fail(
+                    "only monotonic collinear multi-segment strokes are supported",
+                ));
+            }
+        }
+        Ok((
+            *start,
+            *self.points.last().ok_or_else(|| fail("empty path"))?,
+        ))
+    }
+}
+
+#[cfg(test)]
+mod path_stage_tests {
+    use super::*;
+
+    #[test]
+    fn collapses_long_monotone_path_without_changing_endpoints() {
+        let mut path = PathStage::start([20.0, 40.5]);
+        for x in 21..=148 {
+            path.line_to([f64::from(x), 40.5]).unwrap();
+        }
+        assert_eq!(
+            path.collapsed_line().unwrap(),
+            ([20.0, 40.5], [148.0, 40.5])
+        );
+    }
+
+    #[test]
+    fn rejects_turn_and_reversal_until_join_rules_are_verified() {
+        let mut bent = PathStage::start([20.0, 40.5]);
+        bent.line_to([60.0, 40.5]).unwrap();
+        bent.line_to([60.0, 80.5]).unwrap();
+        assert!(bent.collapsed_line().is_err());
+        let mut reversed = PathStage::start([20.0, 40.5]);
+        reversed.line_to([60.0, 40.5]).unwrap();
+        reversed.line_to([40.0, 40.5]).unwrap();
+        assert!(reversed.collapsed_line().is_err());
+    }
+
+    #[test]
+    fn limits_staged_segments() {
+        let mut path = PathStage::start([0.0, 0.0]);
+        for x in 0..MAX_COMMANDS {
+            path.line_to([x as f64, 0.0]).unwrap();
+        }
+        assert!(path.line_to([0.0, 0.0]).is_err());
+    }
+}
+
 fn image_bytes<'a>(
     document: &'a Document,
     resources: &'a lopdf::Dictionary,
@@ -359,9 +454,7 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
     let mut pending_clip = false;
     let mut clip = None;
     let mut saved_clips: Vec<Option<[u32; 4]>> = Vec::new();
-    let mut path_start = None;
-    let mut pending_line = None;
-    let mut pending_elbow = None;
+    let mut pending_path: Option<PathStage> = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
     let started = Instant::now();
     for op in &content.operations {
@@ -372,9 +465,7 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                 && translation.is_none()
                 && pending_rect.is_none()
                 && !pending_clip
-                && path_start.is_none()
-                && pending_line.is_none()
-                && pending_elbow.is_none() =>
+                && pending_path.is_none() =>
             {
                 saved_clips.push(clip);
                 depth += 1;
@@ -383,9 +474,7 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                 && depth > 0
                 && pending_rect.is_none()
                 && !pending_clip
-                && path_start.is_none()
-                && pending_line.is_none()
-                && pending_elbow.is_none()
+                && pending_path.is_none()
                 && (!image_matrix || image.is_some()) =>
             {
                 clip = saved_clips
@@ -398,7 +487,7 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
             "cm" if depth == 1
                 && !image_matrix
                 && translation.is_none()
-                && pending_elbow.is_none() =>
+                && pending_path.is_none() =>
             {
                 let [a, b, c, d, e, f] = operands::<6>(&op.operands)?;
                 if [a, b, c, d, e, f] == [f64::from(width), 0.0, 0.0, f64::from(height), 0.0, 0.0]
@@ -432,12 +521,7 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                     height,
                 )?);
             }
-            "rg" if depth == 0
-                && pending_rect.is_none()
-                && path_start.is_none()
-                && pending_line.is_none()
-                && pending_elbow.is_none() =>
-            {
+            "rg" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
                 let rgb = operands::<3>(&op.operands)?;
                 for (target, channel) in color.iter_mut().zip(rgb) {
                     if !channel.is_finite() || !(0.0..=1.0).contains(&channel) {
@@ -446,12 +530,7 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                     *target = (channel * 255.0).round() as u8;
                 }
             }
-            "re" if !image_matrix
-                && pending_rect.is_none()
-                && path_start.is_none()
-                && pending_line.is_none()
-                && pending_elbow.is_none() =>
-            {
+            "re" if !image_matrix && pending_rect.is_none() && pending_path.is_none() => {
                 let [x, y, w, h] = operands::<4>(&op.operands)?;
                 let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
                 let [x, y, w, h] = [
@@ -490,24 +569,14 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                     return Err(fail("too many commands"));
                 }
             }
-            "w" if depth == 0
-                && pending_rect.is_none()
-                && path_start.is_none()
-                && pending_line.is_none()
-                && pending_elbow.is_none() =>
-            {
+            "w" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
                 let [weight] = operands::<1>(&op.operands)?;
                 if weight != 1.0 {
                     return Err(fail("only one-pixel butt-cap strokes are supported"));
                 }
                 one_pixel_stroke = true;
             }
-            "RG" if depth == 0
-                && pending_rect.is_none()
-                && path_start.is_none()
-                && pending_line.is_none()
-                && pending_elbow.is_none() =>
-            {
+            "RG" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
                 let rgb = operands::<3>(&op.operands)?;
                 for (target, channel) in stroke_color.iter_mut().zip(rgb) {
                     if !channel.is_finite() || !(0.0..=1.0).contains(&channel) {
@@ -516,44 +585,26 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                     *target = (channel * 255.0).round() as u8;
                 }
             }
-            "m" if !image_matrix
-                && pending_rect.is_none()
-                && path_start.is_none()
-                && pending_line.is_none()
-                && pending_elbow.is_none() =>
-            {
+            "m" if !image_matrix && pending_rect.is_none() && pending_path.is_none() => {
                 let [x, y] = operands::<2>(&op.operands)?;
                 let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
-                path_start = Some([x + tx, y + ty]);
+                pending_path = Some(PathStage::start([x + tx, y + ty]));
             }
             "l" if !image_matrix && pending_rect.is_none() => {
-                if pending_elbow.is_some() {
-                    return Err(fail("more than two segments in bent stroke"));
-                }
                 let [x, y] = operands::<2>(&op.operands)?;
                 let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
                 let end = [x + tx, y + ty];
-                if let Some(start) = path_start.take() {
-                    pending_line = Some((start, end));
-                } else if let Some((start, last)) = pending_line.as_mut() {
-                    let horizontal = start[1] == last[1]
-                        && end[1] == last[1]
-                        && (last[0] - start[0]) * (end[0] - last[0]) >= 0.0;
-                    let vertical = start[0] == last[0]
-                        && end[0] == last[0]
-                        && (last[1] - start[1]) * (end[1] - last[1]) >= 0.0;
-                    if !horizontal && !vertical {
-                        pending_elbow = Some((*start, *last, end));
-                        pending_line = None;
-                    } else {
-                        *last = end;
-                    }
-                } else {
-                    return Err(fail("line without move"));
-                }
+                pending_path
+                    .as_mut()
+                    .ok_or_else(|| fail("line without move"))?
+                    .line_to(end)?;
             }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
-                if let Some((start, corner, end)) = pending_elbow.take() {
+                let path = pending_path
+                    .take()
+                    .ok_or_else(|| fail("stroke without move"))?;
+                if path.points.len() == 3 && path.collapsed_line().is_err() {
+                    let [start, corner, end] = [path.points[0], path.points[1], path.points[2]];
                     if start[0] == corner[0] && corner[1] == end[1] {
                         if clip.is_some()
                             || start[1] == corner[1]
@@ -648,9 +699,7 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                     }
                     continue;
                 }
-                let (start, end) = pending_line
-                    .take()
-                    .ok_or_else(|| fail("stroke without line"))?;
+                let (start, end) = path.collapsed_line()?;
                 let (kind, rect) = if start[1] == end[1] {
                     let left = exact_u32(start[0].min(end[0]))?;
                     let right = exact_u32(start[0].max(end[0]))?;
@@ -715,9 +764,7 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
     if depth != 0
         || pending_rect.is_some()
         || pending_clip
-        || path_start.is_some()
-        || pending_line.is_some()
-        || pending_elbow.is_some()
+        || pending_path.is_some()
         || image_matrix
         || translation.is_some()
         || !saved_clips.is_empty()
