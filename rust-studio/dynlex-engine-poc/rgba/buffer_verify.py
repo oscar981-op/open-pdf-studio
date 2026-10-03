@@ -320,34 +320,37 @@ def main():
                 checked_pages += 1
         for mode, number in MODES[1:]:
             for upward in (False, True):
-                pdf = work / f"elbow-{mode}-{upward}.pdf"
-                scene = work / "scene.opdl"
-                direct_output = work / "direct.rgba"
-                cli_output = work / "output.rgba"
-                hayro_output = work / "hayro.rgba"
-                endpoint = 182 if upward else 112
-                elbow = (f"1 w\n1 0 0 RG\n20 151.5 m\n60.5 151.5 l\n"
-                         f"60.5 {endpoint} l\nS\n").encode()
-                pdf.write_bytes(build_pdf(mode, extra_content=elbow))
-                subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
-                subprocess.run([probe, str(number), pdf, direct_output], check=True,
-                               capture_output=True)
-                subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
-                subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
-                               capture_output=True)
-                expected = bytearray(reference_rgba(mode))
-                for x in range(20, 61):
-                    offset = (40 * 256 + x) * 4
-                    expected[offset:offset + 4] = b"\xff\x00\x00\xff"
-                vertical_rows = range(10, 41) if upward else range(40, 80)
-                for y in vertical_rows:
-                    offset = (y * 256 + 60) * 4
-                    expected[offset:offset + 4] = b"\xff\x00\x00\xff"
-                if not (direct_output.read_bytes() == cli_output.read_bytes()
-                        == hayro_output.read_bytes() == expected):
-                    raise RuntimeError(f"pixel mismatch: rightward elbow/{mode}/{upward}")
-                checked += 256 * 192
-                checked_pages += 1
+                for leftward in (False, True):
+                    pdf = work / f"elbow-{mode}-{upward}-{leftward}.pdf"
+                    scene = work / "scene.opdl"
+                    direct_output = work / "direct.rgba"
+                    cli_output = work / "output.rgba"
+                    hayro_output = work / "hayro.rgba"
+                    endpoint = 182 if upward else 112
+                    start_x = 100 if leftward else 20
+                    elbow = (f"1 w\n1 0 0 RG\n{start_x} 151.5 m\n60.5 151.5 l\n"
+                             f"60.5 {endpoint} l\nS\n").encode()
+                    pdf.write_bytes(build_pdf(mode, extra_content=elbow))
+                    subprocess.run([paths["adapter"], pdf, scene], check=True, capture_output=True)
+                    subprocess.run([probe, str(number), pdf, direct_output], check=True,
+                                   capture_output=True)
+                    subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+                    subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
+                                   capture_output=True)
+                    expected = bytearray(reference_rgba(mode))
+                    horizontal_cols = range(60, 100) if leftward else range(20, 61)
+                    for x in horizontal_cols:
+                        offset = (40 * 256 + x) * 4
+                        expected[offset:offset + 4] = b"\xff\x00\x00\xff"
+                    vertical_rows = range(10, 41) if upward else range(40, 80)
+                    for y in vertical_rows:
+                        offset = (y * 256 + 60) * 4
+                        expected[offset:offset + 4] = b"\xff\x00\x00\xff"
+                    if not (direct_output.read_bytes() == cli_output.read_bytes()
+                            == hayro_output.read_bytes() == expected):
+                        raise RuntimeError(f"pixel mismatch: elbow/{mode}/{upward}/{leftward}")
+                    checked += 256 * 192
+                    checked_pages += 1
         invalid_transforms = {
             "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
             "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",
@@ -365,6 +368,7 @@ def main():
             "half-elbow-end": b"1 w\n20 151.5 m\n60.5 151.5 l\n60.5 111.5 l\nS\n",
             "third-elbow-segment": b"1 w\n20 151.5 m\n60.5 151.5 l\n60.5 112 l\n80.5 112 l\nS\n",
             "reverse-elbow": b"1 w\n60.5 151.5 m\n20 151.5 l\n20 111.5 l\nS\n",
+            "short-left-elbow": b"1 w\n61 151.5 m\n60.5 151.5 l\n60.5 112 l\nS\n",
         }
         for name, content in invalid_transforms.items():
             invalid_pdf = work / f"invalid-{name}.pdf"

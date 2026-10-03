@@ -557,31 +557,44 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
                     if clip.is_some()
                         || start[1] != corner[1]
                         || corner[0] != end[0]
-                        || corner[0] <= start[0]
+                        || corner[0] == start[0]
                         || end[1] == corner[1]
                         || start[0].fract() != 0.0
                         || corner[0].fract() != 0.5
                         || corner[1].fract() != 0.5
                         || end[1].fract() != 0.0
                     {
-                        return Err(fail("bent stroke outside supported rightward elbow subset"));
+                        return Err(fail(
+                            "bent stroke outside supported horizontal elbow subset",
+                        ));
                     }
-                    let left = exact_u32(start[0])?;
+                    let start_x = exact_u32(start[0])?;
                     let join_x = exact_u32(corner[0] - 0.5)?;
+                    let horizontal_left = start_x.min(join_x);
+                    let horizontal_right = if start_x < join_x {
+                        join_x + 1
+                    } else {
+                        start_x
+                    };
                     let join_row = exact_u32(f64::from(height) - corner[1] - 0.5)?;
                     let end_row = exact_u32(f64::from(height) - end[1])?;
                     let vertical_top = join_row.min(end_row);
                     let vertical_bottom = (join_row + 1).max(end_row);
                     if join_x + 1 > width
                         || vertical_bottom > height
-                        || left >= join_x
+                        || horizontal_right > width
                         || join_row + 1 > height
+                        || start_x.abs_diff(join_x) < 2
                         || end_row.abs_diff(join_row) < 2
                     {
                         return Err(fail("bent stroke outside page or empty"));
                     }
                     let ink = [stroke_color[0], stroke_color[1], stroke_color[2], 255];
-                    commands.push((3, [left, join_row, join_x + 1, join_row + 1], ink));
+                    commands.push((
+                        3,
+                        [horizontal_left, join_row, horizontal_right, join_row + 1],
+                        ink,
+                    ));
                     commands.push((3, [join_x, vertical_top, join_x + 1, vertical_bottom], ink));
                     if commands.len() > MAX_COMMANDS {
                         return Err(fail("too many commands"));
