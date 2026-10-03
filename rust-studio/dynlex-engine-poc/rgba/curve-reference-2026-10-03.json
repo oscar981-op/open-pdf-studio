@@ -1,0 +1,50 @@
+{
+  "height": 192,
+  "samples": {
+    "hybrid/arch": {
+      "bounds_xy_inclusive": [
+        20,
+        73,
+        90,
+        111
+      ],
+      "changed_pixels": 250,
+      "delta_sha256": "aa5089eeb05d6848eb2714e4ea4ac4d25adf1c54a1c4a300da20cfe2a05594f0",
+      "distinct_changed_rgba": 238
+    },
+    "hybrid/s-bend": {
+      "bounds_xy_inclusive": [
+        20,
+        93,
+        90,
+        129
+      ],
+      "changed_pixels": 235,
+      "delta_sha256": "6e080efcc703f08245ed4c3984a18f661daf68d0023acfca848486c3b47086b5",
+      "distinct_changed_rgba": 229
+    },
+    "vector/arch": {
+      "bounds_xy_inclusive": [
+        20,
+        73,
+        90,
+        111
+      ],
+      "changed_pixels": 250,
+      "delta_sha256": "f1652a311f15a9e7f9ec245ff6c6bd2b1537a3146b88065c90df09a90e18de00",
+      "distinct_changed_rgba": 117
+    },
+    "vector/s-bend": {
+      "bounds_xy_inclusive": [
+        20,
+        93,
+        90,
+        129
+      ],
+      "changed_pixels": 237,
+      "delta_sha256": "c1e818da9a23c95590398d5c8696605dc1907ea5bbfd73bf11dc335246dcb08d",
+      "distinct_changed_rgba": 106
+    }
+  },
+  "width": 256
+}

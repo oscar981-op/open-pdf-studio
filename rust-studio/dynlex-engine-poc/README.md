@@ -518,3 +518,16 @@ Een pad kan maximaal 16.384 lijn- en curvesegmenten samen stagen; de logische
 payload van 16.384 curve-items blijft onder 1 MiB, exclusief Vec-capaciteit.
 De 128-segment rechte fixture wordt nog altijd één OPDL-opdracht. Een
 algemene curve zou een nieuwe, geverifieerde OPDL-opdracht en pixeltest vereisen.
+
+[`rgba/curve_probe.py`](rgba/curve_probe.py) legt daarom twee kleine echte
+PDF-Bézierstroken vast tegen de bestaande Hayro-renderer. Herhaal met
+`python3 dynlex-engine-poc/rgba/curve_probe.py --hayro
+target/release/opds-engine-probe --adapter target/release/opds-opdl-adapter`.
+De [referentie-JSON](rgba/curve-reference-2026-10-03.json) bevat per vector-
+en hybride pagina het veranderde pixelvak en een SHA-256 van de RGBA-waarden.
+De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
+235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
+bewijs voor andere geometrische dekking. De proef controleert ook dat de
+adapter beide curves nog weigert. Voor activering zijn per-pixeldekking,
+compositing en joins afzonderlijk te verifiëren; deze JSON is geen DynLex-
+curvebenchmark.
