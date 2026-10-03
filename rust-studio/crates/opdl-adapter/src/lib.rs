@@ -3,6 +3,119 @@
 
 pub mod path_v3;
 
+pub fn page_to_v3_path(path: &std::path::Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    use path_v3::PathList;
+    let bytes = std::fs::read(path)?;
+    if bytes.len() > 16_000_000 {
+        return Err(fail("path probe PDF is too large"));
+    }
+    let document = Document::load_mem(&bytes)?;
+    let pages = document.get_pages();
+    if pages.len() != 1 {
+        return Err(fail("path probe requires one page"));
+    }
+    let page_id = *pages.values().next().ok_or_else(|| fail("missing page"))?;
+    let page = document.get_dictionary(page_id)?;
+    if page.has(b"Rotate") || page.has(b"CropBox") || page.has(b"Annots") || page.has(b"UserUnit") {
+        return Err(fail("rotation, crop and annotations are not in path probe"));
+    }
+    let mut parent = page
+        .get(b"Parent")
+        .ok()
+        .map(|value| value.as_reference())
+        .transpose()?;
+    let mut seen = std::collections::HashSet::new();
+    while let Some(parent_id) = parent {
+        if !seen.insert(parent_id) {
+            return Err(fail("cyclic page parent tree"));
+        }
+        let node = document.get_dictionary(parent_id)?;
+        if node.has(b"Rotate") || node.has(b"CropBox") || node.has(b"UserUnit") {
+            return Err(fail("inherited geometry is outside path probe"));
+        }
+        parent = node
+            .get(b"Parent")
+            .ok()
+            .map(|value| value.as_reference())
+            .transpose()?;
+    }
+    let [x0, y0, x1, y1] = operands::<4>(page.get(b"MediaBox")?.as_array()?)?;
+    if x0 != 0.0
+        || y0 != 0.0
+        || !x1.is_finite()
+        || !y1.is_finite()
+        || x1.fract() != 0.0
+        || y1.fract() != 0.0
+        || !(1.0..=16_384.0).contains(&x1)
+        || !(1.0..=16_384.0).contains(&y1)
+    {
+        return Err(fail("unsupported path probe page bounds"));
+    }
+    let content_bytes = document.get_page_content(page_id)?;
+    if content_bytes.len() > 2_000_000 {
+        return Err(fail("path probe content is too large"));
+    }
+    if has_compound_operand(&content_bytes) {
+        return Err(fail("compound operands are outside path probe"));
+    }
+    let content = Content::decode(&content_bytes)?;
+    let mut staged: Option<PathStage> = None;
+    let mut segments = None;
+    let mut finished = false;
+    for op in content.operations {
+        if finished {
+            return Err(fail("content after path stroke is unsupported"));
+        }
+        match op.operator.as_str() {
+            "m" => {
+                if staged.is_some() {
+                    return Err(fail("second subpath is outside path probe"));
+                }
+                let [x, y] = operands::<2>(&op.operands)?;
+                staged = Some(PathStage::start([x, y]));
+            }
+            "l" => {
+                let [x, y] = operands::<2>(&op.operands)?;
+                staged
+                    .as_mut()
+                    .ok_or_else(|| fail("line without move"))?
+                    .line_to([x, y])?;
+            }
+            "c" => {
+                let [a, b, c, d, e, f] = operands::<6>(&op.operands)?;
+                staged
+                    .as_mut()
+                    .ok_or_else(|| fail("cubic without move"))?
+                    .cubic_to([[a, b], [c, d], [e, f]])?;
+            }
+            "h" if op.operands.is_empty() => {
+                staged
+                    .as_mut()
+                    .ok_or_else(|| fail("close without move"))?
+                    .close()?;
+            }
+            "S" if op.operands.is_empty() => {
+                let path = staged.take().ok_or_else(|| fail("stroke without move"))?;
+                if !path.has_draw_segment() {
+                    return Err(fail("stroke without line or curve"));
+                }
+                segments = Some(path.to_v3_segments());
+                finished = true;
+            }
+            _ => return Err(fail("operator outside isolated path probe subset")),
+        }
+    }
+    if !finished {
+        return Err(fail("path probe requires a complete stroke"));
+    }
+    let list = PathList {
+        width: x1 as u32,
+        height: y1 as u32,
+        segments: segments.ok_or_else(|| fail("missing path geometry"))?,
+    };
+    list.encode()
+}
+
 use lopdf::{
     content::{Content, Operation},
     Document, Object, Stream,
@@ -251,6 +364,7 @@ struct PathStage {
     points: Vec<[f64; 2]>,
     // Position among line endpoints preserves the order of mixed l/c paths.
     cubics: Vec<(usize, [[f64; 2]; 3])>,
+    closed: bool,
 }
 
 impl PathStage {
@@ -258,10 +372,14 @@ impl PathStage {
         Self {
             points: vec![point],
             cubics: Vec::new(),
+            closed: false,
         }
     }
 
     fn line_to(&mut self, point: [f64; 2]) -> Result<(), Box<dyn Error>> {
+        if self.closed {
+            return Err(fail("segment after close is unsupported"));
+        }
         if self.points.len() + self.cubics.len() > MAX_COMMANDS {
             return Err(fail("too many staged path segments"));
         }
@@ -270,6 +388,9 @@ impl PathStage {
     }
 
     fn cubic_to(&mut self, controls_and_end: [[f64; 2]; 3]) -> Result<(), Box<dyn Error>> {
+        if self.closed {
+            return Err(fail("segment after close is unsupported"));
+        }
         if self.points.len() + self.cubics.len() > MAX_COMMANDS {
             return Err(fail("too many staged path segments"));
         }
@@ -282,6 +403,45 @@ impl PathStage {
         }
         self.cubics.push((self.points.len(), controls_and_end));
         Ok(())
+    }
+
+    fn close(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.closed
+            || !self.has_draw_segment()
+            || self.points.len() + self.cubics.len() >= MAX_COMMANDS
+        {
+            return Err(fail("invalid or oversized closed path"));
+        }
+        self.closed = true;
+        Ok(())
+    }
+
+    fn has_draw_segment(&self) -> bool {
+        self.points.len() > 1 || !self.cubics.is_empty()
+    }
+
+    fn to_v3_segments(self) -> Vec<path_v3::Segment> {
+        use path_v3::Segment;
+        let mut segments =
+            Vec::with_capacity(self.points.len() + self.cubics.len() + usize::from(self.closed));
+        segments.push(Segment::Move(self.points[0]));
+        let mut curves = self.cubics.into_iter().peekable();
+        for index in 1..=self.points.len() {
+            while curves
+                .peek()
+                .is_some_and(|(position, _)| *position == index)
+            {
+                let (_, controls) = curves.next().unwrap();
+                segments.push(Segment::Cubic(controls));
+            }
+            if let Some(point) = self.points.get(index) {
+                segments.push(Segment::Line(*point));
+            }
+        }
+        if self.closed {
+            segments.push(Segment::Close);
+        }
+        segments
     }
 
     fn collapsed_line(&self) -> Result<([f64; 2], [f64; 2]), Box<dyn Error>> {

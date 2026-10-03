@@ -520,7 +520,9 @@ De 128-segment rechte fixture wordt nog altijd één OPDL-opdracht. Een
 algemene curve zou een nieuwe, geverifieerde OPDL-opdracht en pixeltest vereisen.
 Een [afzonderlijke OPDL-v3-padcontainer](opdl-v3-path-2026-10-03.md) legt nu
 `m/l/c/h` met expliciete recordlengtes en strikte grenzen vast. De bestaande
-PDF-adapter en DynLex-renderers gebruiken dit formaat nog niet.
+PDF-adapter en DynLex-renderers gebruiken dit formaat nog niet. Alleen de
+aparte `export_path_v3`-proef schrijft de geometrie van één compleet,
+geïsoleerd PDF-pad; de normale v2-route weigert curven nog steeds.
 
 [`rgba/curve_probe.py`](rgba/curve_probe.py) legt daarom twee kleine echte
 PDF-Bézierstroken vast tegen de bestaande Hayro-renderer. Herhaal met
