@@ -1,6 +1,7 @@
 //! Narrow fixture adapter, not a general PDF interpreter.
 #![forbid(unsafe_code)]
 
+pub mod paint_v4;
 pub mod path_v3;
 
 pub fn page_to_v3_path(path: &std::path::Path) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
