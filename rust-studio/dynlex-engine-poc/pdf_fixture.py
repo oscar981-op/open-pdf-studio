@@ -38,7 +38,7 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False):
     content = bytearray(pre_content)
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
@@ -99,6 +99,13 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
                 for column in range(10):
                     x, y = 10 + 24 * column, 10 + 16 * row
                     content.extend(f"{x} {height - y - 4} 4 4 re\nf\n".encode())
+    if multi_segment and mode != "raster":
+        if vertical_multi:
+            endpoints = f"20.5 {height - 32} m\n20.5 {height - 72} l\n20.5 {height - 112} l"
+        else:
+            pdf_y = height - 40.5
+            endpoints = f"20 {pdf_y:g} m\n60 {pdf_y:g} l\n100 {pdf_y:g} l"
+        content.extend(f"1 w\n0 0 0 RG\n{endpoints}\nS\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
     has_image = mode != "vector"
@@ -128,7 +135,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     return bytes(pdf)
 
 
-def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False):
+def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False):
     rgba = bytearray()
     rects = rectangles(width, height, dense)
     strokes = lines(width, height)
@@ -191,6 +198,9 @@ def reference_rgba(mode, width=WIDTH, height=HEIGHT, dense=False, translated=Fal
                     if (0 <= grid_x < 240 and 0 <= grid_y < 160
                             and grid_x % 24 < 4 and grid_y % 16 < 4):
                         color = (255, 0, 0)
+                if multi_segment and ((not vertical_multi and y == 40 and 20 <= x < 100)
+                                      or (vertical_multi and x == 20 and 32 <= y < 112)):
+                    color = (0, 0, 0)
             rgba.extend((*color, 255))
     return bytes(rgba)
 

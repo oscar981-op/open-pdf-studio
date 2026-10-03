@@ -183,6 +183,28 @@ def main():
                 raise RuntimeError(f"pixel mismatch: 6000 rectangle draws/{mode}")
             checked += width * height
             checked_pages += 1
+        for mode, number in MODES[1:]:
+            for vertical_multi in (False, True):
+                width, height = 256, 192
+                pdf = work / f"multi-segment-{mode}-{vertical_multi}.pdf"
+                scene = work / "scene.opdl"
+                direct_output = work / "direct.rgba"
+                cli_output = work / "output.rgba"
+                hayro_output = work / "hayro.rgba"
+                pdf.write_bytes(build_pdf(mode, multi_segment=True, vertical_multi=vertical_multi))
+                subprocess.run([paths["adapter"], pdf, scene], check=True,
+                               capture_output=True)
+                subprocess.run([probe, str(number), pdf, direct_output], check=True,
+                               capture_output=True)
+                subprocess.run([work / mode], cwd=work, check=True, capture_output=True)
+                subprocess.run([paths["hayro"], pdf, "1", hayro_output, "1"], check=True,
+                               capture_output=True)
+                expected = reference_rgba(mode, multi_segment=True, vertical_multi=vertical_multi)
+                if not (direct_output.read_bytes() == cli_output.read_bytes()
+                        == hayro_output.read_bytes() == expected):
+                    raise RuntimeError(f"pixel mismatch: collinear multi-segment/{mode}/{vertical_multi}")
+                checked += width * height
+                checked_pages += 1
         invalid_transforms = {
             "scale": b"q\n2 0 0 1 0 0 cm\nQ\n",
             "fractional-translation": b"q\n1 0 0 1 0.5 0 cm\nQ\n",
@@ -194,6 +216,8 @@ def main():
             "missing-clip-path": b"W\nn\n",
             "too-deep-save": b"q\nq\nq\nQ\nQ\nQ\n",
             "unfinished-group-clip": b"q\n10 10 20 20 re\nW\nQ\n",
+            "bent-multi-segment": b"1 w\n20 151.5 m\n60 151.5 l\n60 131.5 l\nS\n",
+            "reversed-multi-segment": b"1 w\n20 151.5 m\n60 151.5 l\n40 151.5 l\nS\n",
         }
         for name, content in invalid_transforms.items():
             invalid_pdf = work / f"invalid-{name}.pdf"
@@ -242,7 +266,7 @@ def main():
                     raise RuntimeError(f"CLI accepted invalid scene: {name}")
         if args.bench_json:
             args.bench_json.write_text(json.dumps(measurements, indent=2) + "\n")
-        print(f"{checked_pages} PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 8 invalid scenes and 12 unsupported transforms/path states rejected")
+        print(f"{checked_pages} PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; 8 invalid scenes and 14 unsupported transforms/path states rejected")
 
 
 if __name__ == "__main__":

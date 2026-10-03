@@ -1,7 +1,8 @@
 # Inventarisatie van echte tekeningen voor de DynLex-kern
 
 De huidige PDF→OPDL-adapter accepteert bewust één ongeroteerde pagina met
-een nul-oorsprong, maximaal 1024×1024 pixels en hoogstens 64 tekenopdrachten.
+een nul-oorsprong, maximaal 1024×1024 pixels en hoogstens 16.384
+tekenopdrachten. De oorspronkelijke limiet bij de inventarisatie was 64.
 Dat is voldoende voor pixelcontrole van de beperkte testfixtures, maar niet
 voor de technische tekeningen in deze repository. Deze inventarisatie leest
 alleen PDF-inhoud; ze verruimt de render- of parseclaims niet.

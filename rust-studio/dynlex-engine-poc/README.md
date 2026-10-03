@@ -458,7 +458,7 @@ eindpunten (117). De oude synthetische `kind=2` blijft ongewijzigd.
 De Rust-adapter accepteert dit nieuwe primitief met dekkende RGB-inkt,
 zonder actief clipvak. Andere hoeken,
 brede streken en algemene PDF-paden worden geweigerd. De OPDL-validator
-weigert een niet-dekkend `kind=4`-commando.
+weigert niet-dekkende `kind=4`- en `kind=5`-commando's.
 
 De eerste vector-PDF was pixelgelijk aan Hayro. De overeenkomstige hybride
 PDF week op 110 randpixels licht af: DynLex gebruikte gewone afronding,
@@ -467,7 +467,7 @@ door 255 gebruikt: `(waarde + 255) >> 8`. De kernel gebruikt voor deze
 gecontroleerde diagonaal dezelfde kleurmenging. Zwarte en rode 45°-streken
 zijn in beide oriëntaties op vector- en hybride PDF-pagina's bytegelijk aan
 Hayro en de onafhankelijke referentie. De huidige `rgba/buffer_verify.py`
-controleert 19 fixtures/3.588.096 pixels, waaronder de grotere opdrachtfixture;
+controleert 23 fixtures/3.784.704 pixels, waaronder de grotere opdrachtfixture;
 de oude OPDL-v1-fixture blijft ongewijzigd.
 Andere hoeken en transparante diagonalen vereisen een eigen gecontroleerd pad.
 
@@ -482,3 +482,10 @@ vector- en hybride uitvoer pixelgelijk aan Hayro en de onafhankelijke referentie
 Dit verandert niets aan de huidige 1024×1024-pixellimiet of de beperkte
 PDF-operators. De echte A1-tekening heeft ook curven, tekst, transformaties
 en rotatie nodig voordat zij door deze route kan lopen.
+
+De adapter kan nu een PDF-stroke met meerdere **monotoon collineaire**
+`m/l/l/.../S`-segmenten als één asgerichte lijn samenvoegen. Horizontale en
+verticale fixtures komen in vector en hybride pixelgelijk met Hayro overeen.
+Een knik, terugkerend segment, curve of niet-uitgelijnde streek blijft
+afgewezen: de PDF-lijnverbinding zou anders andere randpixels geven dan
+losse OPDL-rechthoeken. Deze beperking is geen algemene padondersteuning.

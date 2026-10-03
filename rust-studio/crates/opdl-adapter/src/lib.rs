@@ -286,11 +286,28 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
                 path_start = Some([x + tx, y + ty]);
             }
-            "l" if !image_matrix && pending_line.is_none() => {
-                let start = path_start.take().ok_or_else(|| fail("line without move"))?;
+            "l" if !image_matrix && pending_rect.is_none() => {
                 let [x, y] = operands::<2>(&op.operands)?;
                 let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
-                pending_line = Some((start, [x + tx, y + ty]));
+                let end = [x + tx, y + ty];
+                if let Some(start) = path_start.take() {
+                    pending_line = Some((start, end));
+                } else if let Some((start, last)) = pending_line.as_mut() {
+                    let horizontal = start[1] == last[1]
+                        && end[1] == last[1]
+                        && (last[0] - start[0]) * (end[0] - last[0]) >= 0.0;
+                    let vertical = start[0] == last[0]
+                        && end[0] == last[0]
+                        && (last[1] - start[1]) * (end[1] - last[1]) >= 0.0;
+                    if !horizontal && !vertical {
+                        return Err(fail(
+                            "only monotonic collinear multi-segment strokes are supported",
+                        ));
+                    }
+                    *last = end;
+                } else {
+                    return Err(fail("line without move"));
+                }
             }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
                 let (start, end) = pending_line
