@@ -445,3 +445,21 @@ tussen directe DynLex-probe, CLI, Hayro en onafhankelijke referentie.
 Een derde genest niveau blijft afgewezen. Dit is nog geen algemene
 PDF-graphics-state-stack: CTM-, kleur- en lijnstijlinstellingen binnen
 een geneste groep worden nog niet volledig opgeslagen of hersteld.
+
+## Eerste geantialiaste PDF-diagonaal
+
+OPDL-v2 heeft nu een afzonderlijk `kind=4` voor een stijgende 45°-
+1-pixelstreek met halfpixel-eindpunten en butt caps. De DynLex-CLI en
+bufferkernel tekenen drie dekkingstroken (64/233/64) en halve
+eindpunten (117). De oude synthetische `kind=2` blijft ongewijzigd.
+De Rust-adapter accepteert dit nieuwe primitief alleen voor zwarte inkt,
+zonder actief clipvak en zonder RGB-beeldlaag. Andere kleuren,
+hoeken, gespiegeld dalende lijnen, brede streken en algemene PDF-paden worden geweigerd.
+
+Een echte vector-PDF met de 45°-lijn is pixelgelijk aan Hayro en de
+onafhankelijke referentie; de totale verificatie omvat nu 22 pagina's
+en 3.735.552 pixels. Een vergelijkbare hybride PDF wijkt met de huidige
+DynLex-mengformule op 110 randpixels licht af van Hayro.
+Daarom wordt die combinatie expliciet geweigerd. De volgende stap is
+de precieze kleurmenging op RGB-achtergrond reconstrueren en testen
+voordat hybride diagonalen worden toegestaan.

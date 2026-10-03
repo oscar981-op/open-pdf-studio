@@ -70,15 +70,34 @@ function render {cstring:scene} into {cstring:rgba}:
                         set draw_x to clip_left
                     loop while draw_x < stop_x:
                         set hit to 0
+                        set effective_opacity to opacity
                         if kind = 1 or kind = 3:
                             set hit to 1
                         if kind = 2:
                             set line_x to left + (draw_y - top)
                             if draw_x = line_x or draw_x + 1 = line_x or draw_x = line_x + 1:
                                 set hit to 1
+                        if kind = 4:
+                            set line_x to left + (draw_y - top)
+                            set coverage to 0
+                            if draw_y = top or draw_y + 1 = bottom:
+                                if draw_x = line_x:
+                                    set coverage to 117
+                                if draw_y = top and draw_x = line_x + 1:
+                                    set coverage to 64
+                                if draw_y + 1 = bottom and draw_x + 1 = line_x:
+                                    set coverage to 64
+                            else:
+                                if draw_x = line_x:
+                                    set coverage to 233
+                                if draw_x + 1 = line_x or draw_x = line_x + 1:
+                                    set coverage to 64
+                            if coverage > 0:
+                                set hit to 1
+                                set effective_opacity to (opacity * coverage + 127) / 255
                         if hit = 1:
                             set pixel_index to (draw_y * width + draw_x) * 4
-                            if opacity = 255:
+                            if effective_opacity = 255:
                                 store (ink_red as a byte) into pixels at pixel_index
                                 store (ink_green as a byte) into pixels at (pixel_index + 1)
                                 store (ink_blue as a byte) into pixels at (pixel_index + 2)
@@ -86,9 +105,9 @@ function render {cstring:scene} into {cstring:rgba}:
                                 set old_red to unsigned byte at pixel_index in pixels
                                 set old_green to unsigned byte at (pixel_index + 1) in pixels
                                 set old_blue to unsigned byte at (pixel_index + 2) in pixels
-                                store ((blend old_red with ink_red at opacity) as a byte) into pixels at pixel_index
-                                store ((blend old_green with ink_green at opacity) as a byte) into pixels at (pixel_index + 1)
-                                store ((blend old_blue with ink_blue at opacity) as a byte) into pixels at (pixel_index + 2)
+                                store ((blend old_red with ink_red at effective_opacity) as a byte) into pixels at pixel_index
+                                store ((blend old_green with ink_green at effective_opacity) as a byte) into pixels at (pixel_index + 1)
+                                store ((blend old_blue with ink_blue at effective_opacity) as a byte) into pixels at (pixel_index + 2)
                         set draw_x to draw_x + 1
                     set draw_y to draw_y + 1
                 set command to command + 1

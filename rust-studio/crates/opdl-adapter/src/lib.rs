@@ -295,25 +295,43 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 let (start, end) = pending_line
                     .take()
                     .ok_or_else(|| fail("stroke without line"))?;
-                let rect = if start[1] == end[1] {
+                let (kind, rect) = if start[1] == end[1] {
                     let left = exact_u32(start[0].min(end[0]))?;
                     let right = exact_u32(start[0].max(end[0]))?;
                     let top = exact_u32(f64::from(height) - start[1] - 0.5)?;
-                    [left, top, right, top + 1]
+                    (3, [left, top, right, top + 1])
                 } else if start[0] == end[0] {
                     let left = exact_u32(start[0] - 0.5)?;
                     let top = height - exact_u32(start[1].max(end[1]))?;
                     let bottom = height - exact_u32(start[1].min(end[1]))?;
-                    [left, top, left + 1, bottom]
+                    (3, [left, top, left + 1, bottom])
+                } else if clip.is_none()
+                    && image.is_none()
+                    && stroke_color == [0, 0, 0]
+                    && end[0] > start[0]
+                    && end[0] - start[0] == start[1] - end[1]
+                    && start[0].fract() == 0.5
+                    && start[1].fract() == 0.5
+                    && end[0].fract() == 0.5
+                    && end[1].fract() == 0.5
+                {
+                    let left = exact_u32(start[0] - 0.5)?;
+                    let top = exact_u32(f64::from(height) - start[1] - 0.5)?;
+                    let right = exact_u32(end[0] + 0.5)?;
+                    let bottom = exact_u32(f64::from(height) - end[1] + 0.5)?;
+                    (4, [left, top, right, bottom])
                 } else {
-                    return Err(fail("only horizontal or vertical strokes are supported"));
+                    return Err(fail("stroke outside supported axis or 45-degree subset"));
                 };
                 if rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height {
                     return Err(fail("stroke outside page or empty"));
                 }
+                if kind == 4 && (rect[2] - rect[0] != rect[3] - rect[1] || rect[2] - rect[0] < 2) {
+                    return Err(fail("invalid 45-degree stroke bounds"));
+                }
                 if let Some(rect) = intersect_rect(rect, clip) {
                     commands.push((
-                        3,
+                        kind,
                         rect,
                         [stroke_color[0], stroke_color[1], stroke_color[2], 255],
                     ));

@@ -74,15 +74,17 @@ function run renderer with mode mode:
             set checked_top to unsigned word at (checked_offset + 8) in scene
             set checked_right to unsigned word at (checked_offset + 12) in scene
             set checked_bottom to unsigned word at (checked_offset + 16) in scene
-            if checked_kind < 1 or checked_kind > 3:
+            if checked_kind < 1 or checked_kind > 4:
                 @intrinsic("call", "libc", "exit", void, 2)
-            if version = 1 and checked_kind = 3:
+            if version = 1 and (checked_kind = 3 or checked_kind = 4):
                 @intrinsic("call", "libc", "exit", void, 2)
             if checked_left > checked_right or checked_right > width or checked_top > checked_bottom or checked_bottom > height:
                 @intrinsic("call", "libc", "exit", void, 2)
-            if checked_kind = 2:
+            if checked_kind = 2 or checked_kind = 4:
                 if (checked_right - checked_left) != (checked_bottom - checked_top):
                     @intrinsic("call", "libc", "exit", void, 2)
+            if checked_kind = 4 and (checked_right - checked_left) < 2:
+                @intrinsic("call", "libc", "exit", void, 2)
             if checked_kind = 3:
                 if (checked_right - checked_left) != 1 and (checked_bottom - checked_top) != 1:
                     @intrinsic("call", "libc", "exit", void, 2)
@@ -138,15 +140,34 @@ function run renderer with mode mode:
                         set draw_x to clip_left
                     loop while draw_x < stop_x:
                         set hit to 0
+                        set effective_opacity to opacity
                         if kind = 1 or kind = 3:
                             set hit to 1
                         if kind = 2:
                             set line_x to left + (draw_y - top)
                             if draw_x = line_x or draw_x + 1 = line_x or draw_x = line_x + 1:
                                 set hit to 1
+                        if kind = 4:
+                            set line_x to left + (draw_y - top)
+                            set coverage to 0
+                            if draw_y = top or draw_y + 1 = bottom:
+                                if draw_x = line_x:
+                                    set coverage to 117
+                                if draw_y = top and draw_x = line_x + 1:
+                                    set coverage to 64
+                                if draw_y + 1 = bottom and draw_x + 1 = line_x:
+                                    set coverage to 64
+                            else:
+                                if draw_x = line_x:
+                                    set coverage to 233
+                                if draw_x + 1 = line_x or draw_x = line_x + 1:
+                                    set coverage to 64
+                            if coverage > 0:
+                                set hit to 1
+                                set effective_opacity to (opacity * coverage + 127) / 255
                         if hit = 1:
                             set pixel_index to (draw_y * width + draw_x) * 4
-                            if opacity = 255:
+                            if effective_opacity = 255:
                                 store (ink_red as a byte) into rgba at pixel_index
                                 store (ink_green as a byte) into rgba at (pixel_index + 1)
                                 store (ink_blue as a byte) into rgba at (pixel_index + 2)
@@ -154,9 +175,9 @@ function run renderer with mode mode:
                                 set old_red to unsigned byte at pixel_index in rgba
                                 set old_green to unsigned byte at (pixel_index + 1) in rgba
                                 set old_blue to unsigned byte at (pixel_index + 2) in rgba
-                                store ((blend old_red with ink_red at opacity) as a byte) into rgba at pixel_index
-                                store ((blend old_green with ink_green at opacity) as a byte) into rgba at (pixel_index + 1)
-                                store ((blend old_blue with ink_blue at opacity) as a byte) into rgba at (pixel_index + 2)
+                                store ((blend old_red with ink_red at effective_opacity) as a byte) into rgba at pixel_index
+                                store ((blend old_green with ink_green at effective_opacity) as a byte) into rgba at (pixel_index + 1)
+                                store ((blend old_blue with ink_blue at effective_opacity) as a byte) into rgba at (pixel_index + 2)
                         set draw_x to draw_x + 1
                     set draw_y to draw_y + 1
                 set command to command + 1

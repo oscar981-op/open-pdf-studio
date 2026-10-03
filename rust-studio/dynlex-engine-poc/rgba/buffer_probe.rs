@@ -56,7 +56,7 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
         let top = word(scene, offset + 8)?;
         let right = word(scene, offset + 12)?;
         let bottom = word(scene, offset + 16)?;
-        if !(1..=3).contains(&kind)
+        if !(1..=4).contains(&kind)
             || left > right
             || right > width
             || top > bottom
@@ -64,8 +64,11 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
         {
             return Err("invalid drawing command".into());
         }
-        if kind == 2 && right - left != bottom - top {
+        if (kind == 2 || kind == 4) && right - left != bottom - top {
             return Err("invalid diagonal command".into());
+        }
+        if kind == 4 && right - left < 2 {
+            return Err("invalid antialiased diagonal command".into());
         }
         if kind == 3 && right - left != 1 && bottom - top != 1 {
             return Err("invalid stroke command".into());
