@@ -87,7 +87,32 @@ function area {cstring:scene} at {integer:pixel_x} and {integer:pixel_y} into {c
         @intrinsic("call", "libc", "free", void, work_b_bytes)
         return 0
 
+# Experimental full coverage buffer. Rust has validated both input and output
+# capacities before entry. Every output byte is written by DynLex.
+function raster {cstring:scene} into {cstring:output}:
+    execute:
+        set sample_bytes to allocate 8 bytes
+        set sample to sample_bytes as a pointer to a float
+        set y to 0
+        loop while y < 192:
+            set x to 0
+            loop while x < 256:
+                set status to area scene at x and y into sample_bytes
+                if status != 0:
+                    @intrinsic("call", "libc", "free", void, sample_bytes)
+                    return status
+                set coverage to item 0 of sample
+                set value to (coverage * 255.0 + 0.5) as an integer
+                store (value as a byte) into output at (y * 256 + x)
+                set x to x + 1
+            set y to y + 1
+        @intrinsic("call", "libc", "free", void, sample_bytes)
+        return 0
+
 set dummy_scene to allocate 24 bytes
 set dummy_result to allocate 8 bytes
 set status to area dummy_scene at (0 as an integer) and (0 as an integer) into dummy_result
 print status as a line
+set dummy_coverage to allocate 49152 bytes
+set raster_status to raster dummy_scene into dummy_coverage
+print raster_status as a line

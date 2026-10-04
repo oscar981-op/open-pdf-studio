@@ -1,0 +1,282 @@
+{
+  "note": "paired warm process runs; includes startup and file I/O; OS cache not cleared",
+  "rounds": 15,
+  "fixtures": {
+    "arch": {
+      "median": {
+        "dynlex": {
+          "wall_ms": 19.116195,
+          "peak_rss_kib": 2120
+        },
+        "rust": {
+          "wall_ms": 5.997892,
+          "peak_rss_kib": 2112
+        }
+      },
+      "samples": {
+        "dynlex": [
+          {
+            "wall_ms": 22.446406,
+            "peak_rss_kib": 2084
+          },
+          {
+            "wall_ms": 16.767619,
+            "peak_rss_kib": 2140
+          },
+          {
+            "wall_ms": 18.907311,
+            "peak_rss_kib": 2144
+          },
+          {
+            "wall_ms": 21.220817,
+            "peak_rss_kib": 2076
+          },
+          {
+            "wall_ms": 22.06992,
+            "peak_rss_kib": 2144
+          },
+          {
+            "wall_ms": 19.660643,
+            "peak_rss_kib": 2140
+          },
+          {
+            "wall_ms": 20.699919,
+            "peak_rss_kib": 2056
+          },
+          {
+            "wall_ms": 19.116195,
+            "peak_rss_kib": 2112
+          },
+          {
+            "wall_ms": 17.457019,
+            "peak_rss_kib": 2132
+          },
+          {
+            "wall_ms": 17.292246,
+            "peak_rss_kib": 2076
+          },
+          {
+            "wall_ms": 16.976951,
+            "peak_rss_kib": 2088
+          },
+          {
+            "wall_ms": 17.392797,
+            "peak_rss_kib": 2064
+          },
+          {
+            "wall_ms": 19.247617,
+            "peak_rss_kib": 2120
+          },
+          {
+            "wall_ms": 21.756675,
+            "peak_rss_kib": 2128
+          },
+          {
+            "wall_ms": 18.773739,
+            "peak_rss_kib": 2128
+          }
+        ],
+        "rust": [
+          {
+            "wall_ms": 4.731643,
+            "peak_rss_kib": 2092
+          },
+          {
+            "wall_ms": 7.364763,
+            "peak_rss_kib": 2152
+          },
+          {
+            "wall_ms": 7.14313,
+            "peak_rss_kib": 2036
+          },
+          {
+            "wall_ms": 6.341767,
+            "peak_rss_kib": 2180
+          },
+          {
+            "wall_ms": 5.83254,
+            "peak_rss_kib": 2112
+          },
+          {
+            "wall_ms": 5.997892,
+            "peak_rss_kib": 2104
+          },
+          {
+            "wall_ms": 6.022653,
+            "peak_rss_kib": 2064
+          },
+          {
+            "wall_ms": 6.729164,
+            "peak_rss_kib": 2116
+          },
+          {
+            "wall_ms": 5.364363,
+            "peak_rss_kib": 2048
+          },
+          {
+            "wall_ms": 5.115238,
+            "peak_rss_kib": 2096
+          },
+          {
+            "wall_ms": 4.328366,
+            "peak_rss_kib": 2048
+          },
+          {
+            "wall_ms": 7.022118,
+            "peak_rss_kib": 2112
+          },
+          {
+            "wall_ms": 6.49978,
+            "peak_rss_kib": 2112
+          },
+          {
+            "wall_ms": 5.273391,
+            "peak_rss_kib": 2120
+          },
+          {
+            "wall_ms": 4.466079,
+            "peak_rss_kib": 2156
+          }
+        ]
+      }
+    },
+    "s-bend": {
+      "median": {
+        "dynlex": {
+          "wall_ms": 19.961667,
+          "peak_rss_kib": 2120
+        },
+        "rust": {
+          "wall_ms": 5.819009,
+          "peak_rss_kib": 2056
+        }
+      },
+      "samples": {
+        "dynlex": [
+          {
+            "wall_ms": 18.884271,
+            "peak_rss_kib": 2136
+          },
+          {
+            "wall_ms": 16.539765,
+            "peak_rss_kib": 2120
+          },
+          {
+            "wall_ms": 20.384523,
+            "peak_rss_kib": 2072
+          },
+          {
+            "wall_ms": 16.921451,
+            "peak_rss_kib": 2136
+          },
+          {
+            "wall_ms": 17.379127,
+            "peak_rss_kib": 2136
+          },
+          {
+            "wall_ms": 16.709767,
+            "peak_rss_kib": 2120
+          },
+          {
+            "wall_ms": 22.560697,
+            "peak_rss_kib": 2060
+          },
+          {
+            "wall_ms": 18.448394,
+            "peak_rss_kib": 2128
+          },
+          {
+            "wall_ms": 24.334845,
+            "peak_rss_kib": 2132
+          },
+          {
+            "wall_ms": 20.736529,
+            "peak_rss_kib": 2072
+          },
+          {
+            "wall_ms": 23.825807,
+            "peak_rss_kib": 2072
+          },
+          {
+            "wall_ms": 22.75847,
+            "peak_rss_kib": 2080
+          },
+          {
+            "wall_ms": 19.961667,
+            "peak_rss_kib": 2148
+          },
+          {
+            "wall_ms": 23.064035,
+            "peak_rss_kib": 2120
+          },
+          {
+            "wall_ms": 17.922786,
+            "peak_rss_kib": 2060
+          }
+        ],
+        "rust": [
+          {
+            "wall_ms": 5.681828,
+            "peak_rss_kib": 2040
+          },
+          {
+            "wall_ms": 5.21253,
+            "peak_rss_kib": 2056
+          },
+          {
+            "wall_ms": 6.639022,
+            "peak_rss_kib": 2124
+          },
+          {
+            "wall_ms": 5.90056,
+            "peak_rss_kib": 2044
+          },
+          {
+            "wall_ms": 6.870696,
+            "peak_rss_kib": 2052
+          },
+          {
+            "wall_ms": 5.454964,
+            "peak_rss_kib": 2116
+          },
+          {
+            "wall_ms": 6.682883,
+            "peak_rss_kib": 2108
+          },
+          {
+            "wall_ms": 4.655051,
+            "peak_rss_kib": 2044
+          },
+          {
+            "wall_ms": 6.995227,
+            "peak_rss_kib": 2164
+          },
+          {
+            "wall_ms": 5.450584,
+            "peak_rss_kib": 2044
+          },
+          {
+            "wall_ms": 6.303137,
+            "peak_rss_kib": 2104
+          },
+          {
+            "wall_ms": 8.359379,
+            "peak_rss_kib": 2044
+          },
+          {
+            "wall_ms": 4.983137,
+            "peak_rss_kib": 2112
+          },
+          {
+            "wall_ms": 5.369703,
+            "peak_rss_kib": 2064
+          },
+          {
+            "wall_ms": 5.819009,
+            "peak_rss_kib": 2052
+          }
+        ]
+      }
+    }
+  }
+}

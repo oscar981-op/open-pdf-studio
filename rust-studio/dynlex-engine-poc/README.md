@@ -705,9 +705,36 @@ rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_pixel_probe.rs \
 
 DynLex 0.0.1 crashte tijdens compilatie van een dynamische `float`-allocatie;
 de proef alloceert daarom bytes en gebruikt een uitgelijnde `f64`-weergave.
+De proef schrijft nu ook zelf de volledige 256×192-dekkingsbuffer als 8-bit
+grijswaarden. [De verificatie](rgba/verify_curve_raster.py) vergelijkt voor
+boog en S-curve ieder van de 49.152 bytes exact met de opgeslagen
+Hayro/Vello-kaart; vijf ongeldige invoeren leveren geen bestand op. De Rust-
+validator accepteert tekst of OPLN en normaliseert naar dezelfde uitgelijnde
+buffer. Reproduceren, na compilatie van de bovenstaande library:
+
+```sh
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_raster_probe.rs \
+  -L native=/tmp/opds-curve-pixel-build -o /tmp/opds-curve-raster-probe
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_scene.rs \
+  -o /tmp/opds-curve-scene
+python3 dynlex-engine-poc/rgba/verify_curve_raster.py \
+  --probe /tmp/opds-curve-raster-probe --scene-tool /tmp/opds-curve-scene
+```
+
+De [gepaarde meetproef](rgba/bench_curve_raster.py) vergelijkt vijftien warme
+procesruns per fixture met de zelfstandige Rust-area-rasterizer en controleert
+in elke ronde alle bytes. De ruwe samples staan in
+[`curve-raster-bench-2026-10-04.json`](rgba/curve-raster-bench-2026-10-04.json).
+Medianen DynLex/Rust: boog **19,12/6,00 ms**, S-curve **19,96/5,82 ms**;
+piek-RSS ongeveer **2,1/2,1 MiB**. Processtart en bestand-I/O zijn inbegrepen;
+de OS-cache is niet gewist. DynLex alloceert momenteel twee tijdelijke
+puntbuffers per pixel en is in deze kleine proef duidelijk langzamer. Dit is
+geen PDF→RGBA-benchmark.
+
 Dit is nog geen volledige DynLex-curve-renderer: de cubic-flattening blijft
 Vello-afhankelijk, compositing is niet geïntegreerd en de gewone PDF-adapter
-blijft curven weigeren. Deze proef is evenmin een snelheidsbenchmark.
+blijft curven weigeren. Verbeter eerst de bufferhergebruik en onafhankelijke
+flattening voordat deze proef richting productierendering gaat.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de
