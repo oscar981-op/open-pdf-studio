@@ -793,6 +793,45 @@ python3 dynlex-engine-poc/rgba/verify_curve_flatten_rust.py \
 Deze kandidaat is bewust niet geïntegreerd: de exacte adaptieve segmentverdeling
 en daarna de onafhankelijke stroke-outline ontbreken nog. Vello's lokale
 `flatten_simd.rs` is alleen gebruikt om het verschil te onderzoeken.
+
+Een tweede, [begrensde scalar-f32-proef](rgba/curve_flatten_scalar.rs) vertaalt
+de kwadratische onderverdeling en krommingsparameterisatie uit het lokaal
+beschikbare, Apache-2.0/MIT-gelicentieerde `vello_common 0.0.8` naar eigen
+Rust-code zonder die bibliotheek tijdens uitvoering aan te roepen. De
+[verifier](rgba/verify_curve_flatten_scalar.py) gebruikt Kurbo's vastgelegde
+stroke-omtrek als fixture, valideert de resulterende OPLN-buffer en laat de
+DynLex-kernel alle pixels tekenen. Boog en S-curve hebben nu precies 28 en 30
+segmenten en ieder **49.152/49.152 bytegelijke dekkingspixels** tegen de
+vastgelegde Hayro/Vello-kaarten. Een derde, ondiepe curve met 18 segmenten
+is eveneens 49.152 bytes exact tegen een afzonderlijke Vello CPU-oracle. De
+segmentcoördinaten zijn nog niet exact: maximale afwijking respectievelijk
+0,000061, 0,000862 en 0,000023 px. Zes ongeldige/onbegrensde inputs worden
+zonder uitvoer geweigerd. Het rapport staat in
+[`curve-scalar-flatten-2026-10-04.json`](rgba/curve-scalar-flatten-2026-10-04.json).
+
+```sh
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_flatten_scalar.rs \
+  -o /tmp/opds-curve-flatten-scalar
+python3 dynlex-engine-poc/rgba/verify_curve_flatten_scalar.py \
+  --flattener /tmp/opds-curve-flatten-scalar \
+  --rasterizer /tmp/opds-curve-raster-probe \
+  --scene-tool /tmp/opds-curve-scene \
+  --expected-report dynlex-engine-poc/rgba/curve-scalar-flatten-2026-10-04.json
+```
+
+Dit is een scalar herwerking van bestaande Vello-wiskunde, geen nieuw
+afgeleid algoritme of zelfstandige PDF-engine. De stroke-outline komt nog
+uit Kurbo, de extra ondiepe curve heeft alleen een directe Vello-oracle, en
+drie kleine fixtures bewijzen geen algemene pariteit. Curven blijven in de
+gewone adapter en app uitgeschakeld.
+
+De ondiepe referentie gebruikt besturingspunten `(20,5;111,5)`,
+`(43,5;93,5)`, `(67,5;93,5)`, `(90,5;111,5)` en is gemaakt met de
+afzonderlijke `curve_outline_probe`, `curve_flatten_probe` en
+`curve_vello_probe` in `crates/engine-probe/src/bin`. Zij schrijven de
+vastgelegde `curve-outline-shallow.txt`, `curve-flat-shallow.txt` en de
+gecomprimeerde 256×192-kaart; de scalar/Rust-DynLex-verifier roept deze
+referentiecode niet aan.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de

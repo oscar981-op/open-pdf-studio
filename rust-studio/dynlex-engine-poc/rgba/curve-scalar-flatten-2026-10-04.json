@@ -1,0 +1,27 @@
+{
+  "note": "bounded scalar f32 candidate; Kurbo stroke outlines remain fixture input, no Vello runtime call",
+  "fixtures": {
+    "arch": {
+      "segments": 28,
+      "quadratic_subdivisions": "[5, 5]",
+      "segment_coordinate_differences_over_1e_6": 26,
+      "max_segment_coordinate_delta": 6.1035000001652406e-05,
+      "coverage_bytes_exact": 49152
+    },
+    "s-bend": {
+      "segments": 30,
+      "quadratic_subdivisions": "[9, 9]",
+      "segment_coordinate_differences_over_1e_6": 26,
+      "max_segment_coordinate_delta": 0.0008621220000009089,
+      "coverage_bytes_exact": 49152
+    },
+    "shallow": {
+      "segments": 18,
+      "quadratic_subdivisions": "[2, 2]",
+      "segment_coordinate_differences_over_1e_6": 12,
+      "max_segment_coordinate_delta": 2.2888000003717934e-05,
+      "coverage_bytes_exact": 49152
+    }
+  },
+  "invalid_cases_rejected": 6
+}
