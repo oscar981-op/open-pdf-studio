@@ -577,6 +577,23 @@ geen Vello-pariteit op. Dit is een diagnostische **mislukte kandidaat**; zij
 wordt nergens in de v2/v4-renderroute gebruikt. Herhaal met
 `python3 dynlex-engine-poc/rgba/curve_candidate.py --samples 4 8 16
 --expected-report dynlex-engine-poc/rgba/curve-candidate-2026-10-04.json`.
+De lokale bron van Hayro 0.7.1 gebruikt Kurbo `Stroke` met PDF-butt-caps;
+Vello CPU 0.0.8 roept `kurbo::stroke_with` aan met tolerantie 0,25, vlakt de
+resulterende **gevulde omtrek** af en berekent daarna analytische pixeloppervlakte
+via coverage strips. De afzonderlijke
+[`curve_vello_probe.rs`](../crates/engine-probe/src/bin/curve_vello_probe.rs)
+tekent dezelfde twee paden rechtstreeks door Vello, zonder PDF-parser. Zijn
+alpha-buffer is voor beide 49.152-byte-dekkingskaarten exact gelijk aan de
+Hayro-afleiding. Reproduceren:
+
+```sh
+cargo build --release -p opds-engine-probe --bin curve_vello_probe
+python3 dynlex-engine-poc/rgba/verify_curve_vello.py \
+  --probe target/release/curve_vello_probe
+```
+
+Dit is een bron- en geometrieverificatie van de referentierenderer; het is
+**geen DynLex-curvekernel** en bewijst geen onafhankelijke curvepariteit.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de

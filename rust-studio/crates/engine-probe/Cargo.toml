@@ -7,6 +7,7 @@ publish.workspace = true
 
 [dependencies]
 hayro = "=0.7.1"
+vello_cpu = { version = "=0.0.8", default-features = false, features = ["std", "png", "u8_pipeline"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [dev-dependencies]

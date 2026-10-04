@@ -2155,6 +2155,7 @@ dependencies = [
  "hayro",
  "image",
  "lopdf",
+ "vello_cpu",
 ]
 
 [[package]]
