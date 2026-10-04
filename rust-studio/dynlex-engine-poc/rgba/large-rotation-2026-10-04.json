@@ -1,0 +1,51 @@
+{
+  "geometry_version": 1,
+  "experimental_pixel_limit": 6000000,
+  "cases": {
+    "quarter-0": {
+      "display_pixels": [
+        192,
+        256
+      ],
+      "pixel_bytes_exact": 196608
+    },
+    "quarter-90": {
+      "display_pixels": [
+        256,
+        192
+      ],
+      "pixel_bytes_exact": 196608
+    },
+    "quarter-180": {
+      "display_pixels": [
+        192,
+        256
+      ],
+      "pixel_bytes_exact": 196608
+    },
+    "quarter-270": {
+      "display_pixels": [
+        256,
+        192
+      ],
+      "pixel_bytes_exact": 196608
+    },
+    "shifted-crop-90": {
+      "display_pixels": [
+        200,
+        150
+      ],
+      "pixel_bytes_exact": 120000
+    },
+    "a1-quarter-90": {
+      "display_pixels": [
+        2384,
+        1684
+      ],
+      "pixel_bytes_exact": 16058624
+    }
+  },
+  "invalid_scenes_rejected": 3,
+  "invalid_large_modes_rejected": 2,
+  "invalid_geometry_records_rejected": 5
+}

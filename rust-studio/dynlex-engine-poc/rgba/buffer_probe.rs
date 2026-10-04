@@ -21,7 +21,7 @@ fn word(scene: &[u8], offset: usize) -> Result<usize, Box<dyn Error>> {
     Ok(u32::from_le_bytes(bytes) as usize)
 }
 
-fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
+fn validate(scene: &[u8], experimental_large: bool) -> Result<(usize, usize), Box<dyn Error>> {
     if scene.len() < 40 || scene.len() > 3_538_984 || &scene[..4] != b"OPDL" || word(scene, 4)? != 2
     {
         return Err("invalid OPDL-v2 header".into());
@@ -29,6 +29,19 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
     let width = word(scene, 8)?;
     let height = word(scene, 12)?;
     if !(1..=1024).contains(&width) || !(1..=1024).contains(&height) {
+        if !experimental_large
+            || width == 0
+            || width > 4096
+            || height == 0
+            || height > 4096
+            || width
+                .checked_mul(height)
+                .is_none_or(|pixels| pixels > 6_000_000)
+        {
+            return Err("invalid page dimensions".into());
+        }
+    }
+    if width.checked_mul(height).is_none() {
         return Err("invalid page dimensions".into());
     }
     let clip = [
@@ -41,6 +54,9 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
         return Err("invalid clip rectangle".into());
     }
     let image_len = word(scene, 32)?;
+    if experimental_large && (width > 1024 || height > 1024) && image_len != 0 {
+        return Err("large RGB image pages are outside the experiment".into());
+    }
     if image_len != 0 && image_len != width * height * 3 {
         return Err("invalid RGB image length".into());
     }
@@ -82,7 +98,9 @@ fn validate(scene: &[u8]) -> Result<(usize, usize), Box<dyn Error>> {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().collect();
     if args.len() != 4 && args.len() != 5 {
-        return Err("usage: buffer_probe MODE INPUT.opdl|INPUT.pdf OUTPUT.rgba [REPEAT|--profile]".into());
+        return Err(
+            "usage: buffer_probe MODE INPUT.opdl|INPUT.pdf OUTPUT.rgba [REPEAT|--profile]".into(),
+        );
     }
     let mode: i32 = args[1].parse()?;
     if !(1..=3).contains(&mode) {
@@ -90,8 +108,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let input = Path::new(&args[2]);
     let profile = args.get(4).is_some_and(|value| value == "--profile");
+    let experimental_large = args
+        .get(4)
+        .is_some_and(|value| value == "--experimental-large");
     let load_started = Instant::now();
-    let (scene, adapter_timings) = if input.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+    let (scene, adapter_timings) = if input
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))
+    {
         if profile {
             let (scene, timings) = opds_opdl_adapter::page_to_opdl_with_timings(input)?;
             (scene, Some(timings))
@@ -102,9 +126,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         (fs::read(input)?, None)
     };
     let load_ms = load_started.elapsed().as_secs_f64() * 1000.0;
-    let (width, height) = validate(&scene)?;
+    let (width, height) = validate(&scene, experimental_large)?;
+    if (width > 1024 || height > 1024) && mode != 2 {
+        return Err("experimental large pages require vector mode".into());
+    }
     let mut output = vec![0_u8; 12 + width * height * 4];
-    let repeat: usize = if args.len() == 5 && !profile {
+    let repeat: usize = if args.len() == 5 && !profile && !experimental_large {
         args[4].parse()?
     } else {
         1
@@ -132,10 +159,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let kernel_ms = started.elapsed().as_secs_f64() * 1000.0;
     if repeat > 1 {
-        eprintln!(
-            "kernel_ms_per_call={:.4}",
-            kernel_ms / repeat as f64
-        );
+        eprintln!("kernel_ms_per_call={:.4}", kernel_ms / repeat as f64);
     }
     let write_started = Instant::now();
     fs::write(Path::new(&args[3]), &output[12..])?;
@@ -144,8 +168,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Some(timings) = adapter_timings {
             eprintln!(
                 "load_ms={load_ms:.4} read_ms={:.4} document_ms={:.4} page_decode_ms={:.4} content_ms={:.4} operator_decode_ms={:.4} operators_ms={:.4} encode_ms={:.4} kernel_ms={kernel_ms:.4} write_ms={write_ms:.4}",
-                timings.read_ms, timings.document_ms, timings.page_decode_ms, timings.content_ms, timings.operator_decode_ms,
-                timings.operators_ms, timings.encode_ms
+                timings.read_ms,
+                timings.document_ms,
+                timings.page_decode_ms,
+                timings.content_ms,
+                timings.operator_decode_ms,
+                timings.operators_ms,
+                timings.encode_ms
             );
         } else {
             eprintln!("load_ms={load_ms:.4} kernel_ms={kernel_ms:.4} write_ms={write_ms:.4}");

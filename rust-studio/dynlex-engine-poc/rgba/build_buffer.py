@@ -47,7 +47,7 @@ entry:
   %bad_output = icmp eq ptr %output, null
   %bad_ptr = or i1 %bad_scene, %bad_output
   %short = icmp slt i32 %scene_len, 40
-  %too_long = icmp sgt i32 %scene_len, 3147312
+  %too_long = icmp sgt i32 %scene_len, 3538984
   %small_output = icmp slt i32 %output_len, 12
   %bad_size1 = or i1 %short, %too_long
   %bad_size2 = or i1 %bad_size1, %small_output

@@ -880,3 +880,12 @@ python3 dynlex-engine-poc/rgba/verify_curve_outline_candidate.py \
   --rasterizer /tmp/opds-curve-raster-probe \
   --json /tmp/opds-curve-outline-candidate.json
 ```
+
+Voor een onafhankelijke stap richting A1 bestaat nu een
+[versieerbare OPGM-v1-paginageometrieproef](opgm-v1-geometry-2026-10-04.md).
+Een aparte Rust-probe vertaalt CropBox en vier kwartslagen van één
+pixeluitgelijnde rechthoek naar OPDL-v2; een experimentele vector-only
+bufferoptie vergroot de paginalimiet tot maximaal 6 miljoen pixels. Zes
+echte PDF-fixtures, inclusief 90°/CropBox en A1-achtig 2384×1684 zichtbaar,
+zijn bytegelijk aan Hayro en een onafhankelijke referentie. De normale
+adapter en app blijven ongewijzigd.
