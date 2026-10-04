@@ -1,9 +1,12 @@
 //! Isolated PDF→OPGM-v1 fixture export. This is not a general PDF parser.
 use super::{fail, has_compound_operand, number, operands};
-use lopdf::{content::Content, Document, Object};
+use lopdf::{
+    content::{Content, Operation},
+    Document, Object,
+};
 use std::{collections::HashSet, error::Error, path::Path};
 
-fn integer(value: f64) -> Result<u32, Box<dyn Error>> {
+pub(crate) fn integer(value: f64) -> Result<u32, Box<dyn Error>> {
     if !value.is_finite() || value.fract() != 0.0 || !(0.0..=4096.0).contains(&value) {
         return Err(fail("OPGM requires integer coordinates within 4096"));
     }
@@ -20,7 +23,14 @@ fn box_value(value: &Object) -> Result<[u32; 4], Box<dyn Error>> {
     ])
 }
 
-pub fn page_to_opgm(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
+pub(crate) struct PageFixture {
+    pub media: [u32; 4],
+    pub crop: [u32; 4],
+    pub turn: u32,
+    pub operations: Vec<Operation>,
+}
+
+pub(crate) fn load_page(path: &Path) -> Result<PageFixture, Box<dyn Error>> {
     let source = std::fs::read(path)?;
     if source.len() > 16_000_000 {
         return Err(fail("PDF fixture is too large"));
@@ -99,6 +109,43 @@ pub fn page_to_opgm(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
         return Err(fail("unsupported PDF content syntax"));
     }
     let operations = Content::decode(&bytes)?.operations;
+    Ok(PageFixture {
+        media,
+        crop,
+        turn,
+        operations,
+    })
+}
+
+pub(crate) fn rectangle_to_display(
+    crop: [u32; 4],
+    turn: u32,
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+) -> Result<[u32; 4], Box<dyn Error>> {
+    let right = x.checked_add(w).ok_or_else(|| fail("rectangle overflow"))?;
+    let top = y.checked_add(h).ok_or_else(|| fail("rectangle overflow"))?;
+    if w == 0 || h == 0 || x < crop[0] || y < crop[1] || right > crop[2] || top > crop[3] {
+        return Err(fail("rectangle exceeds visible CropBox"));
+    }
+    Ok(match turn {
+        0 => [x - crop[0], crop[3] - top, right - crop[0], crop[3] - y],
+        90 => [y - crop[1], x - crop[0], top - crop[1], right - crop[0]],
+        180 => [crop[2] - right, y - crop[1], crop[2] - x, top - crop[1]],
+        270 => [crop[3] - top, crop[2] - right, crop[3] - y, crop[2] - x],
+        _ => unreachable!(),
+    })
+}
+
+pub fn page_to_opgm(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
+    let PageFixture {
+        media,
+        crop,
+        turn,
+        operations,
+    } = load_page(path)?;
     if operations.len() != 3
         || operations[0].operator != "rg"
         || operations[1].operator != "re"
@@ -110,18 +157,7 @@ pub fn page_to_opgm(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     }
     let [x, y, w, h] = operands::<4>(&operations[1].operands)?;
     let [x, y, w, h] = [integer(x)?, integer(y)?, integer(w)?, integer(h)?];
-    let right = x.checked_add(w).ok_or_else(|| fail("rectangle overflow"))?;
-    let top = y.checked_add(h).ok_or_else(|| fail("rectangle overflow"))?;
-    if w == 0 || h == 0 || x < crop[0] || y < crop[1] || right > crop[2] || top > crop[3] {
-        return Err(fail("rectangle exceeds visible CropBox"));
-    }
-    let rect = match turn {
-        0 => [x - crop[0], crop[3] - top, right - crop[0], crop[3] - y],
-        90 => [y - crop[1], x - crop[0], top - crop[1], right - crop[0]],
-        180 => [crop[2] - right, y - crop[1], crop[2] - x, top - crop[1]],
-        270 => [crop[3] - top, crop[2] - right, crop[3] - y, crop[2] - x],
-        _ => unreachable!(),
-    };
+    let rect = rectangle_to_display(crop, turn, x, y, w, h)?;
     let mut output = Vec::with_capacity(56);
     output.extend_from_slice(b"OPGM");
     for value in [

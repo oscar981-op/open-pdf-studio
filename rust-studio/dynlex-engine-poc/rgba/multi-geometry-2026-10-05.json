@@ -1,0 +1,63 @@
+{
+  "geometry_version": 2,
+  "cases": {
+    "normal": {
+      "pixels": [
+        192,
+        256
+      ],
+      "rgba_bytes_exact": 196608,
+      "commands": 3
+    },
+    "quarter-90": {
+      "pixels": [
+        256,
+        192
+      ],
+      "rgba_bytes_exact": 196608,
+      "commands": 3
+    },
+    "quarter-180": {
+      "pixels": [
+        192,
+        256
+      ],
+      "rgba_bytes_exact": 196608,
+      "commands": 3
+    },
+    "quarter-270": {
+      "pixels": [
+        256,
+        192
+      ],
+      "rgba_bytes_exact": 196608,
+      "commands": 3
+    },
+    "crop-90": {
+      "pixels": [
+        200,
+        150
+      ],
+      "rgba_bytes_exact": 120000,
+      "commands": 3
+    },
+    "max-64": {
+      "pixels": [
+        256,
+        192
+      ],
+      "rgba_bytes_exact": 196608,
+      "commands": 64
+    },
+    "a1-90": {
+      "pixels": [
+        2384,
+        1684
+      ],
+      "rgba_bytes_exact": 16058624,
+      "commands": 3
+    }
+  },
+  "unsupported_pdfs_rejected": 6,
+  "invalid_geometry_records_rejected": 5
+}

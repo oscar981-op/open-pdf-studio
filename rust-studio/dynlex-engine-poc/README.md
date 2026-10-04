@@ -890,3 +890,10 @@ bufferoptie vergroot de paginalimiet tot maximaal 6 miljoen pixels. Zeven
 echte PDF-fixtures, inclusief 90°/CropBox en A1-achtig 2384×1684 zichtbaar,
 zijn bytegelijk aan Hayro en een onafhankelijke referentie. De normale
 adapter en app blijven ongewijzigd.
+
+De aparte [OPGM-v2-laagproef](opgm-v2-layers-2026-10-05.md) voegt maximaal
+64 expliciet gekleurde `rg/re/f`-rechthoeken in PDF-laagvolgorde toe. Zeven
+PDF-fixtures met overlappende RGB-vormen zijn op kleine kwartslag-/CropBox-
+pagina's en A1-achtig formaat 17.161.664 RGBA-bytes exact gelijk aan Hayro
+en onafhankelijke referentie. OPGM-v1, gewone OPDL-v2-app en de bestaande
+DynLex-kernel blijven werken; de exporter/probe zijn experimenteel.
