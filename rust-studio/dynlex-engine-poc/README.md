@@ -594,6 +594,25 @@ python3 dynlex-engine-poc/rgba/verify_curve_vello.py \
 
 Dit is een bron- en geometrieverificatie van de referentierenderer; het is
 **geen DynLex-curvekernel** en bewijst geen onafhankelijke curvepariteit.
+[`curve_outline_probe.rs`](../crates/engine-probe/src/bin/curve_outline_probe.rs)
+legt met dezelfde Kurbo 0.13.1-stroke-instellingen de omtrek afzonderlijk vast
+als [boog](rgba/curve-outline-arch.txt) en [S-curve](rgba/curve-outline-s-bend.txt).
+Beide bestaan uit een gesloten pad met twee cubic-randen en een rechte
+eindkap; dit verklaart waarom de eerdere afstand-tot-middellijnproef een
+andere geometrie gebruikte. Reproduceer na `cargo build --release -p
+opds-engine-probe --bin curve_outline_probe` met
+`target/release/curve_outline_probe arch /tmp/curve-outline-arch.txt`.
+
+De onafhankelijke [`curve_area_candidate.py`](rgba/curve_area_candidate.py)
+vlakt die omtrek met een **uniform** aantal stappen af en knipt de resulterende
+polygoon per pixel analytisch. De
+[metingen](rgba/curve-area-candidate-2026-10-04.json) tonen bij 16 stappen
+nog 244 afwijkende boogpixels en 231 S-curvepixels; bij 32 stappen neemt de
+fout weer toe. Vello gebruikt een adaptieve flattening met tolerantie 0,25 en
+coverage strips. De uniform-afgevlakte oppervlaktemethode is dus nog geen
+pariteit en wordt niet in de kernel gebruikt. Herhaal met
+`python3 dynlex-engine-poc/rgba/curve_area_candidate.py --steps 2 4 8 12 16 24 32
+--expected-report dynlex-engine-poc/rgba/curve-area-candidate-2026-10-04.json`.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de

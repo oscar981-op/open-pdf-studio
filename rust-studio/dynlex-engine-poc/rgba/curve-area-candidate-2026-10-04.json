@@ -1,0 +1,104 @@
+{
+  "arch": {
+    "12": {
+      "absolute_error_sum": 3392,
+      "different_pixels": 250,
+      "false_negative_pixels": 10,
+      "false_positive_pixels": 8,
+      "max_error": 57
+    },
+    "16": {
+      "absolute_error_sum": 3464,
+      "different_pixels": 244,
+      "false_negative_pixels": 10,
+      "false_positive_pixels": 6,
+      "max_error": 46
+    },
+    "2": {
+      "absolute_error_sum": 45792,
+      "different_pixels": 452,
+      "false_negative_pixels": 234,
+      "false_positive_pixels": 202,
+      "max_error": 240
+    },
+    "24": {
+      "absolute_error_sum": 4900,
+      "different_pixels": 250,
+      "false_negative_pixels": 12,
+      "false_positive_pixels": 6,
+      "max_error": 53
+    },
+    "32": {
+      "absolute_error_sum": 5572,
+      "different_pixels": 252,
+      "false_negative_pixels": 12,
+      "false_positive_pixels": 10,
+      "max_error": 58
+    },
+    "4": {
+      "absolute_error_sum": 40655,
+      "different_pixels": 382,
+      "false_negative_pixels": 142,
+      "false_positive_pixels": 132,
+      "max_error": 240
+    },
+    "8": {
+      "absolute_error_sum": 11318,
+      "different_pixels": 276,
+      "false_negative_pixels": 32,
+      "false_positive_pixels": 26,
+      "max_error": 135
+    }
+  },
+  "s-bend": {
+    "12": {
+      "absolute_error_sum": 7599,
+      "different_pixels": 243,
+      "false_negative_pixels": 14,
+      "false_positive_pixels": 12,
+      "max_error": 118
+    },
+    "16": {
+      "absolute_error_sum": 4201,
+      "different_pixels": 231,
+      "false_negative_pixels": 8,
+      "false_positive_pixels": 6,
+      "max_error": 75
+    },
+    "2": {
+      "absolute_error_sum": 45419,
+      "different_pixels": 381,
+      "false_negative_pixels": 226,
+      "false_positive_pixels": 144,
+      "max_error": 255
+    },
+    "24": {
+      "absolute_error_sum": 4886,
+      "different_pixels": 243,
+      "false_negative_pixels": 12,
+      "false_positive_pixels": 10,
+      "max_error": 76
+    },
+    "32": {
+      "absolute_error_sum": 5808,
+      "different_pixels": 245,
+      "false_negative_pixels": 14,
+      "false_positive_pixels": 12,
+      "max_error": 80
+    },
+    "4": {
+      "absolute_error_sum": 41543,
+      "different_pixels": 383,
+      "false_negative_pixels": 156,
+      "false_positive_pixels": 146,
+      "max_error": 255
+    },
+    "8": {
+      "absolute_error_sum": 17588,
+      "different_pixels": 273,
+      "false_negative_pixels": 38,
+      "false_positive_pixels": 38,
+      "max_error": 248
+    }
+  }
+}
