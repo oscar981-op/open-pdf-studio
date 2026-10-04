@@ -81,3 +81,14 @@ zijn rasterisatiecode is onafhankelijk van de v2-kernel. De verifier bouwt
 beide kernels en vergelijkt dezelfde drie PDF-pagina's bytegewijs met de brug,
 Hayro en de onafhankelijke referentie. Curven en 2pt-lijnen blijven geweigerd.
 Dit is een experimentele kernel, geen algemene v4- of PDF-renderer.
+
+Een afwisselend gepaarde proef met 30 warme procesruns op de vooraf geëxporteerde
+256×192-PDF met twee gekleurde strokes mat v4-kernel/v2-brug 3,061/3,116 ms
+mediaan. V4 won 16 van 30 paren; het mediane gepaarde verschil was -0,016 ms.
+De [ruwe samples](rgba/v4-bench-2026-10-04.json) zijn reproduceerbaar met
+`rgba/buffer_verify.py --bench-v4-runs 30 --bench-json PAD` plus de normale
+toolchainargumenten uit de README. Beide probes gebruiken één proces, maar hun
+invoerformaten verschillen (v4 respectievelijk reeds gebrugde v2); PDF-export
+en brugconversie zijn niet meegemeten. OS-cache was warm en de spreiding is
+groter dan het gemeten verschil. Er is dus geen bewezen snelheidswinst of
+uitspraak over echte grote PDF's.

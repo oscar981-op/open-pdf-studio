@@ -26,6 +26,8 @@ def main():
         parser.add_argument(f"--{name}", type=Path, required=True)
     parser.add_argument("--bench-calls", type=int, default=0,
                         help="repeat each dense page in one Rust process to time kernel calls")
+    parser.add_argument("--bench-v4-runs", type=int, default=0,
+                        help="paired warm process runs on the verified two-stroke v4 page")
     parser.add_argument("--bench-runs", type=int, default=0,
                         help="paired full-process PDF-to-RGBA runs on dense fixtures")
     parser.add_argument("--bench-many-calls", type=int, default=0,
@@ -41,7 +43,8 @@ def main():
     args = parser.parse_args()
     if args.bench_memory and args.bench_runs < 1 and args.bench_many_runs < 1:
         parser.error("--bench-memory requires --bench-runs or --bench-many-runs")
-    if args.bench_many_calls < 0 or args.bench_many_runs < 0 or args.bench_many_ab_runs < 0:
+    if (args.bench_many_calls < 0 or args.bench_many_runs < 0
+            or args.bench_many_ab_runs < 0 or args.bench_v4_runs < 0):
         parser.error("benchmark counts must be nonnegative")
     time_binary = Path("/usr/bin/time")
     if args.bench_memory and not time_binary.is_file():
@@ -113,6 +116,26 @@ def main():
         if not (v4_native_rgba.read_bytes() == v4_rgba.read_bytes()
                 == v4_hayro.read_bytes() == expected_v4):
             raise RuntimeError("v4→v2 DynLex axis bridge differs from Hayro or reference")
+        if args.bench_v4_runs:
+            timing = {"v4_native_ms": [], "v2_bridge_ms": []}
+            runners = {
+                "v4_native_ms": [v4_probe, v4_scene, v4_native_rgba],
+                "v2_bridge_ms": [probe, "2", v2_bridge, v4_rgba],
+            }
+            for round_number in range(args.bench_v4_runs):
+                order = ("v4_native_ms", "v2_bridge_ms") if round_number % 2 == 0 else (
+                    "v2_bridge_ms", "v4_native_ms")
+                for name in order:
+                    started = time.perf_counter_ns()
+                    subprocess.run(runners[name], check=True, capture_output=True)
+                    timing[name].append((time.perf_counter_ns() - started) / 1_000_000)
+                    if (v4_native_rgba if name == "v4_native_ms" else v4_rgba).read_bytes() != expected_v4:
+                        raise RuntimeError(f"v4 benchmark changed pixels: {name}")
+            print("v4 native/v2 bridge pre-exported process medians: "
+                  f"{statistics.median(timing['v4_native_ms']):.3f}/"
+                  f"{statistics.median(timing['v2_bridge_ms']):.3f} ms "
+                  f"({args.bench_v4_runs} paired warm runs)")
+            measurements["v4_native_vs_v2_bridge"] = timing
         for falling in (False, True):
             endpoints = (b"20.5 91.5 m\n80.5 151.5 l\n" if falling
                          else b"20.5 151.5 m\n80.5 91.5 l\n")
