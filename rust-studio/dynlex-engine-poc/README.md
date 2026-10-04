@@ -685,8 +685,29 @@ python3 dynlex-engine-poc/rgba/verify_curve_decode.py \
   --scene-tool /tmp/opds-curve-scene --probe /tmp/opds-curve-decode-probe
 ```
 
-Deze DynLex-proef decodeert slechts coördinaten; polygon-clipping en area-AA
-staan nog in de zelfstandige Rust/Python-proeven, niet in DynLex.
+Een tweede, afzonderlijke [DynLex-pixelproef](rgba/curve_pixel_kernel.dl)
+neemt dezelfde door Rust gevalideerde en uitgelijnde OPLN-buffer. Vier
+Sutherland-Hodgman-clips en de shoelace-oppervlakte worden nu in DynLex
+uitgevoerd. De [Rust-probe](rgba/curve_pixel_probe.rs) vergelijkt voor een
+rechthoek en voor **alle 49.152 pixels** van beide vooraf afgevlakte
+curve-omtrekken met de onafhankelijke Rust-berekening; alle waarden zijn binnen
+1e-9 gelijk. Null-/te korte ABI-buffers worden vóór de kernel afgewezen.
+
+```sh
+python3 dynlex-engine-poc/rgba/build_curve_pixel.py \
+  --compiler /pad/naar/dynlex --opt /pad/naar/opt-20 --llc /pad/naar/llc-20 \
+  --output-dir /tmp/opds-curve-pixel-build
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_pixel_probe.rs \
+  -L native=/tmp/opds-curve-pixel-build -o /tmp/opds-curve-pixel-probe
+/tmp/opds-curve-pixel-probe dynlex-engine-poc/rgba/curve-flat-arch.txt
+/tmp/opds-curve-pixel-probe dynlex-engine-poc/rgba/curve-flat-s-bend.txt
+```
+
+DynLex 0.0.1 crashte tijdens compilatie van een dynamische `float`-allocatie;
+de proef alloceert daarom bytes en gebruikt een uitgelijnde `f64`-weergave.
+Dit is nog geen volledige DynLex-curve-renderer: de cubic-flattening blijft
+Vello-afhankelijk, compositing is niet geïntegreerd en de gewone PDF-adapter
+blijft curven weigeren. Deze proef is evenmin een snelheidsbenchmark.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de

@@ -1,0 +1,93 @@
+import renderer.dl
+
+# Sutherland-Hodgman clip of a validated closed polygon against one pixel edge.
+# Source and target must be different preallocated float buffers.
+function clip {cstring:source_bytes} with {integer:count} points on {integer:axis} at {float:boundary} keeping {integer:greater} into {cstring:target_bytes}:
+    execute:
+        set source to source_bytes as a pointer to a float
+        set target to target_bytes as a pointer to a float
+        if count = 0:
+            return 0
+        set previous_index to (count - 1) * 2
+        set previous_x to item previous_index of source
+        set previous_y to item (previous_index + 1) of source
+        set previous_coord to previous_x
+        if axis = 1:
+            set previous_coord to previous_y
+        set previous_inside to 0
+        if greater = 1 and previous_coord >= boundary:
+            set previous_inside to 1
+        if greater = 0 and previous_coord <= boundary:
+            set previous_inside to 1
+        set output_count to 0
+        set index to 0
+        loop while index < count:
+            set x to item (index * 2) of source
+            set y to item (index * 2 + 1) of source
+            set coord to x
+            if axis = 1:
+                set coord to y
+            set inside to 0
+            if greater = 1 and coord >= boundary:
+                set inside to 1
+            if greater = 0 and coord <= boundary:
+                set inside to 1
+            if inside != previous_inside:
+                set ratio to (boundary - previous_coord) / (coord - previous_coord)
+                store (previous_x + ratio * (x - previous_x)) into target at (output_count * 2)
+                store (previous_y + ratio * (y - previous_y)) into target at (output_count * 2 + 1)
+                set output_count to output_count + 1
+            if inside = 1:
+                store x into target at (output_count * 2)
+                store y into target at (output_count * 2 + 1)
+                set output_count to output_count + 1
+            set previous_x to x
+            set previous_y to y
+            set previous_coord to coord
+            set previous_inside to inside
+            set index to index + 1
+        return output_count
+
+# Rust has already validated OPLN and normalized points to aligned offset 24.
+# Result is an aligned f64 cell containing this pixel's signed-area magnitude.
+function area {cstring:scene} at {integer:pixel_x} and {integer:pixel_y} into {cstring:result}:
+    execute:
+        set count to unsigned word at 16 in scene
+        set points to (scene + 24) as a pointer to a float
+        # DynLex 0.0.1 crashes while compiling a dynamic `slots of a float`
+        # allocation. Allocate bytes, then use an aligned f64 view.
+        set work_a_bytes to allocate ((count + 8) * 16) bytes
+        set work_b_bytes to allocate ((count + 8) * 16) bytes
+        set work_a to work_a_bytes as a pointer to a float
+        set work_b to work_b_bytes as a pointer to a float
+        set n to clip (points as a pointer to a byte) with (count - 1) points on 0 at (pixel_x as a float) keeping 1 into (work_a as a pointer to a byte)
+        set n to clip (work_a as a pointer to a byte) with n points on 0 at ((pixel_x + 1) as a float) keeping 0 into (work_b as a pointer to a byte)
+        set n to clip (work_b as a pointer to a byte) with n points on 1 at (pixel_y as a float) keeping 1 into (work_a as a pointer to a byte)
+        set n to clip (work_a as a pointer to a byte) with n points on 1 at ((pixel_y + 1) as a float) keeping 0 into (work_b as a pointer to a byte)
+        set signed to 0.0
+        set index to 0
+        loop while index < n:
+            set next to index + 1
+            if next = n:
+                set next to 0
+            set ax to item (index * 2) of work_b
+            set ay to item (index * 2 + 1) of work_b
+            set bx to item (next * 2) of work_b
+            set by to item (next * 2 + 1) of work_b
+            set signed to signed + ax * by - bx * ay
+            set index to index + 1
+        if signed < 0.0:
+            set signed to 0.0 - signed
+        set coverage to signed / 2.0
+        if coverage > 1.0:
+            set coverage to 1.0
+        set output to result as a pointer to a float
+        store coverage into output at 0
+        @intrinsic("call", "libc", "free", void, work_a_bytes)
+        @intrinsic("call", "libc", "free", void, work_b_bytes)
+        return 0
+
+set dummy_scene to allocate 24 bytes
+set dummy_result to allocate 8 bytes
+set status to area dummy_scene at (0 as an integer) and (0 as an integer) into dummy_result
+print status as a line
