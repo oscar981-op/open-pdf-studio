@@ -1,0 +1,166 @@
+{
+  "note": "independent recursive de Casteljau candidate; Vello/Kurbo outline input remains a fixture",
+  "fixtures": {
+    "arch": {
+      "0.25": {
+        "segments": 34,
+        "vello_segments": 28,
+        "different_pixels": 244,
+        "absolute_error_sum": 3464,
+        "max_error": 46,
+        "first_differences": [
+          {
+            "x": 51,
+            "y": 73,
+            "candidate": 12,
+            "oracle": 15
+          },
+          {
+            "x": 52,
+            "y": 73,
+            "candidate": 41,
+            "oracle": 69
+          },
+          {
+            "x": 53,
+            "y": 73,
+            "candidate": 70,
+            "oracle": 75
+          },
+          {
+            "x": 54,
+            "y": 73,
+            "candidate": 99,
+            "oracle": 75
+          },
+          {
+            "x": 55,
+            "y": 73,
+            "candidate": 120,
+            "oracle": 75
+          }
+        ]
+      },
+      "0.5": {
+        "segments": 34,
+        "vello_segments": 28,
+        "different_pixels": 244,
+        "absolute_error_sum": 3464,
+        "max_error": 46,
+        "first_differences": [
+          {
+            "x": 51,
+            "y": 73,
+            "candidate": 12,
+            "oracle": 15
+          },
+          {
+            "x": 52,
+            "y": 73,
+            "candidate": 41,
+            "oracle": 69
+          },
+          {
+            "x": 53,
+            "y": 73,
+            "candidate": 70,
+            "oracle": 75
+          },
+          {
+            "x": 54,
+            "y": 73,
+            "candidate": 99,
+            "oracle": 75
+          },
+          {
+            "x": 55,
+            "y": 73,
+            "candidate": 120,
+            "oracle": 75
+          }
+        ]
+      }
+    },
+    "s-bend": {
+      "0.25": {
+        "segments": 54,
+        "vello_segments": 30,
+        "different_pixels": 243,
+        "absolute_error_sum": 5409,
+        "max_error": 75,
+        "first_differences": [
+          {
+            "x": 36,
+            "y": 93,
+            "candidate": 42,
+            "oracle": 4
+          },
+          {
+            "x": 37,
+            "y": 93,
+            "candidate": 85,
+            "oracle": 35
+          },
+          {
+            "x": 38,
+            "y": 93,
+            "candidate": 109,
+            "oracle": 71
+          },
+          {
+            "x": 39,
+            "y": 93,
+            "candidate": 97,
+            "oracle": 92
+          },
+          {
+            "x": 40,
+            "y": 93,
+            "candidate": 50,
+            "oracle": 20
+          }
+        ]
+      },
+      "0.5": {
+        "segments": 30,
+        "vello_segments": 30,
+        "different_pixels": 229,
+        "absolute_error_sum": 3358,
+        "max_error": 58,
+        "first_differences": [
+          {
+            "x": 36,
+            "y": 93,
+            "candidate": 34,
+            "oracle": 4
+          },
+          {
+            "x": 37,
+            "y": 93,
+            "candidate": 59,
+            "oracle": 35
+          },
+          {
+            "x": 38,
+            "y": 93,
+            "candidate": 48,
+            "oracle": 71
+          },
+          {
+            "x": 39,
+            "y": 93,
+            "candidate": 38,
+            "oracle": 92
+          },
+          {
+            "x": 40,
+            "y": 93,
+            "candidate": 28,
+            "oracle": 20
+          }
+        ]
+      }
+    }
+  },
+  "invalid_cases_rejected": 4
+}

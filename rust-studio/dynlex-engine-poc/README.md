@@ -766,6 +766,33 @@ Vello-afhankelijk, compositing is niet geïntegreerd en de gewone PDF-adapter
 blijft curven weigeren. Onafhankelijke flattening en de resterende
 rasterprestaties moeten worden onderzocht voordat deze proef richting
 productierendering gaat.
+
+Een eerste [zelfstandige Rust-flattener](rgba/curve_flatten_rust.rs) verdeelt
+de twee vastgelegde Kurbo-stroke-omtrekken recursief met de Casteljau, een
+begrensde afstand-tot-koorde-test, maximaal 16 niveaus en 4.097 punten.
+Hij gebruikt geen Vello/Kurbo-aanroep tijdens de proef, schrijft gevalideerde
+OPLN en laat die door de DynLex-dekkingskernel rasteren. De
+[diagnose](rgba/curve-independent-flatten-2026-10-04.json) vergelijkt
+segmentaantallen en alle pixels met de Vello/Hayro-kaarten. Bij tolerantie
+0,25 zijn het 34 versus 28 boogsegmenten en 54 versus 30 S-curve-segmenten;
+244 respectievelijk 243 pixels wijken af. Tolerantie 0,5 geeft de S-curve
+wel 30 segmenten, maar nog 229 afwijkende pixels. Een gelijk segmentaantal
+bewijst dus geen gelijke segmentposities of rasterdekking. Vier ongeldige
+outline-/tolerantiegevallen worden zonder uitvoer afgewezen. Reproduceren:
+
+```sh
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_flatten_rust.rs \
+  -o /tmp/opds-curve-flatten-rust
+python3 dynlex-engine-poc/rgba/verify_curve_flatten_rust.py \
+  --flattener /tmp/opds-curve-flatten-rust \
+  --rasterizer /tmp/opds-curve-raster-probe \
+  --scene-tool /tmp/opds-curve-scene \
+  --expected-report dynlex-engine-poc/rgba/curve-independent-flatten-2026-10-04.json
+```
+
+Deze kandidaat is bewust niet geïntegreerd: de exacte adaptieve segmentverdeling
+en daarna de onafhankelijke stroke-outline ontbreken nog. Vello's lokale
+`flatten_simd.rs` is alleen gebruikt om het verschil te onderzoeken.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de
