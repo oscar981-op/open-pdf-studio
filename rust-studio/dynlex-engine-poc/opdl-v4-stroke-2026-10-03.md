@@ -3,8 +3,9 @@
 `crates/opdl-adapter/src/paint_v4.rs` bewaart meerdere strokepaden in
 bestandsvolgorde. Een aparte `export_strokes_v4`-proef leest nu geïsoleerde
 PDF-strokes met expliciete `RG`-kleur en `w`-lijnbreedte. Dit is een
-**niet-renderend opslagcontract**: er is nog geen DynLex-v4-renderer of
-app-koppeling. De gewone PDF-adapter blijft OPDL-v2 schrijven en weigert curven.
+opslagcontract. Voor een kleine bewezen subset bestaat nu een afzonderlijke
+DynLex-v4-bufferkernel; de app is er niet op aangesloten. De gewone
+PDF-adapter blijft OPDL-v2 schrijven en weigert curven.
 
 De header blijft 20 bytes: `OPDL`, versie `u32=4`, paginabreedte `u32`,
 paginahoogte `u32` en recordaantal `u32`, little-endian. Elk record begint met
@@ -60,7 +61,7 @@ Zeven ongeldige kleur-/breedte-/padtoestanden geven geen uitvoerbestand.
 `bridge_v4_axis` vertaalt **uitsluitend** 1px, pixeluitgelijnde horizontale,
 verticale en beide 45°-strokes zonder curves, clip of beeldlaag naar reeds
 geverifieerde OPDL-v2-`kind=3/4/5`-opdrachten. De DynLex-v2-kernel tekent het
-resultaat; er is nog geen zelfstandige v4-kernel. De brug weigert 2pt,
+resultaat. De brug weigert 2pt,
 andere hoeken, `c`, `h`, meerdere segmenten per stroke en pagina's boven
 1024 pixels. Een echte
 256×192-PDF met rode horizontale en blauwe verticale stroke wordt via
@@ -69,3 +70,13 @@ vergeleken in `rgba/buffer_verify.py`. Twee extra PDF's controleren de
 stijgende en dalende 45°-richting met 8-bit antialiasdekking. Samen zijn
 147.456 pixels exact. Dit beperkt de integratiestap tot bestaande bewezen
 pixels.
+
+`rgba/v4_stroke_kernel.dl` is een zelfstandige DynLex-rasterkernel voor diezelfde
+drie bewezen strooksoorten. `rgba/v4_buffer_probe.rs` decodeert eerst de ruwe
+v4-lijst met de veilige Rust-validator en gebruikt de bestaande v4→v2-brug om
+haar naar een begrensde commandobuffer te normaliseren. De DynLex-kernel leest
+dus **geen ruwe v4-records** en deelt de Rust-subsetclassificatie met de brug;
+zijn rasterisatiecode is onafhankelijk van de v2-kernel. De verifier bouwt
+beide kernels en vergelijkt dezelfde drie PDF-pagina's bytegewijs met de brug,
+Hayro en de onafhankelijke referentie. Curven en 2pt-lijnen blijven geweigerd.
+Dit is een experimentele kernel, geen algemene v4- of PDF-renderer.

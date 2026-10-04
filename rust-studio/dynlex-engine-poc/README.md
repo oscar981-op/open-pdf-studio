@@ -539,13 +539,19 @@ geïsoleerd PDF-pad; de normale v2-route weigert curven nog steeds.
 De [experimentele OPDL-v4-strokelijst](opdl-v4-stroke-2026-10-03.md) voegt
 expliciete dekkende RGB-lijnstijl en `Stroke`-grenzen voor meerdere paden toe.
 Een aparte `export_strokes_v4`-proef schrijft inmiddels meerdere echte
-PDF-strokes met kleur en breedte in volgorde. V4 heeft nog geen DynLex-renderer;
-de normale PDF-adapter/app blijven de v2-route gebruiken.
+PDF-strokes met kleur en breedte in volgorde. De normale PDF-adapter/app blijven
+de v2-route gebruiken.
 Voor uitsluitend pixeluitgelijnde 1px-horizontale, verticale en 45°-strokes
 zet `bridge_v4_axis` de v4-strokelijst om naar bestaande OPDL-v2-opdrachten.
 Drie echte PDF-pagina's zijn via deze brug voor alle 147.456 pixels gelijk
 aan Hayro en een onafhankelijke RGBA-referentie. Curven, andere hoeken en
 2pt-streken worden door de brug afgewezen.
+Een afzonderlijke [`v4_stroke_kernel.dl`](rgba/v4_stroke_kernel.dl) tekent
+dezelfde bewezen subset in DynLex, met Rust-validatie en normalisatie via de
+bestaande brug. De rasterkernel zelf is onafhankelijk van de v2-kernel; de
+voorverwerking classificeert nog via v2-opdrachtsoorten en ondersteunt geen
+ruwe v4-records, curven of brede lijnen. `rgba/buffer_verify.py` bouwt en
+vergelijkt beide kernelroutes met Hayro op de drie PDF-pagina's.
 
 [`rgba/curve_probe.py`](rgba/curve_probe.py) legt daarom twee kleine echte
 PDF-Bézierstroken vast tegen de bestaande Hayro-renderer. Herhaal met

@@ -58,12 +58,23 @@ def main():
             "python3", HERE / "build_buffer.py", "--compiler", paths["compiler"],
             "--opt", paths["opt"], "--llc", paths["llc"], "--output-dir", work,
         ], check=True, capture_output=True)
+        subprocess.run([
+            "python3", HERE / "build_v4_buffer.py", "--compiler", paths["compiler"],
+            "--opt", paths["opt"], "--llc", paths["llc"], "--output-dir", work,
+        ], check=True, capture_output=True)
         probe = work / "buffer_probe"
         subprocess.run([
             paths["rustc"], "--edition=2024", "-O", HERE / "buffer_probe.rs",
             "-L", f"native={work}",
             "-L", f"dependency={paths['adapter'].parent / 'deps'}",
             "--extern", f"opds_opdl_adapter={adapter_rlib}", "-o", probe,
+        ], check=True, capture_output=True)
+        v4_probe = work / "v4_buffer_probe"
+        subprocess.run([
+            paths["rustc"], "--edition=2024", "-O", HERE / "v4_buffer_probe.rs",
+            "-L", f"native={work}",
+            "-L", f"dependency={paths['adapter'].parent / 'deps'}",
+            "--extern", f"opds_opdl_adapter={adapter_rlib}", "-o", v4_probe,
         ], check=True, capture_output=True)
         (work / "lib").symlink_to(paths["compiler"].parent.parent / "share/dynlex/lib",
                                   target_is_directory=True)
@@ -83,10 +94,13 @@ def main():
         v4_scene = work / "v4-axis.opdl"
         v2_bridge = work / "v4-bridged-v2.opdl"
         v4_rgba = work / "v4-axis.rgba"
+        v4_native_rgba = work / "v4-native.rgba"
         v4_hayro = work / "v4-axis-hayro.rgba"
         subprocess.run([exporter, v4_pdf, v4_scene], check=True, capture_output=True)
         subprocess.run([bridge, v4_scene, v2_bridge], check=True, capture_output=True)
         subprocess.run([probe, "2", v2_bridge, v4_rgba], check=True, capture_output=True)
+        subprocess.run([v4_probe, v4_scene, v4_native_rgba], check=True,
+                       capture_output=True)
         subprocess.run([paths["hayro"], v4_pdf, "1", v4_hayro], check=True,
                        capture_output=True)
         expected_v4 = bytearray(b"\xff\xff\xff\xff" * (256 * 192))
@@ -96,7 +110,8 @@ def main():
         for y in range(32, 132):
             offset = (y * 256 + 150) * 4
             expected_v4[offset:offset + 4] = b"\x00\x00\xff\xff"
-        if not (v4_rgba.read_bytes() == v4_hayro.read_bytes() == expected_v4):
+        if not (v4_native_rgba.read_bytes() == v4_rgba.read_bytes()
+                == v4_hayro.read_bytes() == expected_v4):
             raise RuntimeError("v4→v2 DynLex axis bridge differs from Hayro or reference")
         for falling in (False, True):
             endpoints = (b"20.5 91.5 m\n80.5 151.5 l\n" if falling
@@ -106,6 +121,8 @@ def main():
             subprocess.run([exporter, pdf, v4_scene], check=True, capture_output=True)
             subprocess.run([bridge, v4_scene, v2_bridge], check=True, capture_output=True)
             subprocess.run([probe, "2", v2_bridge, v4_rgba], check=True, capture_output=True)
+            subprocess.run([v4_probe, v4_scene, v4_native_rgba], check=True,
+                           capture_output=True)
             subprocess.run([paths["hayro"], pdf, "1", v4_hayro], check=True,
                            capture_output=True)
             expected = bytearray(b"\xff\xff\xff\xff" * (256 * 192))
@@ -124,8 +141,21 @@ def main():
                                     for ink in (255, 0, 0))
                         offset = (y * 256 + line_x + lane) * 4
                         expected[offset:offset + 4] = rgb + b"\xff"
-            if not (v4_rgba.read_bytes() == v4_hayro.read_bytes() == expected):
+            if not (v4_native_rgba.read_bytes() == v4_rgba.read_bytes()
+                    == v4_hayro.read_bytes() == expected):
                 raise RuntimeError(f"v4→v2 45-degree bridge mismatch: falling={falling}")
+        for name, content in {
+            "curve": b"1 w\n1 0 0 RG\n20 40 m\n30 50 40 50 60 40 c\nS\n",
+            "wide": b"2 w\n1 0 0 RG\n20 40 m\n80 40 l\nS\n",
+        }.items():
+            pdf = work / f"v4-unsupported-{name}.pdf"
+            pdf.write_bytes(pdf_with_stream(content))
+            subprocess.run([exporter, pdf, v4_scene], check=True, capture_output=True)
+            v4_native_rgba.unlink(missing_ok=True)
+            rejected = subprocess.run([v4_probe, v4_scene, v4_native_rgba],
+                                      capture_output=True)
+            if rejected.returncode == 0 or v4_native_rgba.exists():
+                raise RuntimeError(f"native v4 kernel accepted unsupported {name}")
         checked = 0
         checked_pages = 0
         for width, height, dense in ((256, 192, False), (512, 384, False), (1024, 768, True)):
@@ -627,7 +657,7 @@ def main():
         print(f"{checked_pages} PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; "
               f"{len(bad)} invalid scenes, {len(invalid_transforms) + 1} unsupported states "
               f"and {len(valid_syntax) + len(invalid_syntax)} syntax variants checked")
-        print("v4→v2 bridge: 3 PDF pages (axis + both 45° directions), "
+        print("v4 bridge and independent DynLex kernel: 3 PDF pages (axis + both 45° directions), "
               "147,456 pixels exact against Hayro/reference")
 
 

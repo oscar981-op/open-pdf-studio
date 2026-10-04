@@ -1,0 +1,81 @@
+import renderer.dl
+
+# Independent DynLex vector raster kernel for the Rust-validated v4 stroke
+# subset. Rust passes a 12-byte width/height/count header and bounded 24-byte
+# normalized 1px axis/45-degree commands, never raw untrusted OPDL-v4 bytes.
+function render {cstring:scene} into {cstring:rgba}:
+    execute:
+        set width to unsigned word at 0 in scene
+        set height to unsigned word at 4 in scene
+        set count to unsigned word at 8 in scene
+        set pixels to rgba + 12
+        discard @intrinsic("call", "libc", "memset", a pointer to a byte, pixels, 255, width * height * 4)
+        set command to 0
+        loop while command < count:
+            set offset to 12 + command * 24
+            set kind to unsigned word at offset in scene
+            set left to unsigned word at (offset + 4) in scene
+            set top to unsigned word at (offset + 8) in scene
+            set right to unsigned word at (offset + 12) in scene
+            set bottom to unsigned word at (offset + 16) in scene
+            set ink_red to unsigned byte at (offset + 20) in scene
+            set ink_green to unsigned byte at (offset + 21) in scene
+            set ink_blue to unsigned byte at (offset + 22) in scene
+            set draw_y to top
+            loop while draw_y < bottom:
+                set draw_x to left
+                loop while draw_x < right:
+                    set coverage to 0
+                    if kind = 3:
+                        set coverage to 255
+                    if kind = 4:
+                        set line_x to left + (draw_y - top)
+                        if draw_y = top or draw_y + 1 = bottom:
+                            if draw_x = line_x:
+                                set coverage to 117
+                            if draw_y = top and draw_x = line_x + 1:
+                                set coverage to 64
+                            if draw_y + 1 = bottom and draw_x + 1 = line_x:
+                                set coverage to 64
+                        else:
+                            if draw_x = line_x:
+                                set coverage to 233
+                            if draw_x + 1 = line_x or draw_x = line_x + 1:
+                                set coverage to 64
+                    if kind = 5:
+                        set reverse_row to bottom - draw_y - 1
+                        set line_x to left + reverse_row
+                        if draw_y = top or draw_y + 1 = bottom:
+                            if draw_x = line_x:
+                                set coverage to 117
+                            if draw_y = top and draw_x = line_x - 1:
+                                set coverage to 64
+                            if draw_y + 1 = bottom and draw_x = line_x + 1:
+                                set coverage to 64
+                        else:
+                            if draw_x = line_x:
+                                set coverage to 233
+                            if draw_x + 1 = line_x or draw_x = line_x + 1:
+                                set coverage to 64
+                    if coverage > 0:
+                        set pixel_index to (draw_y * width + draw_x) * 4
+                        if coverage = 255:
+                            store (ink_red as a byte) into pixels at pixel_index
+                            store (ink_green as a byte) into pixels at (pixel_index + 1)
+                            store (ink_blue as a byte) into pixels at (pixel_index + 2)
+                        else:
+                            set old_red to unsigned byte at pixel_index in pixels
+                            set old_green to unsigned byte at (pixel_index + 1) in pixels
+                            set old_blue to unsigned byte at (pixel_index + 2) in pixels
+                            store ((blend old_red with antialiased ink_red at coverage) as a byte) into pixels at pixel_index
+                            store ((blend old_green with antialiased ink_green at coverage) as a byte) into pixels at (pixel_index + 1)
+                            store ((blend old_blue with antialiased ink_blue at coverage) as a byte) into pixels at (pixel_index + 2)
+                    set draw_x to draw_x + 1
+                set draw_y to draw_y + 1
+            set command to command + 1
+        return 0
+
+set dummy_scene to allocate 12 bytes
+set dummy_rgba to allocate 12 bytes
+set status to render dummy_scene into dummy_rgba
+print status as a line
