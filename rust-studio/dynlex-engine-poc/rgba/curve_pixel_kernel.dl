@@ -98,22 +98,51 @@ function single area {cstring:scene} at {integer:pixel_x} and {integer:pixel_y} 
 function raster {cstring:scene} into {cstring:output}:
     execute:
         set count to unsigned word at 16 in scene
+        set points to (scene + 24) as a pointer to a float
+        set min_x to item 0 of points
+        set max_x to min_x
+        set min_y to item 1 of points
+        set max_y to min_y
+        set point_index to 1
+        loop while point_index < (count - 1):
+            set point_x to item (point_index * 2) of points
+            set point_y to item (point_index * 2 + 1) of points
+            if point_x < min_x:
+                set min_x to point_x
+            if point_x > max_x:
+                set max_x to point_x
+            if point_y < min_y:
+                set min_y to point_y
+            if point_y > max_y:
+                set max_y to point_y
+            set point_index to point_index + 1
         set work_a_bytes to allocate ((count + 8) * 16) bytes
         set work_b_bytes to allocate ((count + 8) * 16) bytes
         set sample_bytes to allocate 8 bytes
         set sample to sample_bytes as a pointer to a float
         set y to 0
         loop while y < 192:
+            set row_touches to 1
+            set pixel_top to y as a float
+            set pixel_bottom to (y + 1) as a float
+            if pixel_bottom <= min_y:
+                set row_touches to 0
+            if pixel_top >= max_y:
+                set row_touches to 0
             set x to 0
             loop while x < 256:
-                set status to area scene at x and y using work_a_bytes and work_b_bytes into sample_bytes
-                if status != 0:
-                    @intrinsic("call", "libc", "free", void, sample_bytes)
-                    @intrinsic("call", "libc", "free", void, work_a_bytes)
-                    @intrinsic("call", "libc", "free", void, work_b_bytes)
-                    return status
-                set coverage to item 0 of sample
-                set value to (coverage * 255.0 + 0.5) as an integer
+                set value to 0
+                set pixel_left to x as a float
+                set pixel_right to (x + 1) as a float
+                if row_touches = 1 and pixel_right > min_x and pixel_left < max_x:
+                    set status to area scene at x and y using work_a_bytes and work_b_bytes into sample_bytes
+                    if status != 0:
+                        @intrinsic("call", "libc", "free", void, sample_bytes)
+                        @intrinsic("call", "libc", "free", void, work_a_bytes)
+                        @intrinsic("call", "libc", "free", void, work_b_bytes)
+                        return status
+                    set coverage to item 0 of sample
+                    set value to (coverage * 255.0 + 0.5) as an integer
                 store (value as a byte) into output at (y * 256 + x)
                 set x to x + 1
             set y to y + 1

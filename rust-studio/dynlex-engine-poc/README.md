@@ -745,6 +745,22 @@ route, maar geen paar van de Rust-proef. Herhaal met
 apart gebouwde oude binary. Dit is een procesmeting op twee kleine, vooraf
 afgevlakte fixtures, geen PDF→RGBA-benchmark of algemene snelheidsclaim.
 
+De volgende proef bepaalt eenmaal de begrenzing van de gevalideerde punten en
+schrijft voor pixels die de omtrek zeker niet kunnen raken direct nul. Dit
+laat de vier clips alleen lopen waar geometrie aanwezig kan zijn. De twee
+Hayro-dekkingskaarten blijven bytegelijk; vijf rechthoekgevallen testen ook
+linker-/rechterpaginagrens, geheel buiten de pagina, fractionele dekking en
+een volledig gevuld blad.
+Vijf ongeldige inputs blijven geweigerd. De
+[30-ronden-A/B-samples](rgba/curve-raster-bbox-bench-2026-10-04.json) vergelijken
+deze versie met de vorige bufferhergebruikversie en Rust, met bytecontrole na
+iedere run. Mediaan nieuw/vorig/Rust: boog **5,57/12,54/6,09 ms**, S-curve
+**5,66/14,43/6,02 ms**. Nieuw wint 30/30 paren van vorig. Tegen Rust wint
+nieuw 20/30 en 16/30; dat kleine procesverschil is geen bewezen
+kernelvoordeel. Piek-RSS blijft rond 2,1 MiB. OS-cache is niet gewist,
+processtart en bestand-I/O zijn inbegrepen, en de input is nog steeds een
+vooraf afgevlakte, kleine testomtrek.
+
 Dit is nog geen volledige DynLex-curve-renderer: de cubic-flattening blijft
 Vello-afhankelijk, compositing is niet geïntegreerd en de gewone PDF-adapter
 blijft curven weigeren. Onafhankelijke flattening en de resterende
