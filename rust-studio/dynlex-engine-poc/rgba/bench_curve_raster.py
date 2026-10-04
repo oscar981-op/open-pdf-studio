@@ -26,6 +26,7 @@ def timed(binary, source, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dynlex", required=True, type=Path)
+    parser.add_argument("--baseline", type=Path, help="previous DynLex binary for A/B")
     parser.add_argument("--rust", required=True, type=Path)
     parser.add_argument("--rounds", type=int, default=15)
     parser.add_argument("--json", type=Path)
@@ -33,6 +34,8 @@ def main():
     if not 1 <= args.rounds <= 100:
         parser.error("rounds must be 1..100")
     binaries = {"dynlex": args.dynlex.resolve(strict=True), "rust": args.rust.resolve(strict=True)}
+    if args.baseline:
+        binaries["baseline"] = args.baseline.resolve(strict=True)
     report = {"note": "paired warm process runs; includes startup and file I/O; OS cache not cleared", "rounds": args.rounds, "fixtures": {}}
     with tempfile.TemporaryDirectory(prefix="opds-curve-bench-") as folder:
         output = Path(folder)/"coverage.raw"
@@ -41,7 +44,10 @@ def main():
             expected = zlib.decompress((HERE/f"curve-coverage-{name}.zlib").read_bytes())
             samples = {key: [] for key in binaries}
             for index in range(args.rounds):
-                order = ("dynlex", "rust") if index%2==0 else ("rust", "dynlex")
+                keys = list(binaries)
+                order = keys[index % len(keys):] + keys[:index % len(keys)]
+                if index % 2:
+                    order.reverse()
                 for key in order:
                     samples[key].append(timed(binaries[key],source,output))
                     if output.read_bytes()!=expected:
@@ -50,8 +56,9 @@ def main():
                              for metric in ("wall_ms","peak_rss_kib")}
                        for key,values in samples.items()}
             report["fixtures"][name] = {"median": medians, "samples": samples}
-            print(f"{name}: DynLex/Rust wall {medians['dynlex']['wall_ms']:.3f}/{medians['rust']['wall_ms']:.3f} ms, "
-                  f"RSS {medians['dynlex']['peak_rss_kib']}/{medians['rust']['peak_rss_kib']} KiB")
+            print(f"{name}: " + ", ".join(
+                f"{key} {medians[key]['wall_ms']:.3f} ms / {medians[key]['peak_rss_kib']} KiB"
+                for key in binaries))
     if args.json:
         args.json.write_text(json.dumps(report,indent=2)+"\n")
 

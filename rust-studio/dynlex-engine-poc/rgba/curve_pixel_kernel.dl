@@ -49,15 +49,11 @@ function clip {cstring:source_bytes} with {integer:count} points on {integer:axi
         return output_count
 
 # Rust has already validated OPLN and normalized points to aligned offset 24.
-# Result is an aligned f64 cell containing this pixel's signed-area magnitude.
-function area {cstring:scene} at {integer:pixel_x} and {integer:pixel_y} into {cstring:result}:
+# Caller owns the two distinct, sufficiently large clip buffers.
+function area {cstring:scene} at {integer:pixel_x} and {integer:pixel_y} using {cstring:work_a_bytes} and {cstring:work_b_bytes} into {cstring:result}:
     execute:
         set count to unsigned word at 16 in scene
         set points to (scene + 24) as a pointer to a float
-        # DynLex 0.0.1 crashes while compiling a dynamic `slots of a float`
-        # allocation. Allocate bytes, then use an aligned f64 view.
-        set work_a_bytes to allocate ((count + 8) * 16) bytes
-        set work_b_bytes to allocate ((count + 8) * 16) bytes
         set work_a to work_a_bytes as a pointer to a float
         set work_b to work_b_bytes as a pointer to a float
         set n to clip (points as a pointer to a byte) with (count - 1) points on 0 at (pixel_x as a float) keeping 1 into (work_a as a pointer to a byte)
@@ -83,23 +79,38 @@ function area {cstring:scene} at {integer:pixel_x} and {integer:pixel_y} into {c
             set coverage to 1.0
         set output to result as a pointer to a float
         store coverage into output at 0
+        return 0
+
+# Compatibility for the single-pixel probe. DynLex 0.0.1 crashes compiling
+# dynamic `slots of a float`, so use byte allocation and an f64 view.
+function single area {cstring:scene} at {integer:pixel_x} and {integer:pixel_y} into {cstring:result}:
+    execute:
+        set count to unsigned word at 16 in scene
+        set work_a_bytes to allocate ((count + 8) * 16) bytes
+        set work_b_bytes to allocate ((count + 8) * 16) bytes
+        set status to area scene at pixel_x and pixel_y using work_a_bytes and work_b_bytes into result
         @intrinsic("call", "libc", "free", void, work_a_bytes)
         @intrinsic("call", "libc", "free", void, work_b_bytes)
-        return 0
+        return status
 
 # Experimental full coverage buffer. Rust has validated both input and output
 # capacities before entry. Every output byte is written by DynLex.
 function raster {cstring:scene} into {cstring:output}:
     execute:
+        set count to unsigned word at 16 in scene
+        set work_a_bytes to allocate ((count + 8) * 16) bytes
+        set work_b_bytes to allocate ((count + 8) * 16) bytes
         set sample_bytes to allocate 8 bytes
         set sample to sample_bytes as a pointer to a float
         set y to 0
         loop while y < 192:
             set x to 0
             loop while x < 256:
-                set status to area scene at x and y into sample_bytes
+                set status to area scene at x and y using work_a_bytes and work_b_bytes into sample_bytes
                 if status != 0:
                     @intrinsic("call", "libc", "free", void, sample_bytes)
+                    @intrinsic("call", "libc", "free", void, work_a_bytes)
+                    @intrinsic("call", "libc", "free", void, work_b_bytes)
                     return status
                 set coverage to item 0 of sample
                 set value to (coverage * 255.0 + 0.5) as an integer
@@ -107,11 +118,13 @@ function raster {cstring:scene} into {cstring:output}:
                 set x to x + 1
             set y to y + 1
         @intrinsic("call", "libc", "free", void, sample_bytes)
+        @intrinsic("call", "libc", "free", void, work_a_bytes)
+        @intrinsic("call", "libc", "free", void, work_b_bytes)
         return 0
 
 set dummy_scene to allocate 24 bytes
 set dummy_result to allocate 8 bytes
-set status to area dummy_scene at (0 as an integer) and (0 as an integer) into dummy_result
+set status to single area dummy_scene at (0 as an integer) and (0 as an integer) into dummy_result
 print status as a line
 set dummy_coverage to allocate 49152 bytes
 set raster_status to raster dummy_scene into dummy_coverage

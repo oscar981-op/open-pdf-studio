@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-INNER = r'@"area_3cstring8scene5_at_3integer8pixel_x5_and_3integer8pixel_y5_into_3cstring8result5_i8\*_i32_i32_i8\*"'
+INNER = r'@"single_area_3cstring8scene5_at_3integer8pixel_x5_and_3integer8pixel_y5_into_3cstring8result5_i8\*_i32_i32_i8\*"'
 RASTER = r'@"raster_3cstring8scene5_into_3cstring8output5_i8\*_i8\*"'
 
 

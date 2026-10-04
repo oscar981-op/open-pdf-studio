@@ -725,16 +725,31 @@ De [gepaarde meetproef](rgba/bench_curve_raster.py) vergelijkt vijftien warme
 procesruns per fixture met de zelfstandige Rust-area-rasterizer en controleert
 in elke ronde alle bytes. De ruwe samples staan in
 [`curve-raster-bench-2026-10-04.json`](rgba/curve-raster-bench-2026-10-04.json).
-Medianen DynLex/Rust: boog **19,12/6,00 ms**, S-curve **19,96/5,82 ms**;
-piek-RSS ongeveer **2,1/2,1 MiB**. Processtart en bestand-I/O zijn inbegrepen;
-de OS-cache is niet gewist. DynLex alloceert momenteel twee tijdelijke
-puntbuffers per pixel en is in deze kleine proef duidelijk langzamer. Dit is
-geen PDF→RGBA-benchmark.
+Medianen van de eerste versie DynLex/Rust: boog **19,12/6,00 ms**, S-curve
+**19,96/5,82 ms**; piek-RSS ongeveer **2,1/2,1 MiB**. Processtart en
+bestand-I/O zijn inbegrepen; de OS-cache is niet gewist. De eerste DynLex-
+versie alloceerde twee puntbuffers per pixel. De rasterfunctie hergebruikt nu
+twee begrensde buffers voor de hele pagina; de afzonderlijke eenpixel-ABI
+behoudt eigen buffers. Dezelfde 49.152 bytes, inclusief binaire OPLN-invoer,
+blijven exact, evenals de afwijzing van corrupte invoer.
+
+Een tweede [A/B-meting met ruwe samples](rgba/curve-raster-reuse-bench-2026-10-04.json)
+draait dertig warme procesrondes afwisselend met oude DynLex, nieuwe DynLex en
+Rust; iedere uitvoer wordt opnieuw bytegewijs gecontroleerd. Mediaan
+nieuw/oud/Rust: boog **13,97/18,03/6,05 ms**, S-curve
+**13,57/17,88/5,75 ms**. Piek-RSS ligt bij alle drie rond 2,1 MiB; kleine
+RSS-verschillen zijn op deze schaal niet betekenisvol. De nieuwe DynLex-route
+won 26/30 boogparen en 30/30 S-curveparen van de oude
+route, maar geen paar van de Rust-proef. Herhaal met
+[`bench_curve_raster.py`](rgba/bench_curve_raster.py) en `--baseline` voor een
+apart gebouwde oude binary. Dit is een procesmeting op twee kleine, vooraf
+afgevlakte fixtures, geen PDF→RGBA-benchmark of algemene snelheidsclaim.
 
 Dit is nog geen volledige DynLex-curve-renderer: de cubic-flattening blijft
 Vello-afhankelijk, compositing is niet geïntegreerd en de gewone PDF-adapter
-blijft curven weigeren. Verbeter eerst de bufferhergebruik en onafhankelijke
-flattening voordat deze proef richting productierendering gaat.
+blijft curven weigeren. Onafhankelijke flattening en de resterende
+rasterprestaties moeten worden onderzocht voordat deze proef richting
+productierendering gaat.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de
