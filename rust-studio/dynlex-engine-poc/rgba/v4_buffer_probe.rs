@@ -17,12 +17,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("extra argument".into());
     }
     let list = DisplayList::decode(&fs::read(Path::new(&input))?)?;
-    let bridged = list.to_v2_axis_strokes()?;
-    let mut scene = Vec::with_capacity(bridged.len() - 28);
+    let strokes = list.verified_strokes()?;
+    let mut scene = Vec::with_capacity(12 + strokes.len() * 24);
     scene.extend_from_slice(&list.width.to_le_bytes());
     scene.extend_from_slice(&list.height.to_le_bytes());
-    scene.extend_from_slice(&bridged[36..40]);
-    scene.extend_from_slice(&bridged[40..]);
+    scene.extend_from_slice(&u32::try_from(strokes.len())?.to_le_bytes());
+    for stroke in strokes {
+        scene.extend_from_slice(&stroke.kind.to_le_bytes());
+        for value in stroke.rect {
+            scene.extend_from_slice(&value.to_le_bytes());
+        }
+        scene.extend_from_slice(&[stroke.rgb[0], stroke.rgb[1], stroke.rgb[2], 255]);
+    }
     if scene.len() > 393_228 || scene.len() < 12 {
         return Err("invalid normalized v4 scene length".into());
     }
@@ -31,7 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .and_then(|pixels| pixels.checked_mul(4))
         .ok_or("RGBA output size overflow")?;
     let mut rgba = vec![0_u8; 12 + pixel_len];
-    // SAFETY: DisplayList validates every v4 record. The bridge validates
+    // SAFETY: DisplayList validates every v4 record. verified_strokes validates
     // the proven 1px axis/45° subset and all rectangles against page bounds.
     // `scene` contains only 12 + 24*N bytes of bounded normalized commands;
     // `rgba` has the 12 control bytes plus exactly width*height*4 pixel bytes.

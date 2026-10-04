@@ -22,6 +22,14 @@ pub struct DisplayList {
     pub commands: Vec<Command>,
 }
 
+/// Pixel-verified, bounded stroke primitive shared by experimental renderers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VerifiedStroke {
+    pub kind: u32,
+    pub rect: [u32; 4],
+    pub rgb: [u8; 3],
+}
+
 fn invalid(message: &str) -> Box<dyn Error> {
     message.to_owned().into()
 }
@@ -36,6 +44,35 @@ impl DisplayList {
     /// Bridge only verified pixel-aligned 1px axis and 45° strokes to the
     /// existing DynLex OPDL-v2 kernel. No cubic, clip or image path.
     pub fn to_v2_axis_strokes(&self) -> Result<Vec<u8>, Box<dyn Error>> {
+        let strokes = self.verified_strokes()?;
+        let mut bytes = Vec::with_capacity(40 + strokes.len() * 24);
+        bytes.extend_from_slice(b"OPDL");
+        for value in [
+            2,
+            self.width,
+            self.height,
+            0,
+            0,
+            self.width,
+            self.height,
+            0,
+            strokes.len() as u32,
+        ] {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        for stroke in strokes {
+            bytes.extend_from_slice(&stroke.kind.to_le_bytes());
+            for value in stroke.rect {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+            bytes.extend_from_slice(&[stroke.rgb[0], stroke.rgb[1], stroke.rgb[2], 255]);
+        }
+        Ok(bytes)
+    }
+
+    /// Classify only the proven one-pixel axis and 45-degree strokes. This
+    /// does not depend on an OPDL-v2 byte layout.
+    pub fn verified_strokes(&self) -> Result<Vec<VerifiedStroke>, Box<dyn Error>> {
         self.validate()?;
         if self.width > 1024 || self.height > 1024 {
             return Err(invalid("v2 bridge page exceeds verified 1024px limit"));
@@ -102,38 +139,16 @@ impl DisplayList {
                     {
                         return Err(invalid("invalid 45-degree stroke bounds"));
                     }
-                    strokes.push((
+                    strokes.push(VerifiedStroke {
                         kind,
                         rect,
-                        color.ok_or_else(|| invalid("missing stroke RGB"))?,
-                    ));
+                        rgb: color.ok_or_else(|| invalid("missing stroke RGB"))?,
+                    });
                 }
                 _ => return Err(invalid("v4 command outside verified v2 axis subset")),
             }
         }
-        let mut bytes = Vec::with_capacity(40 + strokes.len() * 24);
-        bytes.extend_from_slice(b"OPDL");
-        for value in [
-            2,
-            self.width,
-            self.height,
-            0,
-            0,
-            self.width,
-            self.height,
-            0,
-            strokes.len() as u32,
-        ] {
-            bytes.extend_from_slice(&value.to_le_bytes());
-        }
-        for (kind, rect, rgb) in strokes {
-            bytes.extend_from_slice(&kind.to_le_bytes());
-            for value in rect {
-                bytes.extend_from_slice(&value.to_le_bytes());
-            }
-            bytes.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
-        }
-        Ok(bytes)
+        Ok(strokes)
     }
 
     fn validate(&self) -> Result<(), Box<dyn Error>> {

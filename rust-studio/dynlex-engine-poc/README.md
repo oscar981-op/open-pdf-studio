@@ -547,9 +547,9 @@ Drie echte PDF-pagina's zijn via deze brug voor alle 147.456 pixels gelijk
 aan Hayro en een onafhankelijke RGBA-referentie. Curven, andere hoeken en
 2pt-streken worden door de brug afgewezen.
 Een afzonderlijke [`v4_stroke_kernel.dl`](rgba/v4_stroke_kernel.dl) tekent
-dezelfde bewezen subset in DynLex, met Rust-validatie en normalisatie via de
-bestaande brug. De rasterkernel zelf is onafhankelijk van de v2-kernel; de
-voorverwerking classificeert nog via v2-opdrachtsoorten en ondersteunt geen
+dezelfde bewezen subset in DynLex, met Rust-validatie en een gedeelde
+`verified_strokes`-classificatie die losstaat van v2-byte-indeling. De
+rasterkernel zelf is onafhankelijk van de v2-kernel en ondersteunt geen
 ruwe v4-records, curven of brede lijnen. `rgba/buffer_verify.py` bouwt en
 vergelijkt beide kernelroutes met Hayro op de drie PDF-pagina's.
 

@@ -73,9 +73,10 @@ pixels.
 
 `rgba/v4_stroke_kernel.dl` is een zelfstandige DynLex-rasterkernel voor diezelfde
 drie bewezen strooksoorten. `rgba/v4_buffer_probe.rs` decodeert eerst de ruwe
-v4-lijst met de veilige Rust-validator en gebruikt de bestaande v4→v2-brug om
-haar naar een begrensde commandobuffer te normaliseren. De DynLex-kernel leest
-dus **geen ruwe v4-records** en deelt de Rust-subsetclassificatie met de brug;
+v4-lijst met de veilige Rust-validator. `verified_strokes` classificeert
+de bewezen subset rechtstreeks als begrensde stroken; zowel de brug als de
+nieuwe proef gebruiken deze gedeelde classificatie. De DynLex-kernel leest
+dus **geen ruwe v4-records** en is niet afhankelijk van v2-byte-indeling;
 zijn rasterisatiecode is onafhankelijk van de v2-kernel. De verifier bouwt
 beide kernels en vergelijkt dezelfde drie PDF-pagina's bytegewijs met de brug,
 Hayro en de onafhankelijke referentie. Curven en 2pt-lijnen blijven geweigerd.
