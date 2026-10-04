@@ -541,11 +541,11 @@ expliciete dekkende RGB-lijnstijl en `Stroke`-grenzen voor meerdere paden toe.
 Een aparte `export_strokes_v4`-proef schrijft inmiddels meerdere echte
 PDF-strokes met kleur en breedte in volgorde. V4 heeft nog geen DynLex-renderer;
 de normale PDF-adapter/app blijven de v2-route gebruiken.
-Voor uitsluitend pixeluitgelijnde 1px-horizontale en verticale strokes zet
-`bridge_v4_axis` de v4-strokelijst om naar bestaande OPDL-v2-opdrachten. De
-DynLex-v2-kernel wordt met twee gekleurde strokes uit een echte PDF tegen Hayro
-en een onafhankelijke RGBA-referentie getest. Curven en 2pt-streken worden
-door de brug afgewezen.
+Voor uitsluitend pixeluitgelijnde 1px-horizontale, verticale en 45°-strokes
+zet `bridge_v4_axis` de v4-strokelijst om naar bestaande OPDL-v2-opdrachten.
+Drie echte PDF-pagina's zijn via deze brug voor alle 147.456 pixels gelijk
+aan Hayro en een onafhankelijke RGBA-referentie. Curven, andere hoeken en
+2pt-streken worden door de brug afgewezen.
 
 [`rgba/curve_probe.py`](rgba/curve_probe.py) legt daarom twee kleine echte
 PDF-Bézierstroken vast tegen de bestaande Hayro-renderer. Herhaal met

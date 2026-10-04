@@ -57,12 +57,15 @@ daarboven een blauwe 2pt-lijn. De proef controleert alle acht v4-recordtags,
 RGB-bytes, breedtes, curvepunten en de afwijzing door de normale v2-adapter.
 Zeven ongeldige kleur-/breedte-/padtoestanden geven geen uitvoerbestand.
 
-`bridge_v4_axis` vertaalt **uitsluitend** 1px, pixeluitgelijnde horizontale
-en verticale strokes zonder curves, clip of beeldlaag naar reeds geverifieerde
-OPDL-v2-`kind=3`-opdrachten. De DynLex-v2-kernel tekent het resultaat; er is
-nog geen zelfstandige v4-kernel. De brug weigert 2pt, diagonalen, `c`, `h`,
-meerdere segmenten per stroke en pagina's boven 1024 pixels. Een echte
+`bridge_v4_axis` vertaalt **uitsluitend** 1px, pixeluitgelijnde horizontale,
+verticale en beide 45°-strokes zonder curves, clip of beeldlaag naar reeds
+geverifieerde OPDL-v2-`kind=3/4/5`-opdrachten. De DynLex-v2-kernel tekent het
+resultaat; er is nog geen zelfstandige v4-kernel. De brug weigert 2pt,
+andere hoeken, `c`, `h`, meerdere segmenten per stroke en pagina's boven
+1024 pixels. Een echte
 256×192-PDF met rode horizontale en blauwe verticale stroke wordt via
 PDF→v4→v2→DynLex pixelgewijs met Hayro en een onafhankelijke RGBA-referentie
-vergeleken in `rgba/buffer_verify.py`. Dit beperkt de eerste integratiestap
-tot bestaande bewezen pixels.
+vergeleken in `rgba/buffer_verify.py`. Twee extra PDF's controleren de
+stijgende en dalende 45°-richting met 8-bit antialiasdekking. Samen zijn
+147.456 pixels exact. Dit beperkt de integratiestap tot bestaande bewezen
+pixels.

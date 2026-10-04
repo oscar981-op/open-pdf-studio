@@ -33,8 +33,8 @@ fn valid_point(point: [f64; 2]) -> bool {
 }
 
 impl DisplayList {
-    /// Bridge only pixel-aligned 1px horizontal/vertical strokes to the
-    /// already verified DynLex OPDL-v2 kernel. No cubic, clip or image path.
+    /// Bridge only verified pixel-aligned 1px axis and 45° strokes to the
+    /// existing DynLex OPDL-v2 kernel. No cubic, clip or image path.
     pub fn to_v2_axis_strokes(&self) -> Result<Vec<u8>, Box<dyn Error>> {
         self.validate()?;
         if self.width > 1024 || self.height > 1024 {
@@ -60,18 +60,35 @@ impl DisplayList {
                 Command::Stroke if start.is_some() && end.is_some() => {
                     let a = start.take().unwrap();
                     let b = end.take().unwrap();
-                    let rect = if a[1] == b[1] {
+                    let (kind, rect): (u32, [u32; 4]) = if a[1] == b[1] {
                         let left = exact(a[0].min(b[0]))?;
                         let right = exact(a[0].max(b[0]))?;
                         let top = exact(f64::from(self.height) - a[1] - 0.5)?;
-                        [left, top, right, top + 1]
+                        (3, [left, top, right, top + 1])
                     } else if a[0] == b[0] {
                         let left = exact(a[0] - 0.5)?;
                         let top = exact(f64::from(self.height) - a[1].max(b[1]))?;
                         let bottom = exact(f64::from(self.height) - a[1].min(b[1]))?;
-                        [left, top, left + 1, bottom]
+                        (3, [left, top, left + 1, bottom])
+                    } else if b[0] > a[0]
+                        && b[0] - a[0] == (b[1] - a[1]).abs()
+                        && [a[0], a[1], b[0], b[1]]
+                            .iter()
+                            .all(|value| value.fract() == 0.5)
+                    {
+                        let left = exact(a[0] - 0.5)?;
+                        let right = exact(b[0] + 0.5)?;
+                        if b[1] < a[1] {
+                            let top = exact(f64::from(self.height) - a[1] - 0.5)?;
+                            let bottom = exact(f64::from(self.height) - b[1] + 0.5)?;
+                            (4, [left, top, right, bottom])
+                        } else {
+                            let top = exact(f64::from(self.height) - b[1] - 0.5)?;
+                            let bottom = exact(f64::from(self.height) - a[1] + 0.5)?;
+                            (5, [left, top, right, bottom])
+                        }
                     } else {
-                        return Err(invalid("diagonal v4 stroke is not bridged"));
+                        return Err(invalid("stroke angle is outside verified v2 subset"));
                     };
                     if rect[0] >= rect[2]
                         || rect[1] >= rect[3]
@@ -80,7 +97,16 @@ impl DisplayList {
                     {
                         return Err(invalid("stroke outside verified page"));
                     }
-                    strokes.push((rect, color.ok_or_else(|| invalid("missing stroke RGB"))?));
+                    if (kind == 4 || kind == 5)
+                        && (rect[2] - rect[0] != rect[3] - rect[1] || rect[2] - rect[0] < 2)
+                    {
+                        return Err(invalid("invalid 45-degree stroke bounds"));
+                    }
+                    strokes.push((
+                        kind,
+                        rect,
+                        color.ok_or_else(|| invalid("missing stroke RGB"))?,
+                    ));
                 }
                 _ => return Err(invalid("v4 command outside verified v2 axis subset")),
             }
@@ -100,8 +126,8 @@ impl DisplayList {
         ] {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
-        for (rect, rgb) in strokes {
-            bytes.extend_from_slice(&3_u32.to_le_bytes());
+        for (kind, rect, rgb) in strokes {
+            bytes.extend_from_slice(&kind.to_le_bytes());
             for value in rect {
                 bytes.extend_from_slice(&value.to_le_bytes());
             }
@@ -387,5 +413,31 @@ mod tests {
         };
         list.commands[6] = Command::Path(Segment::Cubic([[1.0, 2.0]; 3]));
         assert!(list.to_v2_axis_strokes().is_err());
+    }
+
+    #[test]
+    fn bridges_both_verified_45_degree_directions() {
+        for (end, expected_kind) in [([80.5, 91.5], 4_u32), ([80.5, 211.5], 5_u32)] {
+            let mut list = DisplayList {
+                width: 256,
+                height: 256,
+                commands: vec![
+                    Command::StrokeStyle {
+                        rgb: [255, 0, 0],
+                        width: 1.0,
+                    },
+                    Command::Path(Segment::Move([20.5, 151.5])),
+                    Command::Path(Segment::Line(end)),
+                    Command::Stroke,
+                ],
+            };
+            let bytes = list.to_v2_axis_strokes().unwrap();
+            assert_eq!(
+                u32::from_le_bytes(bytes[40..44].try_into().unwrap()),
+                expected_kind
+            );
+            list.commands[2] = Command::Path(Segment::Line([80.5, 90.5]));
+            assert!(list.to_v2_axis_strokes().is_err());
+        }
     }
 }

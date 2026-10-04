@@ -98,6 +98,34 @@ def main():
             expected_v4[offset:offset + 4] = b"\x00\x00\xff\xff"
         if not (v4_rgba.read_bytes() == v4_hayro.read_bytes() == expected_v4):
             raise RuntimeError("v4→v2 DynLex axis bridge differs from Hayro or reference")
+        for falling in (False, True):
+            endpoints = (b"20.5 91.5 m\n80.5 151.5 l\n" if falling
+                         else b"20.5 151.5 m\n80.5 91.5 l\n")
+            pdf = work / f"v4-diagonal-{falling}.pdf"
+            pdf.write_bytes(pdf_with_stream(b"1 w\n1 0 0 RG\n" + endpoints + b"S\n"))
+            subprocess.run([exporter, pdf, v4_scene], check=True, capture_output=True)
+            subprocess.run([bridge, v4_scene, v2_bridge], check=True, capture_output=True)
+            subprocess.run([probe, "2", v2_bridge, v4_rgba], check=True, capture_output=True)
+            subprocess.run([paths["hayro"], pdf, "1", v4_hayro], check=True,
+                           capture_output=True)
+            expected = bytearray(b"\xff\xff\xff\xff" * (256 * 192))
+            for row in range(61):
+                y = 40 + row
+                line_x = 80 - row if falling else 20 + row
+                for lane in (-1, 0, 1):
+                    if row in (0, 60):
+                        coverage = (117 if lane == 0 else
+                                    64 if (row == 0 and lane == (-1 if falling else 1))
+                                    or (row == 60 and lane == (1 if falling else -1)) else 0)
+                    else:
+                        coverage = 233 if lane == 0 else 64
+                    if coverage:
+                        rgb = bytes((ink * coverage + 255 * (255 - coverage) + 255) // 256
+                                    for ink in (255, 0, 0))
+                        offset = (y * 256 + line_x + lane) * 4
+                        expected[offset:offset + 4] = rgb + b"\xff"
+            if not (v4_rgba.read_bytes() == v4_hayro.read_bytes() == expected):
+                raise RuntimeError(f"v4→v2 45-degree bridge mismatch: falling={falling}")
         checked = 0
         checked_pages = 0
         for width, height, dense in ((256, 192, False), (512, 384, False), (1024, 768, True)):
@@ -599,7 +627,8 @@ def main():
         print(f"{checked_pages} PDF pages, {checked:,} pixels, direct/CLI/Hayro/reference exact; "
               f"{len(bad)} invalid scenes, {len(invalid_transforms) + 1} unsupported states "
               f"and {len(valid_syntax) + len(invalid_syntax)} syntax variants checked")
-        print("v4→v2 axis-stroke bridge: 1 PDF page, 49,152 pixels exact against Hayro/reference")
+        print("v4→v2 bridge: 3 PDF pages (axis + both 45° directions), "
+              "147,456 pixels exact against Hayro/reference")
 
 
 if __name__ == "__main__":
