@@ -13,8 +13,10 @@ HERE = Path(__file__).resolve().parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rasterizer", type=Path, required=True)
+    parser.add_argument("--scene-tool", type=Path)
     args = parser.parse_args()
     rasterizer = args.rasterizer.resolve(strict=True)
+    scene_tool = args.scene_tool.resolve(strict=True) if args.scene_tool else None
     with tempfile.TemporaryDirectory(prefix="opds-rust-area-") as folder:
         work = Path(folder)
         output = work / "coverage.raw"
@@ -25,6 +27,14 @@ def main():
             actual = output.read_bytes()
             if actual != expected or len(actual) != 256 * 192:
                 raise RuntimeError(f"Rust area coverage differs: {name}")
+            if scene_tool:
+                scene = work / f"{name}.opln"
+                subprocess.run([scene_tool, "encode", HERE / f"curve-flat-{name}.txt", scene],
+                               check=True, capture_output=True)
+                subprocess.run([scene_tool, "validate", scene], check=True, capture_output=True)
+                subprocess.run([rasterizer, scene, output], check=True, capture_output=True)
+                if output.read_bytes() != expected:
+                    raise RuntimeError(f"binary OPLN area coverage differs: {name}")
             print(f"{name}: 49,152 area bytes exact")
         for name, bad in {
             "open": "0 0 1 0\n1 0 1 1\n",

@@ -2,47 +2,21 @@
 //! This accepts only trusted fixture geometry, not a PDF or raw OPDL-v4 scene.
 
 use std::{env, error::Error, fs};
+#[allow(dead_code)]
+mod curve_scene;
 
 const WIDTH: usize = 256;
 const HEIGHT: usize = 192;
 type Point = [f64; 2];
 
 fn read_polygon(path: &std::ffi::OsStr) -> Result<Vec<Point>, Box<dyn Error>> {
-    let input = fs::read_to_string(path)?;
-    let mut points: Vec<Point> = Vec::new();
-    for line in input.lines().filter(|line| !line.starts_with('#')) {
-        let values: Vec<f64> = line
-            .split_whitespace()
-            .map(str::parse::<f64>)
-            .collect::<Result<_, _>>()?;
-        if values.len() != 4
-            || values
-                .iter()
-                .any(|value| !value.is_finite() || value.abs() > 4096.0)
-        {
-            return Err("invalid flattened line".into());
-        }
-        if let Some(previous) = points.last() {
-            if (previous[0] - values[0]).abs() > 0.000001
-                || (previous[1] - values[1]).abs() > 0.000001
-            {
-                return Err("disconnected outline".into());
-            }
-        } else {
-            points.push([values[0], values[1]]);
-        }
-        points.push([values[2], values[3]]);
-        if points.len() > 4097 {
-            return Err("too many flattened lines".into());
-        }
-    }
-    if points.len() < 4
-        || (points[0][0] - points.last().unwrap()[0]).abs() > 0.000001
-        || (points[0][1] - points.last().unwrap()[1]).abs() > 0.000001
-    {
-        return Err("open or empty outline".into());
-    }
-    points.pop();
+    let bytes = fs::read(path)?;
+    let mut points = if bytes.starts_with(b"OPLN") {
+        curve_scene::decode(&bytes)?
+    } else {
+        curve_scene::parse_lines(std::str::from_utf8(&bytes)?)?
+    };
+    points.pop(); // The closing vertex is implicit in polygon clipping.
     Ok(points)
 }
 

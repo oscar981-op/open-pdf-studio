@@ -650,6 +650,23 @@ python3 dynlex-engine-poc/rgba/verify_curve_area_rust.py \
 
 Dit vervangt nog geen DynLex-code of PDF-parser; de onafhankelijke stap is
 uitsluitend de area-rasterisatie, niet de cubic-flattening.
+De volgende interface is een afzonderlijke, [begrensde OPLN-v1-segmentbuffer](rgba/curve_scene.rs):
+`OPLN`, versie 1, 256×192, puntaantal en vervolgens little-endian `f64`-paren.
+Maximaal 4.097 punten (65.572 bytes totaal), uitsluitend eindige coördinaten
+binnen ±4096 en een gesloten omtrek. De Rust-validator weigert truncatie,
+verkeerde versie/afmetingen/aantal, extra bytes, NaN en open paden vóór
+rasterisatie. De area-proef leest zowel de oude tekstfixture als deze buffer;
+beide leveren de twee kaarten bytegelijk. Reproduceren:
+
+```sh
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_scene.rs -o /tmp/opds-curve-scene
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_area_rust.rs -o /tmp/opds-curve-area-rust
+python3 dynlex-engine-poc/rgba/verify_curve_area_rust.py \
+  --rasterizer /tmp/opds-curve-area-rust --scene-tool /tmp/opds-curve-scene
+```
+
+OPLN is alleen een experimenteel kernelinvoercontract. DynLex leest het nog
+niet; er is geen onafhankelijke adaptive flattening of algemene curveclaim.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de
