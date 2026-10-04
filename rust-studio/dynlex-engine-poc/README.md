@@ -635,6 +635,21 @@ Dit is alleen pariteit van een **eigen oppervlaktemeting gegeven Vello's
 segmenten** op twee kleine fixtures. De flattening is nog niet onafhankelijk
 nagebouwd, de proef is Python en er bestaat nog geen DynLex-curveopdracht.
 Curven blijven in de gewone adapter en app geweigerd.
+Dezelfde per-pixel polygon-clip en oppervlakteberekening draait inmiddels ook
+als zelfstandige [Rust-proef](rgba/curve_area_rust.rs), zonder Vello-aanroep bij
+het rasteren. Haar streng begrensde tekstinvoer bevat uitsluitend verbonden,
+gesloten, eindige lijnstukken uit de vastgelegde fixtures; ongeldige invoer
+wordt vóór uitvoer afgewezen. Met Vello's vooraf vastgelegde segmenten levert
+zij wederom beide 49.152-byte-kaarten exact. Reproduceren:
+
+```sh
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_area_rust.rs -o /tmp/opds-curve-area-rust
+python3 dynlex-engine-poc/rgba/verify_curve_area_rust.py \
+  --rasterizer /tmp/opds-curve-area-rust
+```
+
+Dit vervangt nog geen DynLex-code of PDF-parser; de onafhankelijke stap is
+uitsluitend de area-rasterisatie, niet de cubic-flattening.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de
