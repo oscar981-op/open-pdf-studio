@@ -1,0 +1,28 @@
+import renderer.dl
+
+# Experimental OPLN-v1 boundary probe. Rust validates the entire input first.
+# Output layout: u32 count, 4 padding bytes, f64 first x, last x, sum x.
+function decode {cstring:scene} into {cstring:result}:
+    execute:
+        set count to unsigned word at 16 in scene
+        # Rust normalizes OPLN to an 8-byte-aligned point offset of 24.
+        set points to (scene + 24) as a pointer to a float
+        set first_x to item 0 of points
+        set last_x to item ((count - 1) * 2) of points
+        set sum_x to 0.0
+        set index to 0
+        loop while index < count:
+            set sum_x to sum_x + item (index * 2) of points
+            set index to index + 1
+        set count_slot to result as a pointer to an integer
+        set output_floats to (result + 8) as a pointer to a float
+        store count into count_slot at 0
+        store first_x into output_floats at 0
+        store last_x into output_floats at 1
+        store sum_x into output_floats at 2
+        return 0
+
+set dummy_scene to allocate 20 bytes
+set dummy_output to allocate 32 bytes
+set status to decode dummy_scene into dummy_output
+print status as a line

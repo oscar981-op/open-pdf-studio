@@ -666,7 +666,27 @@ python3 dynlex-engine-poc/rgba/verify_curve_area_rust.py \
 ```
 
 OPLN is alleen een experimenteel kernelinvoercontract. DynLex leest het nog
-niet; er is geen onafhankelijke adaptive flattening of algemene curveclaim.
+niet als volledige renderopdracht; er is geen onafhankelijke adaptive
+flattening of algemene curveclaim. Een kleine
+[`curve_decode_kernel.dl`](rgba/curve_decode_kernel.dl)-proef bevestigt nu wel
+de eerste ABI-grens: na volledige Rust-validatie worden OPLN-punten op een
+8-byte-uitgelijnde offset genormaliseerd. DynLex 0.0.1 leest alle `f64`-x-waarden,
+geeft aantal, eerste/laatste x en som terug en de Rust-probe vergelijkt die met
+de validator. De C-wrapper weigert null-pointers en te korte buffers voordat
+DynLex wordt aangeroepen; beschadigde OPLN-inputs bereiken de kernel niet.
+
+```sh
+python3 dynlex-engine-poc/rgba/build_curve_decode.py \
+  --compiler /pad/naar/dynlex --opt /pad/naar/opt-20 --llc /pad/naar/llc-20 \
+  --output-dir /tmp/opds-curve-decode-build
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_decode_probe.rs \
+  -L native=/tmp/opds-curve-decode-build -o /tmp/opds-curve-decode-probe
+python3 dynlex-engine-poc/rgba/verify_curve_decode.py \
+  --scene-tool /tmp/opds-curve-scene --probe /tmp/opds-curve-decode-probe
+```
+
+Deze DynLex-proef decodeert slechts coördinaten; polygon-clipping en area-AA
+staan nog in de zelfstandige Rust/Python-proeven, niet in DynLex.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de
