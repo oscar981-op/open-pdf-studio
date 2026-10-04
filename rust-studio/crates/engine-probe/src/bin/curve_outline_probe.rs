@@ -1,7 +1,7 @@
 //! Read-only Kurbo stroke-outline probe for bounded cubic test fixtures.
 
 use std::{env, error::Error, fmt::Write, fs};
-use vello_cpu::kurbo::{BezPath, Cap, PathEl, Stroke, StrokeCtx, StrokeOpts, stroke_with};
+use vello_cpu::kurbo::{stroke_with, BezPath, Cap, PathEl, Stroke, StrokeCtx, StrokeOpts};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);

@@ -1,6 +1,7 @@
 //! Narrow fixture adapter, not a general PDF interpreter.
 #![forbid(unsafe_code)]
 
+pub mod geometry_v1;
 pub mod paint_v4;
 pub mod path_v3;
 

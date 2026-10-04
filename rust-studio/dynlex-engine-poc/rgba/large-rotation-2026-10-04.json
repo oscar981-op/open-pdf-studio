@@ -37,6 +37,13 @@
       ],
       "pixel_bytes_exact": 120000
     },
+    "inherited-media-90": {
+      "display_pixels": [
+        256,
+        192
+      ],
+      "pixel_bytes_exact": 196608
+    },
     "a1-quarter-90": {
       "display_pixels": [
         2384,
@@ -47,5 +54,6 @@
   },
   "invalid_scenes_rejected": 3,
   "invalid_large_modes_rejected": 2,
-  "invalid_geometry_records_rejected": 5
+  "invalid_geometry_records_rejected": 5,
+  "unsupported_pdfs_rejected": 9
 }

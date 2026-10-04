@@ -1,7 +1,9 @@
 # Experimentele paginageometrie OPGM-v1
 
 OPGM is een afzonderlijke, **niet-productieve** testcontainer voor één dekkend
-rood rechthoekje. De Rust-probe valideert hem, zet het rechthoekje uit
+rood rechthoekje. Een strikt beperkte Rust-PDF-exporter leest precies één
+expliciete rode `rg`, één `re` en één `f`, inclusief geërfde paginaformaten,
+CropBox en Rotate. De Rust-probe valideert de OPGM, zet het rechthoekje uit
 zichtbare schermcoördinaten om naar PDF-coördinaten en schrijft een bestaande
 OPDL-v2-vectorscene voor de DynLex-bufferkernel. De gewone PDF-adapter en app
 lezen OPGM niet.
@@ -21,16 +23,18 @@ Voor grotere pagina's is uitsluitend vectormodus toegestaan. Deze proef
 maakt geen aanspraak op algemene PDF-coördinaten, tekst, curven, andere
 annotaties of een echte A1-tekening.
 
-De [verifier](rgba/verify_large_rotation.py) vergelijkt zes gecontroleerde
+De [verifier](rgba/verify_large_rotation.py) vergelijkt zeven gecontroleerde
 PDF's met de DynLex-kernel, Hayro en een onafhankelijke RGBA-referentie:
-vier kwartslagen, een verschoven CropBox bij 90° en een A1-achtige
-1684×2384-pt pagina bij 90° (zichtbaar 2384×1684). Alle 16.965.056
+vier kwartslagen, een verschoven CropBox, een geërfde MediaBox en een A1-achtige
+1684×2384-pt pagina bij 90° (zichtbaar 2384×1684). Alle 17.161.664
 RGBA-bytes zijn gelijk. Drie ongeldige OPDL-scenes, twee ongeldige grote
-renderstanden en vijf ongeldige OPGM-records worden geweigerd. Het
+renderstanden, vijf ongeldige OPGM-records en negen niet-ondersteunde PDF's
+worden geweigerd. Het
 [rapport](rgba/large-rotation-2026-10-04.json) bevat alle uitvoerformaten.
 
 ```sh
 cd rust-studio
+cargo build --release --offline -p opds-opdl-adapter --bin export_geometry_v1
 rustc --edition=2024 -O dynlex-engine-poc/rgba/page_geometry_probe.rs \
   -o /tmp/opds-page-geometry-probe
 rustc --edition=2024 -O dynlex-engine-poc/rgba/buffer_probe.rs \
@@ -40,6 +44,7 @@ rustc --edition=2024 -O dynlex-engine-poc/rgba/buffer_probe.rs \
 python3 dynlex-engine-poc/rgba/verify_large_rotation.py \
   --probe /tmp/opds-buffer-probe-large \
   --geometry /tmp/opds-page-geometry-probe \
+  --exporter target/release/export_geometry_v1 \
   --hayro target/release/opds-engine-probe
 ```
 

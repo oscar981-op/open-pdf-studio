@@ -1,11 +1,11 @@
 //! Isolated Vello CPU stroke probe. No PDF adapter or application routing.
 
 use std::{env, error::Error, fs};
-use vello_cpu::{Pixmap, RenderContext, Resources};
 use vello_cpu::{
     color::palette::css,
     kurbo::{BezPath, Cap, Stroke},
 };
+use vello_cpu::{Pixmap, RenderContext, Resources};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);

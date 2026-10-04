@@ -68,33 +68,46 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--probe', required=True, type=Path)
     parser.add_argument('--geometry', required=True, type=Path)
+    parser.add_argument('--exporter', required=True, type=Path)
     parser.add_argument('--hayro', required=True, type=Path)
     parser.add_argument('--json', type=Path)
     args = parser.parse_args()
-    probe, geometry, hayro = (str(path.resolve(strict=True)) for path in (args.probe,args.geometry,args.hayro))
+    probe, geometry, exporter, hayro = (str(path.resolve(strict=True)) for path in (args.probe,args.geometry,args.exporter,args.hayro))
     cases = [
-        ('quarter-0', 192, 256, (0,0,192,256), 0, RECT),
-        ('quarter-90', 192, 256, (0,0,192,256), 90, RECT),
-        ('quarter-180', 192, 256, (0,0,192,256), 180, RECT),
-        ('quarter-270', 192, 256, (0,0,192,256), 270, RECT),
-        ('shifted-crop-90', 220, 280, (20,30,170,230), 90, RECT),
-        ('a1-quarter-90', 1684, 2384, (0,0,1684,2384), 90, (100,80,260,130)),
+        ('quarter-0', 192, 256, (0,0,192,256), 0, RECT, False),
+        ('quarter-90', 192, 256, (0,0,192,256), 90, RECT, False),
+        ('quarter-180', 192, 256, (0,0,192,256), 180, RECT, False),
+        ('quarter-270', 192, 256, (0,0,192,256), 270, RECT, False),
+        ('shifted-crop-90', 220, 280, (20,30,170,230), 90, RECT, False),
+        ('inherited-media-90', 192, 256, (0,0,192,256), 90, RECT, True),
+        ('a1-quarter-90', 1684, 2384, (0,0,1684,2384), 90, (100,80,260,130), False),
     ]
     report={'geometry_version':GEOMETRY_VERSION,'experimental_pixel_limit':MAX_PIXELS,'cases':{}}
     with tempfile.TemporaryDirectory(prefix='opds-large-rotate-') as directory:
         work=Path(directory)
-        for name,media_w,media_h,crop,turn,rect in cases:
+        for name,media_w,media_h,crop,turn,rect,inherited_media in cases:
             width,height=display_size(crop,turn)
             px,py,pw,ph=pdf_rect(crop,turn,rect)
             inherited=f'/Rotate {turn} /CropBox [{" ".join(map(str,crop))}]'.encode()
+            if inherited_media:
+                inherited+=f' /MediaBox [0 0 {media_w} {media_h}]'.encode()
             pdf=work/f'{name}.pdf';opdl=work/f'{name}.opdl';geom=work/f'{name}.opgm'
-            geom.write_bytes(b'OPGM'+struct.pack('<12I',GEOMETRY_VERSION,media_w,media_h,*crop,turn,*rect)
-                             +bytes((255,0,0,255)))
+            pdf_bytes=pdf_with_stream(f'1 0 0 rg\n{px} {py} {pw} {ph} re\nf\n'.encode(),
+                                      media_w,media_h,inherited)
+            if inherited_media:
+                needle=f'/MediaBox [0 0 {media_w} {media_h}]'.encode()
+                page_start=pdf_bytes.index(b'3 0 obj\n')
+                at=pdf_bytes.index(needle,page_start)
+                pdf_bytes=pdf_bytes[:at]+b' '*len(needle)+pdf_bytes[at+len(needle):]
+            pdf.write_bytes(pdf_bytes)
+            run_checked([exporter,pdf,geom])
+            expected_geom=(b'OPGM'+struct.pack('<12I',GEOMETRY_VERSION,media_w,media_h,*crop,turn,*rect)
+                           +bytes((255,0,0,255)))
+            if geom.read_bytes()!=expected_geom:
+                raise RuntimeError(f'{name}: PDF exporter differs from independent geometry')
             mapped=run_checked([geometry,geom,opdl]).stdout.strip()
             if mapped!=f'{px} {py} {pw} {ph}' or opdl.read_bytes()!=scene(width,height,rect):
                 raise RuntimeError(f'{name}: OPGM geometry differs from independent mapping')
-            pdf.write_bytes(pdf_with_stream(f'1 0 0 rg\n{px} {py} {pw} {ph} re\nf\n'.encode(),
-                                            media_w,media_h,inherited))
             actual=work/f'{name}.rgba';reference=work/f'{name}-hayro.rgba'
             run_checked([probe,'2',opdl,actual,'--experimental-large'])
             run_checked([hayro,pdf,'1',reference])
@@ -143,6 +156,23 @@ def main():
             rejected=subprocess.run([geometry,source,out],capture_output=True)
             if rejected.returncode==0 or out.exists():raise RuntimeError(f'accepted OPGM {name}')
         report['invalid_geometry_records_rejected']=len(bad_records)
+        invalid_pdfs={
+            'missing-fill':(b'1 0 0 rg\n20 25 25 65 re\n',b'/Rotate 90'),
+            'two-fills':(b'1 0 0 rg\n20 25 25 65 re\nf\n20 25 2 2 re\nf\n',b'/Rotate 90'),
+            'unsupported-color':(b'0 0 1 rg\n20 25 25 65 re\nf\n',b'/Rotate 90'),
+            'bad-rotation':(b'1 0 0 rg\n20 25 25 65 re\nf\n',b'/Rotate 45'),
+            'crop-outside':(b'1 0 0 rg\n20 25 25 65 re\nf\n',b'/CropBox [0 0 300 256]'),
+            'rectangle-outside-crop':(b'1 0 0 rg\n20 25 25 65 re\nf\n',b'/CropBox [40 0 180 256]'),
+            'unknown-operator':(b'1 0 0 rg\n20 25 25 65 re\nf\nq\n',b'/Rotate 90'),
+            'fractional-rectangle':(b'1 0 0 rg\n20.5 25 25 65 re\nf\n',b'/Rotate 90'),
+            'compound-operand':(b'(ignored) Tj\n1 0 0 rg\n20 25 25 65 re\nf\n',b'/Rotate 90'),
+        }
+        for name,(content,inherited) in invalid_pdfs.items():
+            source=work/f'bad-pdf-{name}.pdf';out=work/f'bad-pdf-{name}.opgm'
+            source.write_bytes(pdf_with_stream(content,192,256,inherited))
+            rejected=subprocess.run([exporter,source,out],capture_output=True)
+            if rejected.returncode==0 or out.exists():raise RuntimeError(f'accepted PDF {name}')
+        report['unsupported_pdfs_rejected']=len(invalid_pdfs)
     if args.json:args.json.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 
