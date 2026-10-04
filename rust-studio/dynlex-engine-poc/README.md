@@ -568,6 +568,15 @@ dekkingsbytes na decompressie; de SHA-256 staat in de JSON. Herhaal de
 regressie met `--expected-report rgba/curve-reference-2026-10-03.json` bij
 `curve_probe.py`. Dit is meetdata voor een toekomstige curvekernel, geen
 curve-rendering of bewezen rasterisatie-algoritme; de adapter weigert `c` nog.
+[`rgba/curve_candidate.py`](rgba/curve_candidate.py) probeert los van de app
+een 512-segmentenpolylijn met butt-eindpunten en 4×4, 8×8 of 16×16
+subpixelbemonstering. De [ruwe vergelijking](rgba/curve-candidate-2026-10-04.json)
+laat bij 16×16 nog 258 afwijkende boogpixels en 247 afwijkende S-curvepixels
+zien, met maximale dekkingsfout 64 en 103. Meer samples alleen levert dus nog
+geen Vello-pariteit op. Dit is een diagnostische **mislukte kandidaat**; zij
+wordt nergens in de v2/v4-renderroute gebruikt. Herhaal met
+`python3 dynlex-engine-poc/rgba/curve_candidate.py --samples 4 8 16
+--expected-report dynlex-engine-poc/rgba/curve-candidate-2026-10-04.json`.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de

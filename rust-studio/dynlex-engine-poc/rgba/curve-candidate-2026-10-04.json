@@ -1,0 +1,48 @@
+{
+  "arch": {
+    "16": {
+      "absolute_error_sum": 6647,
+      "different_pixels": 258,
+      "false_negative_pixels": 14,
+      "false_positive_pixels": 10,
+      "max_error": 64
+    },
+    "4": {
+      "absolute_error_sum": 6791,
+      "different_pixels": 246,
+      "false_negative_pixels": 28,
+      "false_positive_pixels": 2,
+      "max_error": 66
+    },
+    "8": {
+      "absolute_error_sum": 6673,
+      "different_pixels": 250,
+      "false_negative_pixels": 16,
+      "false_positive_pixels": 4,
+      "max_error": 64
+    }
+  },
+  "s-bend": {
+    "16": {
+      "absolute_error_sum": 7579,
+      "different_pixels": 247,
+      "false_negative_pixels": 16,
+      "false_positive_pixels": 12,
+      "max_error": 103
+    },
+    "4": {
+      "absolute_error_sum": 7487,
+      "different_pixels": 237,
+      "false_negative_pixels": 28,
+      "false_positive_pixels": 0,
+      "max_error": 109
+    },
+    "8": {
+      "absolute_error_sum": 7663,
+      "different_pixels": 245,
+      "false_negative_pixels": 20,
+      "false_positive_pixels": 8,
+      "max_error": 102
+    }
+  }
+}
