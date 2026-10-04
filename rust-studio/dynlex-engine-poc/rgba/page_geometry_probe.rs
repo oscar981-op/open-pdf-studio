@@ -80,9 +80,9 @@ fn convert_v1(bytes: &[u8]) -> Result<(Vec<u8>, [u32; 4]), Box<dyn Error>> {
     Ok((scene, pdf_rect))
 }
 
-fn convert_v2(bytes: &[u8]) -> Result<(Vec<u8>, u32), Box<dyn Error>> {
-    if bytes.len() < 40 || &bytes[..4] != b"OPGM" || word(bytes, 4) != 2 {
-        return Err("invalid OPGM-v2 header".into());
+fn convert_layers(bytes: &[u8], version: u32) -> Result<(Vec<u8>, u32), Box<dyn Error>> {
+    if bytes.len() < 40 || &bytes[..4] != b"OPGM" || word(bytes, 4) != version {
+        return Err("invalid OPGM layers header".into());
     }
     let media = [word(bytes, 8), word(bytes, 12)];
     let crop = [word(bytes, 16), word(bytes, 20), word(bytes, 24), word(bytes, 28)];
@@ -105,8 +105,10 @@ fn convert_v2(bytes: &[u8]) -> Result<(Vec<u8>, u32), Box<dyn Error>> {
     for index in 0..count as usize {
         let at = 40 + index*24;
         let rect = [word(bytes,at+4),word(bytes,at+8),word(bytes,at+12),word(bytes,at+16)];
-        if word(bytes,at) != 1 || rect[0]>=rect[2] || rect[1]>=rect[3]
+        if !(word(bytes,at) == 1 || (version == 3 && word(bytes,at) == 3))
+            || rect[0]>=rect[2] || rect[1]>=rect[3]
             || rect[2]>width || rect[3]>height
+            || (word(bytes,at) == 3 && rect[2]-rect[0] != 1 && rect[3]-rect[1] != 1)
             || !bytes[at+20..at+23].iter().all(|v| *v==0 || *v==255)
             || bytes[at+23] != 255
         { return Err("invalid OPGM-v2 rectangle command".into()); }
@@ -137,8 +139,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             (scene,format!("{} {} {} {}",rect[0],rect[1],rect[2],rect[3]))
         }
         2 => {
-            let (scene,count) = convert_v2(&bytes)?;
+            let (scene,count) = convert_layers(&bytes,2)?;
             (scene,format!("{count} rectangles"))
+        }
+        3 => {
+            let (scene,count) = convert_layers(&bytes,3)?;
+            (scene,format!("{count} fill/stroke commands"))
         }
         _ => return Err("unsupported OPGM version".into()),
     };

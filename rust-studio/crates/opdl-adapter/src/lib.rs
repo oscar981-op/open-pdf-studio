@@ -3,6 +3,7 @@
 
 pub mod geometry_v1;
 pub mod geometry_v2;
+pub mod geometry_v3;
 pub mod paint_v4;
 pub mod path_v3;
 

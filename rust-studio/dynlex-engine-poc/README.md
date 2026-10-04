@@ -897,3 +897,8 @@ PDF-fixtures met overlappende RGB-vormen zijn op kleine kwartslag-/CropBox-
 pagina's en A1-achtig formaat 17.161.664 RGBA-bytes exact gelijk aan Hayro
 en onafhankelijke referentie. OPGM-v1, gewone OPDL-v2-app en de bestaande
 DynLex-kernel blijven werken; de exporter/probe zijn experimenteel.
+# OPGM-v3-paginascene
+
+De aparte [OPGM-v3-proef](opgm-v3-strokes-2026-10-05.md) combineert
+pixeluitgelijnde 1px-strokes en gekleurde fills op grote, gedraaide of
+gecropte pagina's in PDF-laagvolgorde. De gewone app-route verandert niet.
