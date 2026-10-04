@@ -26,7 +26,7 @@ def main():
     p.add_argument('--json',type=Path)
     args=p.parse_args()
     tools={name:str(getattr(args,name).resolve(strict=True)) for name in ('candidate','flattener','scene_tool','rasterizer')}
-    report={'scope':'diagnostic one-cubic 1px butt-cap; never used by app or PDF adapter', 'fixtures':{}}
+    report={'scope':'diagnostic bounded adaptive 1px butt-cap; never used by app or PDF adapter', 'fixtures':{}}
     with tempfile.TemporaryDirectory(prefix='opds-outline-candidate-') as folder:
         root=Path(folder)
         inp,outline,lines,scene,raw=(root/name for name in ('input.txt','outline.txt','flat.txt','scene.opln','coverage.raw'))
@@ -38,15 +38,17 @@ def main():
             subprocess.run([tools['rasterizer'],str(scene),str(raw)],check=True,capture_output=True)
             reference=geometry(HERE/f'curve-outline-{name}.txt')
             actual=geometry(outline)
-            if [op for op,_ in actual]!=[op for op,_ in reference]:
-                raise RuntimeError('outline command order changed')
-            max_delta=max(abs(a-b) for (_,av),(_,bv) in zip(actual,reference) for a,b in zip(av,bv))
+            if actual[0][0]!='M' or actual[-1][0]!='Z' or sum(op=='L' for op,_ in actual)!=1 or any(op not in ('M','C','L','Z') for op,_ in actual):
+                raise RuntimeError('invalid outline command order')
+            max_delta=(max(abs(a-b) for (_,av),(_,bv) in zip(actual,reference) for a,b in zip(av,bv))
+                       if [op for op,_ in actual]==[op for op,_ in reference] else None)
             oracle=zlib.decompress((HERE/f'curve-coverage-{name}.zlib').read_bytes())
             pixels=raw.read_bytes()
             if len(pixels)!=256*192 or len(oracle)!=256*192: raise RuntimeError('bad coverage size')
             mismatches=[(i,x,y) for i,(x,y) in enumerate(zip(pixels,oracle)) if x!=y]
             report['fixtures'][name]={
                 'max_outline_coordinate_delta_px':max_delta,
+                'candidate_cubic_segments':sum(op=='C' for op,_ in actual),
                 'coverage_mismatched_pixels':len(mismatches),
                 'max_coverage_delta':max((abs(x-y) for _,x,y in mismatches),default=0),
                 'first_mismatch':{'x':mismatches[0][0]%256,'y':mismatches[0][0]//256,
@@ -57,11 +59,13 @@ def main():
             'extra':'M 0 0\nC 1 2 3 4 5 6\nZ\n',
             'zero':'M 0 0\nC 0 0 0 0 0 0\n',
             'huge':'M 0 0\nC 1 2 3 4 5000 6\n',
+            'zero-start-tangent':'M 0 0\nC 0 0 3 4 5 6\n',
+            'zero-end-tangent':'M 0 0\nC 1 2 5 6 5 6\n',
         }.items():
             inp.write_text(content);outline.unlink(missing_ok=True)
             result=subprocess.run([tools['candidate'],str(inp),str(outline)],capture_output=True)
             if result.returncode==0 or outline.exists():raise RuntimeError('accepted '+label)
-        report['invalid_cases_rejected']=5
+        report['invalid_cases_rejected']=7
     if args.json: args.json.write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 

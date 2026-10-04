@@ -1,0 +1,54 @@
+{
+  "scope": "diagnostic bounded adaptive 1px butt-cap; never used by app or PDF adapter",
+  "fixtures": {
+    "arch": {
+      "max_outline_coordinate_delta_px": null,
+      "candidate_cubic_segments": 4,
+      "coverage_mismatched_pixels": 244,
+      "max_coverage_delta": 48,
+      "first_mismatch": {
+        "x": 51,
+        "y": 73,
+        "candidate": 3,
+        "oracle": 15
+      }
+    },
+    "s-bend": {
+      "max_outline_coordinate_delta_px": null,
+      "candidate_cubic_segments": 8,
+      "coverage_mismatched_pixels": 229,
+      "max_coverage_delta": 91,
+      "first_mismatch": {
+        "x": 36,
+        "y": 93,
+        "candidate": 0,
+        "oracle": 4
+      }
+    },
+    "shallow": {
+      "max_outline_coordinate_delta_px": 0.019184033682996926,
+      "candidate_cubic_segments": 2,
+      "coverage_mismatched_pixels": 126,
+      "max_coverage_delta": 3,
+      "first_mismatch": {
+        "x": 50,
+        "y": 97,
+        "candidate": 2,
+        "oracle": 3
+      }
+    },
+    "asymmetric": {
+      "max_outline_coordinate_delta_px": null,
+      "candidate_cubic_segments": 6,
+      "coverage_mismatched_pixels": 315,
+      "max_coverage_delta": 53,
+      "first_mismatch": {
+        "x": 61,
+        "y": 78,
+        "candidate": 0,
+        "oracle": 24
+      }
+    }
+  },
+  "invalid_cases_rejected": 7
+}

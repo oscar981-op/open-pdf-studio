@@ -856,6 +856,20 @@ fixtures `curve-outline-asymmetric.txt`, `curve-flat-asymmetric.txt` en
 `curve-coverage-asymmetric.zlib` zijn read-only referenties. De kandidaat
 wordt nergens in de PDF-adapter of app gebruikt.
 
+Een [adaptieve vervolgproef](rgba/curve-outline-adaptive-2026-10-04.json)
+past per zijde maximaal 16 cubics met behoud van eindpunttangenten,
+31 kleinste-kwadraten-meetpunten per interval en 63 afzonderlijke
+foutcontrolepunten. Intervallen worden gesplitst tot de bemonsterde
+geometrische fout hoogstens 0,02 px is; bij onhaalbare fout of degeneratie
+weigert de proef de uitvoer. Zeven ongeldige gevallen worden getest. Op
+boog/S-curve/ondiep/asymmetrisch blijven 244/229/126/315 pixels afwijken;
+voor drie van vier vormen is dit slechter dan de een-cubic-baseline op commit
+`d1c47a1f`. Meer segmenten alleen reconstrueren Kurbo's offsetsolver dus
+niet. Het JSON-rapport bewaart ook segmentaantallen en eerste afwijkende
+pixel. De `curve_outline_candidate.rs` in de huidige boom is deze adaptieve
+diagnose; de eerste een-cubic-versie en zijn rapport zijn op die commit
+reproduceerbaar.
+
 ```sh
 rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_outline_candidate.rs \
   -o /tmp/opds-curve-outline-candidate
