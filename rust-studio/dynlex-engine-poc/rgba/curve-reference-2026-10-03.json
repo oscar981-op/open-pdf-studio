@@ -31,8 +31,10 @@
         111
       ],
       "changed_pixels": 250,
+      "coverage_sha256": "705f05238ae7f4b829b78d641321752f8ce39c0d41be087a620652d6655c32e8",
       "delta_sha256": "f1652a311f15a9e7f9ec245ff6c6bd2b1537a3146b88065c90df09a90e18de00",
-      "distinct_changed_rgba": 117
+      "distinct_changed_rgba": 117,
+      "nonzero_coverage_pixels": 250
     },
     "vector/s-bend": {
       "bounds_xy_inclusive": [
@@ -42,8 +44,10 @@
         129
       ],
       "changed_pixels": 237,
+      "coverage_sha256": "230bad9c6077e0d4bc5f24c3396cf46781a9245e0f85c8f47ebc49f237d691ec",
       "delta_sha256": "c1e818da9a23c95590398d5c8696605dc1907ea5bbfd73bf11dc335246dcb08d",
-      "distinct_changed_rgba": 106
+      "distinct_changed_rgba": 106,
+      "nonzero_coverage_pixels": 237
     }
   },
   "width": 256

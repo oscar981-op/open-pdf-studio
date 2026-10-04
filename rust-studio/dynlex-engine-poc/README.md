@@ -559,6 +559,15 @@ PDF-Bézierstroken vast tegen de bestaande Hayro-renderer. Herhaal met
 target/release/opds-engine-probe --adapter target/release/opds-opdl-adapter`.
 De [referentie-JSON](rgba/curve-reference-2026-10-03.json) bevat per vector-
 en hybride pagina het veranderde pixelvak en een SHA-256 van de RGBA-waarden.
+De probe leidt nu bovendien voor de zwarte boog en S-curve één 8-bit-dekking
+per pixel af die zowel de vector- als hybride uitvoer exact verklaart met
+Vello's benaderende `/256`-mengregel. De gecomprimeerde
+[`arch`](rgba/curve-coverage-arch.zlib)- en
+[`s-bend`](rgba/curve-coverage-s-bend.zlib)-kaarten bevatten elk 256×192
+dekkingsbytes na decompressie; de SHA-256 staat in de JSON. Herhaal de
+regressie met `--expected-report rgba/curve-reference-2026-10-03.json` bij
+`curve_probe.py`. Dit is meetdata voor een toekomstige curvekernel, geen
+curve-rendering of bewezen rasterisatie-algoritme; de adapter weigert `c` nog.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de
