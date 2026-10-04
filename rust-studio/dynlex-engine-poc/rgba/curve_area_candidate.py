@@ -46,6 +46,22 @@ def read_outline(path, steps):
     return points
 
 
+def read_flat_lines(path):
+    points = []
+    for line in path.read_text().splitlines():
+        if line.startswith("#"):
+            continue
+        x0, y0, x1, y1 = map(float, line.split())
+        if not points:
+            points.append((x0, y0))
+        elif abs(points[-1][0] - x0) > 0.000001 or abs(points[-1][1] - y0) > 0.000001:
+            raise ValueError("flattened outline has a disconnected segment")
+        points.append((x1, y1))
+    if not points or any(abs(a - b) > 0.000001 for a, b in zip(points[0], points[-1])):
+        raise ValueError("flattened outline does not close")
+    return points[:-1]
+
+
 def clip(poly, axis, boundary, keep_greater):
     if not poly:
         return []
@@ -91,6 +107,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--steps", type=int, nargs="+", default=[16, 64, 256])
     parser.add_argument("--expected-report", type=Path)
+    parser.add_argument("--flat-lines", action="store_true",
+                        help="use actual Vello-flattened stroke segments instead of uniform steps")
     args = parser.parse_args()
     if any(step < 2 or step > 512 for step in args.steps):
         parser.error("steps must be 2..512")
@@ -98,9 +116,13 @@ def main():
     for name in ("arch", "s-bend"):
         oracle = zlib.decompress((HERE / f"curve-coverage-{name}.zlib").read_bytes())
         report[name] = {}
-        for steps in args.steps:
-            polygon = read_outline(HERE / f"curve-outline-{name}.txt", steps)
-            report[name][str(steps)] = compare(rasterize(polygon), oracle)
+        if args.flat_lines:
+            polygon = read_flat_lines(HERE / f"curve-flat-{name}.txt")
+            report[name]["vello_flatten"] = compare(rasterize(polygon), oracle)
+        else:
+            for steps in args.steps:
+                polygon = read_outline(HERE / f"curve-outline-{name}.txt", steps)
+                report[name][str(steps)] = compare(rasterize(polygon), oracle)
     if args.expected_report and report != json.loads(args.expected_report.read_text()):
         raise RuntimeError("area coverage candidate changed")
     print(json.dumps(report, indent=2, sort_keys=True))

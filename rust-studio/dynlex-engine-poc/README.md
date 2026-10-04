@@ -613,6 +613,28 @@ coverage strips. De uniform-afgevlakte oppervlaktemethode is dus nog geen
 pariteit en wordt niet in de kernel gebruikt. Herhaal met
 `python3 dynlex-engine-poc/rgba/curve_area_candidate.py --steps 2 4 8 12 16 24 32
 --expected-report dynlex-engine-poc/rgba/curve-area-candidate-2026-10-04.json`.
+De afzonderlijke [`curve_flatten_probe.rs`](../crates/engine-probe/src/bin/curve_flatten_probe.rs)
+legt vervolgens de **daadwerkelijke** Vello-common-0.0.8-lijnsegmenten van de
+stroke-omtrek vast: 28 voor de boog en 30 voor de S-curve. De bestanden staan
+in [`curve-flat-arch.txt`](rgba/curve-flat-arch.txt) en
+[`curve-flat-s-bend.txt`](rgba/curve-flat-s-bend.txt). De eigen Python-rasterproef
+gebruikt deze segmenten uitsluitend als geometrie-invoer en knipt de gesloten
+polygoon zelf per pixel. Met `--flat-lines` levert zij voor **beide** kaarten
+49.152/49.152 exacte dekkingsbytes; zie
+[`curve-flat-area-2026-10-04.json`](rgba/curve-flat-area-2026-10-04.json).
+
+```sh
+cargo build --release -p opds-engine-probe --bin curve_flatten_probe
+target/release/curve_flatten_probe arch /tmp/curve-flat-arch.txt
+target/release/curve_flatten_probe s-bend /tmp/curve-flat-s-bend.txt
+python3 dynlex-engine-poc/rgba/curve_area_candidate.py --flat-lines \
+  --expected-report dynlex-engine-poc/rgba/curve-flat-area-2026-10-04.json
+```
+
+Dit is alleen pariteit van een **eigen oppervlaktemeting gegeven Vello's
+segmenten** op twee kleine fixtures. De flattening is nog niet onafhankelijk
+nagebouwd, de proef is Python en er bestaat nog geen DynLex-curveopdracht.
+Curven blijven in de gewone adapter en app geweigerd.
 De boog verandert 250 pixels in beide modi; de S-vorm 237 vectorpixels en
 235 hybride pixels. Dat verschil is een verschil met de ondergrond, geen
 bewijs voor andere geometrische dekking. De proef controleert ook dat de
