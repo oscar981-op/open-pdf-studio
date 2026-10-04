@@ -838,3 +838,31 @@ bewijs voor andere geometrische dekking. De proef controleert ook dat de
 adapter beide curves nog weigert. Voor activering zijn per-pixeldekking,
 compositing en joins afzonderlijk te verifiëren; deze JSON is geen DynLex-
 curvebenchmark.
+
+Een volgende [zelfstandige Rust-proef](rgba/curve_outline_candidate.rs) maakt
+de 1px butt-cap-omtrek van één cubic zonder Kurbo/Vello runtime-aanroep. Zij
+berekent normaal-offsetpunten bij `t=0,1/3,2/3,1` en past per zijde één cubic
+door de twee binnenpunten. Dit is bewust een beperkte geometriekandidaat:
+Kurbo 0.13.1 gebruikt in zijn Apache-2.0/MIT-gelicentieerde `stroke.rs` en
+`offset.rs` een adaptieve offsetsolver met foutcontrole; vier samples zijn
+geen equivalent. De [verifier](rgba/verify_curve_outline_candidate.py) voert
+de omtrek door de eigen scalar flattener en DynLex-area-kernel en vergelijkt
+alle dekkingsbytes met drie bestaande en een vierde asymmetrische
+Vello/Kurbo-oracle. Het [rapport](rgba/curve-outline-candidate-2026-10-04.json)
+toont respectievelijk 233, 233, 114 en 305 afwijkende pixels, met
+maximale dekkingsfout 20, 106, 2 en 15. Vijf ongeldige of onbegrensde
+invoerpatronen worden zonder output geweigerd. De nieuwe asymmetrische
+fixtures `curve-outline-asymmetric.txt`, `curve-flat-asymmetric.txt` en
+`curve-coverage-asymmetric.zlib` zijn read-only referenties. De kandidaat
+wordt nergens in de PDF-adapter of app gebruikt.
+
+```sh
+rustc --edition=2024 -O dynlex-engine-poc/rgba/curve_outline_candidate.rs \
+  -o /tmp/opds-curve-outline-candidate
+python3 dynlex-engine-poc/rgba/verify_curve_outline_candidate.py \
+  --candidate /tmp/opds-curve-outline-candidate \
+  --flattener /tmp/opds-curve-flatten-scalar \
+  --scene-tool /tmp/opds-curve-scene \
+  --rasterizer /tmp/opds-curve-raster-probe \
+  --json /tmp/opds-curve-outline-candidate.json
+```

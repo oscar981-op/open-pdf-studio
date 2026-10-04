@@ -1,0 +1,50 @@
+{
+  "scope": "diagnostic one-cubic 1px butt-cap; never used by app or PDF adapter",
+  "fixtures": {
+    "arch": {
+      "max_outline_coordinate_delta_px": 0.31546504963800714,
+      "coverage_mismatched_pixels": 233,
+      "max_coverage_delta": 20,
+      "first_mismatch": {
+        "x": 51,
+        "y": 73,
+        "candidate": 9,
+        "oracle": 15
+      }
+    },
+    "s-bend": {
+      "max_outline_coordinate_delta_px": 0.720212684569006,
+      "coverage_mismatched_pixels": 233,
+      "max_coverage_delta": 106,
+      "first_mismatch": {
+        "x": 36,
+        "y": 93,
+        "candidate": 0,
+        "oracle": 4
+      }
+    },
+    "shallow": {
+      "max_outline_coordinate_delta_px": 0.07119727381999752,
+      "coverage_mismatched_pixels": 114,
+      "max_coverage_delta": 2,
+      "first_mismatch": {
+        "x": 52,
+        "y": 97,
+        "candidate": 50,
+        "oracle": 51
+      }
+    },
+    "asymmetric": {
+      "max_outline_coordinate_delta_px": 0.279541887373,
+      "coverage_mismatched_pixels": 305,
+      "max_coverage_delta": 15,
+      "first_mismatch": {
+        "x": 61,
+        "y": 78,
+        "candidate": 19,
+        "oracle": 24
+      }
+    }
+  },
+  "invalid_cases_rejected": 5
+}

@@ -1,7 +1,7 @@
 //! Read-only Kurbo stroke-outline probe for bounded cubic test fixtures.
 
 use std::{env, error::Error, fmt::Write, fs};
-use vello_cpu::kurbo::{stroke_with, BezPath, Cap, PathEl, Stroke, StrokeCtx, StrokeOpts};
+use vello_cpu::kurbo::{BezPath, Cap, PathEl, Stroke, StrokeCtx, StrokeOpts, stroke_with};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
@@ -16,6 +16,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Some("arch") => [(20.5, 111.5), (35.5, 61.5), (75.5, 61.5), (90.5, 111.5)],
         Some("s-bend") => [(20.5, 111.5), (55.5, 51.5), (55.5, 171.5), (90.5, 111.5)],
         Some("shallow") => [(20.5, 111.5), (43.5, 93.5), (67.5, 93.5), (90.5, 111.5)],
+        Some("asymmetric") => [(25.5, 125.5), (39.5, 48.5), (103.5, 79.5), (111.5, 133.5)],
         _ => return Err("unknown curve".into()),
     };
     let mut path = BezPath::new();
