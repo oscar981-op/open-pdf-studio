@@ -150,7 +150,24 @@ gat en een 90° gedraaid gat zijn ook elk 49.152/49.152 exact. Een schuine
 ruit met gat heeft daarentegen **72 afwijkende randpixels**, maximaal één
 8-bit-dekkingsstap per pixel. Dit is een geregistreerde diagnostische
 mismatch; schuine vormen zijn dus niet algemeen bewezen en de gewone
-PDF-adapter blijft op Hayro terugvallen. Een enkele warme in-process
+PDF-adapter blijft op Hayro terugvallen. `diagnose_glyph_multi_edges.py`
+knipt beide contouren met exacte rationale getallen tegen elk afwijkend
+pixel. **Alle 72 verschillen liggen precies op een halve 8-bit-stap**
+(`oppervlakte × 255 = geheel getal + 1/2`): Hayro kiest 46 keer een byte
+hoger en 26 keer een byte lager dan de huidige DynLex-berekening. Dat wijst
+op de f32-stripaccumulatie en omzetting in Vello CPU 0.0.8, maar bewijst
+niet dat andere schuine contouren geen geometrische verschillen hebben.
+Een proef met pixels rond de lokale oorsprong maakte de oppervlakteberekening
+numeriek stabieler, maar liet 59 verschillen over; die variant is niet
+geactiveerd. Reproduceren vanuit `rust-studio`:
+
+```sh
+python3 dynlex-engine-poc/rgba/diagnose_glyph_multi_edges.py \
+  --probe /tmp/opds-glyph-multi-native-probe \
+  --hayro target/release/opds-engine-probe
+```
+
+Een enkele warme in-process
 diagnose met dertig kernelcalls op de echte glyphs gaf ongeveer 2,1/2,7 ms
 per DynLex-call versus circa 19/20 ms voor de oude per-pixel-FFI/Rust-proef.
 Dit is geen volledige PDF→RGBA-benchmark en geen algemene snelheidsclaim.
