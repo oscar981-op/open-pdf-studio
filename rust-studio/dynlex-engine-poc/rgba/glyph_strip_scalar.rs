@@ -23,6 +23,26 @@ fn max_if_first_nan_take_second(value: f32, bound: f32) -> f32 {
     }
 }
 
+// A bounding-box overlap alone also visits tiles touched only by a line's
+// endpoint or bbox corner. Vello's line binning skips those tiles, which can
+// change a half-byte coverage tie after several f32 winding additions.
+fn line_crosses_tile(x0: f32, y0: f32, x1: f32, y1: f32, left: f32, top: f32) -> bool {
+    let lo = top.max(y0.min(y1));
+    let hi = (top + TILE as f32).min(y0.max(y1));
+    if lo >= hi {
+        return false;
+    }
+    if x0 == x1 {
+        // A vertical line on a tile boundary belongs to the tile whose
+        // left edge it occupies.
+        return x0 >= left && x0 < left + TILE as f32;
+    }
+    let slope = (x1 - x0) / (y1 - y0);
+    let xa = (lo - y0).mul_add(slope, x0);
+    let xb = (hi - y0).mul_add(slope, x0);
+    xa.max(xb) > left && xa.min(xb) < left + TILE as f32
+}
+
 fn render(contours: &[Vec<[f64; 2]>]) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut paths = Vec::with_capacity(contours.len());
     let mut quantized = Vec::with_capacity(contours.len());
@@ -51,12 +71,7 @@ fn render(contours: &[Vec<[f64; 2]>]) -> Result<Vec<u8>, Box<dyn Error>> {
             for path in &paths {
                 for edge in path.windows(2) {
                     let ((x0, y0), (x1, y1)): (Point, Point) = (edge[0], edge[1]);
-                    if y0 == y1
-                        || x0.max(x1) < left
-                        || x0.min(x1) > left + TILE as f32
-                        || y0.max(y1) < top
-                        || y0.min(y1) > top + TILE as f32
-                    {
+                    if !line_crosses_tile(x0, y0, x1, y1, left, top) {
                         continue;
                     }
                     let (p0x, p0y, p1x, p1y) = (x0 - left, y0 - top, x1 - left, y1 - top);

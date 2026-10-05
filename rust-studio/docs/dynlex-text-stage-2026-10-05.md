@@ -248,23 +248,42 @@ route is uitsluitend experimenteel en nog niet verbonden met de app.
 De DynLex-stripkernel is op de twee echte CID-glyphs, losse/geneste
 contouren, acht contouren, volle pagina met gat, 90°-vorm én de schuine
 ruit met gat telkens **49.152/49.152 bytes** gelijk aan Hayro. De vorige
-area-kernel had op die ruit 72 afwijkende randpixels. Een deterministische
-proef met 200 plus 500 willekeurige ruiten met gaten gaf 666/700 volledige
-Hayro-pariteit. De overige 34 scènes hadden samen 68 pixels met één byte
-verschil; iedere afwijking is met exacte rationale clipping geverifieerd als
+area-kernel had op die ruit 72 afwijkende randpixels. De eerste stripproef
+gaf op 200 plus 500 willekeurige ruiten met gaten 666/700 volledige
+Hayro-pariteit. Na strikte lijn/tegeltoewijzing zijn dit **678/700** scènes:
+de overige 22 hebben samen 29 pixels met één byte verschil. Iedere
+afwijking is met exacte rationale clipping geverifieerd als
 een halve 8-bit-stap. De volledige buffers van de zelfstandige Rust- en
-DynLex-stripproef waren op alle 700 scènes onderling bytegelijk. Ruwe
-gevallen staan in `rgba/glyph-strip-dynlex-random-{2026-10-05,500-2026-10-05}.json`.
+DynLex-stripproef waren op alle 700 scènes onderling bytegelijk. Een derde
+seed gaf 975/1000 scènes volledig gelijk, met 37 halve-byte-randpixels in
+25 overige scènes. Ruwe gevallen staan in de drie
+`rgba/glyph-strip-dynlex-random-*-2026-10-05.json`-rapporten.
 Dit is vooruitgang voor rechte outline-segmenten, geen bewijs voor algemene
 glyphs, curves, tekstlagen of alle PDF-randen. De normale app blijft tekst
 aan Hayro geven totdat ook de resterende halve-stapgevallen en PDF-
 compositing veilig zijn.
 
+De extra controle kwam uit een directe Vello CPU-oracle op een afwijkende
+ruit: het Vello-alfa was 42, gelijk aan Hayro, terwijl de eerste DynLex-
+proef 43 gaf. Vello registreerde in die tegel slechts één lijn. De eerste
+proef nam door een overlappende bounding box nog lijnen mee die de tegel
+alleen op zijn grens raakten; na een halfopen lijn/tegeltest is deze pixel
+exact. Een verticale lijn op een tegelgrens wordt aan de tegel rechts
+toegewezen. De proef bevat nog geen volledige Vello-tegelbinning, dus de
+overblijvende halve-byteverschillen zijn niet stilzwijgend weggewerkt.
+De read-only `glyph_vello_probe` en `verify_glyph_vello_oracle.py` maken de
+directe Vello/Hayro/DynLex-vergelijking van die 49.152 bytes reproduceerbaar;
+de app en kernel roepen deze Vello-proef niet aan.
+
 Dertig afwisselend gepaarde warme processen met honderd kernelcalls per
-proces op de twee echte glyphs gaven vorige area-/nieuwe stripkernel
+proces op de twee echte glyphs gaven vorige area-/eerste stripkernel
 **0,552/0,314 ms** en **0,554/0,341 ms per call**; strip won 30/30 paren
 bij beide. Dit sluit PDF-parsing, Rust-validatie, compositing en processtart
 uit. De ruwe samples staan in `rgba/glyph-strip-bench-2026-10-05.json`.
+Een nieuw gepaard A/B van eerste/strikt gebinde stripkernel gaf
+**0,334/0,334 ms** en **0,349/0,374 ms** per call, met 16/30 en 11/30
+winstparen; de nauwkeuriger tegeltest heeft dus geen bewezen snelheidswinst.
+Ruwe samples: `rgba/glyph-strip-line-bench-2026-10-05.json`.
 Reproduceren vanuit `rust-studio`:
 
 ```sh
@@ -284,4 +303,9 @@ python3 dynlex-engine-poc/rgba/verify_glyph_strip_random.py \
   --probe /tmp/opds-glyph-strip-native-probe \
   --compare-probe /tmp/opds-glyph-strip-scalar \
   --hayro target/release/opds-engine-probe --cases 500 --seed 20261006
+cargo build --offline --release -p opds-engine-probe --bin glyph_vello_probe
+python3 dynlex-engine-poc/rgba/verify_glyph_vello_oracle.py \
+  --vello target/release/glyph_vello_probe \
+  --hayro target/release/opds-engine-probe \
+  --dynlex /tmp/opds-glyph-strip-native-probe
 ```

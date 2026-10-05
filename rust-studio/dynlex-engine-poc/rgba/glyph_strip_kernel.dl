@@ -63,6 +63,36 @@ function strip raster {cstring:scene} into {cstring:output}:
                         if min_y > top + (4 as a 32 bit float):
                             set active to 0
                         if active = 1:
+                            # A bbox touch is not necessarily a line/tile hit.
+                            # Exclude zero-height endpoint touches and x-edge-only
+                            # contacts, matching the scalar strip proof.
+                            set clip_top to min_y
+                            if top > clip_top:
+                                set clip_top to top
+                            set clip_bottom to max_y
+                            if top + (4 as a 32 bit float) < clip_bottom:
+                                set clip_bottom to top + (4 as a 32 bit float)
+                            if clip_top >= clip_bottom:
+                                set active to 0
+                            if x0 = x1:
+                                if x0 < tile_origin_x:
+                                    set active to 0
+                                if x0 >= tile_origin_x + (4 as a 32 bit float):
+                                    set active to 0
+                            else:
+                                set line_dx_dy to (x1 - x0) / (y1 - y0)
+                                set clip_x0 to @intrinsic("call", "libm", "fmaf", a 32 bit float, clip_top - y0, line_dx_dy, x0)
+                                set clip_x1 to @intrinsic("call", "libm", "fmaf", a 32 bit float, clip_bottom - y0, line_dx_dy, x0)
+                                set clip_x_min to clip_x0
+                                set clip_x_max to clip_x1
+                                if clip_x1 < clip_x0:
+                                    set clip_x_min to clip_x1
+                                    set clip_x_max to clip_x0
+                                if clip_x_max <= tile_origin_x:
+                                    set active to 0
+                                if clip_x_min >= tile_origin_x + (4 as a 32 bit float):
+                                    set active to 0
+                        if active = 1:
                             set p0x to x0 - tile_origin_x
                             set p0y to y0 - top
                             set p1x to x1 - tile_origin_x

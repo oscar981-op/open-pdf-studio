@@ -98,8 +98,8 @@ def main():
     report = verify(args.probe, args.hayro, args.cases, args.seed,
                     args.compare_probe)
     if args.cases == 200 and args.seed == 20261005 and (
-        report["half_byte_mismatch_cases"] != 5
-        or report["half_byte_mismatch_pixels"] != 20
+        report["half_byte_mismatch_cases"] != 3
+        or report["half_byte_mismatch_pixels"] != 6
     ):
         raise AssertionError("golden scalar-strip diagnostic changed; revalidate")
     encoded = json.dumps(report, indent=2) + "\n"
