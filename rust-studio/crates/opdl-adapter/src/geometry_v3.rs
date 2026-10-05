@@ -11,7 +11,38 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let ops = &page.operations;
     let mut records = Vec::new();
     let mut i = 0;
+    let mut translation = [0_i32; 2];
+    let mut stack = Vec::new();
     while i < ops.len() {
+        match ops[i].operator.as_str() {
+            "q" if ops[i].operands.is_empty() && stack.len() < 2 => {
+                stack.push(translation);
+                i += 1;
+                continue;
+            }
+            "Q" if ops[i].operands.is_empty() => {
+                translation = stack.pop().ok_or_else(|| fail("unmatched Q"))?;
+                i += 1;
+                continue;
+            }
+            "cm" if !stack.is_empty() => {
+                let [a, b, c, d, tx, ty] = operands::<6>(&ops[i].operands)?;
+                if [a, b, c, d] != [1.0, 0.0, 0.0, 1.0] {
+                    return Err(fail("only integer translation CTM"));
+                }
+                translation[0] = translation[0]
+                    .checked_add(signed_integer(tx)?)
+                    .filter(|v| v.abs() <= 4096)
+                    .ok_or_else(|| fail("translation exceeds bound"))?;
+                translation[1] = translation[1]
+                    .checked_add(signed_integer(ty)?)
+                    .filter(|v| v.abs() <= 4096)
+                    .ok_or_else(|| fail("translation exceeds bound"))?;
+                i += 1;
+                continue;
+            }
+            _ => {}
+        }
         if records.len() / 24 >= 64 {
             return Err(fail("too many OPGM-v3 commands"));
         }
@@ -29,8 +60,8 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 let rect = rectangle_to_display(
                     page.crop,
                     page.turn,
-                    integer(x)?,
-                    integer(y)?,
+                    translated(x, translation[0])?,
+                    translated(y, translation[1])?,
                     integer(w)?,
                     integer(h)?,
                 )?;
@@ -52,6 +83,12 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                 }
                 let [x0, y0] = operands::<2>(&ops[i + 2].operands)?;
                 let [x1, y1] = operands::<2>(&ops[i + 3].operands)?;
+                let [x0, y0, x1, y1] = [
+                    x0 + f64::from(translation[0]),
+                    y0 + f64::from(translation[1]),
+                    x1 + f64::from(translation[0]),
+                    y1 + f64::from(translation[1]),
+                ];
                 let (x, y, w, h) = if y0 == y1 && x0 != x1 {
                     (
                         integer(x0.min(x1))?,
@@ -80,8 +117,8 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
         records.extend_from_slice(&ink);
         i += consumed;
     }
-    if records.is_empty() {
-        return Err(fail("empty OPGM-v3 page"));
+    if records.is_empty() || !stack.is_empty() {
+        return Err(fail("empty page or unclosed graphics group"));
     }
     let mut out = Vec::with_capacity(40 + records.len());
     out.extend_from_slice(b"OPGM");
@@ -100,6 +137,17 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     }
     out.extend_from_slice(&records);
     Ok(out)
+}
+
+fn signed_integer(value: f64) -> Result<i32, Box<dyn Error>> {
+    if !value.is_finite() || value.fract() != 0.0 || !(-4096.0..=4096.0).contains(&value) {
+        return Err(fail("invalid integer translation"));
+    }
+    Ok(value as i32)
+}
+
+fn translated(value: f64, offset: i32) -> Result<u32, Box<dyn Error>> {
+    integer(value + f64::from(offset))
 }
 
 fn binary_ink(rgb: [f64; 3]) -> Result<[u8; 4], Box<dyn Error>> {

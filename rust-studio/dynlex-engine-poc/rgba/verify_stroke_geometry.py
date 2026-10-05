@@ -25,19 +25,29 @@ def command(rect,kind,ink):
 def main():
     cases=[('normal',192,256,(0,0,192,256),0),('rot90',192,256,(0,0,192,256),90),
            ('rot180',192,256,(0,0,192,256),180),('rot270',192,256,(0,0,192,256),270),
-           ('crop90',220,280,(20,30,170,230),90),('a1-90',1684,2384,(0,0,1684,2384),90)]
+           ('crop90',220,280,(20,30,170,230),90),('a1-90',1684,2384,(0,0,1684,2384),90),
+           ('nested-90',192,256,(0,0,192,256),90),('translated-a1',1684,2384,(0,0,1684,2384),90),
+           ('restore90',192,256,(0,0,192,256),90)]
     report={'cases':{},'unsupported_pdfs_rejected':0,'invalid_records_rejected':0}
     with tempfile.TemporaryDirectory(prefix='opds-opgm-v3-') as d:
         root=Path(d)
         for name,mw,mh,crop,turn in cases:
             width,height=display_size(crop,turn)
-            if name=='a1-90':
+            if name in ('a1-90','translated-a1'):
                 records=[(1,(100,80,400,280),COLORS[0]),(3,(120,220,490,221),COLORS[1]),
                          (3,(380,100,381,330),COLORS[2])]
             else:
                 records=[(1,(25,20,95,60),COLORS[0]),(3,(30,45,110,46),COLORS[1]),
                          (3,(60,30,61,100),COLORS[2])]
-            content=b''.join(command(pdf_rect(crop,turn,rect),kind,ink) for kind,rect,ink in records)
+            shift=(7,9) if name in ('nested-90','translated-a1') else (0,0)
+            content=b''.join(command(tuple(v-shift[j%2] if j<2 else v for j,v in enumerate(pdf_rect(crop,turn,rect))),kind,ink)
+                             for kind,rect,ink in records)
+            if name=='nested-90':content=b'q\n1 0 0 1 3 4 cm\nq\n1 0 0 1 4 5 cm\n'+content+b'Q\nQ\n'
+            elif name=='translated-a1':content=b'q\n1 0 0 1 7 9 cm\n'+content+b'Q\n'
+            elif name=='restore90':
+                first=records[0];x,y,w,h=pdf_rect(crop,turn,first[1]);content=(
+                    b'q\n1 0 0 1 7 9 cm\n'+command((x-7,y-9,w,h),first[0],first[2])+b'Q\n'
+                    +b''.join(command(pdf_rect(crop,turn,rect),kind,ink) for kind,rect,ink in records[1:]))
             pdf=root/f'{name}.pdf';opgm=root/f'{name}.opgm';opdl=root/f'{name}.opdl'
             pdf.write_bytes(pdf_with_stream(content,mw,mh,f'/Rotate {turn} /CropBox [{" ".join(map(str,crop))}]'.encode()))
             run_checked([EXPORTER,pdf,opgm]);run_checked([GEOMETRY,opgm,opdl])
@@ -56,7 +66,11 @@ def main():
         bad=[b'1 0 0 RG\n2 w\n10 20.5 m\n50 20.5 l\nS\n',
              b'1 0 0 RG\n1 w\n10 20 m\n50 20 l\nS\n',
              b'1 0 0 RG\n1 w\n10 20.5 m\n50 20.5 l\n',
-             b'1 0 0 RG\n1 w\n10 20.5 m\n50 20.5 l\nS\nq\n']
+             b'1 0 0 RG\n1 w\n10 20.5 m\n50 20.5 l\nS\nq\n',
+             b'Q\n1 0 0 rg\n20 20 30 30 re\nf\n',
+             b'q\n2 0 0 1 5 5 cm\n1 0 0 rg\n20 20 30 30 re\nf\nQ\n',
+             b'q\n1 0 0 1 0.5 5 cm\n1 0 0 rg\n20 20 30 30 re\nf\nQ\n',
+             b'q\nq\nq\n1 0 0 rg\n20 20 30 30 re\nf\nQ\nQ\nQ\n']
         for index,stream in enumerate(bad):
             pdf=root/f'bad{index}.pdf';out=root/f'bad{index}.opgm'
             pdf.write_bytes(pdf_with_stream(stream,192,256,b'/Rotate 90'))
