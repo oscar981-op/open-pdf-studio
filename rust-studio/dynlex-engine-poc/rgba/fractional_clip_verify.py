@@ -18,6 +18,8 @@ def main() -> None:
     parser.add_argument("--probe", type=Path, required=True)
     parser.add_argument("--cases", type=int, default=200)
     parser.add_argument("--seed", type=int, default=20261005)
+    parser.add_argument("--polygon-rect", action="store_true",
+                        help="encode each rectangle as one closed m/l/h path")
     parser.add_argument("--failed-pdf", type=Path)
     args = parser.parse_args()
     if not 1 <= args.cases <= 1000:
@@ -38,7 +40,13 @@ def main() -> None:
             y = 20 + rng.randrange(30) + rng.choice(fractions)
             width, height = rng.choice(lengths), rng.choice(lengths)
             turn = rng.choice((0, 90, 180, 270))
-            clip = f"{x:g} {y:g} {width:g} {height:g} re\nW\nn\n".encode()
+            if args.polygon_rect:
+                right, top = x + width, y + height
+                rule = "W*" if index % 2 else "W"
+                clip = (f"{x:g} {y:g} m\n{right:g} {y:g} l\n"
+                        f"{right:g} {top:g} l\n{x:g} {top:g} l\nh\n{rule}\nn\n").encode()
+            else:
+                clip = f"{x:g} {y:g} {width:g} {height:g} re\nW\nn\n".encode()
             pre = b"0 0 1 rg\n10 10 110 90 re\nf\n" + clip
             pdf.write_bytes(build_pdf("raster", pre_content=pre,
                                       pages_extra=f"/Rotate {turn} /CropBox [8 12 248 180]",
@@ -59,7 +67,8 @@ def main() -> None:
                                        first_byte=first, actual=dynlex[first], expected=hayro[first]))
                 if args.failed_pdf and len(mismatches) == 1:
                     args.failed_pdf.write_bytes(pdf.read_bytes())
-    print(json.dumps(dict(cases=args.cases, seed=args.seed, supported=args.cases-fallback,
+    print(json.dumps(dict(cases=args.cases, seed=args.seed, polygon_rect=args.polygon_rect,
+                          supported=args.cases-fallback,
                           exact=args.cases-fallback-len(mismatches), fallback=fallback,
                           mismatches=mismatches[:20]), indent=2))
     if mismatches:

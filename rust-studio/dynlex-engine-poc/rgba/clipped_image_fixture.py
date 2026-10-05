@@ -21,6 +21,15 @@ def main() -> None:
     common = dict(image_source_size=(4, 4), image_source_override=rgb,
                   image_placement=placement)
     clipped = b"30 25 45 35 re\nW\nn\n"
+    polygon_rectangle = b"30 25 m\n75 25 l\n75 60 l\n30 60 l\nh\nW\nn\n"
+    output.joinpath("clipped-path-rectangle.pdf").write_bytes(build_pdf(
+        "raster", pre_content=b"0 0 1 rg\n15 20 100 80 re\nf\n" + polygon_rectangle,
+        flate_image=True, **common))
+    output.joinpath("clipped-path-rectangle-rotate.pdf").write_bytes(build_pdf(
+        "raster", pre_content=polygon_rectangle,
+        pages_extra="/Rotate 90 /CropBox [8 12 248 180]", **common))
+    output.joinpath("clipped-path-rectangle-evenodd.pdf").write_bytes(build_pdf(
+        "raster", pre_content=polygon_rectangle.replace(b"\nW\n", b"\nW*\n"), **common))
     output.joinpath("clipped-fractional-rgb.pdf").write_bytes(build_pdf(
         "raster", pre_content=b"0 0 1 rg\n15 20 100 80 re\nf\n" + clipped,
         flate_image=True, **common))
@@ -62,6 +71,10 @@ def main() -> None:
         "raster", pre_content=blue + fractional.replace(b"\nW\n", b"\nW*\n"),
         image_source_size=(4, 4), image_source_override=bytes([255, 0, 0]) * 16,
         image_placement=(20, 20, 80, 60)))
+    fractional_polygon = b"30.25 25.25 m\n75.75 25.25 l\n75.75 60.75 l\n30.25 60.75 l\nh\nW*\nn\n"
+    output.joinpath("clipped-path-subpixel-rotate.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + fractional_polygon,
+        pages_extra="/Rotate 270 /CropBox [8 12 248 180]", **common))
     output.joinpath("clipped-subpixel-unsupported-fill.pdf").write_bytes(build_pdf(
         "raster", pre_content=fractional + b"0 1 0 rg\n10.25 12 20 10 re\nf\n", **common))
     output.joinpath("clipped-subpixel-ambiguous.pdf").write_bytes(build_pdf(
@@ -78,6 +91,10 @@ def main() -> None:
         "raster", pre_content=blue + b"100.25 100.5 20.5 20.25 re\nW\nn\n", **common))
     output.joinpath("clipped-nonrect-unsupported.pdf").write_bytes(build_pdf(
         "raster", pre_content=b"30 25 m\n75 25 l\n52 60 l\nh\nW\nn\n", **common))
+    output.joinpath("clipped-path-open-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=polygon_rectangle.replace(b"h\n", b""), **common))
+    output.joinpath("clipped-path-bowtie-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=b"30 25 m\n75 60 l\n75 25 l\n30 60 l\nh\nW*\nn\n", **common))
 
 
 if __name__ == "__main__":

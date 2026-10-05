@@ -26,7 +26,10 @@ cargo run --release -p opds-opdl-adapter --bin inspect_pdf -- \
 1684×1191 pt met 8.721 operators, waaronder 4.034 `c`, 2.697 `l`,
 375 `f`, 43 `W`, 12 `W*` en 47 `cm`. De read-only `inspect_pdf --clip-ops`
 classificeert 41 clipopdrachten als één `re`-rechthoek en 14 als
-`m/l/h`-paden. Veel rechthoekcoördinaten zijn na de globale 0,1-schaal
+`m/l/h`-paden. Twee van die 14 paden zijn vierhoekige asgerichte
+rechthoeken (`W`); de overige twaalf gebruiken `W*` met 5 tot 327
+lijnsegmenten en vragen nog algemene polygonale clipping. Veel
+rechthoekcoördinaten zijn na de globale 0,1-schaal
 fractioneel; een gecontroleerde subpixel-rechthoek wordt nu via OPDL-v6
 beelddekking bytegelijk aan Hayro gerenderd. Polygonale clips ontbreken nog.
 Een read-only image-inventaris op 5 oktober

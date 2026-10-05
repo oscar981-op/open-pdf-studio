@@ -247,6 +247,18 @@ aan Hayro. Een volledig weggeclipt beeld levert nu een lege geordende actie op;
 een daarna zichtbaar beeld behoudt zijn laagvolgorde. Drie fixtures voor lege
 aligned/fractionele clips en herstel via `Q` zijn pixelgelijk aan Hayro.
 Niet-rechthoekige clipvormen zijn nog niet bewezen.
+
+Een enkel gesloten `m/l/l/l/h`-pad wordt nu alleen als rechthoek geaccepteerd
+wanneer het precies de vier verschillende hoeken bevat en elke zijde
+asgericht is. `W` en `W*` hergebruiken dan dezelfde begrensde rechthoekige
+cliproute, inclusief fractionele rand en paginaoriëntatie. Vier gerichte
+PDF-fixtures zijn pixelgelijk aan Hayro; open, driehoekige en kruisende paden
+blijven op Hayro terugvallen. Twee extra deterministische reeksen van elk
+1.000 `m/l/h`-rechthoek-PDF's met wisselende kwartslag en `W`/`W*` gaven
+949/949 en 959/959 ondersteunde resultaten bytegelijk aan Hayro; 51 en 41
+ambigue randen vielen terug. Herhaal met de bovenstaande
+`fractional_clip_verify.py`-commando's plus `--polygon-rect`. Dit is geen
+algemene polygonale clipping.
 `dynlex-engine-poc/rgba/clipped_image_fixture.py` maakt de fixtures.
 
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht

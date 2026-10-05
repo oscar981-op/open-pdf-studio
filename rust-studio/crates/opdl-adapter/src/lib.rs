@@ -529,6 +529,55 @@ impl PathStage {
         self.points.len() > 1 || !self.cubics.is_empty()
     }
 
+    fn closed_axis_rectangle(&self) -> Result<[f64; 4], Box<dyn Error>> {
+        if !self.closed || !self.cubics.is_empty() || self.points.len() != 4 {
+            return Err(fail(
+                "clip path is not a single closed four-corner rectangle",
+            ));
+        }
+        let left = self
+            .points
+            .iter()
+            .map(|point| point[0])
+            .fold(f64::INFINITY, f64::min);
+        let right = self
+            .points
+            .iter()
+            .map(|point| point[0])
+            .fold(f64::NEG_INFINITY, f64::max);
+        let bottom = self
+            .points
+            .iter()
+            .map(|point| point[1])
+            .fold(f64::INFINITY, f64::min);
+        let top = self
+            .points
+            .iter()
+            .map(|point| point[1])
+            .fold(f64::NEG_INFINITY, f64::max);
+        if ![left, right, bottom, top]
+            .iter()
+            .all(|value| value.is_finite())
+            || left >= right
+            || bottom >= top
+        {
+            return Err(fail("invalid rectangular clip path bounds"));
+        }
+        for corner in [[left, bottom], [left, top], [right, bottom], [right, top]] {
+            if self.points.iter().filter(|point| **point == corner).count() != 1 {
+                return Err(fail("clip path has unverified rectangle geometry"));
+            }
+        }
+        for index in 0..4 {
+            let a = self.points[index];
+            let b = self.points[(index + 1) % 4];
+            if !matches!((a[0] == b[0], a[1] == b[1]), (true, false) | (false, true)) {
+                return Err(fail("clip path has unverified rectangle geometry"));
+            }
+        }
+        Ok([left, bottom, right - left, top - bottom])
+    }
+
     fn to_v3_segments(self) -> Vec<path_v3::Segment> {
         use path_v3::Segment;
         let mut segments =
@@ -646,6 +695,36 @@ impl PathStage {
 #[cfg(test)]
 mod path_stage_tests {
     use super::*;
+
+    #[test]
+    fn clip_path_accepts_only_closed_axis_rectangles() {
+        for points in [
+            [[10.0, 20.0], [30.0, 20.0], [30.0, 40.0], [10.0, 40.0]],
+            [[30.0, 40.0], [30.0, 20.0], [10.0, 20.0], [10.0, 40.0]],
+        ] {
+            let mut path = PathStage::start(points[0]);
+            for point in &points[1..] {
+                path.line_to(*point).unwrap();
+            }
+            assert!(path.closed_axis_rectangle().is_err());
+            path.close().unwrap();
+            assert_eq!(
+                path.closed_axis_rectangle().unwrap(),
+                [10.0, 20.0, 20.0, 20.0]
+            );
+        }
+        for points in [
+            [[10.0, 20.0], [30.0, 40.0], [30.0, 20.0], [10.0, 40.0]],
+            [[10.0, 20.0], [30.0, 20.0], [30.0, 20.0], [10.0, 40.0]],
+        ] {
+            let mut path = PathStage::start(points[0]);
+            for point in &points[1..] {
+                path.line_to(*point).unwrap();
+            }
+            path.close().unwrap();
+            assert!(path.closed_axis_rectangle().is_err());
+        }
+    }
 
     #[test]
     fn collapses_long_monotone_path_without_changing_endpoints() {
@@ -1900,6 +1979,41 @@ fn page_to_opdl_bytes_internal(
             {
                 pending_clip = true;
             }
+            "W" | "W*"
+                if ordered_images
+                    && !image_matrix
+                    && op.operands.is_empty()
+                    && pending_rect.is_none()
+                    && pending_path.is_some()
+                    && !pending_clip =>
+            {
+                let rect = pending_path
+                    .take()
+                    .ok_or_else(|| fail("clip path is missing"))?
+                    .closed_axis_rectangle()?;
+                if rect[0] < 0.0
+                    || rect[1] < 0.0
+                    || rect[0] + rect[2] > f64::from(media[2])
+                    || rect[1] + rect[3] > f64::from(media[3])
+                {
+                    return Err(fail("polygonal rectangle clip is outside page"));
+                }
+                let aligned = rect
+                    .map(|value| pixel_aligned_u32(value, coordinate_limit))
+                    .into_iter()
+                    .collect::<Result<Vec<_>, _>>();
+                if let Ok(aligned) = aligned {
+                    pending_rect = Some(visible_rect_to_display(
+                        crop,
+                        turn,
+                        [aligned[0], aligned[1], aligned[2], aligned[3]],
+                    )?);
+                } else {
+                    pending_fractional_rect = Some(rect);
+                    pending_rect = Some([0, 0, 0, 0]);
+                }
+                pending_clip = true;
+            }
             "n" if !image_matrix && op.operands.is_empty() && pending_clip => {
                 let rect = pending_rect
                     .take()
@@ -1999,6 +2113,12 @@ fn page_to_opdl_bytes_internal(
                     .ok_or_else(|| fail("cubic without move"))?
                     .cubic_to(curve)?;
             }
+            "h" if ordered_images && !image_matrix && op.operands.is_empty() => {
+                pending_path
+                    .as_mut()
+                    .ok_or_else(|| fail("close without path"))?
+                    .close()?;
+            }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
                 if fractional_clip.is_some() {
                     return Err(fail("strokes under fractional clip are not yet supported"));
@@ -2009,6 +2129,9 @@ fn page_to_opdl_bytes_internal(
                 let path = pending_path
                     .take()
                     .ok_or_else(|| fail("stroke without move"))?;
+                if path.closed {
+                    return Err(fail("closed stroke is outside the proven subset"));
+                }
                 if !path.cubics.is_empty() {
                     return Err(fail("cubic stroke rasterization is not yet verified"));
                 }

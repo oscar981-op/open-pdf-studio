@@ -889,6 +889,22 @@ mod tests {
                 include_bytes!("../tests/fixtures/clipped-indexed-rgb.pdf").as_slice(),
             ),
             (
+                "m/l/h rectangle",
+                include_bytes!("../tests/fixtures/clipped-path-rectangle.pdf").as_slice(),
+            ),
+            (
+                "m/l/h rectangle Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-path-rectangle-rotate.pdf").as_slice(),
+            ),
+            (
+                "m/l/h rectangle W*",
+                include_bytes!("../tests/fixtures/clipped-path-rectangle-evenodd.pdf").as_slice(),
+            ),
+            (
+                "fractional m/l/h rectangle Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-path-subpixel-rotate.pdf").as_slice(),
+            ),
+            (
                 "subpixel RGB",
                 include_bytes!("../tests/fixtures/clipped-subpixel-rgb.pdf").as_slice(),
             ),
@@ -948,6 +964,8 @@ mod tests {
     fn unsupported_image_clips_fall_back() {
         for bytes in [
             include_bytes!("../tests/fixtures/clipped-nonrect-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-path-open-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-path-bowtie-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-subpixel-unsupported-fill.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-subpixel-ambiguous.pdf").as_slice(),
         ] {
