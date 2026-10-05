@@ -2,8 +2,10 @@
 
 De aparte PDF→OPGM-v3-route accepteert één pagina met geërfde
 MediaBox/CropBox/Rotate, lege resources en maximaal 64 opdrachten in
-PDF-laagvolgorde. Elke opdracht is precies `rg re f` of
-`RG 1 w m l S`. Dekkende DeviceRGB-kanalen van 0 tot 1 worden naar
+PDF-laagvolgorde. Fills gebruiken `re f` na een expliciete `rg`-kleur;
+strokes gebruiken `m l S` na expliciete `RG`-kleur en `1 w`.
+Deze staat kan voor volgende objecten worden hergebruikt en wordt met
+`q/Q` bewaard en hersteld. Dekkende DeviceRGB-kanalen van 0 tot 1 worden naar
 8-bit afgerond; niet-eindige waarden en waarden buiten dat bereik worden
 geweigerd. Een stroke moet
 dekkend, 1 pt breed, horizontaal of verticaal en pixeluitgelijnd zijn;
@@ -32,8 +34,9 @@ overlappende vormen op 0/90/180/270°, een verschoven CropBox en een
 A1-achtige pagina, geneste translatie, clipdoorsnede en herstel na `Q`. De
 PDF→OPGM→DynLex-uitvoer is 50.065.344 RGBA-bytes
 exact gelijk aan Hayro en een onafhankelijke rechthoek-/strookreferentie.
-Vier extra RGB-PDF's op normale, geroteerde/gecropte en A1-pagina's zijn
-ook bytegelijk; dertien niet-ondersteunde PDF-states en vier corrupte
+Vier extra RGB-PDF's op normale, geroteerde/gecropte en A1-pagina's en twee
+extra staatstestpagina's zijn ook bytegelijk: 19 pagina's en 67.030.400
+RGBA-bytes totaal. Zeventien niet-ondersteunde PDF-states en vier corrupte
 OPGM-v3-records
 worden zonder uitvoer geweigerd. Dit bewijst geen algemene padpariteit
 of snelheid op echte technische tekeningen.

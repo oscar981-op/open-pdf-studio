@@ -33,6 +33,8 @@ pixeluitgelijnde rechthoekfills/1px asgerichte strokes, beperkte q/Q,
 gehele translatie, rechthoekige clips en DeviceRGB-kleuren met kanaalwaarden
 van 0 tot 1. De RGB-waarden worden naar 8-bit afgerond; transparantie,
 andere kleurruimtes en willekeurige paden zijn nog niet ondersteund.
+Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
+tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
 Bij elke niet-ondersteunde PDF,
 pagina of schaal rendert Hayro. Dit voorkomt dat een nog onvolledige
 DynLex-kernel PDF-inhoud stil weglaat. Er is nog geen
@@ -64,3 +66,6 @@ normale, 90°-, 270°/CropBox- en A1/90°-pagina's eveneens bytegelijk;
 waarden buiten 0–1 worden afgewezen. De native backendtest controleert
 dat zo'n PDF daadwerkelijk via DynLex gaat. Deze tests bewijzen slechts
 de beschreven deelset.
+Twee aanvullende pagina's testen hergebruik en `q/Q`-herstel van vulkleur,
+lijnkleur en lijnbreedte; de directe native backendtest is ook daarvoor
+bytegelijk aan Hayro.

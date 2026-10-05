@@ -252,4 +252,15 @@ mod tests {
         let hayro = pdf.render_page(1, 1.0).unwrap();
         assert_eq!(result.raster.rgba, hayro.rgba);
     }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn saved_graphics_state_uses_dynlex_and_matches_hayro() {
+        let bytes = include_bytes!("../tests/fixtures/stateful-rgb-fill-stroke.pdf").to_vec();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let result = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert_eq!(result.used, Backend::Dynlex);
+        let hayro = pdf.render_page(1, 1.0).unwrap();
+        assert_eq!(result.raster.rgba, hayro.rgba);
+    }
 }

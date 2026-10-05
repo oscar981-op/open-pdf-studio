@@ -17,16 +17,39 @@ pub fn page_to_opgm_v3_bytes(source: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut i = 0;
     let mut translation = [0_i32; 2];
     let mut clip: Option<[u32; 4]> = None;
+    let mut fill_ink: Option<[u8; 4]> = None;
+    let mut stroke_ink: Option<[u8; 4]> = None;
+    let mut stroke_width: Option<f64> = None;
     let mut stack = Vec::new();
     while i < ops.len() {
         match ops[i].operator.as_str() {
             "q" if ops[i].operands.is_empty() && stack.len() < 2 => {
-                stack.push((translation, clip));
+                stack.push((translation, clip, fill_ink, stroke_ink, stroke_width));
                 i += 1;
                 continue;
             }
             "Q" if ops[i].operands.is_empty() => {
-                (translation, clip) = stack.pop().ok_or_else(|| fail("unmatched Q"))?;
+                (translation, clip, fill_ink, stroke_ink, stroke_width) =
+                    stack.pop().ok_or_else(|| fail("unmatched Q"))?;
+                i += 1;
+                continue;
+            }
+            "rg" => {
+                fill_ink = Some(opaque_rgb_ink(operands::<3>(&ops[i].operands)?)?);
+                i += 1;
+                continue;
+            }
+            "RG" => {
+                stroke_ink = Some(opaque_rgb_ink(operands::<3>(&ops[i].operands)?)?);
+                i += 1;
+                continue;
+            }
+            "w" => {
+                let [width] = operands::<1>(&ops[i].operands)?;
+                if width != 1.0 {
+                    return Err(fail("only 1pt stroke"));
+                }
+                stroke_width = Some(width);
                 i += 1;
                 continue;
             }
@@ -74,16 +97,15 @@ pub fn page_to_opgm_v3_bytes(source: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
             return Err(fail("too many OPGM-v3 commands"));
         }
         let (kind, rect, ink, consumed) = match ops[i].operator.as_str() {
-            "rg" => {
-                if i + 2 >= ops.len()
-                    || ops[i + 1].operator != "re"
-                    || ops[i + 2].operator != "f"
-                    || !ops[i + 2].operands.is_empty()
+            "re" => {
+                if i + 1 >= ops.len()
+                    || ops[i + 1].operator != "f"
+                    || !ops[i + 1].operands.is_empty()
                 {
                     return Err(fail("incomplete fill"));
                 }
-                let ink = opaque_rgb_ink(operands::<3>(&ops[i].operands)?)?;
-                let [x, y, w, h] = operands::<4>(&ops[i + 1].operands)?;
+                let ink = fill_ink.ok_or_else(|| fail("missing explicit fill color"))?;
+                let [x, y, w, h] = operands::<4>(&ops[i].operands)?;
                 let rect = rectangle_to_display(
                     page.crop,
                     page.turn,
@@ -92,24 +114,22 @@ pub fn page_to_opgm_v3_bytes(source: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
                     integer(w)?,
                     integer(h)?,
                 )?;
-                (1, rect, ink, 3)
+                (1, rect, ink, 2)
             }
-            "RG" => {
-                if i + 4 >= ops.len()
-                    || ops[i + 1].operator != "w"
-                    || ops[i + 2].operator != "m"
-                    || ops[i + 3].operator != "l"
-                    || ops[i + 4].operator != "S"
-                    || !ops[i + 4].operands.is_empty()
+            "m" => {
+                if i + 2 >= ops.len()
+                    || ops[i + 1].operator != "l"
+                    || ops[i + 2].operator != "S"
+                    || !ops[i + 2].operands.is_empty()
                 {
                     return Err(fail("incomplete stroke"));
                 }
-                let ink = opaque_rgb_ink(operands::<3>(&ops[i].operands)?)?;
-                if operands::<1>(&ops[i + 1].operands)? != [1.0] {
-                    return Err(fail("only 1pt stroke"));
+                let ink = stroke_ink.ok_or_else(|| fail("missing explicit stroke color"))?;
+                if stroke_width != Some(1.0) {
+                    return Err(fail("missing explicit 1pt stroke width"));
                 }
-                let [x0, y0] = operands::<2>(&ops[i + 2].operands)?;
-                let [x1, y1] = operands::<2>(&ops[i + 3].operands)?;
+                let [x0, y0] = operands::<2>(&ops[i].operands)?;
+                let [x1, y1] = operands::<2>(&ops[i + 1].operands)?;
                 let [x0, y0, x1, y1] = [
                     x0 + f64::from(translation[0]),
                     y0 + f64::from(translation[1]),
@@ -134,7 +154,7 @@ pub fn page_to_opgm_v3_bytes(source: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
                     return Err(fail("only pixel-aligned axis stroke"));
                 };
                 let rect = rectangle_to_display(page.crop, page.turn, x, y, w, h)?;
-                (3, rect, ink, 5)
+                (3, rect, ink, 3)
             }
             _ => return Err(fail("unsupported OPGM-v3 operator")),
         };
