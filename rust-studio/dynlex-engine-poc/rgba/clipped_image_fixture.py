@@ -92,6 +92,36 @@ def main() -> None:
     output.joinpath("clipped-concave-rotate.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + concave,
         pages_extra="/Rotate 90 /CropBox [8 12 248 180]", **common))
+    nested_hole = (b"28 23 m\n90 23 l\n90 75 l\n28 75 l\nh\n"
+                   b"43 36 m\n69 36 l\n69 59 l\n43 59 l\nh\nW*\nn\n")
+    output.joinpath("clipped-two-contour-hole.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + nested_hole, **common))
+    output.joinpath("clipped-two-contour-hole-rotate.pdf").write_bytes(build_pdf(
+        "raster", pre_content=nested_hole,
+        pages_extra="/Rotate 90 /CropBox [8 12 248 180]", **common))
+    output.joinpath("clipped-two-contour-hole-restored.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + b"q\n" + nested_hole,
+        extra_content=b"Q\nq\n20 0 0 16 100 90 cm\n/Im0 Do\nQ\n", **common))
+    triangle_hole = (b"28 23 m\n90 23 l\n90 75 l\n28 75 l\nh\n"
+                     b"44 38 m\n68 38 l\n56 58 l\nh\nW*\nn\n")
+    output.joinpath("clipped-two-contour-triangle-hole.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + triangle_hole, **common))
+    output.joinpath("clipped-two-contour-hole-reversed.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + nested_hole.replace(
+            nested_hole[:nested_hole.index(b"43 36 m")], b"").replace(
+            b"h\nW*\nn\n", b"h\n" + nested_hole[:nested_hole.index(b"43 36 m")] + b"W*\nn\n"), **common))
+    output.joinpath("clipped-two-contour-nonzero-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=nested_hole.replace(b"W*\n", b"W\n"), **common))
+    output.joinpath("clipped-two-contour-overlap-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=nested_hole.replace(b"43 36", b"83 36").replace(
+            b"69 36", b"109 36").replace(b"69 59", b"109 59").replace(
+            b"43 59", b"83 59"), **common))
+    third_contour = b"48 41 m\n56 41 l\n56 48 l\n48 48 l\nh\n"
+    output.joinpath("clipped-three-contour-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=nested_hole.replace(b"W*\nn\n",
+                                                  third_contour + b"W*\nn\n"), **common))
+    output.joinpath("clipped-two-contour-open-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=nested_hole.replace(b"43 59 l\nh\n", b"43 59 l\n"), **common))
     output.joinpath("clipped-triangle-restored.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + b"q\n" + triangle,
         extra_content=b"Q\nq\n20 0 0 16 100 90 cm\n/Im0 Do\nQ\n", **common))

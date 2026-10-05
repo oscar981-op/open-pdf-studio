@@ -929,6 +929,24 @@ mod tests {
                 include_bytes!("../tests/fixtures/clipped-concave-rotate.pdf").as_slice(),
             ),
             (
+                "two-contour even-odd hole",
+                include_bytes!("../tests/fixtures/clipped-two-contour-hole.pdf").as_slice(),
+            ),
+            (
+                "two-contour hole Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-two-contour-hole-rotate.pdf").as_slice(),
+            ),
+            (
+                "two-contour hole restored before later image",
+                include_bytes!("../tests/fixtures/clipped-two-contour-hole-restored.pdf")
+                    .as_slice(),
+            ),
+            (
+                "two-contour hole with reversed path order",
+                include_bytes!("../tests/fixtures/clipped-two-contour-hole-reversed.pdf")
+                    .as_slice(),
+            ),
+            (
                 "isolated real W* shape under global CTM",
                 include_bytes!("../tests/fixtures/clipped-real-shape-582.pdf").as_slice(),
             ),
@@ -1006,6 +1024,13 @@ mod tests {
             include_bytes!("../tests/fixtures/clipped-polygon-fill-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-intersection-unsupported.pdf")
                 .as_slice(),
+            include_bytes!("../tests/fixtures/clipped-two-contour-nonzero-unsupported.pdf")
+                .as_slice(),
+            include_bytes!("../tests/fixtures/clipped-two-contour-overlap-unsupported.pdf")
+                .as_slice(),
+            include_bytes!("../tests/fixtures/clipped-two-contour-triangle-hole.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-three-contour-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-two-contour-open-unsupported.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());

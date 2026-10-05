@@ -321,9 +321,35 @@ python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
 ```
 
 De andere elf complexe `W*`-paden en de duizenden curven/tekstoperatoren
-zijn niet bewezen; de hele echte pagina blijft Hayro gebruiken. Meerdere holle hoeken,
-zelfkruisende of open paden, samengestelde polygonale clips, fills/strokes
-onder de polygonale clip en onzekere randdekking blijven fallback.
+zijn niet bewezen; de hele echte pagina blijft Hayro gebruiken. De read-only
+`inspect_pdf --clip-ops`-inventaris toont voor `W*`-operator 338 vier gesloten
+contouren met 108, 68, 99 en 56 hoekpunten; elf andere complexe `W*`-paden
+hebben één contour met 8–48 hoekpunten. Daarmee valt de echte pagina nog
+buiten de begrensde beeldclip. Zelfkruisende/open paden, meerdere holle hoeken,
+fills/strokes onder de polygonale clip en onzekere randdekking blijven fallback.
+
+Een afzonderlijke gecontroleerde subset ondersteunt nu twee gesloten
+`m/l/h`-contouren met `W*`: een strikt convex buitenpad en een volledig daarin
+gelegen gat. Beide contouren worden afzonderlijk gevalideerd (3–8 hoekpunten,
+geen zelfkruising), de buiten-/binnenrelatie mag nergens de grens raken en de
+even-odd-dekking wordt als **één** analytisch pixeloppervlak berekend voordat
+8-bit-afronding en beeldcompositie plaatsvinden. Omgekeerde contourvolgorde,
+een blauwe onderlaag en een 90°/CropBox-fixture zijn via de native DynLex-route
+RGBA-bytegelijk aan Hayro. Twee deterministische reeksen van 400 geneste
+rechthoek-PDF's met vier kwartslagen, gehele/kwart-/decimale randen en beide
+contourvolgordes gaven 339/339 en 330/330 geaccepteerde resultaten bytegelijk;
+61/70 twijfelachtige randgevallen vielen op Hayro terug. Herhalen vanuit
+`rust-studio`:
+
+```sh
+python3 dynlex-engine-poc/rgba/nested_clip_verify.py --probe target/release/backend_probe --cases 400 --seed 20261005
+python3 dynlex-engine-poc/rgba/nested_clip_verify.py --probe target/release/backend_probe --cases 400 --seed 394727
+```
+
+`W` met twee contouren, overlappende grenzen, een derde contour en een
+driehoekig gat met twijfelachtige 8-bit-randdekking worden expliciet geweigerd.
+Deze subset gebruikt nog steeds het begrensde OPDL-v6-beeldmasker en is geen
+algemene even-odd-clippadrenderer.
 
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht
 (`kind=8`) met RGBA-patch en een 8-bit-dekkingswaarde per pixel. De

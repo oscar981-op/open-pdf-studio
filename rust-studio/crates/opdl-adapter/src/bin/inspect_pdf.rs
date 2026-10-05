@@ -69,6 +69,66 @@ fn describe_bounded(document: &Document, object: &Object, depth: usize) -> Strin
     }
 }
 
+fn contour_summary(operations: &[lopdf::content::Operation]) -> String {
+    let mut contours = Vec::<Vec<[f64; 2]>>::new();
+    let mut current = Vec::<[f64; 2]>::new();
+    let mut other_segments = 0_usize;
+    for operation in operations {
+        match operation.operator.as_str() {
+            "m" if operation.operands.len() == 2 => {
+                if !current.is_empty() {
+                    contours.push(std::mem::take(&mut current));
+                }
+                if let (Some(x), Some(y)) = (
+                    pdf_number(&operation.operands[0]),
+                    pdf_number(&operation.operands[1]),
+                ) {
+                    current.push([x, y]);
+                }
+            }
+            "l" if operation.operands.len() == 2 => {
+                if let (Some(x), Some(y)) = (
+                    pdf_number(&operation.operands[0]),
+                    pdf_number(&operation.operands[1]),
+                ) {
+                    current.push([x, y]);
+                }
+            }
+            "h" => {
+                if !current.is_empty() {
+                    contours.push(std::mem::take(&mut current));
+                }
+            }
+            "c" | "v" | "y" | "re" => other_segments += 1,
+            _ => {}
+        }
+    }
+    if !current.is_empty() {
+        contours.push(current);
+    }
+    let details = contours
+        .iter()
+        .take(8)
+        .map(|points| {
+            let signed_area2: f64 = points
+                .iter()
+                .enumerate()
+                .map(|(index, a)| {
+                    let b = points[(index + 1) % points.len()];
+                    a[0] * b[1] - b[0] * a[1]
+                })
+                .sum();
+            format!("{}pts/area2={signed_area2:.1}", points.len())
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "contours={} [{}] other_segments={other_segments}",
+        contours.len(),
+        details
+    )
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
     let input = args.next().ok_or(
@@ -203,9 +263,19 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .map(|op| op.operator.as_str())
                     .collect::<Vec<_>>()
                     .join(" ");
+                let path_start = content.operations[..index]
+                    .iter()
+                    .rposition(|previous| {
+                        matches!(
+                            previous.operator.as_str(),
+                            "n" | "S" | "s" | "f" | "F" | "f*" | "B" | "B*" | "b" | "b*"
+                        )
+                    })
+                    .map_or(0, |previous| previous + 1);
                 println!(
-                    "clip_op={index} rule={} path={counts} recent={nearby}",
-                    operation.operator
+                    "clip_op={index} rule={} path={counts} recent={nearby} {}",
+                    operation.operator,
+                    contour_summary(&content.operations[path_start..index])
                 );
             }
         }
