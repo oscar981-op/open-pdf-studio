@@ -1,0 +1,446 @@
+{
+  "page": 2,
+  "records": {
+    "0": {
+      "mismatch_pixels": 11,
+      "ink_pixels": 776,
+      "opm_bytes": 848,
+      "first_mismatches": [
+        [
+          124,
+          86,
+          93,
+          94
+        ],
+        [
+          112,
+          94,
+          205,
+          206
+        ],
+        [
+          108,
+          95,
+          236,
+          237
+        ],
+        [
+          112,
+          95,
+          228,
+          229
+        ],
+        [
+          124,
+          95,
+          61,
+          62
+        ]
+      ]
+    },
+    "1": {
+      "mismatch_pixels": 6,
+      "ink_pixels": 509,
+      "opm_bytes": 732,
+      "first_mismatches": [
+        [
+          138,
+          85,
+          34,
+          35
+        ],
+        [
+          139,
+          86,
+          67,
+          68
+        ],
+        [
+          115,
+          88,
+          185,
+          186
+        ],
+        [
+          141,
+          89,
+          120,
+          121
+        ],
+        [
+          113,
+          98,
+          204,
+          205
+        ]
+      ]
+    },
+    "2": {
+      "mismatch_pixels": 38,
+      "ink_pixels": 626,
+      "opm_bytes": 956,
+      "first_mismatches": [
+        [
+          125,
+          83,
+          64,
+          63
+        ],
+        [
+          140,
+          84,
+          135,
+          134
+        ],
+        [
+          139,
+          86,
+          95,
+          94
+        ],
+        [
+          108,
+          91,
+          210,
+          211
+        ],
+        [
+          144,
+          94,
+          147,
+          146
+        ]
+      ]
+    },
+    "3": {
+      "mismatch_pixels": 10,
+      "ink_pixels": 512,
+      "opm_bytes": 956,
+      "first_mismatches": [
+        [
+          133,
+          82,
+          35,
+          34
+        ],
+        [
+          132,
+          88,
+          159,
+          160
+        ],
+        [
+          138,
+          91,
+          15,
+          14
+        ],
+        [
+          117,
+          92,
+          104,
+          105
+        ],
+        [
+          129,
+          95,
+          161,
+          162
+        ]
+      ]
+    },
+    "4": {
+      "mismatch_pixels": 18,
+      "ink_pixels": 415,
+      "opm_bytes": 440,
+      "first_mismatches": [
+        [
+          113,
+          84,
+          20,
+          21
+        ],
+        [
+          127,
+          89,
+          41,
+          42
+        ],
+        [
+          128,
+          89,
+          41,
+          42
+        ],
+        [
+          129,
+          89,
+          41,
+          42
+        ],
+        [
+          130,
+          89,
+          41,
+          42
+        ]
+      ]
+    },
+    "7": {
+      "mismatch_pixels": 8,
+      "ink_pixels": 725,
+      "opm_bytes": 824,
+      "first_mismatches": [
+        [
+          128,
+          77,
+          100,
+          101
+        ],
+        [
+          132,
+          78,
+          243,
+          244
+        ],
+        [
+          138,
+          79,
+          28,
+          29
+        ],
+        [
+          136,
+          84,
+          192,
+          191
+        ],
+        [
+          144,
+          85,
+          200,
+          201
+        ]
+      ]
+    },
+    "8": {
+      "mismatch_pixels": 2,
+      "ink_pixels": 238,
+      "opm_bytes": 344,
+      "first_mismatches": [
+        [
+          117,
+          102,
+          215,
+          216
+        ],
+        [
+          116,
+          103,
+          55,
+          56
+        ]
+      ]
+    },
+    "9": {
+      "mismatch_pixels": 11,
+      "ink_pixels": 452,
+      "opm_bytes": 684,
+      "first_mismatches": [
+        [
+          121,
+          83,
+          111,
+          112
+        ],
+        [
+          119,
+          84,
+          165,
+          166
+        ],
+        [
+          127,
+          87,
+          146,
+          145
+        ],
+        [
+          128,
+          87,
+          146,
+          145
+        ],
+        [
+          135,
+          89,
+          125,
+          124
+        ]
+      ]
+    },
+    "11": {
+      "mismatch_pixels": 6,
+      "ink_pixels": 541,
+      "opm_bytes": 700,
+      "first_mismatches": [
+        [
+          122,
+          86,
+          105,
+          104
+        ],
+        [
+          126,
+          90,
+          2,
+          3
+        ],
+        [
+          123,
+          92,
+          85,
+          86
+        ],
+        [
+          140,
+          102,
+          154,
+          153
+        ],
+        [
+          141,
+          102,
+          251,
+          250
+        ]
+      ]
+    },
+    "12": {
+      "mismatch_pixels": 2,
+      "ink_pixels": 72,
+      "opm_bytes": 344,
+      "first_mismatches": [
+        [
+          126,
+          95,
+          137,
+          138
+        ],
+        [
+          127,
+          95,
+          66,
+          67
+        ]
+      ]
+    },
+    "18": {
+      "mismatch_pixels": 1,
+      "ink_pixels": 53,
+      "opm_bytes": 504,
+      "first_mismatches": [
+        [
+          125,
+          94,
+          218,
+          217
+        ]
+      ]
+    },
+    "27": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 27,
+      "opm_bytes": 284,
+      "first_mismatches": []
+    },
+    "30": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 35,
+      "opm_bytes": 360,
+      "first_mismatches": []
+    },
+    "52": {
+      "mismatch_pixels": 1,
+      "ink_pixels": 12,
+      "opm_bytes": 380,
+      "first_mismatches": [
+        [
+          126,
+          95,
+          92,
+          91
+        ]
+      ]
+    },
+    "53": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 12,
+      "opm_bytes": 392,
+      "first_mismatches": []
+    },
+    "58": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 20,
+      "opm_bytes": 428,
+      "first_mismatches": []
+    },
+    "64": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 8,
+      "opm_bytes": 184,
+      "first_mismatches": []
+    },
+    "72": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 10,
+      "opm_bytes": 608,
+      "first_mismatches": []
+    },
+    "77": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 8,
+      "opm_bytes": 360,
+      "first_mismatches": []
+    },
+    "88": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 7,
+      "opm_bytes": 312,
+      "first_mismatches": []
+    },
+    "94": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 8,
+      "opm_bytes": 344,
+      "first_mismatches": []
+    },
+    "95": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 8,
+      "opm_bytes": 568,
+      "first_mismatches": []
+    },
+    "140": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 11,
+      "opm_bytes": 508,
+      "first_mismatches": []
+    },
+    "196": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 19,
+      "opm_bytes": 520,
+      "first_mismatches": []
+    },
+    "208": {
+      "mismatch_pixels": 0,
+      "ink_pixels": 11,
+      "opm_bytes": 540,
+      "first_mismatches": []
+    }
+  },
+  "exact": 13,
+  "one_byte_only": 12,
+  "invalid_rejected": 2
+}

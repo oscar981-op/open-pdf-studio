@@ -42,7 +42,7 @@ entry:
   %snull = icmp eq ptr %scene, null
   %onull = icmp eq ptr %output, null
   %null = or i1 %snull, %onull
-  %smin = icmp slt i32 %scene_len, 168
+  %smin = icmp slt i32 %scene_len, 88
   %smax = icmp sgt i32 %scene_len, 4184
   %omin = icmp slt i32 %output_len, 49152
   %a = or i1 %null, %smin

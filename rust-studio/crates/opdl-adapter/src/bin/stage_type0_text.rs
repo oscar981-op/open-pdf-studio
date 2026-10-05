@@ -2,6 +2,8 @@
 //! This does not render PDF text or change the normal DynLex adapter.
 #![forbid(unsafe_code)]
 
+mod quad_glyph;
+
 use lopdf::{content::Content, Dictionary, Document, Object, Stream};
 use std::{
     collections::BTreeMap,
@@ -481,7 +483,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
     let input = args
         .next()
-        .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr] | --validate INPUT.tgr | --outline INPUT.pdf PAGE RECORD_INDEX OUTPUT.opln")?;
+        .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr] | --validate INPUT.tgr | --isolate-quad INPUT.pdf PAGE RECORD_INDEX OUTPUT.opm OUTPUT.pdf")?;
     if input == "--validate" {
         let path = args.next().ok_or("--validate requires a file")?;
         if args.next().is_some() {
@@ -496,8 +498,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let inventory_mode = input == "--outline-inventory";
     let multi_mode = input == "--isolate-multi";
-    let outline_mode = input == "--outline" || input == "--isolate" || multi_mode;
-    let isolate_mode = input == "--isolate" || multi_mode;
+    let quad_mode = input == "--isolate-quad";
+    let outline_mode = input == "--outline" || input == "--isolate" || multi_mode || quad_mode;
+    let isolate_mode = input == "--isolate" || multi_mode || quad_mode;
     let input = if outline_mode || inventory_mode {
         args.next().ok_or("--outline requires PDF")?
     } else {
@@ -746,6 +749,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                     outline.lines
                 );
             }
+            if outline.quads > 0 || outline.cubics > 0 {
+                println!(
+                    "curved_record={index} font={} gid={} contours={} lines={} quads={} cubics={}",
+                    String::from_utf8_lossy(&record.font),
+                    record.gid,
+                    outline.moves,
+                    outline.lines,
+                    outline.quads,
+                    outline.cubics
+                );
+            }
         }
         return Ok(());
     }
@@ -767,7 +781,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let font = fonts
                     .get(&record.font)
                     .ok_or_else(|| fail("glyph font unavailable"))?;
-                let result = if multi_mode {
+                let result = if quad_mode {
+                    quad_glyph::stage(&font.data, record.gid, record.transform)
+                } else if multi_mode {
                     multi_glyph_scene(font, record)
                 } else {
                     simple_glyph_opln(font, record)
@@ -778,7 +794,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             let (index, opln, shift) =
-                selected.ok_or_else(|| fail("no line-only glyph contour in run"))?;
+                selected.ok_or_else(|| fail("no bounded glyph contour for requested mode"))?;
             std::fs::write(output, opln)?;
             println!("selected_record={index}");
             if let Some(pdf_output) = pdf_output {

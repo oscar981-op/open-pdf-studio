@@ -79,7 +79,7 @@ pub fn read_scene(bytes: &[u8]) -> Result<Vec<Vec<[f64; 2]>>, Box<dyn Error>> {
     if word(4) != 1
         || word(8) != WIDTH as u32
         || word(12) != HEIGHT as u32
-        || !(2..=MAX_CONTOURS).contains(&count)
+        || !(1..=MAX_CONTOURS).contains(&count)
     {
         return Err("invalid OPM2 version, dimensions or contour count".into());
     }

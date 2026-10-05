@@ -309,3 +309,46 @@ python3 dynlex-engine-poc/rgba/verify_glyph_vello_oracle.py \
   --hayro target/release/opds-engine-probe \
   --dynlex /tmp/opds-glyph-strip-native-probe
 ```
+
+## Afzonderlijke proef met echte kwadratische TrueType-glyphs
+
+`stage_type0_text --isolate-quad` gebruikt dezelfde TGR1-code→CID→GID-
+koppeling en het ingebedde FontFile2 als de eerdere tekstproef. De nieuwe
+`quad_glyph.rs` legt `move/line/quad/close` begrensd vast (maximaal acht
+contouren en 256 bronsegmenten), past de TGR1-tekstmatrix toe en vlakt de
+kwadratische segmenten tot een OPM2-lijnscene af. De adaptieve parabool-
+onderverdelingswiskunde is herleid uit de Apache-2.0/MIT-gelicentieerde
+`vello_common` 0.0.8-bron; de exporter en DynLex-kernel roepen geen Vello of
+Kurbo aan. Per curve en totale scene gelden harde puntlimieten. De proef
+maakt een tijdelijke geïsoleerde 256×192-PDF met hetzelfde originele glyph
+voor de Hayro-vergelijking; hij wijzigt de bron-PDF en normale adapter niet.
+
+Pagina 2 van `Technische tekening.pdf` bevat veel daadwerkelijk gebruikte
+kwadratische glyphs. Van 25 verschillende gecontroleerde TGR1-records met
+één of meerdere contouren zijn **13 volledige 49.152-pixelbuffers exact**
+gelijk aan Hayro. De overige 12 verschillen op 1–38 randpixels, steeds
+maximaal één 8-bit-dekkingsstap. Twee ongeschikte records worden zonder
+uitvoer geweigerd. Het volledige rapport met de eerste afwijkende pixels
+staat in `rgba/real-quad-glyphs-2026-10-05.json`. Dit is geen algemene
+TrueType-, tekst- of PDF-pariteit: zelfs deze proef heeft nog onbewezen
+f32-tegelranden, andere fonts, kleur, clip, rotatie/CropBox, compositing en
+laagvolgorde. De native app blijft voor tekst Hayro gebruiken.
+
+Bij record 0 is een afwijkend pixel (124,86) volgens exacte clipping van
+de **eigen afgevlakte OPM2-veelhoek** 93,4283/255 gedekt; DynLex rondt naar
+93 en Hayro geeft 94. Dit is geen halve-bytegeval van de rechte-glyphproef.
+De eerste vervolgstap is daarom de kwadratische segmentverdeling en de
+f32-punten van deze exporter rechtstreeks naast Vello's flattening te leggen,
+voordat algemene quadratic-pariteit kan worden geclaimd.
+
+Reproduceren vanuit `rust-studio`:
+
+```sh
+cargo build --offline --release -p opds-opdl-adapter --bin stage_type0_text
+python3 dynlex-engine-poc/rgba/verify_real_quad_glyphs.py \
+  --stage target/release/stage_type0_text \
+  --hayro target/release/opds-engine-probe \
+  --dynlex /tmp/opds-glyph-strip-native-probe \
+  --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf' \
+  --output dynlex-engine-poc/rgba/real-quad-glyphs-2026-10-05.json
+```
