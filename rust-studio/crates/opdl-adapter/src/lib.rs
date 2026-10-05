@@ -263,8 +263,8 @@ fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
                 if operands.len() > 6 {
                     return None;
                 }
-            } else if first == b'/' && word == b"/Im0" && operator.is_none() {
-                operands.push(Object::Name(b"Im0".to_vec()));
+            } else if first == b'/' && matches!(word, b"/Im0" | b"/Im1") && operator.is_none() {
+                operands.push(Object::Name(word[1..].to_vec()));
             } else {
                 if words.next().is_some() {
                     return None;
@@ -304,7 +304,7 @@ fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
             _ => return None,
         };
         if operands.len() != arity
-            || (operator == "Do" && operands[0].as_name().ok() != Some(b"Im0".as_slice()))
+            || (operator == "Do" && !matches!(operands[0].as_name().ok(), Some(b"Im0" | b"Im1")))
         {
             return None;
         }
@@ -346,6 +346,7 @@ mod fast_decode_tests {
         let general = Content::decode(bytes).expect("general parser");
         assert_eq!(fast.encode().unwrap(), general.encode().unwrap());
         assert!(decode_canonical_content(b"1 0 0 rg\n").is_some());
+        assert!(decode_canonical_content(b"/Im1 Do").is_some());
     }
 
     #[test]
@@ -363,7 +364,6 @@ mod fast_decode_tests {
             b"1 0 0 rg\r\n".as_slice(),
             b"1 0 0 rg 2 0 0 rg".as_slice(),
             b"1 0 rg".as_slice(),
-            b"1 0 0 rg\n/Im1 Do".as_slice(),
         ] {
             assert!(decode_canonical_content(bytes).is_none(), "{bytes:?}");
         }
@@ -717,8 +717,8 @@ fn image_bytes<'a>(
     width: u32,
     height: u32,
 ) -> Result<std::borrow::Cow<'a, [u8]>, Box<dyn Error>> {
-    if name != b"Im0" {
-        return Err(fail("only /Im0 is supported"));
+    if name != b"Im0" && name != b"Im1" {
+        return Err(fail("only /Im0 and /Im1 are supported"));
     }
     let xobjects = resources.get(b"XObject")?;
     let (_, xobjects) = document.dereference(xobjects)?;
@@ -874,6 +874,7 @@ fn page_to_opdl_bytes_with_timings(
     let mut depth = 0_u8;
     let mut image_matrix = false;
     let mut image_placement: Option<[u32; 4]> = None;
+    let mut image_count = 0_u8;
     let mut translation: Option<[f64; 2]> = None;
     let mut image = None;
     let mut color = [0_u8; 3];
@@ -923,7 +924,7 @@ fn page_to_opdl_bytes_with_timings(
                 if b == 0.0
                     && c == 0.0
                     && !(a == 1.0 && d == 1.0)
-                    && image.is_none()
+                    && image_count < 2
                     && commands.is_empty()
                     && clip.is_none()
                 {
@@ -952,7 +953,7 @@ fn page_to_opdl_bytes_with_timings(
                     ));
                 }
             }
-            "Do" if depth == 1 && image_matrix && image.is_none() => {
+            "Do" if depth == 1 && image_matrix && image_count < 2 => {
                 let [name] = op.operands.as_slice() else {
                     return Err(fail("Do requires one name"));
                 };
@@ -965,10 +966,14 @@ fn page_to_opdl_bytes_with_timings(
                     placed_width,
                     placed_height,
                 )?;
-                if [x, y, placed_width, placed_height] == [0, 0, width, height] {
+                if image_count == 0 && [x, y, placed_width, placed_height] == [0, 0, width, height]
+                {
                     image = Some(pixels);
                 } else {
-                    let mut page_rgb = vec![255_u8; width as usize * height as usize * 3];
+                    let mut page_rgb = image
+                        .take()
+                        .map(std::borrow::Cow::into_owned)
+                        .unwrap_or_else(|| vec![255_u8; width as usize * height as usize * 3]);
                     let row_bytes = placed_width as usize * 3;
                     let top = height - y - placed_height;
                     for row in 0..placed_height as usize {
@@ -979,6 +984,7 @@ fn page_to_opdl_bytes_with_timings(
                     }
                     image = Some(std::borrow::Cow::Owned(page_rgb));
                 }
+                image_count += 1;
             }
             "rg" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
                 let rgb = operands::<3>(&op.operands)?;

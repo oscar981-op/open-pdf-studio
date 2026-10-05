@@ -36,13 +36,14 @@ andere kleurruimtes en willekeurige paden zijn nog niet ondersteund.
 Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
 tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
 Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
-één ongefilterde of enkelvoudig met FlateDecode gecomprimeerde, niet
-geïnterpoleerde RGB8-XObject op een ongeroteerde pagina tot 1024×1024.
-De afbeelding mag de hele pagina vullen of een kleiner pixeluitgelijnd
+één of twee ongefilterde of enkelvoudig met FlateDecode gecomprimeerde,
+niet geïnterpoleerde RGB8-XObjects op een ongeroteerde pagina tot 1024×1024.
+Een afbeelding mag de hele pagina vullen of een kleiner pixeluitgelijnd
 rechthoekig deel zonder resampling; de bronpixels moeten exact overeenkomen
 met de positieve gehele breedte en hoogte in de PDF-plaatsingsmatrix.
-Buiten de afbeelding is de pagina wit. Daarna zijn bewezen rechthoekfills
-en 1px-strokes toegestaan; een afbeelding ná vectorinhoud wordt geweigerd.
+Buiten de afbeeldingen is de pagina wit. Overlap volgt de PDF-tekenvolgorde.
+Daarna zijn bewezen rechthoekfills en 1px-strokes toegestaan; een afbeelding
+ná vectorinhoud wordt geweigerd.
 Rust valideert de complete OPDL-scene opnieuw
 voor de DynLex-ABI; alleen dan draait de hybride kernelmodus. FlateDecode
 wordt met een harde limiet van exact de verwachte RGB-bytelengte uitgepakt.
@@ -91,8 +92,11 @@ in de native backend op 256×192 pixel voor pixel met Hayro vergeleken.
 Vier extra PDF's plaatsen een 64×48-beeld op (31,27) binnen die pagina:
 raster/hybride, raw/Flate, telkens RGBA-bytegelijk aan Hayro. Een plaatsing
 buiten de pagina, een fractionele positie en beeldinhoud na vectorinhoud
-vallen aantoonbaar terug op Hayro. Rotatie, shear, geschaalde bronpixels,
-meerdere afbeeldingen en andere filters zijn nog niet bewezen.
+vallen aantoonbaar terug op Hayro. Vier andere PDF's overlappen een tweede
+72×56-beeld met het eerste, weer in raster/hybride en raw/Flate, telkens
+RGBA-bytegelijk aan Hayro; een tweede beeld ná vectorinhoud wordt geweigerd.
+Rotatie, shear, geschaalde bronpixels, drie of meer afbeeldingen en andere
+filters zijn nog niet bewezen.
 Een pagina met geërfde `/Rotate 90` volgt aantoonbaar de Hayro-fallback;
 een ongeldige Flate-stroom, decodeparameters en een opgeblazen beeldstroom
 worden niet aan DynLex doorgegeven.

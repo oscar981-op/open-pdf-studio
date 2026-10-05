@@ -39,11 +39,14 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None, second_image_placement=None, second_image_after_vector=False):
     content = bytearray(pre_content)
     if mode != "vector":
         image_x, image_y, image_width, image_height = image_placement or (0, 0, width, height)
         content.extend(f"q\n{image_width} 0 0 {image_height} {image_x} {image_y} cm\n/Im0 Do\nQ\n".encode())
+        if second_image_placement and not second_image_after_vector:
+            x, y, w, h = second_image_placement
+            content.extend(f"q\n{w} 0 0 {h} {x} {y} cm\n/Im1 Do\nQ\n".encode())
     if mode != "raster":
         for x0, y0, x1, y1, (r, g, b) in rectangles(width, height, dense):
             content.extend(f"{r / 255:g} {g / 255:g} {b / 255:g} rg\n"
@@ -108,13 +111,19 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
             pdf_y = height - 40.5
             endpoints = f"20 {pdf_y:g} m\n60 {pdf_y:g} l\n100 {pdf_y:g} l"
         content.extend(f"1 w\n0 0 0 RG\n{endpoints}\nS\n".encode())
+    if second_image_placement and second_image_after_vector:
+        x, y, w, h = second_image_placement
+        content.extend(f"q\n{w} 0 0 {h} {x} {y} cm\n/Im1 Do\nQ\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(image_width, image_height) if mode != "vector" else b""
     image_payload = zlib.compress(rgb + image_bytes_extra) if flate_image else rgb
     image_filter = "/Filter /FlateDecode" if flate_image else ""
     has_image = mode != "vector"
-    content_id = 5 if has_image else 4
-    resources = "/Resources << /XObject << /Im0 4 0 R >> >>" if has_image else "/Resources << >>"
+    content_id = 6 if second_image_placement else (5 if has_image else 4)
+    resources = ("/Resources << /XObject << /Im0 4 0 R /Im1 5 0 R >> >>"
+                 if second_image_placement else
+                 "/Resources << /XObject << /Im0 4 0 R >> >>" if has_image else
+                 "/Resources << >>")
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         f"<< /Type /Pages /Count 1 /Kids [3 0 R] {pages_extra} >>".encode(),
@@ -125,6 +134,13 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         objects.append(f"<< /Type /XObject /Subtype /Image /Width {image_width} /Height {image_height} "
                        f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {image_filter} {image_extra} /Length {len(image_payload)} >>\nstream\n".encode()
                        + image_payload + b"\nendstream")
+    if second_image_placement:
+        _, _, second_width, second_height = second_image_placement
+        second_rgb = bytes(255 - value for value in image_rgb(second_width, second_height))
+        second_payload = zlib.compress(second_rgb) if flate_image else second_rgb
+        objects.append(f"<< /Type /XObject /Subtype /Image /Width {second_width} /Height {second_height} "
+                       f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {image_filter} /Length {len(second_payload)} >>\nstream\n".encode()
+                       + second_payload + b"\nendstream")
     objects.append(f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"endstream")
     pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     offsets = [0]
