@@ -445,9 +445,11 @@ CID/GID, RGB-inkt en begrensde OPM2 per glyph. Een tijdelijke geïsoleerde
 PDF is de Hayro-oracle; de bron-PDF blijft onaangeroerd. Deze route verwerkt
 nog geen algemene originele paginacontent, `TJ` of clipping. Voor de
 afzonderlijke runproef worden geërfde MediaBox/CropBox en kwartslagen
-0/90/180/270 begrensd naar zichtbare paginacoördinaten omgerekend. Alleen
-RGB-eindpunten 0/1 en grijs-eindpunten 0/1 zijn als inkt bewezen; onbekende
-of transparante ExtGState wordt geweigerd. De oorspronkelijke proefkleuren
+0/90/180/270 begrensd naar zichtbare paginacoördinaten omgerekend. De
+oorspronkelijke proef liet alleen RGB-/grijseindpunten 0/1 door; de huidige
+staging laat daarnaast uitsluitend de canonieke 3-decimale DeviceRGB-waarden
+uit de native 8-bit Save As toe. Andere kleurprecisie en onbekende of
+transparante ExtGState worden geweigerd. De oorspronkelijke proefkleuren
 zijn zwart en een rode laatste glyph; de
 `red-overlap-last`-optie verplaatst die laatste glyph bewust 20 pt in
 zowel OPGS als de oracle-PDF om gekleurde antialias-overlap te toetsen.

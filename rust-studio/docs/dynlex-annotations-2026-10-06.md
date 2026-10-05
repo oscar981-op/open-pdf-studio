@@ -106,9 +106,19 @@ python3 dynlex-engine-poc/rgba/verify_native_text_appearance.py \
   --vello target/release/glyph_run_vello_oracle
 ```
 
+Dezelfde OPGS-validatie en DynLex-glyphstrip zijn nu ook via
+`opds_dynlex_backend::render_validated_glyph_scene` **in-process** beschikbaar
+voor de opt-in Rust-backend. De proef-CLI gebruikt dezelfde gedeelde
+Rust-code. Een vastgelegde 2480-byte OPGS-scene van de opgeslagen blauwe
+`ΩΩΩ`-appearance levert in een backendtest exact de eerder onafhankelijk met
+Hayro bevestigde 256×192-RGBA-hash; afgekorte scenes worden geweigerd.
+De kernel wordt met de bestaande DynLex/LLVM-toolchain als statische library
+meegebouwd, zonder extern renderproces in deze API.
+
 Dit bewijst één geïsoleerde Unicode-tekstfixture, **niet** de gehele Text
-Box in de normale DynLex-app. De glyphkernel is nog een afzonderlijke
-256×192-proef; clipping, meerdere regels, andere glyphcontouren, rotatie,
+Box in de normale DynLex-app. De glyphkernel is nu in de backend aanwezig,
+maar de app levert nog geen live OPGS-scene aan en de uitvoer is één
+256×192-tegel op wit. Clipping, meerdere regels, andere glyphcontouren, rotatie,
 onderliggende paginakleur en editinteracties vereisen aparte pariteitstests
 en een begrensde in-process integratie. Daarom blijft Text Box in de app
 voorlopig bij de bestaande fallback.

@@ -8,6 +8,10 @@ pub use annotation_overlay::{
 mod appearance_stage;
 #[cfg(feature = "kernel")]
 pub use appearance_stage::flatten_native_free_text_appearance;
+#[cfg(feature = "kernel")]
+mod glyph_scene;
+#[cfg(feature = "kernel")]
+pub use glyph_scene::render_validated_glyph_scene;
 use opds_engine_probe::{ParsedPdf, Raster, RenderError};
 #[cfg(feature = "kernel")]
 use opds_opdl_adapter::{
