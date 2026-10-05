@@ -42,3 +42,9 @@ Gebruik voor interactie altijd de release-build: de debug-build rendert zware PD
 - Originele UI-bronclone: `/home/aia02/Documenten/GitHub/OpenCADStudio`
 
 De originele clone blijft een aparte repository. De UI-bronnen en iconen van de vastgelegde commit zijn gekopieerd naar `vendor/opencadstudio`, met de oorspronkelijke licentie.
+# Experimentele DynLex-backend
+
+De native Rust-app kan met `dynlex-experimental` een in-process DynLex-
+kernel voor een kleine gevalideerde PDF-deelset gebruiken; alle overige
+pagina's blijven via Hayro renderen. Zie
+[backend en beperkingen](docs/dynlex-native-backend-2026-10-05.md).

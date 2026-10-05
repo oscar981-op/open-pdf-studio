@@ -8,6 +8,7 @@ mod text_layout;
 mod virtual_ipp;
 use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};
+use opds_dynlex_backend::Backend;
 use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::{
     Annotation, DocumentModel, Edit, Kind, Rect, TextAlign, DEFAULT_TEXT_FONT_SIZE, TEXT_FONT_SIZES,
@@ -17,6 +18,21 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+fn render_page_selected(
+    pdf: &ParsedPdf,
+    source: &[u8],
+    page: usize,
+    scale: f32,
+) -> Result<Raster, String> {
+    let backend = if std::env::var("OPDS_RENDER_BACKEND").ok().as_deref() == Some("dynlex") {
+        Backend::Dynlex
+    } else {
+        Backend::Hayro
+    };
+    opds_dynlex_backend::render_with_fallback(pdf, source, page, scale, backend)
+        .map_err(|error| error.to_string())
+}
 
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_THUMBNAILS: usize = 12;
@@ -1535,9 +1551,7 @@ impl App {
                         let (page_width, _) =
                             pdf.page_dimensions(1).map_err(|error| error.to_string())?;
                         let initial_scale = (550.0 / page_width).clamp(0.1, 1.0);
-                        let raster = pdf
-                            .render_page(1, initial_scale)
-                            .map_err(|error| error.to_string())?;
+                        let raster = render_page_selected(&pdf, &bytes, 1, initial_scale)?;
                         Ok((path, bytes, pdf, initial_scale, raster))
                     },
                     move |result| Message::Loaded(token, result),
@@ -1772,12 +1786,13 @@ impl App {
         };
         document.thumbnail_in_flight = Some(page);
         let pdf = Arc::clone(&document.pdf);
+        let source = Arc::clone(&document.source_bytes);
         let token = self.next_load;
         Task::perform(
             async move {
                 let (width, height) = pdf.page_dimensions(page + 1).map_err(|e| e.to_string())?;
                 let scale = thumbnail_scale(width, height)?;
-                pdf.render_page(page + 1, scale).map_err(|e| e.to_string())
+                render_page_selected(&pdf, &source, page + 1, scale)
             },
             move |result| Message::ThumbnailRendered(token, page, result),
         )
@@ -1806,13 +1821,11 @@ impl App {
             return Task::none();
         }
         let pdf = Arc::clone(&document.pdf);
+        let source = Arc::clone(&document.source_bytes);
         self.busy = true;
         self.message = format!("Rendering page {page} at {:.0}%…", scale * 100.0);
         Task::perform(
-            async move {
-                pdf.render_page(page, scale)
-                    .map_err(|error| error.to_string())
-            },
+            async move { render_page_selected(&pdf, &source, page, scale) },
             move |result| Message::Rendered(ticket, result),
         )
     }

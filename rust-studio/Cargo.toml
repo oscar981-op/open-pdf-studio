@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/studio-core", "crates/engine-probe", "crates/native-app", "crates/opdl-adapter"]
+members = ["crates/studio-core", "crates/engine-probe", "crates/native-app", "crates/opdl-adapter", "crates/dynlex-backend"]
 resolver = "2"
 
 [workspace.package]

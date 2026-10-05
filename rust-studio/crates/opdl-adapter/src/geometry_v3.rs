@@ -1,13 +1,17 @@
 //! Experimental, bounded PDF→OPGM-v3 fills and axis-aligned strokes.
 use super::{
     fail,
-    geometry_v1::{integer, load_page, rectangle_to_display},
+    geometry_v1::{integer, load_page_bytes, rectangle_to_display},
     operands,
 };
 use std::{error::Error, path::Path};
 
 pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
-    let page = load_page(path)?;
+    page_to_opgm_v3_bytes(&std::fs::read(path)?)
+}
+
+pub fn page_to_opgm_v3_bytes(source: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    let page = load_page_bytes(source)?;
     let ops = &page.operations;
     let mut records = Vec::new();
     let mut i = 0;

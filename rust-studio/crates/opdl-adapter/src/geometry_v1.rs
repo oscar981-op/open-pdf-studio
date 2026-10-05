@@ -32,6 +32,10 @@ pub(crate) struct PageFixture {
 
 pub(crate) fn load_page(path: &Path) -> Result<PageFixture, Box<dyn Error>> {
     let source = std::fs::read(path)?;
+    load_page_bytes(&source)
+}
+
+pub(crate) fn load_page_bytes(source: &[u8]) -> Result<PageFixture, Box<dyn Error>> {
     if source.len() > 16_000_000 {
         return Err(fail("PDF fixture is too large"));
     }
