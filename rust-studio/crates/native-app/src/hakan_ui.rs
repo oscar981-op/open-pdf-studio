@@ -1095,7 +1095,18 @@ pub fn view(app: &App) -> Element<'_, Message> {
     .style(surface);
     let center: Element<'_, Message> =
         if let Some(document) = app.document.as_ref().filter(|d| d.bitmap.is_some()) {
-            let handle = document.bitmap.clone().expect("filtered above");
+            let annotation_bitmap = if app.backend == opds_dynlex_backend::Backend::Dynlex
+                && document.selected_annotation.is_none()
+                && app.editing_text_id.is_none()
+            {
+                document.dynlex_annotation_bitmap()
+            } else {
+                None
+            };
+            let dynlex_annotations = annotation_bitmap.is_some();
+            let handle = annotation_bitmap
+                .or_else(|| document.bitmap.clone())
+                .expect("filtered above");
             let (width, height) = document.bitmap_size;
             let mut page: Element<'_, Message> = iced::widget::stack![
                 image(handle).width(width as f32).height(height as f32),
@@ -1106,7 +1117,8 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     app.editing_text_id,
                     app.annotation_tool,
                     document.bitmap_page_points,
-                    document.bitmap_size
+                    document.bitmap_size,
+                    !dynlex_annotations
                 )
             ]
             .into();
@@ -1366,12 +1378,41 @@ pub fn view(app: &App) -> Element<'_, Message> {
     let renderer_label = app
         .document
         .as_ref()
-        .map(|document| match (app.backend, document.bitmap_backend) {
-            (_, opds_dynlex_backend::Backend::Dynlex) => "Renderer: DynLex",
-            (opds_dynlex_backend::Backend::Dynlex, opds_dynlex_backend::Backend::Hayro) => {
-                "Renderer: Hayro (DynLex fallback)"
+        .map(|document| {
+            let dynlex_annotations = app.backend == opds_dynlex_backend::Backend::Dynlex
+                && document.selected_annotation.is_none()
+                && app.editing_text_id.is_none()
+                && document.dynlex_annotation_bitmap().is_some();
+            let has_annotations = document
+                .model
+                .items()
+                .any(|item| item.page == document.displayed_page);
+            match (document.bitmap_backend, has_annotations, dynlex_annotations) {
+                (opds_dynlex_backend::Backend::Dynlex, _, true) => {
+                    "PDF: DynLex · Annotations: DynLex"
+                }
+                (opds_dynlex_backend::Backend::Hayro, _, true) => {
+                    "PDF: Hayro fallback · Annotations: DynLex"
+                }
+                (opds_dynlex_backend::Backend::Dynlex, true, false) => {
+                    "PDF: DynLex · Annotations: Iced"
+                }
+                (opds_dynlex_backend::Backend::Hayro, true, false)
+                    if app.backend == opds_dynlex_backend::Backend::Dynlex =>
+                {
+                    "PDF: Hayro fallback · Annotations: Iced"
+                }
+                (opds_dynlex_backend::Backend::Hayro, true, false) => {
+                    "PDF: Hayro · Annotations: Iced"
+                }
+                (opds_dynlex_backend::Backend::Dynlex, false, false) => "Renderer: DynLex",
+                (opds_dynlex_backend::Backend::Hayro, false, false)
+                    if app.backend == opds_dynlex_backend::Backend::Dynlex =>
+                {
+                    "Renderer: Hayro (DynLex fallback)"
+                }
+                _ => "Renderer: Hayro",
             }
-            _ => "Renderer: Hayro",
         })
         .unwrap_or("");
     let status = container(

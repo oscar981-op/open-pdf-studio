@@ -847,6 +847,8 @@ mod tests {
     use super::*;
     use lopdf::dictionary;
     use opds_native_core::annotations::Rect;
+    #[cfg(feature = "dynlex-experimental")]
+    use std::sync::Arc;
 
     fn source_pdf() -> Vec<u8> {
         let mut doc = Document::with_version("1.4");
@@ -873,6 +875,190 @@ mod tests {
         let mut bytes = Vec::new();
         doc.save_to(&mut bytes).unwrap();
         bytes
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn dynlex_native_rectangle_and_highlight_match_saved_pdf_appearances() {
+        use opds_dynlex_backend::render_native_annotation_overlay;
+        use opds_engine_probe::ParsedPdf;
+
+        let source = source_pdf();
+        let base = ParsedPdf::open(Arc::new(source.clone()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        for color in [[231, 76, 60], [255, 226, 67]] {
+            let mark = Annotation {
+                id: 77,
+                page: 0,
+                bounds: Rect {
+                    x: 20.0,
+                    y: 30.0,
+                    width: 48.0,
+                    height: 36.0,
+                },
+                kind: Kind::Rectangle { color_rgb: color },
+            };
+            let dynlex = render_native_annotation_overlay(&base, &[mark.clone()], 0)
+                .unwrap()
+                .expect("bounded mark should use DynLex");
+            let saved = export_annotations(&source, &[mark]).unwrap();
+            let hayro = ParsedPdf::open(Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            assert_eq!(dynlex.rgba.len(), hayro.rgba.len());
+            let wrong: Vec<_> = dynlex
+                .rgba
+                .iter()
+                .zip(&hayro.rgba)
+                .enumerate()
+                .filter_map(|(index, (left, right))| {
+                    (left != right).then_some((index, *left, *right))
+                })
+                .collect();
+            assert!(
+                wrong.is_empty(),
+                "mark color {color:?}: {} differing bytes, first {:?}",
+                wrong.len(),
+                wrong.first()
+            );
+        }
+        let mut marks = [
+            Annotation {
+                id: 78,
+                page: 0,
+                bounds: Rect {
+                    x: 20.0,
+                    y: 30.0,
+                    width: 48.0,
+                    height: 36.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [231, 76, 60],
+                },
+            },
+            Annotation {
+                id: 79,
+                page: 0,
+                bounds: Rect {
+                    x: 90.0,
+                    y: 80.0,
+                    width: 48.0,
+                    height: 36.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [255, 226, 67],
+                },
+            },
+        ];
+        let dynlex = render_native_annotation_overlay(&base, &marks, 0)
+            .unwrap()
+            .expect("ordered marks should use DynLex");
+        let saved = export_annotations(&source, &marks).unwrap();
+        let hayro = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let wrong: Vec<_> = dynlex
+            .rgba
+            .iter()
+            .zip(&hayro.rgba)
+            .enumerate()
+            .filter_map(|(index, (left, right))| (left != right).then_some((index, *left, *right)))
+            .collect();
+        assert!(
+            wrong.is_empty(),
+            "disjoint order: {} differing bytes, first {:?}",
+            wrong.len(),
+            &wrong[..wrong.len().min(20)]
+        );
+        marks[1].bounds.x = 42.0;
+        marks[1].bounds.y = 46.0;
+        assert!(
+            render_native_annotation_overlay(&base, &marks, 0)
+                .unwrap()
+                .is_none(),
+            "overlapping appearances must fall back"
+        );
+        marks[1].bounds.x = 90.5;
+        marks[1].bounds.y = 80.0;
+        assert!(
+            render_native_annotation_overlay(&base, &marks, 0)
+                .unwrap()
+                .is_none(),
+            "subpixel annotation must fall back"
+        );
+        marks[1].bounds.x = 90.0;
+        marks[1].bounds.y = 80.0;
+        marks[1].kind = Kind::Text {
+            value: "Ω".into(),
+            color_rgb: [0, 0, 0],
+            font_size: 16,
+            align: TextAlign::Left,
+        };
+        assert!(
+            render_native_annotation_overlay(&base, &marks, 0)
+                .unwrap()
+                .is_none(),
+            "unproven annotation text must fall back"
+        );
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn dynlex_highlight_over_colored_page_falls_back() {
+        use opds_dynlex_backend::render_native_annotation_overlay;
+        use opds_engine_probe::ParsedPdf;
+
+        let source =
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec();
+        let mark = Annotation {
+            id: 78,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 140.0,
+                width: 50.0,
+                height: 36.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let base = ParsedPdf::open(Arc::new(source.clone()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert!(render_native_annotation_overlay(&base, &[mark], 0)
+            .unwrap()
+            .is_none());
+        let opaque_square = Annotation {
+            id: 79,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 140.0,
+                width: 50.0,
+                height: 36.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [0, 80, 240],
+            },
+        };
+        let dynlex = render_native_annotation_overlay(&base, &[opaque_square.clone()], 0)
+            .unwrap()
+            .expect("opaque square over colored page");
+        let saved = export_annotations(&source, &[opaque_square]).unwrap();
+        let hayro = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert!(
+            dynlex.rgba == hayro.rgba,
+            "opaque Square over colored page differs"
+        );
     }
 
     #[test]

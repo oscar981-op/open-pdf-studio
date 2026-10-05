@@ -1,5 +1,9 @@
 //! Opt-in native Rust boundary for the bounded DynLex vector kernel.
 //! Unsupported PDFs return None so the host can keep its existing renderer.
+mod annotation_overlay;
+pub use annotation_overlay::{
+    render_native_annotation_overlay, render_native_annotation_overlay_pixels,
+};
 use opds_engine_probe::{ParsedPdf, Raster, RenderError};
 #[cfg(feature = "kernel")]
 use opds_opdl_adapter::{
@@ -225,6 +229,14 @@ fn validated_scene(geometry: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
 /// Revalidate its bytes before crossing the ABI.
 #[cfg(feature = "kernel")]
 fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
+    validated_rgb_scene_for_annotations(scene, false)
+}
+
+#[cfg(feature = "kernel")]
+fn validated_rgb_scene_for_annotations(
+    scene: Vec<u8>,
+    allow_annotation_alpha: bool,
+) -> Result<(Vec<u8>, u32, u32), String> {
     if scene.len() < 40
         || scene.len() > 3_538_984
         || scene.get(..4) != Some(b"OPDL")
@@ -283,7 +295,8 @@ fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
             || rect[2] > width
             || rect[3] > height
             || (kind == 3 && rect[2] - rect[0] != 1 && rect[3] - rect[1] != 1)
-            || scene[at + 23] != 255
+            || (scene[at + 23] != 255
+                && !(allow_annotation_alpha && kind == 1 && scene[at + 23] == 90))
         {
             return Err("invalid RGB OPDL command".into());
         }

@@ -2153,6 +2153,7 @@ name = "opds-dynlex-backend"
 version = "0.1.0"
 dependencies = [
  "opds-engine-probe",
+ "opds-native-core",
  "opds-opdl-adapter",
 ]
 

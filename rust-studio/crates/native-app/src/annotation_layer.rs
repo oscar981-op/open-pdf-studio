@@ -12,6 +12,7 @@ pub struct Layer<'a> {
     pub editing_text: Option<u64>,
     pub tool: AnnotationTool,
     pub page_points: (f32, f32),
+    pub paint_existing: bool,
 }
 
 #[derive(Default)]
@@ -318,7 +319,11 @@ impl canvas::Program<Message> for Layer<'_> {
         let scale_x = bounds.width / self.page_points.0;
         let scale_y = bounds.height / self.page_points.1;
         let mut selection = None;
-        for annotation in self.model.items().filter(|item| item.page == self.page) {
+        for annotation in self
+            .model
+            .items()
+            .filter(|item| self.paint_existing && item.page == self.page)
+        {
             let rect = if let Some(resizing) = &state.resizing {
                 if resizing.id == annotation.id {
                     self.resized_bounds(
@@ -485,6 +490,7 @@ pub fn view<'a>(
     tool: AnnotationTool,
     page_points: (f32, f32),
     bitmap_size: (u32, u32),
+    paint_existing: bool,
 ) -> Element<'a, Message> {
     Canvas::new(Layer {
         model,
@@ -493,6 +499,7 @@ pub fn view<'a>(
         editing_text,
         tool,
         page_points,
+        paint_existing,
     })
     .width(bitmap_size.0 as f32)
     .height(bitmap_size.1 as f32)

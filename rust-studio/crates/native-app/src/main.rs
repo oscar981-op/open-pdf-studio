@@ -14,6 +14,7 @@ use opds_native_core::annotations::{
     Annotation, DocumentModel, Edit, Kind, Rect, TextAlign, DEFAULT_TEXT_FONT_SIZE, TEXT_FONT_SIZES,
 };
 use opds_native_core::{DocumentId, RenderTicket};
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -552,6 +553,7 @@ mod unsaved_annotation_tests {
                 model,
                 last_saved_annotations: Vec::new(),
                 bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
                 bitmap_size: (0, 0),
                 bitmap_page_points: (0.0, 0.0),
                 bitmap_scale: 1.0,
@@ -589,6 +591,7 @@ struct OpenDocument {
     model: DocumentModel,
     last_saved_annotations: Vec<Annotation>,
     bitmap: Option<image::Handle>,
+    annotation_overlay_cache: RefCell<Option<AnnotationOverlayCache>>,
     bitmap_size: (u32, u32),
     bitmap_page_points: (f32, f32),
     bitmap_scale: f32,
@@ -600,6 +603,13 @@ struct OpenDocument {
     thumbnail_in_flight: Option<usize>,
     thumbnail_failed: HashSet<usize>,
     thumbnail_focus: usize,
+}
+
+struct AnnotationOverlayCache {
+    base: image::Handle,
+    page: usize,
+    annotations: Vec<Annotation>,
+    bitmap: Option<image::Handle>,
 }
 
 struct CachedPage {
@@ -615,6 +625,56 @@ struct CachedPage {
 impl OpenDocument {
     fn is_dirty(&self) -> bool {
         annotations_changed(&self.model, &self.last_saved_annotations)
+    }
+
+    fn dynlex_annotation_bitmap(&self) -> Option<image::Handle> {
+        let base = self.bitmap.as_ref()?;
+        let annotations: Vec<_> = self
+            .model
+            .items()
+            .filter(|item| item.page == self.displayed_page)
+            .cloned()
+            .collect();
+        if annotations.is_empty() {
+            return None;
+        }
+        let mut cache = self.annotation_overlay_cache.borrow_mut();
+        if let Some(cached) = cache.as_ref() {
+            if cached.base == *base
+                && cached.page == self.displayed_page
+                && cached.annotations == annotations
+            {
+                return cached.bitmap.clone();
+            }
+        }
+        let bitmap = if let image::Handle::Rgba {
+            width,
+            height,
+            pixels,
+            ..
+        } = base
+        {
+            opds_dynlex_backend::render_native_annotation_overlay_pixels(
+                pixels.as_ref(),
+                *width,
+                *height,
+                self.bitmap_page_points,
+                &annotations,
+                self.displayed_page,
+            )
+            .ok()
+            .flatten()
+            .map(|result| image::Handle::from_rgba(result.width, result.height, result.rgba))
+        } else {
+            None
+        };
+        *cache = Some(AnnotationOverlayCache {
+            base: base.clone(),
+            page: self.displayed_page,
+            annotations,
+            bitmap: bitmap.clone(),
+        });
+        bitmap
     }
 
     fn cache_bitmap(&mut self, page: usize, scale: f32, outcome: RenderOutcome) {
@@ -644,6 +704,69 @@ impl OpenDocument {
         while self.page_cache.iter().map(|item| item.bytes).sum::<usize>() > MAX_PAGE_CACHE_BYTES {
             self.page_cache.pop_front();
         }
+    }
+}
+
+#[cfg(all(test, feature = "dynlex-experimental"))]
+mod dynlex_annotation_overlay_tests {
+    use super::*;
+
+    #[test]
+    fn overlay_cache_tracks_edits_and_page_bitmap() {
+        let source =
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec();
+        let pdf = Arc::new(ParsedPdf::open(Arc::new(source.clone())).unwrap());
+        let raster = pdf.render_page(1, 1.0).unwrap();
+        let mut model = DocumentModel::new(DocumentId(48), pdf.page_count()).unwrap();
+        let mark = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 12.0,
+                y: 16.0,
+                width: 40.0,
+                height: 28.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [231, 76, 60],
+            },
+        };
+        model.apply(Edit::Add(mark.clone())).unwrap();
+        let mut document = OpenDocument {
+            path: "fixture.pdf".into(),
+            source_bytes: Arc::new(source),
+            pdf,
+            model,
+            last_saved_annotations: Vec::new(),
+            bitmap: None,
+            annotation_overlay_cache: RefCell::new(None),
+            bitmap_size: (0, 0),
+            bitmap_page_points: (0.0, 0.0),
+            bitmap_scale: 1.0,
+            bitmap_backend: Backend::Hayro,
+            displayed_page: 0,
+            selected_annotation: None,
+            page_cache: VecDeque::new(),
+            thumbnails: VecDeque::new(),
+            thumbnail_in_flight: None,
+            thumbnail_failed: HashSet::new(),
+            thumbnail_focus: 0,
+        };
+        document.cache_bitmap(
+            0,
+            1.0,
+            RenderOutcome {
+                raster,
+                used: Backend::Hayro,
+            },
+        );
+        let first = document.dynlex_annotation_bitmap().expect("bounded mark");
+        assert!(document.dynlex_annotation_bitmap() == Some(first.clone()));
+        let mut moved = mark;
+        moved.bounds.x = 60.0;
+        document.model.apply(Edit::Replace(moved)).unwrap();
+        let second = document.dynlex_annotation_bitmap().expect("moved mark");
+        assert!(first != second, "edit must invalidate the derived image");
     }
 }
 
@@ -1617,6 +1740,7 @@ impl App {
                             model,
                             last_saved_annotations: Vec::new(),
                             bitmap: None,
+                            annotation_overlay_cache: RefCell::new(None),
                             bitmap_size: (0, 0),
                             bitmap_page_points: (0.0, 0.0),
                             bitmap_scale: initial_scale,

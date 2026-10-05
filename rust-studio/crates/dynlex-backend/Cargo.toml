@@ -12,3 +12,4 @@ kernel = []
 [dependencies]
 opds-opdl-adapter = { path = "../opdl-adapter" }
 opds-engine-probe = { path = "../engine-probe" }
+opds-native-core = { path = "../studio-core" }

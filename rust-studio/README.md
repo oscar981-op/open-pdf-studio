@@ -34,6 +34,7 @@ Gebruik voor interactie altijd de release-build: de debug-build rendert zware PD
 - [UI- en snelheidsvergelijking](docs/ui-performance-2026-10-01.md)
 - [Eerste native Print-pad en vergelijking](docs/print-2026-10-01.md)
 - [Preview van geïmporteerde annotaties zonder appearance](docs/imported-annotations-2026-10-01.md)
+- [Eerste begrensde DynLex-compositor voor native annotaties](docs/dynlex-annotations-2026-10-06.md)
 
 ## Lokale werkmappen
 
