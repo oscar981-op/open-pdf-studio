@@ -70,7 +70,7 @@ unsafe extern "C" {
     ) -> i32;
 }
 
-fn read_scene(bytes: &[u8]) -> Result<Vec<Vec<[f64; 2]>>, Box<dyn Error>> {
+pub fn read_scene(bytes: &[u8]) -> Result<Vec<Vec<[f64; 2]>>, Box<dyn Error>> {
     if bytes.len() < 20 || &bytes[..4] != b"OPM2" || bytes.len() > 4_148 {
         return Err("invalid OPM2 header or size".into());
     }
@@ -141,7 +141,7 @@ fn aligned_scene(contour: &[[f64; 2]]) -> Result<Vec<u64>, Box<dyn Error>> {
     Ok(words)
 }
 
-fn render(contours: &[Vec<[f64; 2]>]) -> Result<Vec<u8>, Box<dyn Error>> {
+pub fn render(contours: &[Vec<[f64; 2]>]) -> Result<Vec<u8>, Box<dyn Error>> {
     let aligned = contours
         .iter()
         .map(|c| aligned_scene(c))

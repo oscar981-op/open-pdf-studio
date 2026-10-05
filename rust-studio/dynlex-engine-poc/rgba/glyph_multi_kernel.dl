@@ -1,0 +1,127 @@
+import renderer.dl
+
+# Sutherland-Hodgman clip of a validated closed polygon against one pixel edge.
+# Source and target must be different preallocated float buffers.
+function clip {cstring:source_bytes} with {integer:count} points on {integer:axis} at {float:boundary} keeping {integer:greater} into {cstring:target_bytes}:
+    execute:
+        set source to source_bytes as a pointer to a float
+        set target to target_bytes as a pointer to a float
+        if count = 0:
+            return 0
+        set previous_index to (count - 1) * 2
+        set previous_x to item previous_index of source
+        set previous_y to item (previous_index + 1) of source
+        set previous_coord to previous_x
+        if axis = 1:
+            set previous_coord to previous_y
+        set previous_inside to 0
+        if greater = 1 and previous_coord >= boundary:
+            set previous_inside to 1
+        if greater = 0 and previous_coord <= boundary:
+            set previous_inside to 1
+        set output_count to 0
+        set index to 0
+        loop while index < count:
+            set x to item (index * 2) of source
+            set y to item (index * 2 + 1) of source
+            set coord to x
+            if axis = 1:
+                set coord to y
+            set inside to 0
+            if greater = 1 and coord >= boundary:
+                set inside to 1
+            if greater = 0 and coord <= boundary:
+                set inside to 1
+            if inside != previous_inside:
+                set ratio to (boundary - previous_coord) / (coord - previous_coord)
+                store (previous_x + ratio * (x - previous_x)) into target at (output_count * 2)
+                store (previous_y + ratio * (y - previous_y)) into target at (output_count * 2 + 1)
+                set output_count to output_count + 1
+            if inside = 1:
+                store x into target at (output_count * 2)
+                store y into target at (output_count * 2 + 1)
+                set output_count to output_count + 1
+            set previous_x to x
+            set previous_y to y
+            set previous_coord to coord
+            set previous_inside to inside
+            set index to index + 1
+        return output_count
+
+# Scene is Rust-validated, 8-byte-aligned OPM2: header 24 bytes, then
+# [u64 count, f64 x/y pairs] for each closed contour. Return signed area;
+# the caller sums contours before the single 8-bit quantization.
+function polygon area {cstring:points_bytes} with {integer:count} at {integer:pixel_x} and {integer:pixel_y} using {cstring:work_a_bytes} and {cstring:work_b_bytes} into {cstring:result}:
+    execute:
+        set points to points_bytes as a pointer to a float
+        set work_a to work_a_bytes as a pointer to a float
+        set work_b to work_b_bytes as a pointer to a float
+        set n to clip (points as a pointer to a byte) with (count - 1) points on 0 at (pixel_x as a float) keeping 1 into (work_a as a pointer to a byte)
+        set n to clip (work_a as a pointer to a byte) with n points on 0 at ((pixel_x + 1) as a float) keeping 0 into (work_b as a pointer to a byte)
+        set n to clip (work_b as a pointer to a byte) with n points on 1 at (pixel_y as a float) keeping 1 into (work_a as a pointer to a byte)
+        set n to clip (work_a as a pointer to a byte) with n points on 1 at ((pixel_y + 1) as a float) keeping 0 into (work_b as a pointer to a byte)
+        set shoelace to 0.0
+        set index to 0
+        loop while index < n:
+            set next to index + 1
+            if next = n:
+                set next to 0
+            set ax to item (index * 2) of work_b
+            set ay to item (index * 2 + 1) of work_b
+            set bx to item (next * 2) of work_b
+            set by to item (next * 2 + 1) of work_b
+            set shoelace to shoelace + ax * by - bx * ay
+            set index to index + 1
+        set output to result as a pointer to a float
+        store (shoelace / 2.0) into output at 0
+        return 0
+
+# Independent experimental DynLex winding/composition loop. Rust validates
+# exact scene and output lengths before the ABI; this kernel never parses PDF.
+function multi raster {cstring:scene} into {cstring:output}:
+    execute:
+        set contours to unsigned word at 16 in scene
+        # Four half-plane clips may at most double the vertex count per step.
+        # 256 validated vertices * 2^4 * 16 bytes per f64 pair = 65536.
+        set work_a_bytes to allocate 65536 bytes
+        set work_b_bytes to allocate 65536 bytes
+        set sample_bytes to allocate 8 bytes
+        set sample to sample_bytes as a pointer to a float
+        set y to 0
+        loop while y < 192:
+            set x to 0
+            loop while x < 256:
+                set area_sum to 0.0
+                set offset to 24
+                set index to 0
+                loop while index < contours:
+                    set count to unsigned word at offset in scene
+                    set start to offset + 8
+                    set points_bytes to (scene + start) as a pointer to a byte
+                    set status to polygon area points_bytes with count at x and y using work_a_bytes and work_b_bytes into sample_bytes
+                    if status != 0:
+                        @intrinsic("call", "libc", "free", void, sample_bytes)
+                        @intrinsic("call", "libc", "free", void, work_a_bytes)
+                        @intrinsic("call", "libc", "free", void, work_b_bytes)
+                        return status
+                    set coverage to item 0 of sample
+                    set area_sum to area_sum + coverage
+                    set offset to start + count * 16
+                    set index to index + 1
+                if area_sum < 0.0:
+                    set area_sum to 0.0 - area_sum
+                if area_sum > 1.0:
+                    set area_sum to 1.0
+                set value to (area_sum * 255.0 + 0.5) as an integer
+                store (value as a byte) into output at (y * 256 + x)
+                set x to x + 1
+            set y to y + 1
+        @intrinsic("call", "libc", "free", void, sample_bytes)
+        @intrinsic("call", "libc", "free", void, work_a_bytes)
+        @intrinsic("call", "libc", "free", void, work_b_bytes)
+        return 0
+
+set dummy_scene to allocate 24 bytes
+set dummy_output to allocate 49152 bytes
+set dummy_status to multi raster dummy_scene into dummy_output
+print dummy_status as a line

@@ -130,5 +130,50 @@ De proef gebruikt alleen zwarte geïsoleerde line-only-glyphs; samengestelde
 tekstlagen, rotatie/CropBox op de uitvoertegel, kleur, clips, quadratic/cubic
 TrueType-contouren en PDF-fontfallback zijn niet gevalideerd. De native app
 blijft tekst via Hayro renderen. Een volgende stap is de getekende
-meercontour-compositie binnen één begrensde DynLex-kernel en pixeltests voor
-meer oriëntaties, kleuren en lastigere glyphs.
+meercontour-compositie binnen één begrensde DynLex-kernel, hieronder
+beschreven; kleur, clips en lastigere glyphs blijven daarna open.
+
+## Afzonderlijke DynLex-OPM2-bufferkernel
+
+`glyph_multi_kernel.dl` doet nu zelf de vier halfvlakclips, getekende
+contouroppervlakken, nonzero-compositie en één 8-bit-afronding in één
+256×192-buffer. De Rust-probe valideert eerst OPM2, normaliseert naar
+8-byte-uitgelijnde punten en vergelijkt de complete uitvoer met de vorige
+DynLex-per-contour/Rust-compositie. De C-ABI weigert null- en te korte
+buffers. Twee hergebruikte clipbuffers hebben elk 65.536 bytes capaciteit
+voor maximaal 256 punten en vier clippassen; de productieroute gebruikt deze
+kernel nog niet.
+
+De twee echte CID-glyphs blijven ieder 49.152/49.152 bytegelijk aan Hayro.
+Vier kleine PDF-fixtures voor losse contouren, een gat, een eiland in een
+gat en een 90° gedraaid gat zijn ook elk 49.152/49.152 exact. Een schuine
+ruit met gat heeft daarentegen **72 afwijkende randpixels**, maximaal één
+8-bit-dekkingsstap per pixel. Dit is een geregistreerde diagnostische
+mismatch; schuine vormen zijn dus niet algemeen bewezen en de gewone
+PDF-adapter blijft op Hayro terugvallen. Een enkele warme in-process
+diagnose met dertig kernelcalls op de echte glyphs gaf ongeveer 2,1/2,7 ms
+per DynLex-call versus circa 19/20 ms voor de oude per-pixel-FFI/Rust-proef.
+Dit is geen volledige PDF→RGBA-benchmark en geen algemene snelheidsclaim.
+
+Reproduceren vanuit `rust-studio` na de OPLN-area-library uit de vorige
+sectie:
+
+```sh
+python3 dynlex-engine-poc/rgba/build_glyph_multi.py \
+  --compiler ~/.cache/opds-toolchains/dynlex-0.0.1/dynlex/bin/dynlex \
+  --opt ~/.cache/opds-toolchains/llvm-20/root/usr/bin/opt-20 \
+  --llc ~/.cache/opds-toolchains/llvm-20/root/usr/bin/llc-20 \
+  --output-dir /tmp/opds-glyph-multi-build
+rustc --edition=2024 -O dynlex-engine-poc/rgba/glyph_multi_native_probe.rs \
+  -L native=/tmp/opds-glyph-multi-build \
+  -L native=/tmp/opds-curve-pixel-build \
+  -o /tmp/opds-glyph-multi-native-probe
+python3 dynlex-engine-poc/rgba/verify_real_multi_glyph.py \
+  --stage target/release/stage_type0_text \
+  --hayro target/release/opds-engine-probe \
+  --probe /tmp/opds-glyph-multi-native-probe \
+  --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf'
+python3 dynlex-engine-poc/rgba/verify_glyph_multi_geometry.py \
+  --probe /tmp/opds-glyph-multi-native-probe \
+  --hayro target/release/opds-engine-probe
+```
