@@ -649,9 +649,9 @@ impl PathStage {
         Ok(self.points.clone())
     }
 
-    fn bounded_convex_clip(&self) -> Result<Vec<[f64; 2]>, Box<dyn Error>> {
-        if !self.closed || !self.cubics.is_empty() || !(3..=32).contains(&self.points.len()) {
-            return Err(fail("multi-contour clip requires 3–32 straight vertices"));
+    fn bounded_multi_clip(&self) -> Result<Vec<[f64; 2]>, Box<dyn Error>> {
+        if !self.closed || !self.cubics.is_empty() || !(3..=128).contains(&self.points.len()) {
+            return Err(fail("multi-contour clip requires 3–128 straight vertices"));
         }
         if self
             .points
@@ -668,10 +668,8 @@ impl PathStage {
         for index in 0..self.points.len() {
             let a = self.points[index];
             let b = self.points[(index + 1) % self.points.len()];
-            let c = self.points[(index + 2) % self.points.len()];
-            let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
-            if cross * area.signum() <= 1e-6 {
-                return Err(fail("multi-contour clip is not strictly convex"));
+            if (a[0] - b[0]).hypot(a[1] - b[1]) <= 1e-6 {
+                return Err(fail("multi-contour clip has a zero-length edge"));
             }
             for other in index + 2..self.points.len() {
                 if index == 0 && other + 1 == self.points.len() {
@@ -683,7 +681,7 @@ impl PathStage {
                     self.points[other],
                     self.points[(other + 1) % self.points.len()],
                 ) {
-                    return Err(fail("multi-contour clip is self-crossing"));
+                    return Err(fail("multi-contour clip is self-crossing or touching"));
                 }
             }
         }
@@ -913,9 +911,9 @@ mod path_stage_tests {
         }
         path.close().unwrap();
         assert!(
-            path.bounded_convex_clip().is_ok(),
+            path.bounded_multi_clip().is_ok(),
             "{:?}",
-            path.bounded_convex_clip()
+            path.bounded_multi_clip()
         );
     }
 
@@ -1524,23 +1522,31 @@ fn signed_polygon_area2(points: &[[f64; 2]]) -> f64 {
         .sum()
 }
 
-fn point_in_convex_polygon(point: [f64; 2], polygon: &[[f64; 2]]) -> Result<bool, Box<dyn Error>> {
-    let direction = signed_polygon_area2(polygon).signum();
-    let mut on_boundary = false;
+fn point_in_simple_polygon(point: [f64; 2], polygon: &[[f64; 2]]) -> Result<bool, Box<dyn Error>> {
+    let mut inside = false;
     for index in 0..polygon.len() {
         let a = polygon[index];
         let b = polygon[(index + 1) % polygon.len()];
-        let side =
-            ((b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0])) * direction;
-        if side < -1e-6 {
-            return Ok(false);
+        let cross = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
+        if cross.abs() <= 1e-6
+            && point[0] >= a[0].min(b[0]) - 1e-6
+            && point[0] <= a[0].max(b[0]) + 1e-6
+            && point[1] >= a[1].min(b[1]) - 1e-6
+            && point[1] <= a[1].max(b[1]) + 1e-6
+        {
+            return Err(fail("multi-contour clip touches a boundary"));
         }
-        on_boundary |= side.abs() <= 1e-6;
+        if (a[1] > point[1]) != (b[1] > point[1]) {
+            let intersection = a[0] + (point[1] - a[1]) * (b[0] - a[0]) / (b[1] - a[1]);
+            if (intersection - point[0]).abs() <= 1e-6 {
+                return Err(fail("multi-contour clip touches a boundary"));
+            }
+            if intersection > point[0] {
+                inside = !inside;
+            }
+        }
     }
-    if on_boundary {
-        return Err(fail("multi-contour clip touches a boundary"));
-    }
-    Ok(true)
+    Ok(inside)
 }
 
 fn edges_touch_or_cross(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> bool {
@@ -1570,18 +1576,18 @@ fn multi_even_odd_clip(paths: Vec<PathStage>) -> Result<PolygonImageClip, Box<dy
     }
     let polygons = paths
         .iter()
-        .map(PathStage::bounded_convex_clip)
+        .map(PathStage::bounded_multi_clip)
         .collect::<Result<Vec<_>, _>>()?;
     let mut depth = vec![0_usize; polygons.len()];
     for first in 0..polygons.len() {
         for second in first + 1..polygons.len() {
             let a_in_b = polygons[first]
                 .iter()
-                .map(|&point| point_in_convex_polygon(point, &polygons[second]))
+                .map(|&point| point_in_simple_polygon(point, &polygons[second]))
                 .collect::<Result<Vec<_>, _>>()?;
             let b_in_a = polygons[second]
                 .iter()
-                .map(|&point| point_in_convex_polygon(point, &polygons[first]))
+                .map(|&point| point_in_simple_polygon(point, &polygons[first]))
                 .collect::<Result<Vec<_>, _>>()?;
             if (a_in_b.iter().any(|inside| *inside) && !a_in_b.iter().all(|inside| *inside))
                 || (b_in_a.iter().any(|inside| *inside) && !b_in_a.iter().all(|inside| *inside))

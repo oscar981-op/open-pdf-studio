@@ -324,12 +324,12 @@ De andere elf complexe `W*`-paden en de duizenden curven/tekstoperatoren
 zijn niet bewezen; de hele echte pagina blijft Hayro gebruiken. De read-only
 `inspect_pdf --clip-ops`-inventaris toont voor `W*`-operator 338 vier gesloten
 contouren met 108, 68, 99 en 56 hoekpunten; elf andere complexe `W*`-paden
-hebben één contour met 8–48 hoekpunten. Daarmee valt de echte pagina nog
-buiten de begrensde beeldclip. Zelfkruisende/open paden, meerdere holle hoeken,
-fills/strokes onder de polygonale clip en onzekere randdekking blijven fallback.
+hebben één contour met 8–48 hoekpunten. De echte pagina valt nog buiten de
+bewezen subset. Zelfkruisende/open paden, fills/strokes onder de polygonale
+clip en onzekere randdekking blijven fallback.
 
-De begrensde `W*`-beeldclip accepteert nu twee tot vier expliciet gesloten
-`m/l/h`-contouren. Iedere contour is strikt convex met 3–32 hoekpunten en
+De eerste begrensde `W*`-meercontourproef accepteerde twee tot vier expliciet
+gesloten `m/l/h`-contouren. Iedere contour was strikt convex met 3–32 hoekpunten en
 coördinaten binnen ±4096; een contour mag geheel in een andere liggen of
 er geheel los van staan. Rakende/kruisende grenzen, zelfkruising, vijfde
 contour en onzekere 8-bit-dekking geven Hayro-fallback. De adapter valideert
@@ -357,10 +357,26 @@ done
 
 `W` met meerdere contouren, overlappende/open grenzen, een vijfde contour
 en een driehoekig gat met twijfelachtige 8-bit-randdekking worden geweigerd.
-De echte `W*`-operator 338 heeft wel vier contouren, maar 108/68/99/56
-hoekpunten en is dus niet bewezen of geactiveerd. Deze subset is geen
-algemene even-odd-clippadrenderer en ondersteunt geen complex pad onder
-vectorfills of strokes.
+De latere eenvoudige-polygoonproef verhoogt de limiet tot 128 hoekpunten per
+contour en accepteert ook meerdere holle hoeken, mits elke contour eenvoudig
+is en de contourgrenzen elkaar niet raken of kruisen. Voor de nestingtest
+gebruikt zij punt-in-polygoon in plaats van de convexe-halfvlaktest; de
+analytische oppervlakken blijven per containmentdiepte getekend. Een
+67-punts trapvorm met gat, een holle contour met gat op normale en
+90°/CropBox-pagina's en 430/430 geaccepteerde willekeurige holle gevallen
+waren bytegelijk aan Hayro. Nog 370 gevallen vielen veilig terug. Reproduceer
+de twee differentiële reeksen met `nested_clip_verify.py --layout concave-hole`
+en seeds `20261005` en `394727`, elk met `--cases 400`.
+
+`inspect_pdf --page 1 --dump-clip 338` exporteert het echte pad naar
+`dynlex-engine-poc/rgba/real-clip-338.content`. Alle vier contouren zijn
+eenvoudig maar hol; drie zijn onderling los, de vierde ligt in een andere.
+`clipped_image_fixture.py` bouwt hieruit een geïsoleerde beeld-PDF, ook met
+90°/CropBox. Bij het uitschakelen van de conservatieve halve-8-bit-randcontrole
+weken 48 RGBA-kanaalbytes af van Hayro. Met die controle actief wordt dit
+echte corpuspad nog geweigerd en veilig door Hayro getekend. Dit is dus geen
+bewijs van volledige even-odd-clippariteit; onzekere randdekking, complexe
+vectorinhoud, tekst en curven blijven fallback.
 
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht
 (`kind=8`) met RGBA-patch en een 8-bit-dekkingswaarde per pixel. De

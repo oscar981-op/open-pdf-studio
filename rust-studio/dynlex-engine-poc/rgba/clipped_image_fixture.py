@@ -130,6 +130,27 @@ def main() -> None:
     output.joinpath("clipped-multi-twelve-vertices.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + twelve_path + contour(45, 40, 65, 60)
         + b"W*\nn\n", **common))
+    concave_outer = (b"28 23 m\n90 23 l\n90 75 l\n68 75 l\n"
+                     b"68 60 l\n50 60 l\n50 75 l\n28 75 l\nh\n")
+    concave_hole = concave_outer + contour(34, 36, 44, 54) + b"W*\nn\n"
+    output.joinpath("clipped-multi-concave-hole.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + concave_hole, **common))
+    output.joinpath("clipped-multi-concave-hole-rotate.pdf").write_bytes(build_pdf(
+        "raster", pre_content=concave_hole,
+        pages_extra="/Rotate 90 /CropBox [8 12 248 180]", **common))
+    stair_points = [(30, 20), (90, 20), (90, 65)]
+    for index in range(16):
+        x = 90 - 3 * index
+        if index:
+            stair_points.append((x, 65))
+        stair_points.extend(((x - 1, 65), (x - 1, 70), (x - 3, 70)))
+    stair_points.append((30, 70))
+    stair_path = (f"{stair_points[0][0]} {stair_points[0][1]} m\n"
+                  + "".join(f"{x} {y} l\n" for x, y in stair_points[1:])
+                  + "h\n").encode()
+    output.joinpath("clipped-multi-long-stair.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + stair_path + contour(35, 35, 45, 47)
+        + b"W*\nn\n", **common))
     output.joinpath("clipped-multi-crossing-unsupported.pdf").write_bytes(build_pdf(
         "raster", pre_content=contour(28, 23, 60, 75) + contour(50, 36, 83, 59)
         + b"W*\nn\n", **common))
@@ -181,6 +202,20 @@ def main() -> None:
         pre_content=b"q\n0.1 0 0 0.1 0 0 cm\nq\n" + real_clip,
         extra_content=b"Q\nQ\n", image_placement=(16000, 0, 840, 800),
         image_source_size=(4, 4), image_source_override=bytes([255, 0, 0]) * 16))
+    # The four independent contours at operator 338 of the same original
+    # PDF, extracted by inspect_pdf --page 1 --dump-clip 338. This fixture
+    # isolates its W* geometry from the thousands of unrelated paint ops.
+    real_multi_clip = Path(__file__).with_name("real-clip-338.content").read_bytes()
+    for label, extra in (("", ""),
+                         ("-rotate-crop", "/Rotate 90 /CropBox [1100 20 1300 110]")):
+        output.joinpath(f"clipped-real-shape-338{label}.pdf").write_bytes(build_pdf(
+            "raster", width=1684, height=1191,
+            pre_content=(b"0 0 1 rg\n1100 20 200 90 re\nf\n"
+                         b"q\n0.1 0 0 0.1 0 0 cm\n" + real_multi_clip),
+            extra_content=b"Q\n", pages_extra=extra,
+            image_placement=(11000, 300, 1800, 500),
+            image_source_size=(4, 4),
+            image_source_override=bytes([255, 0, 0]) * 16))
     output.joinpath("clipped-subpixel-unsupported-fill.pdf").write_bytes(build_pdf(
         "raster", pre_content=fractional + b"0 1 0 rg\n10.25 12 20 10 re\nf\n", **common))
     output.joinpath("clipped-subpixel-ambiguous.pdf").write_bytes(build_pdf(

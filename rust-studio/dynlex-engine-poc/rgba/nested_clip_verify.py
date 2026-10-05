@@ -24,7 +24,7 @@ def main():
     parser.add_argument("--probe", required=True, type=Path)
     parser.add_argument("--cases", type=int, default=200)
     parser.add_argument("--seed", type=int, default=20261005)
-    parser.add_argument("--layout", choices=("one-hole", "two-holes", "disjoint", "four", "ring12"),
+    parser.add_argument("--layout", choices=("one-hole", "two-holes", "disjoint", "four", "ring12", "concave-hole"),
                         default="one-hole")
     parser.add_argument("--failed-pdf", type=Path)
     args = parser.parse_args()
@@ -64,7 +64,7 @@ def main():
                             rectangle(x + 5, y + 8, half - 16, height - 16),
                             rectangle(x + half + 3, y, half - 3, height),
                             rectangle(x + half + 8, y + 8, half - 16, height - 16)]
-            else:
+            elif args.layout == "ring12":
                 cx, cy = x + width / 2, y + height / 2
                 points = [(round(cx + width * .46 * math.cos(j * math.pi / 6), 2),
                            round(cy + height * .46 * math.sin(j * math.pi / 6), 2))
@@ -73,6 +73,17 @@ def main():
                 ring += "".join(f"{px} {py} l\n" for px, py in points[1:]) + "h\n"
                 contours = [ring, rectangle(cx - width / 8, cy - height / 8,
                                             width / 4, height / 4)]
+            else:
+                x1, x2 = round(x + width * .3, 2), round(x + width * .7, 2)
+                y1 = round(y + height * .65, 2)
+                concave = (f"{x} {y} m\n{x + width} {y} l\n"
+                           f"{x + width} {y + height} l\n{x2} {y + height} l\n"
+                           f"{x2} {y1} l\n{x1} {y1} l\n"
+                           f"{x1} {y + height} l\n{x} {y + height} l\nh\n")
+                contours = [concave, rectangle(round(x + width * .07, 2),
+                                               round(y + height * .2, 2),
+                                               round(width * .13, 2),
+                                               round(height * .3, 2))]
             if index % 2:
                 contours.reverse()
             path = "".join(contours) + "W*\nn\n"

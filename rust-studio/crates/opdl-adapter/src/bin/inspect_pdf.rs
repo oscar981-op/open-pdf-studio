@@ -2,7 +2,7 @@
 #![forbid(unsafe_code)]
 
 use lopdf::{content::Content, Document, Object, ObjectId};
-use std::{collections::BTreeMap, env, error::Error, path::Path};
+use std::{collections::BTreeMap, env, error::Error, io::Write, path::Path};
 
 fn inherited<'a>(document: &'a Document, mut page: ObjectId, key: &[u8]) -> Option<&'a Object> {
     for _ in 0..32 {
@@ -132,13 +132,14 @@ fn contour_summary(operations: &[lopdf::content::Operation]) -> String {
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
     let input = args.next().ok_or(
-        "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--head N] [--around INDEX]",
+        "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--head N] [--around INDEX] [--dump-clip INDEX]",
     )?;
     let mut selected = None;
     let mut image_ops = false;
     let mut clip_ops = false;
     let mut head = 0_usize;
     let mut around = None;
+    let mut dump_clip = None;
     while let Some(arg) = args.next() {
         match arg.to_str() {
             Some("--page") if selected.is_none() => {
@@ -169,20 +170,35 @@ fn main() -> Result<(), Box<dyn Error>> {
                         .parse::<usize>()?,
                 );
             }
+            Some("--dump-clip") if dump_clip.is_none() => {
+                dump_clip = Some(
+                    args.next()
+                        .ok_or("--dump-clip requires an index")?
+                        .to_string_lossy()
+                        .parse::<usize>()?,
+                );
+            }
             _ => return Err(
-                "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--head N] [--around INDEX]"
+                "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--head N] [--around INDEX] [--dump-clip INDEX]"
                     .into(),
             ),
         }
     }
     let document = Document::load(Path::new(&input))?;
+    if dump_clip.is_some()
+        && (selected.is_none() || image_ops || clip_ops || head > 0 || around.is_some())
+    {
+        return Err("--dump-clip needs --page and no other display options".into());
+    }
     let pages = document.get_pages();
     if let Some(number) = selected {
         if !pages.contains_key(&number) {
             return Err("page number outside document".into());
         }
     }
-    println!("pages={}", pages.len());
+    if dump_clip.is_none() {
+        println!("pages={}", pages.len());
+    }
     for (number, id) in pages {
         if selected.is_some_and(|selected| selected != number) {
             continue;
@@ -201,6 +217,49 @@ fn main() -> Result<(), Box<dyn Error>> {
             .unwrap_or(0);
         let stream = document.get_page_content(id)?;
         let content = Content::decode(&stream)?;
+        if let Some(index) = dump_clip {
+            let clip = content
+                .operations
+                .get(index)
+                .ok_or("clip operator index outside page")?;
+            if !matches!(clip.operator.as_str(), "W" | "W*")
+                || content
+                    .operations
+                    .get(index + 1)
+                    .is_none_or(|next| next.operator != "n")
+            {
+                return Err("index must name a W/W* followed by n".into());
+            }
+            let start = content.operations[..index]
+                .iter()
+                .rposition(|previous| {
+                    matches!(
+                        previous.operator.as_str(),
+                        "n" | "S" | "s" | "f" | "F" | "f*" | "B" | "B*" | "b" | "b*"
+                    )
+                })
+                .map_or(0, |previous| previous + 1);
+            let mut selected_ops = Vec::new();
+            for operation in &content.operations[start..index] {
+                if matches!(operation.operator.as_str(), "m" | "l" | "h") {
+                    selected_ops.push(operation.clone());
+                } else if !selected_ops.is_empty() {
+                    return Err("clip path contains an interleaved graphics operation".into());
+                }
+            }
+            if selected_ops.is_empty() || selected_ops[0].operator != "m" {
+                return Err("clip path has no initial move".into());
+            }
+            selected_ops.push(clip.clone());
+            selected_ops.push(content.operations[index + 1].clone());
+            let bytes = Content {
+                operations: selected_ops,
+            }
+            .encode()?;
+            std::io::stdout().write_all(&bytes)?;
+            std::io::stdout().write_all(b"\n")?;
+            return Ok(());
+        }
         let mut counts = BTreeMap::<String, usize>::new();
         for operation in &content.operations {
             *counts.entry(operation.operator.clone()).or_default() += 1;

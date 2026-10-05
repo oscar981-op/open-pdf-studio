@@ -980,6 +980,19 @@ mod tests {
                 include_bytes!("../tests/fixtures/clipped-multi-twelve-vertices.pdf").as_slice(),
             ),
             (
+                "concave outer contour with hole",
+                include_bytes!("../tests/fixtures/clipped-multi-concave-hole.pdf").as_slice(),
+            ),
+            (
+                "concave outer contour with hole Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-multi-concave-hole-rotate.pdf")
+                    .as_slice(),
+            ),
+            (
+                "long 67-vertex concave outer contour",
+                include_bytes!("../tests/fixtures/clipped-multi-long-stair.pdf").as_slice(),
+            ),
+            (
                 "isolated real W* shape under global CTM",
                 include_bytes!("../tests/fixtures/clipped-real-shape-582.pdf").as_slice(),
             ),
@@ -1065,6 +1078,8 @@ mod tests {
             include_bytes!("../tests/fixtures/clipped-two-contour-open-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-multi-crossing-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-multi-five-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-real-shape-338.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-real-shape-338-rotate-crop.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());

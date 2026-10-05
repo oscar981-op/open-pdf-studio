@@ -37,10 +37,14 @@ hoek en zekere 8-bit-randdekking. Het echte `W*`-pad bij operator 582 heeft
 zes hoekpunten en één holle hoek onder de globale 0,1-CTM; een geïsoleerde
 reconstructie is nu op alle 8.022.576 RGBA-bytes gelijk aan Hayro. De overige complexe
 `W*`-paden zijn evenmin als ondersteund aangetoond. De latere proef kan 2–4
-strikt convexe, afzonderlijke of volledig geneste contouren van maximaal 32
-hoekpunten per contour rond een beeldlaag pixelgelijk aan Hayro verwerken.
-Operator 338 telt echter vier contouren met 108, 68, 99 en 56 hoekpunten;
-geen daarvan valt onder die limiet.
+afzonderlijke of volledig geneste eenvoudige contouren van maximaal 128
+hoekpunten per contour rond een beeldlaag pixelgelijk aan Hayro verwerken,
+als de 8-bit-randdekking zeker is. Operator 338 telt vier eenvoudige maar
+holle contouren met 108, 68, 99 en 56 hoekpunten; drie zijn los, de vierde
+is genest. Een geïsoleerde PDF met precies dit pad en een beeldlaag wijkt bij
+ongecontroleerd afronden op 48 RGBA-kanaalbytes af. De veilige route weigert
+die ambigue rand en gebruikt Hayro; de hele oorspronkelijke pagina blijft
+eveneens unsupported.
 Een read-only image-inventaris op 5 oktober
 vond 38 image-XObjects: 36 DeviceRGB8/FlateDecode-stroken met PNG-predictor
 15 (meestal 3843×68, laatste 3843×25), plus twee Indexed/DeviceRGB-beelden.
