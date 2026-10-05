@@ -33,7 +33,9 @@ een beperkte RGB8-subset, geneste positieve asgerichte CTM's en inmiddels
 fractionele beeldhoeken met een per-pixel binair dekkingsmasker. Een
 gecontroleerde 3843×68-strook met op deze PDF gebaseerde geometrie is
 pixelgelijk aan Hayro; de oorspronkelijke pagina is daarmee nog niet
-ondersteund: duizenden curven, clippaden en Indexed-kleuren ontbreken.
+ondersteund: duizenden curven en clippaden ontbreken. De twee Indexed-
+DeviceRGB8-objecten hebben elk 256 kleuren en een lookupstring van 768 bytes;
+deze vorm heeft nu een begrensde pure-Rust decodeproef met Hayro-pixelcontrole.
 Reproduceer de metadata met
 `inspect_pdf --image-ops` en bekijk de eerste beeldopdracht met
 `inspect_pdf --around 4855` op dit bestand. De naam alleen bewijst geen

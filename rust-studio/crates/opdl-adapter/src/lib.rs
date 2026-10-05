@@ -761,8 +761,29 @@ fn image_bytes<'a>(
     }
     let source_width = u32::try_from(dict.get(b"Width")?.as_i64()?)?;
     let source_height = u32::try_from(dict.get(b"Height")?.as_i64()?)?;
+    let (_, color_space) = document.dereference(dict.get(b"ColorSpace")?)?;
+    let indexed_palette = match color_space {
+        lopdf::Object::Name(name) if name == b"DeviceRGB" => None,
+        lopdf::Object::Array(parts) if parts.len() == 4 => {
+            if parts[0].as_name()? != b"Indexed" || parts[1].as_name()? != b"DeviceRGB" {
+                return Err(fail("unsupported Indexed image base color space"));
+            }
+            let high = usize::try_from(parts[2].as_i64()?)?;
+            if high > 255 {
+                return Err(fail("Indexed image palette exceeds 8-bit range"));
+            }
+            let (_, lookup) = document.dereference(&parts[3])?;
+            let lopdf::Object::String(bytes, _) = lookup else {
+                return Err(fail("Indexed image requires a literal lookup string"));
+            };
+            if bytes.len() != (high + 1) * 3 {
+                return Err(fail("Indexed image palette has the wrong byte length"));
+            }
+            Some(bytes.as_slice())
+        }
+        _ => return Err(fail("unsupported image color space")),
+    };
     if dict.get(b"Subtype")?.as_name()? != b"Image"
-        || dict.get(b"ColorSpace")?.as_name()? != b"DeviceRGB"
         || dict.get(b"BitsPerComponent")?.as_i64()? != 8
         || source_width == 0
         || source_height == 0
@@ -774,11 +795,16 @@ fn image_bytes<'a>(
         || (!allow_scaling && (source_width != placed_width || source_height != placed_height))
     {
         return Err(fail(
-            "image is outside bounded RGB8 source/placement subset",
+            "image is outside bounded 8-bit source/placement subset",
         ));
     }
-    let expected_len = source_width as usize * source_height as usize * 3;
+    let sample_len = source_width as usize
+        * source_height as usize
+        * if indexed_palette.is_some() { 1 } else { 3 };
     let png_predictor = if dict.has(b"DecodeParms") {
+        if indexed_palette.is_some() {
+            return Err(fail("Indexed image predictors are not yet supported"));
+        }
         if !dict.has(b"Filter") || dict.get(b"Filter")?.as_name()? != b"FlateDecode" {
             return Err(fail(
                 "image DecodeParms require a single FlateDecode filter",
@@ -815,12 +841,12 @@ fn image_bytes<'a>(
         let decoded_len = if png_predictor {
             source_height as usize * (source_width as usize * 3 + 1)
         } else {
-            expected_len
+            sample_len
         };
         let decoded = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(content, decoded_len)
             .map_err(|_| fail("invalid or oversized FlateDecode image"))?;
         if decoded.len() != decoded_len {
-            return Err(fail("wrong decoded RGB image byte length"));
+            return Err(fail("wrong decoded image byte length"));
         }
         std::borrow::Cow::Owned(if png_predictor {
             decode_png_rgb8_rows(&decoded, source_width as usize, source_height as usize)?
@@ -828,10 +854,23 @@ fn image_bytes<'a>(
             decoded
         })
     } else {
-        if content.len() != expected_len {
-            return Err(fail("wrong RGB image byte length"));
+        if content.len() != sample_len {
+            return Err(fail("wrong image byte length"));
         }
         std::borrow::Cow::Borrowed(content.as_slice())
+    };
+    let pixels = if let Some(palette) = indexed_palette {
+        let mut rgb = Vec::with_capacity(source_width as usize * source_height as usize * 3);
+        for &index in pixels.iter() {
+            let offset = usize::from(index) * 3;
+            let color = palette
+                .get(offset..offset + 3)
+                .ok_or_else(|| fail("Indexed image sample exceeds palette"))?;
+            rgb.extend_from_slice(color);
+        }
+        std::borrow::Cow::Owned(rgb)
+    } else {
+        pixels
     };
     if (source_width, source_height) == (placed_width, placed_height) {
         return Ok(pixels);

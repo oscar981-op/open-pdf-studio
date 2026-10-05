@@ -789,6 +789,51 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
+    fn indexed_device_rgb_images_match_hayro() {
+        for (name, bytes) in [
+            (
+                "raw raster",
+                include_bytes!("../tests/fixtures/indexed-raw-raster.pdf").as_slice(),
+            ),
+            (
+                "Flate hybrid",
+                include_bytes!("../tests/fixtures/indexed-flate-hybrid.pdf").as_slice(),
+            ),
+            (
+                "rotate and crop",
+                include_bytes!("../tests/fixtures/indexed-rotate-crop.pdf").as_slice(),
+            ),
+            (
+                "256-color large",
+                include_bytes!("../tests/fixtures/indexed-256-palette-large.pdf").as_slice(),
+            ),
+        ] {
+            let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+            let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(rendered.used, Backend::Dynlex, "{name}");
+            assert_eq!(
+                rendered.raster.rgba,
+                pdf.render_page(1, 1.0).unwrap().rgba,
+                "{name}"
+            );
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn invalid_indexed_images_fall_back() {
+        for bytes in [
+            include_bytes!("../tests/fixtures/indexed-invalid-index.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/indexed-invalid-palette.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/indexed-unsupported-decode.pdf").as_slice(),
+        ] {
+            assert!(page_to_opdl_ordered_bytes(bytes).is_err());
+            assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
     fn unproven_fractional_image_states_fall_back() {
         for bytes in [
             include_bytes!("../tests/fixtures/fractional-clipped-unsupported.pdf").as_slice(),

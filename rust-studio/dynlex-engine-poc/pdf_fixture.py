@@ -117,7 +117,7 @@ def build_many_images_pdf(image_count=12, compress_alternate=False):
     return bytes(pdf)
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None, second_image_placement=None, second_image_after_vector=False, image_source_size=None, image_source_override=None, png_predictor=False):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None, second_image_placement=None, second_image_after_vector=False, image_source_size=None, image_source_override=None, png_predictor=False, indexed_palette=None, indexed_pixels=None):
     content = bytearray(pre_content)
     if mode != "vector":
         image_x, image_y, image_width, image_height = image_placement or (0, 0, width, height)
@@ -194,10 +194,23 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         content.extend(f"q\n{w} 0 0 {h} {x} {y} cm\n/Im1 Do\nQ\n".encode())
     content.extend(extra_content)
     source_width, source_height = (image_source_size or (image_width, image_height)) if mode != "vector" else (0, 0)
-    rgb = (image_source_override if image_source_override is not None
-           else image_rgb(source_width, source_height)) if mode != "vector" else b""
-    if mode != "vector" and len(rgb) != source_width * source_height * 3:
-        raise ValueError("image_source_override has the wrong RGB8 byte length")
+    indexed = indexed_palette is not None
+    if indexed:
+        if mode == "vector" or second_image_placement or image_source_override is not None or png_predictor:
+            raise ValueError("Indexed fixture supports one image without PNG predictor")
+        if not 3 <= len(indexed_palette) <= 768 or len(indexed_palette) % 3:
+            raise ValueError("Indexed palette must contain 1..256 RGB colors")
+        if indexed_pixels is None or len(indexed_pixels) != source_width * source_height:
+            raise ValueError("Indexed fixture has the wrong sample byte length")
+        rgb = indexed_pixels
+        color_space = (f"/ColorSpace [/Indexed /DeviceRGB {len(indexed_palette) // 3 - 1} "
+                       f"<{indexed_palette.hex()}>]")
+    else:
+        rgb = (image_source_override if image_source_override is not None
+               else image_rgb(source_width, source_height)) if mode != "vector" else b""
+        if mode != "vector" and len(rgb) != source_width * source_height * 3:
+            raise ValueError("image_source_override has the wrong RGB8 byte length")
+        color_space = "/ColorSpace /DeviceRGB"
     if png_predictor and (not flate_image or second_image_placement):
         raise ValueError("PNG predictor fixture requires one Flate image")
     encoded_rgb = png_predictor_rgb(rgb, source_width, source_height) if png_predictor else rgb
@@ -219,7 +232,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     ]
     if has_image:
         objects.append(f"<< /Type /XObject /Subtype /Image /Width {source_width} /Height {source_height} "
-                       f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {image_filter} {image_extra} /Length {len(image_payload)} >>\nstream\n".encode()
+                       f"{color_space} /BitsPerComponent 8 {image_filter} {image_extra} /Length {len(image_payload)} >>\nstream\n".encode()
                        + image_payload + b"\nendstream")
     if second_image_placement:
         _, _, second_width, second_height = second_image_placement

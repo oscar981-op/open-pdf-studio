@@ -32,7 +32,8 @@ uitsluitend één pagina op schaal 1,0 verwerken, met 1–64 dekkende
 pixeluitgelijnde rechthoekfills/1px asgerichte strokes, beperkte q/Q,
 gehele translatie, rechthoekige clips en DeviceRGB-kleuren met kanaalwaarden
 van 0 tot 1. De RGB-waarden worden naar 8-bit afgerond; transparantie,
-andere kleurruimtes en willekeurige paden zijn nog niet ondersteund.
+andere vector-kleurruimtes en willekeurige paden zijn in deze OPGM-v3-route
+nog niet ondersteund.
 Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
 tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
 Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
@@ -157,7 +158,8 @@ alle vijf PNG-rijfilters af. Verkeerde Predictor-, Columns- en Colors-waarden,
 een onbekend rijfilter en afgekorte rijen worden geweigerd. Dit brengt de
 echte combinatie-PDF dichterbij, maar die gebruikt ook fractionele/globale
 CTM-transformaties, duizenden Bézier-curven, clipping en Indexed-kleurbeelden;
-de volledige pagina valt nog terecht terug op Hayro.
+latere deelstappen hieronder ondersteunen de beeldtransformaties en een
+begrensde Indexed-vorm. De volledige pagina valt nog terecht terug op Hayro.
 
 De geordende route kan nu positieve asgerichte PDF-matrices door geneste
 `q`/`Q`-grafische toestanden samenstellen en herstellen (maximaal zestien
@@ -198,8 +200,8 @@ python3 dynlex-engine-poc/rgba/fractional_image_verify.py \
 
 Een actief clipvak, `/Interpolate true`, scheve of omgekeerde beeldmatrix en
 andere onbewezen PDF-states blijven op Hayro terugvallen. De echte
-combinatie-PDF bevat bovendien duizenden curven, clippaden en Indexed-
-kleurenbeelden; deze proef bewijst geen volledige objectdekking.
+combinatie-PDF bevat bovendien duizenden curven en clippaden; deze proef
+bewijst geen volledige objectdekking.
 
 Op de gecontroleerde fractionele 3843×68-strook (15 afwisselende warme
 procesparen) waren DynLex/Hayro mediane wandtijd 58,99/79,20 ms en mediane
@@ -210,6 +212,29 @@ met warme OS-cache. Ruwe samples staan in
 `dynlex-engine-poc/rgba/native-fractional-strip-bench-2026-10-05.json`.
 Dit is geen meting van de volledige echte combinatie-PDF of van andere
 PDF-objecten.
+
+Voor afbeeldings-XObjects ondersteunt de geordende native route nu ook een
+begrensde `/Indexed /DeviceRGB`-deelset: 8-bit indices, hoogstens 256
+paletkleuren, een letterlijke of hexadecimale PDF-lookupstring met exact
+`3 × (hival + 1)` bytes, optioneel één FlateDecode-filter en geen predictor.
+De pure-Rust-adapter valideert iedere index vóór omzetting naar RGB; daarna
+gebruikt hij dezelfde schaal-, fractionele dekkings- en laagvolgorderoute.
+De twee Indexed-objecten in de echte combinatie-PDF hebben precies deze
+dictionaryvorm (1429×305 en 1428×232, hival 255, 768 paletbytes), maar
+de **volledige pagina** blijft op Hayro terugvallen vanwege de overige
+onondersteunde PDF-operators. Vier gecontroleerde Indexed-PDF's zijn
+RGBA-bytegelijk aan Hayro: raw raster, Flate/hybride, kwartslag met CropBox
+en een 1428×232-bron met 256-kleurenpalet op een grote pagina. Een te hoge
+index, te kort palet en een expliciete `/Decode` worden afgewezen.
+`dynlex-engine-poc/rgba/indexed_image_fixture.py` genereert deze fixtures.
+Predictors op Indexed-beelden, niet-DeviceRGB-basispaletten, streamlookups,
+maskers en transparantie zijn niet ondersteund.
+Op de grote gecontroleerde Indexed-fixture waren 15 warme procesparen
+DynLex/Hayro mediaan 50,51/54,32 ms en mediane piek-RSS 20.104/22.880 KiB;
+DynLex won 10/15 paren. Alle 8.022.576 RGBA-bytes waren steeds gelijk.
+De ruwe samples staan in
+`dynlex-engine-poc/rgba/native-indexed-large-bench-2026-10-05.json`.
+Door de spreiding is dit geen overtuigend of algemeen snelheidsvoordeel.
 
 De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
 `rust-studio`:

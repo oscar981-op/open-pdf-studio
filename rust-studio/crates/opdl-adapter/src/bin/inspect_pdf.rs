@@ -202,6 +202,31 @@ fn main() -> Result<(), Box<dyn Error>> {
                             String::from_utf8_lossy(name), label(b"Width"), label(b"Height"), label(b"BitsPerComponent"),
                             label(b"ColorSpace"), label(b"Filter"), label(b"DecodeParms"),
                             image.dict.has(b"Mask") || image.dict.has(b"SMask"));
+                        if let Ok((_, Object::Array(array))) = image
+                            .dict
+                            .get(b"ColorSpace")
+                            .and_then(|value| document.dereference(value))
+                        {
+                            let [indexed, base, high, lookup] = array.as_slice() else {
+                                continue;
+                            };
+                            if indexed.as_name().ok() == Some(b"Indexed") {
+                                let lookup = document.dereference(lookup)?.1;
+                                let (kind, bytes) = match lookup {
+                                    Object::String(bytes, _) => ("string", bytes.len()),
+                                    Object::Stream(stream) => ("stream", stream.content.len()),
+                                    _ => ("unsupported", 0),
+                                };
+                                println!(
+                                    "indexed_image={} base={} high={} lookup={} bytes={}",
+                                    String::from_utf8_lossy(name),
+                                    describe(&document, base),
+                                    describe(&document, high),
+                                    kind,
+                                    bytes
+                                );
+                            }
+                        }
                     }
                 }
             }
