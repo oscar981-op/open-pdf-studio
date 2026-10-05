@@ -270,7 +270,7 @@ DynLex mengt die met de onderliggende kleur. Bij één eenvoudig contour zijn
 `W` en `W*` gelijk. Zeven gecontroleerde PDF's met convexe en éénhoekig
 holle vormen, `W`/`W*`, 90°/CropBox en `q/Q`-herstel met een latere zichtbare
 afbeelding zijn bytegelijk aan Hayro. Bij dekking
-binnen 0,01 van een halve 8-bit-stap valt de hele pagina terug op Hayro:
+binnen 0,002 van een halve 8-bit-stap valt de hele pagina terug op Hayro:
 de f32-randberekening kan daar één kleurwaarde anders afronden. Twee
 deterministische reeksen van elk 1.000 wisselende drie-/vierhoeken gaven
 418/418 en 446/446 ondersteunde pagina's exact gelijk aan Hayro; 582 en
@@ -304,10 +304,24 @@ python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
 Het echte `W*`-pad bij contentoperator 582 van `Combinatie Raster, vector,
 tekening images.pdf` heeft zes hoekpunten, één holle hoek en staat onder
 `0.1 0 0 0.1 0 0 cm`. Een geïsoleerde 1684×1191-PDF met precies die
-coördinaten wordt geometrisch herkend, maar raakt een onzekere halve
-8-bit-dekkingsstap en valt expliciet terug. De andere elf complexe
-`W*`-paden en de duizenden curven/tekstoperatoren zijn niet bewezen;
-de hele echte pagina blijft Hayro gebruiken. Meerdere holle hoeken,
+coördinaten is nu door DynLex gerenderd: alle 8.022.576 RGBA-bytes zijn
+gelijk aan Hayro. De dichtstbijzijnde halve dekkingsstap in die fixture is
+95,49665 van 255, dus ongeveer 0,00335 van de afrondingsgrens. De
+veiligheidsmarge is van 0,01 naar 0,002 verkleind; exacte halve stappen
+blijven fallback. Dat is empirische uitbreiding, geen formeel bewijs voor
+alle PDF-geometrie. Op zeven extra deterministische reeksen van 2.000
+polygonen waren alle 9.588 geaccepteerde gevallen bytegelijk aan Hayro,
+waaronder vier reeksen met onafhankelijk verschoven decimale hoekpunten
+onder een globale 0,1-CTM. Herhaal bijvoorbeeld:
+
+```sh
+python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
+  --probe target/release/backend_probe --cases 2000 --concave --decimal \
+  --jitter-vertices --global-ctm --seed 20261009
+```
+
+De andere elf complexe `W*`-paden en de duizenden curven/tekstoperatoren
+zijn niet bewezen; de hele echte pagina blijft Hayro gebruiken. Meerdere holle hoeken,
 zelfkruisende of open paden, samengestelde polygonale clips, fills/strokes
 onder de polygonale clip en onzekere randdekking blijven fallback.
 

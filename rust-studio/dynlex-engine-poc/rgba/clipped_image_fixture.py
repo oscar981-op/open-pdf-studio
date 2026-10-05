@@ -98,17 +98,20 @@ def main() -> None:
     output.joinpath("clipped-polygon-ambiguous.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue +
         b"25 25 m\n75 25 l\n50 70 l\nh\nW\nn\n", **common))
+    output.joinpath("clipped-polygon-ambiguous-rotate.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue +
+        b"25 25 m\n75 25 l\n50 70 l\nh\nW\nn\n",
+        pages_extra="/Rotate 90 /CropBox [8 12 248 180]", **common))
     output.joinpath("clipped-polygon-fill-unsupported.pdf").write_bytes(build_pdf(
         "raster", pre_content=triangle + b"0 1 0 rg\n15 20 100 80 re\nf\n", **common))
     output.joinpath("clipped-polygon-intersection-unsupported.pdf").write_bytes(build_pdf(
         "raster", pre_content=triangle + diamond, **common))
     # Clip operator 582 from the real combination PDF, isolated around a
-    # controlled solid image. Its 0.1 CTM creates decimal edge coordinates;
-    # the current analytic mask deliberately falls back at ambiguous bytes.
+    # controlled solid image. Its 0.1 CTM creates decimal edge coordinates.
     real_clip = (b"16825 402 m\n16823.8 400.801 l\n16441 18 l\n"
                  b"16438.6 16.8008 l\n16826.2 15.6016 l\n16826.2 402 l\n"
                  b"h\nW*\nn\n")
-    output.joinpath("clipped-real-shape-582-fallback.pdf").write_bytes(build_pdf(
+    output.joinpath("clipped-real-shape-582.pdf").write_bytes(build_pdf(
         "raster", width=1684, height=1191,
         pre_content=b"q\n0.1 0 0 0.1 0 0 cm\nq\n" + real_clip,
         extra_content=b"Q\nQ\n", image_placement=(16000, 0, 840, 800),

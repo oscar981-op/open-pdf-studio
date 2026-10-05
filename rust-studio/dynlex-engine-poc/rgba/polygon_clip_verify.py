@@ -26,6 +26,8 @@ def main() -> None:
                         help="use a bounded simple five-vertex notch")
     parser.add_argument("--global-ctm", action="store_true",
                         help="encode geometry under a global 0.1 PDF scale")
+    parser.add_argument("--jitter-vertices", action="store_true",
+                        help="give each vertex its own decimal offset")
     parser.add_argument("--failed-pdf", type=Path)
     args = parser.parse_args()
     if not 1 <= args.cases <= 2000:
@@ -64,9 +66,13 @@ def main() -> None:
                 dy = rng.randrange(4) / 4
                 points = [(px + dx, py + dy) for px, py in points]
             if args.decimal:
-                dx = rng.choice((.01, .05, .24, .49, .51, .75, .99))
-                dy = rng.choice((.01, .05, .24, .49, .51, .75, .99))
-                points = [(px + dx, py + dy) for px, py in points]
+                offsets = (.01, .05, .24, .49, .51, .75, .99)
+                dx, dy = rng.choice(offsets), rng.choice(offsets)
+                points = [
+                    (px + (rng.choice(offsets) if args.jitter_vertices else dx),
+                     py + (rng.choice(offsets) if args.jitter_vertices else dy))
+                    for px, py in points
+                ]
             if args.global_ctm:
                 points = [(px * 10, py * 10) for px, py in points]
             turn = rng.choice((0, 90, 180, 270))
@@ -104,6 +110,7 @@ def main() -> None:
     print(json.dumps(dict(cases=args.cases, seed=args.seed,
                           quarter=args.quarter, decimal=args.decimal,
                           concave=args.concave, global_ctm=args.global_ctm,
+                          jitter_vertices=args.jitter_vertices,
                           supported=args.cases - fallback, fallback=fallback,
                           exact=args.cases - fallback - len(mismatch),
                           mismatches=mismatch[:20]), indent=2))

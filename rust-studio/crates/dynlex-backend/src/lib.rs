@@ -866,7 +866,7 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
-    fn rectangular_clipped_images_match_hayro() {
+    fn bounded_clipped_images_match_hayro() {
         for (name, bytes) in [
             (
                 "fractional RGB",
@@ -927,6 +927,10 @@ mod tests {
             (
                 "simple concave Rotate/CropBox clip",
                 include_bytes!("../tests/fixtures/clipped-concave-rotate.pdf").as_slice(),
+            ),
+            (
+                "isolated real W* shape under global CTM",
+                include_bytes!("../tests/fixtures/clipped-real-shape-582.pdf").as_slice(),
             ),
             (
                 "convex clip restored before later image",
@@ -998,19 +1002,14 @@ mod tests {
             include_bytes!("../tests/fixtures/clipped-subpixel-unsupported-fill.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-subpixel-ambiguous.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-ambiguous.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-polygon-ambiguous-rotate.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-fill-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-intersection-unsupported.pdf")
                 .as_slice(),
-            include_bytes!("../tests/fixtures/clipped-real-shape-582-fallback.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
         }
-        let real_shape = include_bytes!("../tests/fixtures/clipped-real-shape-582-fallback.pdf");
-        assert!(page_to_opdl_ordered_bytes(real_shape)
-            .unwrap_err()
-            .to_string()
-            .contains("ambiguous polygon edge coverage"));
     }
 
     #[cfg(feature = "kernel")]

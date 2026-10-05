@@ -1494,7 +1494,7 @@ fn polygon_pixel_coverage(polygon: &[[f64; 2]], x: u32, y: u32) -> Result<u8, Bo
     // Hayro computes the edge area with f32 path coordinates. When the
     // analytic f64 result is near a byte-rounding boundary, its rasterizer
     // can round in either direction. Leave those pages to the fallback.
-    if (scaled.fract() - 0.5).abs() < 0.01 {
+    if (scaled.fract() - 0.5).abs() < 0.002 {
         return Err(fail("ambiguous polygon edge coverage"));
     }
     Ok((scaled + 0.5).floor().min(255.0) as u8)

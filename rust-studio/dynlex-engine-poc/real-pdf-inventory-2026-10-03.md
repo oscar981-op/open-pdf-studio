@@ -35,7 +35,7 @@ beelddekking bytegelijk aan Hayro gerenderd. Een aparte proef ondersteunt
 één klein, eenvoudig polygoonclipvak voor beelden met 3–8 zijden, maximaal één holle
 hoek en zekere 8-bit-randdekking. Het echte `W*`-pad bij operator 582 heeft
 zes hoekpunten en één holle hoek onder de globale 0,1-CTM; een geïsoleerde
-reconstructie valt nog terug wegens ambigue randdekking. De overige complexe
+reconstructie is nu op alle 8.022.576 RGBA-bytes gelijk aan Hayro. De overige complexe
 `W*`-paden zijn evenmin als ondersteund aangetoond.
 Een read-only image-inventaris op 5 oktober
 vond 38 image-XObjects: 36 DeviceRGB8/FlateDecode-stroken met PNG-predictor
