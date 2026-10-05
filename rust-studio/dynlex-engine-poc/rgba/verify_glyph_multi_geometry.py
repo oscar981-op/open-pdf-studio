@@ -58,6 +58,11 @@ def main():
         "disjoint": [outer, [(174, 80), (194, 80), (194, 102), (174, 102)]],
         "hole": [outer, hole],
         "island": [outer, hole, island],
+        "eight_contours": [[(20 + 25*i, 60), (30 + 25*i, 60),
+                            (30 + 25*i, 70), (20 + 25*i, 70)]
+                           for i in range(8)],
+        "full_page_with_hole": [[(0, 0), (256, 0), (256, 192), (0, 192)],
+                                [(80, 60), (80, 132), (176, 132), (176, 60)]],
         "quarter_turn_hole": [[(96 + (y-75), 68 + (156-x)) for x,y in outer],
                               [(96 + (y-75), 68 + (156-x)) for x,y in hole]],
         "diagonal_hole": [diamond, diamond_hole],

@@ -86,7 +86,40 @@ function multi raster {cstring:scene} into {cstring:output}:
         set work_a_bytes to allocate 65536 bytes
         set work_b_bytes to allocate 65536 bytes
         set sample_bytes to allocate 8 bytes
+        # Rust validates at most eight contours. Cache each contour's bounds
+        # once so empty pixels never enter the four clipping passes.
+        set bounds_bytes to allocate 256 bytes
+        set bounds to bounds_bytes as a pointer to a float
         set sample to sample_bytes as a pointer to a float
+        set offset to 24
+        set index to 0
+        loop while index < contours:
+            set count to unsigned word at offset in scene
+            set start to offset + 8
+            set points to (scene + start) as a pointer to a float
+            set min_x to item 0 of points
+            set max_x to min_x
+            set min_y to item 1 of points
+            set max_y to min_y
+            set point_index to 1
+            loop while point_index < count - 1:
+                set px to item (point_index * 2) of points
+                set py to item (point_index * 2 + 1) of points
+                if px < min_x:
+                    set min_x to px
+                if px > max_x:
+                    set max_x to px
+                if py < min_y:
+                    set min_y to py
+                if py > max_y:
+                    set max_y to py
+                set point_index to point_index + 1
+            store min_x into bounds at (index * 4)
+            store max_x into bounds at (index * 4 + 1)
+            store min_y into bounds at (index * 4 + 2)
+            store max_y into bounds at (index * 4 + 3)
+            set offset to start + count * 16
+            set index to index + 1
         set y to 0
         loop while y < 192:
             set x to 0
@@ -97,15 +130,26 @@ function multi raster {cstring:scene} into {cstring:output}:
                 loop while index < contours:
                     set count to unsigned word at offset in scene
                     set start to offset + 8
-                    set points_bytes to (scene + start) as a pointer to a byte
-                    set status to polygon area points_bytes with count at x and y using work_a_bytes and work_b_bytes into sample_bytes
-                    if status != 0:
-                        @intrinsic("call", "libc", "free", void, sample_bytes)
-                        @intrinsic("call", "libc", "free", void, work_a_bytes)
-                        @intrinsic("call", "libc", "free", void, work_b_bytes)
-                        return status
-                    set coverage to item 0 of sample
-                    set area_sum to area_sum + coverage
+                    set active to 1
+                    if (x + 1) as a float <= item (index * 4) of bounds:
+                        set active to 0
+                    if (x as a float) >= item (index * 4 + 1) of bounds:
+                        set active to 0
+                    if (y + 1) as a float <= item (index * 4 + 2) of bounds:
+                        set active to 0
+                    if (y as a float) >= item (index * 4 + 3) of bounds:
+                        set active to 0
+                    if active = 1:
+                        set points_bytes to (scene + start) as a pointer to a byte
+                        set status to polygon area points_bytes with count at x and y using work_a_bytes and work_b_bytes into sample_bytes
+                        if status != 0:
+                            @intrinsic("call", "libc", "free", void, sample_bytes)
+                            @intrinsic("call", "libc", "free", void, bounds_bytes)
+                            @intrinsic("call", "libc", "free", void, work_a_bytes)
+                            @intrinsic("call", "libc", "free", void, work_b_bytes)
+                            return status
+                        set coverage to item 0 of sample
+                        set area_sum to area_sum + coverage
                     set offset to start + count * 16
                     set index to index + 1
                 if area_sum < 0.0:
@@ -117,6 +161,7 @@ function multi raster {cstring:scene} into {cstring:output}:
                 set x to x + 1
             set y to y + 1
         @intrinsic("call", "libc", "free", void, sample_bytes)
+        @intrinsic("call", "libc", "free", void, bounds_bytes)
         @intrinsic("call", "libc", "free", void, work_a_bytes)
         @intrinsic("call", "libc", "free", void, work_b_bytes)
         return 0

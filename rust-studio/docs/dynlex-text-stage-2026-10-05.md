@@ -194,3 +194,42 @@ python3 dynlex-engine-poc/rgba/verify_glyph_multi_geometry.py \
   --probe /tmp/opds-glyph-multi-native-probe \
   --hayro target/release/opds-engine-probe
 ```
+
+## Begrensde contourvakken in de experimentele kernel
+
+De OPM2-DynLex-kernel berekent nu eenmaal per gevalideerde contour een
+`min/max`-vak en slaat de vier polygoonclipstappen over voor pixels die
+helemaal buiten dat vak liggen. De maximaal acht vakken nemen samen 256
+bytes in. De Rust-grens en het OPM2-formaat zijn ongewijzigd. Twee echte
+CID-glyphs, losse/geneste contouren, de grens van acht contouren, een
+paginavullende contour met gat en een kwartslag blijven volledig bytegelijk
+aan de oude kernel en Hayro.
+De schuine ruit houdt exact dezelfde 72 diagnostische randverschillen; de
+optimalisatie is geen oplossing voor f32-strippariteit.
+
+`bench_glyph_multi_bbox.py` verifieert de complete buffer bij elk van 30
+afwisselende warme procesparen, met honderd kernelcalls per proces. Op de
+twee echte CID-glyphs waren de medianen oud/nieuw respectievelijk
+**1,935/0,543 ms** en **2,636/0,541 ms per kernelcall**; nieuw won 30/30
+paren in beide gevallen. Mediaan piek-RSS bleef ongeveer 2,1 MiB. De ruwe
+samples staan in `rgba/glyph-multi-bbox-bench-2026-10-05.json`. Dit meet geen
+PDF-parsing, validatie, compositing of app-weergave en toont dus geen
+algemene PDF-snelheidswinst.
+
+De oude bron kan uit commit `4d21eac1` worden gebouwd en de nieuwe bron
+uit de huidige branch met het hierboven getoonde `build_glyph_multi.py`-
+commando. Kopieer voor de oude build de huidige `build_glyph_multi.py` en
+`renderer.dl` naar een aparte map en zet daarin
+`git show 4d21eac1:rust-studio/dynlex-engine-poc/rgba/glyph_multi_kernel.dl`
+als `glyph_multi_kernel.dl`; compileer beide libraries en link dezelfde
+`glyph_multi_native_probe.rs` afzonderlijk tegen oud en nieuw. Maak de
+scenes via `stage_type0_text --isolate-multi ... 2 26` en `... 2 264`.
+Voor het gepaarde protocol:
+
+```sh
+python3 dynlex-engine-poc/rgba/bench_glyph_multi_bbox.py \
+  --old /tmp/opds-glyph-multi-old-probe \
+  --new /tmp/opds-glyph-multi-bbox-probe \
+  --scene /tmp/opds-glyph-26.opm --scene /tmp/opds-glyph-264.opm \
+  --rounds 30 --repeats 100
+```
