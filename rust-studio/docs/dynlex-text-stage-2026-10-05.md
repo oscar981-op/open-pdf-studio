@@ -443,8 +443,12 @@ via pure-Rust `skrifa` gevormde OPM2-glyphs in één 256×192-tegel. Een
 versieerbare OPGS-v1-container bewaart de volgorde, fontresourcenaam,
 CID/GID, RGB-inkt en begrensde OPM2 per glyph. Een tijdelijke geïsoleerde
 PDF is de Hayro-oracle; de bron-PDF blijft onaangeroerd. Deze route verwerkt
-nog geen algemene originele paginacontent, `TJ`, clipping, `/Rotate` of
-CropBox. De proefkleuren zijn zwart en een rode laatste glyph; de
+nog geen algemene originele paginacontent, `TJ` of clipping. Voor de
+afzonderlijke runproef worden geërfde MediaBox/CropBox en kwartslagen
+0/90/180/270 begrensd naar zichtbare paginacoördinaten omgerekend. Alleen
+RGB-eindpunten 0/1 en grijs-eindpunten 0/1 zijn als inkt bewezen; onbekende
+of transparante ExtGState wordt geweigerd. De oorspronkelijke proefkleuren
+zijn zwart en een rode laatste glyph; de
 `red-overlap-last`-optie verplaatst die laatste glyph bewust 20 pt in
 zowel OPGS als de oracle-PDF om gekleurde antialias-overlap te toetsen.
 
@@ -452,9 +456,10 @@ De Rust-grens valideert OPGS-lengte (maximaal 140 kB), aantal, namen,
 Identity-CID/GID, vlaggen en elk genest OPM2 inclusief contourtopologie
 vóór de DynLex-ABI. DynLex schrijft de 8-bit-dekking van elke glyph; de
 **experimentele Rust-probe** combineert de glyphs in inhoudsvolgorde.
-De zeven gecontroleerde runs gebruiken glyphs uit één fontresource; een
-werkelijke fontwissel op de A1-pagina lag buiten de 256×192-tegel en werd
-zonder uitvoer geweigerd. Een nabije fontwissel is nog niet bewezen.
+De zeven oorspronkelijke gecontroleerde runs gebruiken glyphs uit één
+fontresource. Een werkelijke fontwissel op de A1-pagina lag buiten de
+256×192-tegel en werd zonder uitvoer geweigerd; een gecontroleerde nabij
+geplaatste fontwissel is hieronder afzonderlijk bewezen.
 De relevante PDF/Hayro-compositie heeft een transparante paginalaag:
 eerst alle glyphs in die laag mengen en pas daarna de laag op de witte
 pagina leggen. Directe menging van elke glyph op wit leverde bij overlap
@@ -481,6 +486,30 @@ rustc --edition=2024 -O -A dead_code \
   -L native=/tmp/opds-curve-pixel-build \
   -o /tmp/opds-glyph-run-probe
 python3 dynlex-engine-poc/rgba/verify_real_glyph_run.py \
+  --stage target/release/stage_type0_text \
+  --probe /tmp/opds-glyph-run-probe \
+  --hayro target/release/opds-engine-probe \
+  --vello target/release/glyph_run_vello_oracle \
+  --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf'
+```
+
+Een extra gecontroleerde PDF gebruikt twee werkelijk ingebedde Type0-fonts
+`F1` en `F2` uit die technische tekening, respectievelijk zwarte en rode
+glyphs. Dezelfde zichtbare 256×192-pagina is als 0°, 90° met verschoven
+CropBox, 180° en 270° gegenereerd. `--isolate-text-run ... page-coords`
+houdt de echte paginacoördinaten aan. DynLex en het read-only Vello-orakel
+zijn voor **ieder van de vier PDF's 196.608/196.608 RGBA-bytes** gelijk
+aan Hayro's render van de oorspronkelijke gecontroleerde PDF; de vier
+OPGS-scenes en Hayro-uitvoeren zijn onderling ook bytegelijk. Een ongeldige
+rotatie, CropBox, UserUnit en een halftransparante `/gs` worden zonder
+scene of oracle-PDF geweigerd. Dit is nog steeds een geïsoleerde proef,
+geen ondersteuning voor willekeurige tekstpagina's of annotatietekst.
+
+```sh
+cargo build --release --offline -p opds-opdl-adapter \
+  --bin stage_type0_text --bin make_type0_run_fixture
+python3 dynlex-engine-poc/rgba/verify_two_font_run.py \
+  --fixture target/release/make_type0_run_fixture \
   --stage target/release/stage_type0_text \
   --probe /tmp/opds-glyph-run-probe \
   --hayro target/release/opds-engine-probe \

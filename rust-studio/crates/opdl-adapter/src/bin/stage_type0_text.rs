@@ -6,7 +6,7 @@ mod quad_glyph;
 
 use lopdf::{content::Content, Dictionary, Document, Object, Stream};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     env,
     error::Error,
     fs::File,
@@ -48,6 +48,14 @@ fn number(value: &Object) -> Result<f64, Box<dyn Error>> {
         return Err(fail("unbounded PDF number").into());
     }
     Ok(value)
+}
+
+fn endpoint_channel(value: &Object) -> Option<u8> {
+    match number(value).ok()? {
+        0.0 => Some(0),
+        1.0 => Some(255),
+        _ => None,
+    }
 }
 
 fn six(operands: &[Object]) -> Result<[f64; 6], Box<dyn Error>> {
@@ -93,6 +101,112 @@ impl Matrix {
             .iter()
             .all(|value| value.is_finite() && value.abs() <= 1_000_000.0)
     }
+}
+
+/// PDF user space to top-left display coordinates at one pixel per point.
+/// This is deliberately narrower than the general PDF page transform:
+/// UserUnit, malformed/inverted boxes and non-quarter-turn rotations fail.
+fn page_display_matrix(
+    document: &Document,
+    page_id: lopdf::ObjectId,
+) -> Result<Matrix, Box<dyn Error>> {
+    let mut media = None;
+    let mut crop = None;
+    let mut rotation = None;
+    let mut current = Some(page_id);
+    let mut visited = HashSet::new();
+    while let Some(id) = current {
+        if !visited.insert(id) || visited.len() > 16 {
+            return Err(fail("cyclic or deep page tree").into());
+        }
+        let node = document.get_dictionary(id)?;
+        if node.has(b"UserUnit") {
+            return Err(fail("text-run page UserUnit unsupported").into());
+        }
+        let parse_box = |key: &[u8]| -> Result<Option<[f64; 4]>, Box<dyn Error>> {
+            let Ok(value) = node.get(key) else {
+                return Ok(None);
+            };
+            let values = document.dereference(value)?.1.as_array()?;
+            if values.len() != 4 {
+                return Err(fail("page box needs four coordinates").into());
+            }
+            Ok(Some([
+                number(&values[0])?,
+                number(&values[1])?,
+                number(&values[2])?,
+                number(&values[3])?,
+            ]))
+        };
+        if media.is_none() {
+            media = parse_box(b"MediaBox")?;
+        }
+        if crop.is_none() {
+            crop = parse_box(b"CropBox")?;
+        }
+        if rotation.is_none() {
+            rotation = node.get(b"Rotate").ok().map(number).transpose()?;
+        }
+        current = node
+            .get(b"Parent")
+            .ok()
+            .map(Object::as_reference)
+            .transpose()?;
+    }
+    let media = media.ok_or_else(|| fail("text-run page lacks MediaBox"))?;
+    let crop = crop.unwrap_or(media);
+    if media[0] >= media[2]
+        || media[1] >= media[3]
+        || crop[0] < media[0]
+        || crop[1] < media[1]
+        || crop[0] >= crop[2]
+        || crop[1] >= crop[3]
+        || crop[2] > media[2]
+        || crop[3] > media[3]
+    {
+        return Err(fail("invalid text-run MediaBox or CropBox").into());
+    }
+    let matrix = match rotation.unwrap_or(0.0) {
+        0.0 => [1.0, 0.0, 0.0, -1.0, -crop[0], crop[3]],
+        90.0 => [0.0, 1.0, 1.0, 0.0, -crop[1], -crop[0]],
+        180.0 => [-1.0, 0.0, 0.0, 1.0, crop[2], -crop[1]],
+        270.0 => [0.0, -1.0, -1.0, 0.0, crop[3], crop[2]],
+        _ => return Err(fail("text-run page rotation unsupported").into()),
+    };
+    Ok(Matrix(matrix))
+}
+
+fn opaque_gstates(
+    document: &Document,
+    page_id: lopdf::ObjectId,
+) -> Result<BTreeMap<Vec<u8>, bool>, Box<dyn Error>> {
+    let (direct, inherited) = document.get_page_resources(page_id)?;
+    let mut result = BTreeMap::new();
+    for resources in direct.into_iter().chain(
+        inherited
+            .iter()
+            .filter_map(|id| document.get_dictionary(*id).ok()),
+    ) {
+        let Ok(states) = resources.get(b"ExtGState") else {
+            continue;
+        };
+        let states = document.dereference(states)?.1.as_dict()?;
+        for (name, value) in states.iter() {
+            if result.contains_key(name) {
+                continue;
+            }
+            let safe = document.dereference(value)?.1.as_dict().is_ok_and(|dict| {
+                dict.iter().all(|(key, value)| match key.as_slice() {
+                    b"Type" => value.as_name().ok() == Some(b"ExtGState"),
+                    b"CA" | b"ca" => number(value).ok() == Some(1.0),
+                    b"BM" => value.as_name().ok() == Some(b"Normal"),
+                    _ => false,
+                })
+            });
+            result.insert(name.clone(), safe);
+        }
+    }
+    Ok(result)
 }
 
 struct Font {
@@ -403,6 +517,8 @@ struct GlyphRecord {
     cid: u16,
     gid: u16,
     transform: [f64; 6],
+    // Not part of TGR1; only used by the bounded page-color experiment.
+    color: Option<[u8; 3]>,
 }
 
 fn encode_records(page: u32, records: &[GlyphRecord]) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -541,15 +657,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         None
     };
-    let (red_last, overlap_last) = if run_mode {
+    let (red_last, overlap_last, page_coords) = if run_mode {
         match args.next().as_deref() {
-            None => (false, false),
-            Some(value) if value == "red-last" => (true, false),
-            Some(value) if value == "red-overlap-last" => (true, true),
+            None => (false, false, false),
+            Some(value) if value == "red-last" => (true, false, false),
+            Some(value) if value == "red-overlap-last" => (true, true, false),
+            Some(value) if value == "page-coords" => (false, false, true),
             _ => return Err(fail("unsupported text-run color mode").into()),
         }
     } else {
-        (false, false)
+        (false, false, false)
     };
     let raw_output = if quad_mode { args.next() } else { None };
     let font_output = if quad_mode { args.next() } else { None };
@@ -577,6 +694,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .get_pages()
         .get(&page_number)
         .ok_or_else(|| fail("page not found"))?;
+    let opaque_states = if run_mode {
+        opaque_gstates(&document, page_id)?
+    } else {
+        BTreeMap::new()
+    };
     let mut fonts = BTreeMap::new();
     let mut total_font_bytes = 0_usize;
     for (name, font) in document.get_page_fonts(page_id)? {
@@ -611,6 +733,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut in_text = false;
     let mut positioned = false;
     let mut ctm = Matrix::IDENTITY;
+    let mut fill_ink = Some([0_u8; 3]); // PDF's default fill is black.
+    let mut paint_safe = true;
     let mut saved = Vec::new();
     let mut summaries = BTreeMap::<Vec<u8>, Summary>::new();
     let mut records = Vec::<GlyphRecord>::new();
@@ -630,6 +754,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     horizontal_scale,
                     rise,
                     render_mode,
+                    fill_ink,
+                    paint_safe,
                 ));
             }
             ("Q", []) if !in_text => {
@@ -642,8 +768,24 @@ fn main() -> Result<(), Box<dyn Error>> {
                     horizontal_scale,
                     rise,
                     render_mode,
+                    fill_ink,
+                    paint_safe,
                 ) = saved.pop().ok_or_else(|| fail("unbalanced Q"))?;
             }
+            ("rg", [red, green, blue]) => {
+                fill_ink = endpoint_channel(red)
+                    .zip(endpoint_channel(green))
+                    .zip(endpoint_channel(blue))
+                    .map(|((red, green), blue)| [red, green, blue]);
+            }
+            ("g", [gray]) => {
+                fill_ink = endpoint_channel(gray).map(|value| [value; 3]);
+            }
+            ("gs", [Object::Name(name)]) => {
+                paint_safe &= opaque_states.get(name).copied().unwrap_or(false);
+            }
+            ("gs", _) => paint_safe = false,
+            ("rg" | "g" | "k" | "cs" | "sc" | "scn", _) => fill_ink = None,
             ("cm", operands) if !in_text => {
                 ctm = ctm.concat(Matrix(six(operands)?));
                 if !ctm.bounded() {
@@ -719,6 +861,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         font: active_font.clone(),
                         cid,
                         gid,
+                        color: if paint_safe { fill_ink } else { None },
                         transform: [
                             basis_x[0] - position[0],
                             basis_x[1] - position[1],
@@ -808,6 +951,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 return Err(fail("text-run records outside staged glyph run").into());
             }
             let mut run_records = records[first..first + count].to_vec();
+            let display = page_display_matrix(&document, page_id)?;
+            for record in &mut run_records {
+                record.transform = display.concat(Matrix(record.transform)).0;
+            }
             if overlap_last {
                 // Deliberate controlled overlap fixture. Both the isolated
                 // PDF and OPGS geometry receive the same 20pt displacement.
@@ -849,10 +996,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             if bounds[2] - bounds[0] > 240.0 || bounds[3] - bounds[1] > 176.0 {
                 return Err(fail("text run exceeds bounded output tile").into());
             }
-            let shift = [
-                128.0 - (bounds[0] + bounds[2]) / 2.0,
-                96.0 - (bounds[1] + bounds[3]) / 2.0,
-            ];
+            let shift = if page_coords {
+                if bounds[0] < 0.0 || bounds[1] < 0.0 || bounds[2] > 256.0 || bounds[3] > 192.0 {
+                    return Err(fail("text run exceeds visible page tile").into());
+                }
+                [0.0, 0.0]
+            } else {
+                [
+                    128.0 - (bounds[0] + bounds[2]) / 2.0,
+                    96.0 - (bounds[1] + bounds[3]) / 2.0,
+                ]
+            };
             let mut scene = Vec::new();
             scene.extend_from_slice(b"OPGS");
             for word in [1_u32, 256, 192, count as u32] {
@@ -869,10 +1023,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 scene.extend_from_slice(&name);
                 scene.extend_from_slice(&record.cid.to_le_bytes());
                 scene.extend_from_slice(&record.gid.to_le_bytes());
+                let source_color = record
+                    .color
+                    .ok_or_else(|| fail("text-run fill color unsupported"))?;
                 let color = if red_last && position + 1 == count {
                     [255_u8, 0, 0]
                 } else {
-                    [0_u8; 3]
+                    source_color
                 };
                 scene.extend_from_slice(&color);
                 scene.push(0); // reserved flags
@@ -994,6 +1151,7 @@ mod tests {
             cid: 65,
             gid: 65,
             transform: [0.02, 0.0, 0.0, 0.02, 20.0, 30.0],
+            color: Some([0; 3]),
         };
         let valid = encode_records(1, &[record]).unwrap();
         assert_eq!(validate_records(&valid).unwrap(), (1, 1));
