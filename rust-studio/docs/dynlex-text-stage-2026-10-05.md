@@ -434,3 +434,56 @@ python3 dynlex-engine-poc/rgba/verify_native_quad_glyphs.py \
   --hayro target/release/opds-engine-probe \
   --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf'
 ```
+
+## Geordende glyphs en paginalaag (6 oktober)
+
+De afzonderlijke `--isolate-text-run`-proef kiest 2–32 opeenvolgende TGR1-
+records uit pagina 2, koppelt hun embedded Type0-fontresources en plaatst de
+via pure-Rust `skrifa` gevormde OPM2-glyphs in één 256×192-tegel. Een
+versieerbare OPGS-v1-container bewaart de volgorde, fontresourcenaam,
+CID/GID, RGB-inkt en begrensde OPM2 per glyph. Een tijdelijke geïsoleerde
+PDF is de Hayro-oracle; de bron-PDF blijft onaangeroerd. Deze route verwerkt
+nog geen algemene originele paginacontent, `TJ`, clipping, `/Rotate` of
+CropBox. De proefkleuren zijn zwart en een rode laatste glyph; de
+`red-overlap-last`-optie verplaatst die laatste glyph bewust 20 pt in
+zowel OPGS als de oracle-PDF om gekleurde antialias-overlap te toetsen.
+
+De Rust-grens valideert OPGS-lengte (maximaal 140 kB), aantal, namen,
+Identity-CID/GID, vlaggen en elk genest OPM2 inclusief contourtopologie
+vóór de DynLex-ABI. DynLex schrijft de 8-bit-dekking van elke glyph; de
+**experimentele Rust-probe** combineert de glyphs in inhoudsvolgorde.
+De zeven gecontroleerde runs gebruiken glyphs uit één fontresource; een
+werkelijke fontwissel op de A1-pagina lag buiten de 256×192-tegel en werd
+zonder uitvoer geweigerd. Een nabije fontwissel is nog niet bewezen.
+De relevante PDF/Hayro-compositie heeft een transparante paginalaag:
+eerst alle glyphs in die laag mengen en pas daarna de laag op de witte
+pagina leggen. Directe menging van elke glyph op wit leverde bij overlap
+6–13 afwijkende rode randbytes. Een aparte Vello CPU-testorakel bevestigde
+dat het laagmodel de oorzaak was. Vello is niet aangeroepen door de
+DynLex/Rust-uitvoerroute.
+
+Zeven echte tekst-runfixtures (2, 3 en 4 zwarte glyphs; 4 met rode laatste;
+2, 3 en 4 met rode overlappende laatste) zijn nu ieder **196.608/196.608
+RGBA-bytes** gelijk aan zowel Hayro als het read-only Vello-orakel.
+Acht corrupte OPGS-vormen zijn vóór uitvoer geweigerd. Dit bewijst alleen
+deze kleine runs: er is nog geen productie-tekstbackend of snelheidsclaim.
+
+Reproduceren vanuit `rust-studio` met de DynLex-strip- en
+area-libraries die hierboven zijn gebouwd:
+
+```sh
+cargo build --release --offline -p opds-opdl-adapter --bin stage_type0_text
+cargo build --release --offline -p opds-engine-probe \
+  --bin opds-engine-probe --bin glyph_run_vello_oracle
+rustc --edition=2024 -O -A dead_code \
+  dynlex-engine-poc/rgba/glyph_run_probe.rs \
+  -L native=/tmp/opds-glyph-strip-quad-build \
+  -L native=/tmp/opds-curve-pixel-build \
+  -o /tmp/opds-glyph-run-probe
+python3 dynlex-engine-poc/rgba/verify_real_glyph_run.py \
+  --stage target/release/stage_type0_text \
+  --probe /tmp/opds-glyph-run-probe \
+  --hayro target/release/opds-engine-probe \
+  --vello target/release/glyph_run_vello_oracle \
+  --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf'
+```

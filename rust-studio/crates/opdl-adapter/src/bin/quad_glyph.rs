@@ -274,6 +274,84 @@ fn raw_quadratic_path(
     Ok(bytes)
 }
 
+fn opm_point_offsets(scene: &[u8]) -> Result<Vec<usize>, Box<dyn Error>> {
+    if scene.len() < 20 || &scene[..4] != b"OPM2" {
+        return Err("invalid staged OPM2 header".into());
+    }
+    let word = |at: usize| u32::from_le_bytes(scene[at..at + 4].try_into().unwrap());
+    let contours = word(16) as usize;
+    if word(4) != 1 || word(8) != 256 || word(12) != 192 || !(1..=8).contains(&contours) {
+        return Err("invalid staged OPM2 geometry".into());
+    }
+    let mut at = 20_usize;
+    let mut offsets = Vec::new();
+    for _ in 0..contours {
+        if at + 4 > scene.len() {
+            return Err("truncated staged OPM2 contour".into());
+        }
+        let count = word(at) as usize;
+        at += 4;
+        if !(4..=256).contains(&count)
+            || offsets.len() + count > 256
+            || count.checked_mul(16).is_none_or(|n| at + n > scene.len())
+        {
+            return Err("invalid staged OPM2 point count".into());
+        }
+        for i in 0..count {
+            offsets.push(at + i * 16);
+        }
+        at += count * 16;
+    }
+    if at != scene.len() {
+        return Err("trailing staged OPM2 bytes".into());
+    }
+    Ok(offsets)
+}
+
+/// Bounds in the original PDF user space, before the per-glyph tile shift.
+pub fn absolute_bounds(scene: &[u8], shift: Point) -> Result<[f64; 4], Box<dyn Error>> {
+    let mut bounds = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    for at in opm_point_offsets(scene)? {
+        let x = f64::from_le_bytes(scene[at..at + 8].try_into()?) - shift[0];
+        let y = f64::from_le_bytes(scene[at + 8..at + 16].try_into()?) - shift[1];
+        if !x.is_finite() || !y.is_finite() {
+            return Err("nonfinite staged glyph bound".into());
+        }
+        bounds[0] = bounds[0].min(x);
+        bounds[1] = bounds[1].min(y);
+        bounds[2] = bounds[2].max(x);
+        bounds[3] = bounds[3].max(y);
+    }
+    Ok(bounds)
+}
+
+/// Rebase a validated staged glyph into the common 256×192 text-run tile.
+pub fn rebase(
+    scene: &mut [u8],
+    old_shift: Point,
+    common_shift: Point,
+) -> Result<(), Box<dyn Error>> {
+    let offsets = opm_point_offsets(scene)?;
+    for at in offsets {
+        for axis in 0..2 {
+            let start = at + axis * 8;
+            let value = f64::from_le_bytes(scene[start..start + 8].try_into()?)
+                + common_shift[axis]
+                - old_shift[axis];
+            if !value.is_finite() || value < 0.0 || value > [256.0, 192.0][axis] {
+                return Err("glyph run exceeds output tile".into());
+            }
+            scene[start..start + 8].copy_from_slice(&value.to_le_bytes());
+        }
+    }
+    Ok(())
+}
+
 /// Build a bounded OPM2 scene from one embedded quadratic TrueType glyph.
 /// The returned shift is used only to make an isolated 256×192 PDF oracle.
 pub fn stage(

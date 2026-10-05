@@ -397,6 +397,7 @@ fn simple_glyph_opln(
     Ok((encoded, [dx, dy]))
 }
 
+#[derive(Clone)]
 struct GlyphRecord {
     font: Vec<u8>,
     cid: u16,
@@ -500,8 +501,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let multi_mode = input == "--isolate-multi";
     let quad_skrifa_mode = input == "--isolate-quad-skrifa";
     let quad_mode = input == "--isolate-quad" || quad_skrifa_mode;
-    let outline_mode = input == "--outline" || input == "--isolate" || multi_mode || quad_mode;
-    let isolate_mode = input == "--isolate" || multi_mode || quad_mode;
+    let run_mode = input == "--isolate-text-run";
+    let outline_mode =
+        input == "--outline" || input == "--isolate" || multi_mode || quad_mode || run_mode;
+    let isolate_mode = input == "--isolate" || multi_mode || quad_mode || run_mode;
     let input = if outline_mode || inventory_mode {
         args.next().ok_or("--outline requires PDF")?
     } else {
@@ -522,11 +525,31 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         None
     };
+    let run_count = if run_mode {
+        let count = args.next().ok_or("text run requires glyph count")?;
+        let count = count.to_string_lossy().parse::<usize>()?;
+        if !(2..=32).contains(&count) {
+            return Err(fail("text run needs 2..32 glyphs").into());
+        }
+        Some(count)
+    } else {
+        None
+    };
     let output = args.next();
     let pdf_output = if isolate_mode {
         Some(args.next().ok_or("--isolate requires output PDF path")?)
     } else {
         None
+    };
+    let (red_last, overlap_last) = if run_mode {
+        match args.next().as_deref() {
+            None => (false, false),
+            Some(value) if value == "red-last" => (true, false),
+            Some(value) if value == "red-overlap-last" => (true, true),
+            _ => return Err(fail("unsupported text-run color mode").into()),
+        }
+    } else {
+        (false, false)
     };
     let raw_output = if quad_mode { args.next() } else { None };
     let font_output = if quad_mode { args.next() } else { None };
@@ -774,6 +797,107 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(output) = output {
         if skipped != 0 {
             return Err(fail("cannot export a partial glyph run").into());
+        }
+        if let Some(count) = run_count {
+            let first = outline_index.ok_or_else(|| fail("missing first text-run record"))?;
+            if first == usize::MAX
+                || first
+                    .checked_add(count)
+                    .is_none_or(|end| end > records.len())
+            {
+                return Err(fail("text-run records outside staged glyph run").into());
+            }
+            let mut run_records = records[first..first + count].to_vec();
+            if overlap_last {
+                // Deliberate controlled overlap fixture. Both the isolated
+                // PDF and OPGS geometry receive the same 20pt displacement.
+                run_records[count - 1].transform[5] -= 20.0;
+            }
+            let mut scenes = Vec::with_capacity(count);
+            let mut bounds = [
+                f64::INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::NEG_INFINITY,
+            ];
+            for record in &run_records {
+                if record.font.is_empty()
+                    || record.font.len() > 31
+                    || !record
+                        .font
+                        .iter()
+                        .all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-')
+                {
+                    return Err(fail("text-run font resource name unsupported").into());
+                }
+                let font = fonts
+                    .get(&record.font)
+                    .ok_or_else(|| fail("glyph font unavailable"))?;
+                let (scene, shift, _) = quad_glyph::stage(
+                    &font.data,
+                    record.gid,
+                    record.transform,
+                    quad_glyph::Source::SkrifaAtThousand,
+                )?;
+                let rect = quad_glyph::absolute_bounds(&scene, shift)?;
+                bounds[0] = bounds[0].min(rect[0]);
+                bounds[1] = bounds[1].min(rect[1]);
+                bounds[2] = bounds[2].max(rect[2]);
+                bounds[3] = bounds[3].max(rect[3]);
+                scenes.push((scene, shift));
+            }
+            if bounds[2] - bounds[0] > 240.0 || bounds[3] - bounds[1] > 176.0 {
+                return Err(fail("text run exceeds bounded output tile").into());
+            }
+            let shift = [
+                128.0 - (bounds[0] + bounds[2]) / 2.0,
+                96.0 - (bounds[1] + bounds[3]) / 2.0,
+            ];
+            let mut scene = Vec::new();
+            scene.extend_from_slice(b"OPGS");
+            for word in [1_u32, 256, 192, count as u32] {
+                scene.extend_from_slice(&word.to_le_bytes());
+            }
+            let mut contents = Vec::new();
+            for (position, (record, (mut opm, old_shift))) in
+                run_records.iter().zip(scenes).enumerate()
+            {
+                quad_glyph::rebase(&mut opm, old_shift, shift)?;
+                let font = &fonts[&record.font];
+                let mut name = [0_u8; 32];
+                name[..record.font.len()].copy_from_slice(&record.font);
+                scene.extend_from_slice(&name);
+                scene.extend_from_slice(&record.cid.to_le_bytes());
+                scene.extend_from_slice(&record.gid.to_le_bytes());
+                let color = if red_last && position + 1 == count {
+                    [255_u8, 0, 0]
+                } else {
+                    [0_u8; 3]
+                };
+                scene.extend_from_slice(&color);
+                scene.push(0); // reserved flags
+                scene.extend_from_slice(&u32::try_from(opm.len())?.to_le_bytes());
+                scene.extend_from_slice(&opm);
+                let [a, b, c, d, e, f] = record.transform;
+                let text = format!(
+                    "q {} {} {} rg BT /{} {} Tf {:.12} {:.12} {:.12} {:.12} {:.12} {:.12} Tm <{:04X}> Tj ET Q\n",
+                    if color[0] == 255 { 1 } else { 0 }, 0, 0,
+                    String::from_utf8_lossy(&record.font), font.units_per_em,
+                    a, -b, c, -d, e + shift[0], 192.0 - f - shift[1], record.cid
+                );
+                contents.extend_from_slice(text.as_bytes());
+            }
+            let pdf_output = pdf_output.ok_or_else(|| fail("text run requires output PDF"))?;
+            let stream_id = document.add_object(Stream::new(Dictionary::new(), contents));
+            let page = document.get_object_mut(page_id)?.as_dict_mut()?;
+            page.set("Contents", stream_id);
+            page.set("MediaBox", vec![0.into(), 0.into(), 256.into(), 192.into()]);
+            page.set("CropBox", vec![0.into(), 0.into(), 256.into(), 192.into()]);
+            page.set("Rotate", 0);
+            std::fs::write(output, scene)?;
+            document.save(pdf_output)?;
+            println!("OPGS glyphs={count} first_record={first}");
+            return Ok(());
         }
         if let Some(index) = outline_index {
             let candidates: Box<dyn Iterator<Item = usize>> = if index == usize::MAX {
