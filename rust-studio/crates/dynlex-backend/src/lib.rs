@@ -905,6 +905,26 @@ mod tests {
                 include_bytes!("../tests/fixtures/clipped-path-subpixel-rotate.pdf").as_slice(),
             ),
             (
+                "convex triangle",
+                include_bytes!("../tests/fixtures/clipped-triangle.pdf").as_slice(),
+            ),
+            (
+                "convex triangle Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-triangle-rotate.pdf").as_slice(),
+            ),
+            (
+                "convex triangle W*",
+                include_bytes!("../tests/fixtures/clipped-triangle-evenodd.pdf").as_slice(),
+            ),
+            (
+                "convex four-corner clip",
+                include_bytes!("../tests/fixtures/clipped-diamond.pdf").as_slice(),
+            ),
+            (
+                "convex clip restored before later image",
+                include_bytes!("../tests/fixtures/clipped-triangle-restored.pdf").as_slice(),
+            ),
+            (
                 "subpixel RGB",
                 include_bytes!("../tests/fixtures/clipped-subpixel-rgb.pdf").as_slice(),
             ),
@@ -968,6 +988,10 @@ mod tests {
             include_bytes!("../tests/fixtures/clipped-path-bowtie-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-subpixel-unsupported-fill.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-subpixel-ambiguous.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-polygon-ambiguous.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-polygon-fill-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-polygon-intersection-unsupported.pdf")
+                .as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());

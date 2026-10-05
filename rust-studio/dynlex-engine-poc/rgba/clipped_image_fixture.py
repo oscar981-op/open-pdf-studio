@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate controlled PDFs with rectangular clips around RGB/Indexed images."""
+"""Generate controlled PDFs with bounded clips around RGB/Indexed images."""
 
 import argparse
 from pathlib import Path
@@ -75,6 +75,27 @@ def main() -> None:
     output.joinpath("clipped-path-subpixel-rotate.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + fractional_polygon,
         pages_extra="/Rotate 270 /CropBox [8 12 248 180]", **common))
+    triangle = b"35 28 m\n90 28 l\n35 68 l\nh\nW\nn\n"
+    output.joinpath("clipped-triangle.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + triangle, **common))
+    output.joinpath("clipped-triangle-rotate.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + triangle,
+        pages_extra="/Rotate 90 /CropBox [8 12 248 180]", **common))
+    output.joinpath("clipped-triangle-evenodd.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + triangle.replace(b"\nW\n", b"\nW*\n"), **common))
+    diamond = b"40 19 m\n68 36 l\n40 77 l\n30 36 l\nh\nW*\nn\n"
+    output.joinpath("clipped-diamond.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + diamond, **common))
+    output.joinpath("clipped-triangle-restored.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + b"q\n" + triangle,
+        extra_content=b"Q\nq\n20 0 0 16 100 90 cm\n/Im0 Do\nQ\n", **common))
+    output.joinpath("clipped-polygon-ambiguous.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue +
+        b"25 25 m\n75 25 l\n50 70 l\nh\nW\nn\n", **common))
+    output.joinpath("clipped-polygon-fill-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=triangle + b"0 1 0 rg\n15 20 100 80 re\nf\n", **common))
+    output.joinpath("clipped-polygon-intersection-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=triangle + diamond, **common))
     output.joinpath("clipped-subpixel-unsupported-fill.pdf").write_bytes(build_pdf(
         "raster", pre_content=fractional + b"0 1 0 rg\n10.25 12 20 10 re\nf\n", **common))
     output.joinpath("clipped-subpixel-ambiguous.pdf").write_bytes(build_pdf(
@@ -90,7 +111,7 @@ def main() -> None:
     output.joinpath("clipped-subpixel-fully-outside.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + b"100.25 100.5 20.5 20.25 re\nW\nn\n", **common))
     output.joinpath("clipped-nonrect-unsupported.pdf").write_bytes(build_pdf(
-        "raster", pre_content=b"30 25 m\n75 25 l\n52 60 l\nh\nW\nn\n", **common))
+        "raster", pre_content=b"30 25 m\n75 25 l\n55 40 l\n75 60 l\n30 60 l\nh\nW\nn\n", **common))
     output.joinpath("clipped-path-open-unsupported.pdf").write_bytes(build_pdf(
         "raster", pre_content=polygon_rectangle.replace(b"h\n", b""), **common))
     output.joinpath("clipped-path-bowtie-unsupported.pdf").write_bytes(build_pdf(

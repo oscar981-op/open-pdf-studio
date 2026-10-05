@@ -578,6 +578,58 @@ impl PathStage {
         Ok([left, bottom, right - left, top - bottom])
     }
 
+    fn bounded_convex_clip(&self) -> Result<Vec<[f64; 2]>, Box<dyn Error>> {
+        if !self.closed || !self.cubics.is_empty() || !(3..=8).contains(&self.points.len()) {
+            return Err(fail(
+                "only one closed three-to-eight-edge clip is supported",
+            ));
+        }
+        if self
+            .points
+            .iter()
+            .flatten()
+            .any(|value| !value.is_finite() || (value * 4.0 - (value * 4.0).round()).abs() > 1e-8)
+        {
+            return Err(fail(
+                "polygon clip coordinates must be quarter-pixel aligned",
+            ));
+        }
+        let mut turn = 0_i8;
+        let orient = |a: [f64; 2], b: [f64; 2], c: [f64; 2]| {
+            (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+        };
+        for index in 0..self.points.len() {
+            let a = self.points[index];
+            let b = self.points[(index + 1) % self.points.len()];
+            let c = self.points[(index + 2) % self.points.len()];
+            let cross = orient(a, b, c);
+            if cross == 0.0 || !cross.is_finite() {
+                return Err(fail("degenerate polygon clip edge"));
+            }
+            let direction = if cross > 0.0 { 1 } else { -1 };
+            if turn != 0 && direction != turn {
+                return Err(fail("nonconvex or self-crossing polygon clip"));
+            }
+            turn = direction;
+            for other in index + 1..self.points.len() {
+                if a == self.points[other] {
+                    return Err(fail("duplicate polygon clip vertex"));
+                }
+                if other == index + 1 || (index == 0 && other + 1 == self.points.len()) {
+                    continue;
+                }
+                let c = self.points[other];
+                let d = self.points[(other + 1) % self.points.len()];
+                if orient(a, b, c) * orient(a, b, d) < 0.0
+                    && orient(c, d, a) * orient(c, d, b) < 0.0
+                {
+                    return Err(fail("self-crossing polygon clip"));
+                }
+            }
+        }
+        Ok(self.points.clone())
+    }
+
     fn to_v3_segments(self) -> Vec<path_v3::Segment> {
         use path_v3::Segment;
         let mut segments =
@@ -724,6 +776,40 @@ mod path_stage_tests {
             path.close().unwrap();
             assert!(path.closed_axis_rectangle().is_err());
         }
+    }
+
+    #[test]
+    fn polygon_clip_requires_a_simple_bounded_convex_loop() {
+        let stage = |points: &[[f64; 2]], closed: bool| {
+            let mut path = PathStage::start(points[0]);
+            for &point in &points[1..] {
+                path.line_to(point).unwrap();
+            }
+            if closed {
+                path.close().unwrap();
+            }
+            path.bounded_convex_clip()
+        };
+        assert!(stage(&[[35.0, 28.0], [90.0, 28.0], [35.0, 68.0]], true).is_ok());
+        assert!(stage(&[[35.0, 28.0], [90.0, 28.0], [35.0, 68.0]], false).is_err());
+        assert!(stage(&[[35.0, 28.0], [90.1, 28.0], [35.0, 68.0]], true).is_err());
+        assert!(stage(
+            &[
+                [30.0, 25.0],
+                [75.0, 25.0],
+                [55.0, 40.0],
+                [75.0, 60.0],
+                [30.0, 60.0]
+            ],
+            true
+        )
+        .is_err());
+        assert!(stage(
+            &[[30.0, 25.0], [75.0, 60.0], [75.0, 25.0], [30.0, 60.0]],
+            true
+        )
+        .is_err());
+        assert!(stage(&[[35.0, 28.0], [90.0, 28.0], [35.0, 28.0]], true).is_err());
     }
 
     #[test]
@@ -1282,6 +1368,153 @@ fn mask_fractional_image_clip(
     Ok(Some((rect, output)))
 }
 
+fn polygon_to_display(
+    polygon: &[[f64; 2]],
+    media: [u32; 4],
+    crop: [u32; 4],
+    turn: u32,
+) -> Result<Vec<[f64; 2]>, Box<dyn Error>> {
+    polygon
+        .iter()
+        .map(|&[x, y]| {
+            if x < f64::from(media[0])
+                || y < f64::from(media[1])
+                || x > f64::from(media[2])
+                || y > f64::from(media[3])
+            {
+                return Err(fail("polygon clip vertex is outside MediaBox"));
+            }
+            Ok(match turn {
+                0 => [x - f64::from(crop[0]), f64::from(crop[3]) - y],
+                90 => [y - f64::from(crop[1]), x - f64::from(crop[0])],
+                180 => [f64::from(crop[2]) - x, y - f64::from(crop[1])],
+                270 => [f64::from(crop[3]) - y, f64::from(crop[2]) - x],
+                _ => return Err(fail("unsupported polygon clip rotation")),
+            })
+        })
+        .collect()
+}
+
+fn clip_polygon_axis(
+    polygon: &[[f64; 2]],
+    axis: usize,
+    boundary: f64,
+    greater: bool,
+) -> Vec<[f64; 2]> {
+    if polygon.is_empty() {
+        return Vec::new();
+    }
+    let mut output = Vec::with_capacity(polygon.len() + 2);
+    let mut previous = *polygon.last().unwrap();
+    let mut previous_inside = if greater {
+        previous[axis] >= boundary
+    } else {
+        previous[axis] <= boundary
+    };
+    for &point in polygon {
+        let inside = if greater {
+            point[axis] >= boundary
+        } else {
+            point[axis] <= boundary
+        };
+        if inside != previous_inside {
+            let fraction = (boundary - previous[axis]) / (point[axis] - previous[axis]);
+            output.push([
+                previous[0] + fraction * (point[0] - previous[0]),
+                previous[1] + fraction * (point[1] - previous[1]),
+            ]);
+        }
+        if inside {
+            output.push(point);
+        }
+        previous = point;
+        previous_inside = inside;
+    }
+    output
+}
+
+fn polygon_pixel_coverage(polygon: &[[f64; 2]], x: u32, y: u32) -> Result<u8, Box<dyn Error>> {
+    let mut clipped = polygon.to_vec();
+    for (axis, boundary, greater) in [
+        (0, f64::from(x), true),
+        (0, f64::from(x + 1), false),
+        (1, f64::from(y), true),
+        (1, f64::from(y + 1), false),
+    ] {
+        clipped = clip_polygon_axis(&clipped, axis, boundary, greater);
+        if clipped.is_empty() {
+            return Ok(0);
+        }
+    }
+    let mut signed = 0.0;
+    for index in 0..clipped.len() {
+        let a = clipped[index];
+        let b = clipped[(index + 1) % clipped.len()];
+        signed += a[0] * b[1] - b[0] * a[1];
+    }
+    let scaled = (signed.abs() * 0.5).min(1.0) * 255.0;
+    // Hayro computes the edge area with f32 path coordinates. When the
+    // analytic f64 result is near a byte-rounding boundary, its rasterizer
+    // can round in either direction. Leave those pages to the fallback.
+    if (scaled.fract() - 0.5).abs() < 0.01 {
+        return Err(fail("ambiguous polygon edge coverage"));
+    }
+    Ok((scaled + 0.5).floor().min(255.0) as u8)
+}
+
+fn mask_polygon_image_clip(
+    rect: [u32; 4],
+    pixels: Vec<u8>,
+    polygon: &[[f64; 2]],
+    channels: usize,
+) -> Result<Option<([u32; 4], Vec<u8>)>, Box<dyn Error>> {
+    let left = polygon
+        .iter()
+        .map(|point| point[0])
+        .fold(f64::INFINITY, f64::min);
+    let right = polygon
+        .iter()
+        .map(|point| point[0])
+        .fold(f64::NEG_INFINITY, f64::max);
+    let top = polygon
+        .iter()
+        .map(|point| point[1])
+        .fold(f64::INFINITY, f64::min);
+    let bottom = polygon
+        .iter()
+        .map(|point| point[1])
+        .fold(f64::NEG_INFINITY, f64::max);
+    let bounds = [
+        (left.floor().max(0.0) as u32).max(rect[0]),
+        (top.floor().max(0.0) as u32).max(rect[1]),
+        (right.ceil().max(0.0) as u32).min(rect[2]),
+        (bottom.ceil().max(0.0) as u32).min(rect[3]),
+    ];
+    let Some((rect, pixels)) = clip_display_image(rect, pixels, bounds, channels)? else {
+        return Ok(None);
+    };
+    let count = usize::try_from(rect[2] - rect[0])? * usize::try_from(rect[3] - rect[1])?;
+    if count > 65_536 {
+        return Err(fail("polygon clip image patch exceeds trial pixel limit"));
+    }
+    let mut output = vec![0; count * 4];
+    for y in rect[1]..rect[3] {
+        for x in rect[0]..rect[2] {
+            let pixel =
+                (y - rect[1]) as usize * (rect[2] - rect[0]) as usize + (x - rect[0]) as usize;
+            let source = pixel * channels;
+            let target = pixel * 4;
+            output[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+            output[target + 3] = if channels == 4 && pixels[source + 3] == 0 {
+                0
+            } else {
+                polygon_pixel_coverage(polygon, x, y)?
+            };
+        }
+    }
+    Ok(Some((rect, output)))
+}
+
 fn image_source_dimensions(
     document: &Document,
     resources: &lopdf::Dictionary,
@@ -1667,6 +1900,9 @@ fn page_to_opdl_bytes_internal(
     let mut saved_clips: Vec<Option<[u32; 4]>> = Vec::new();
     let mut fractional_clip: Option<[f64; 4]> = None;
     let mut saved_fractional_clips: Vec<Option<[f64; 4]>> = Vec::new();
+    let mut pending_polygon_clip: Option<Vec<[f64; 2]>> = None;
+    let mut polygon_clip: Option<Vec<[f64; 2]>> = None;
+    let mut saved_polygon_clips: Vec<Option<Vec<[f64; 2]>>> = Vec::new();
     let mut pending_path: Option<PathStage> = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
     let mut ordered_image_bytes = Vec::new();
@@ -1685,6 +1921,7 @@ fn page_to_opdl_bytes_internal(
             {
                 saved_clips.push(clip);
                 saved_fractional_clips.push(fractional_clip);
+                saved_polygon_clips.push(polygon_clip.clone());
                 saved_ctms.push(ctm);
                 saved_styles.push((color, stroke_color, one_pixel_stroke));
                 depth += 1;
@@ -1702,6 +1939,9 @@ fn page_to_opdl_bytes_internal(
                 fractional_clip = saved_fractional_clips
                     .pop()
                     .ok_or_else(|| fail("fractional clip restore without save"))?;
+                polygon_clip = saved_polygon_clips
+                    .pop()
+                    .ok_or_else(|| fail("polygon clip restore without save"))?;
                 depth -= 1;
                 ctm = saved_ctms
                     .pop()
@@ -1863,6 +2103,14 @@ fn page_to_opdl_bytes_internal(
                                 if kind == 7 { 4 } else { 3 },
                             )?
                             .map(|(rect, pixels)| (8, rect, pixels))
+                        } else if let Some(polygon) = polygon_clip.as_deref() {
+                            mask_polygon_image_clip(
+                                rect,
+                                display_pixels,
+                                polygon,
+                                if kind == 7 { 4 } else { 3 },
+                            )?
+                            .map(|(rect, pixels)| (8, rect, pixels))
                         } else {
                             Some((kind, rect, display_pixels))
                         };
@@ -1987,38 +2235,49 @@ fn page_to_opdl_bytes_internal(
                     && pending_path.is_some()
                     && !pending_clip =>
             {
-                let rect = pending_path
+                let path = pending_path
                     .take()
-                    .ok_or_else(|| fail("clip path is missing"))?
-                    .closed_axis_rectangle()?;
-                if rect[0] < 0.0
-                    || rect[1] < 0.0
-                    || rect[0] + rect[2] > f64::from(media[2])
-                    || rect[1] + rect[3] > f64::from(media[3])
-                {
-                    return Err(fail("polygonal rectangle clip is outside page"));
-                }
-                let aligned = rect
-                    .map(|value| pixel_aligned_u32(value, coordinate_limit))
-                    .into_iter()
-                    .collect::<Result<Vec<_>, _>>();
-                if let Ok(aligned) = aligned {
-                    pending_rect = Some(visible_rect_to_display(
-                        crop,
-                        turn,
-                        [aligned[0], aligned[1], aligned[2], aligned[3]],
-                    )?);
+                    .ok_or_else(|| fail("clip path is missing"))?;
+                if let Ok(rect) = path.closed_axis_rectangle() {
+                    if rect[0] < 0.0
+                        || rect[1] < 0.0
+                        || rect[0] + rect[2] > f64::from(media[2])
+                        || rect[1] + rect[3] > f64::from(media[3])
+                    {
+                        return Err(fail("polygonal rectangle clip is outside page"));
+                    }
+                    let aligned = rect
+                        .map(|value| pixel_aligned_u32(value, coordinate_limit))
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>();
+                    if let Ok(aligned) = aligned {
+                        pending_rect = Some(visible_rect_to_display(
+                            crop,
+                            turn,
+                            [aligned[0], aligned[1], aligned[2], aligned[3]],
+                        )?);
+                    } else {
+                        pending_fractional_rect = Some(rect);
+                        pending_rect = Some([0, 0, 0, 0]);
+                    }
                 } else {
-                    pending_fractional_rect = Some(rect);
-                    pending_rect = Some([0, 0, 0, 0]);
+                    if polygon_clip.is_some() || fractional_clip.is_some() {
+                        return Err(fail("polygon clip intersection is not yet verified"));
+                    }
+                    pending_polygon_clip = Some(path.bounded_convex_clip()?);
                 }
                 pending_clip = true;
             }
             "n" if !image_matrix && op.operands.is_empty() && pending_clip => {
-                let rect = pending_rect
-                    .take()
-                    .ok_or_else(|| fail("clip without rectangle"))?;
-                if let Some(fractional) = pending_fractional_rect.take() {
+                if let Some(polygon) = pending_polygon_clip.take() {
+                    polygon_clip = Some(polygon_to_display(&polygon, media, crop, turn)?);
+                } else if let Some(fractional) = pending_fractional_rect.take() {
+                    pending_rect
+                        .take()
+                        .ok_or_else(|| fail("clip without rectangle"))?;
+                    if polygon_clip.is_some() {
+                        return Err(fail("fractional and polygon clips cannot be combined"));
+                    }
                     let display = fractional_clip_to_display(fractional, crop, turn)?;
                     fractional_clip = Some(if let Some(prior) = fractional_clip {
                         [
@@ -2031,12 +2290,18 @@ fn page_to_opdl_bytes_internal(
                         display
                     });
                 } else {
+                    let rect = pending_rect
+                        .take()
+                        .ok_or_else(|| fail("clip without rectangle"))?;
                     clip = Some(intersect_rect(rect, clip).unwrap_or([0, 0, 0, 0]));
                 }
                 pending_clip = false;
             }
             "f" if !image_matrix && op.operands.is_empty() && !pending_clip => {
-                if pending_fractional_rect.is_some() || fractional_clip.is_some() {
+                if pending_fractional_rect.is_some()
+                    || fractional_clip.is_some()
+                    || polygon_clip.is_some()
+                {
                     return Err(fail(
                         "fractional clip or fill requires general path coverage",
                     ));
@@ -2120,8 +2385,8 @@ fn page_to_opdl_bytes_internal(
                     .close()?;
             }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
-                if fractional_clip.is_some() {
-                    return Err(fail("strokes under fractional clip are not yet supported"));
+                if fractional_clip.is_some() || polygon_clip.is_some() {
+                    return Err(fail("strokes under antialiased clip are not yet supported"));
                 }
                 if ordered_images && (ctm.sx != 1.0 || ctm.sy != 1.0) {
                     return Err(fail("scaled stroke width is outside the proven subset"));
@@ -2234,12 +2499,14 @@ fn page_to_opdl_bytes_internal(
     if depth != 0
         || pending_rect.is_some()
         || pending_fractional_rect.is_some()
+        || pending_polygon_clip.is_some()
         || pending_clip
         || pending_path.is_some()
         || image_matrix
         || translation.is_some()
         || !saved_clips.is_empty()
         || !saved_fractional_clips.is_empty()
+        || !saved_polygon_clips.is_empty()
         || !saved_ctms.is_empty()
         || !saved_styles.is_empty()
     {

@@ -246,20 +246,49 @@ onder het beeld, dubbele clip, `q/Q` en 90°/CropBox zijn RGBA-bytegelijk
 aan Hayro. Een volledig weggeclipt beeld levert nu een lege geordende actie op;
 een daarna zichtbaar beeld behoudt zijn laagvolgorde. Drie fixtures voor lege
 aligned/fractionele clips en herstel via `Q` zijn pixelgelijk aan Hayro.
-Niet-rechthoekige clipvormen zijn nog niet bewezen.
 
 Een enkel gesloten `m/l/l/l/h`-pad wordt nu alleen als rechthoek geaccepteerd
 wanneer het precies de vier verschillende hoeken bevat en elke zijde
 asgericht is. `W` en `W*` hergebruiken dan dezelfde begrensde rechthoekige
 cliproute, inclusief fractionele rand en paginaoriëntatie. Vier gerichte
-PDF-fixtures zijn pixelgelijk aan Hayro; open, driehoekige en kruisende paden
-blijven op Hayro terugvallen. Twee extra deterministische reeksen van elk
+PDF-fixtures zijn pixelgelijk aan Hayro; open en kruisende paden blijven op
+Hayro terugvallen. Twee extra deterministische reeksen van elk
 1.000 `m/l/h`-rechthoek-PDF's met wisselende kwartslag en `W`/`W*` gaven
 949/949 en 959/959 ondersteunde resultaten bytegelijk aan Hayro; 51 en 41
 ambigue randen vielen terug. Herhaal met de bovenstaande
 `fractional_clip_verify.py`-commando's plus `--polygon-rect`. Dit is geen
 algemene polygonale clipping.
 `dynlex-engine-poc/rgba/clipped_image_fixture.py` maakt de fixtures.
+
+Een afzonderlijke, nog smalle route accepteert nu één gesloten convexe
+`m/l/.../h W/W* n`-clip met drie tot acht verschillende, op kwartpixels
+uitgelijnde hoekpunten rond een beeldlaag. De Rust-adapter valideert de
+convexiteit, rekent de polygonale overlap per pixel analytisch uit, beperkt
+de beeldpatch tot 65.536 pixels en schrijft de dekking als geordende OPDL-v6
+RGBA-patch. DynLex mengt die met de onderliggende kleur. Vier gecontroleerde
+PDF's met driehoek/vierhoek, `W`/`W*`, 90°/CropBox en een vijfde met `q/Q`
+en een latere zichtbare afbeelding zijn bytegelijk aan Hayro. Bij dekking
+binnen 0,01 van een halve 8-bit-stap valt de hele pagina terug op Hayro:
+de f32-randberekening kan daar één kleurwaarde anders afronden. Twee
+deterministische reeksen van elk 1.000 wisselende drie-/vierhoeken gaven
+418/418 en 446/446 ondersteunde pagina's exact gelijk aan Hayro; 582 en
+554 vielen terug. Met kwartpixelverschuiving waren 339/339 ondersteunde
+pagina's exact en 661 fallback. Reproduceer met:
+
+```sh
+python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
+  --probe target/release/backend_probe --cases 1000 --seed 20261005
+python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
+  --probe target/release/backend_probe --cases 1000 --seed 20261006
+python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
+  --probe target/release/backend_probe --cases 1000 --quarter
+```
+
+Niet-convexe/zelfkruisende paden, samengestelde polygonale clips, fills of
+strokes onder de polygonale clip en onzekere randdekking blijven fallback.
+Dit toont alleen de begrensde beeldsubset. In de echte combinatie-PDF zijn
+twaalf `W*`-polygonen met 5–327 segmenten; de pagina heeft ook duizenden
+curven en tekstoperatoren en valt nog volledig op Hayro terug.
 
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht
 (`kind=8`) met RGBA-patch en een 8-bit-dekkingswaarde per pixel. De
@@ -275,7 +304,7 @@ vectorlaag, fractionele beeldrand, de vier kwartslagen, CropBox en een globale
 `0.1`-CTM; zij zijn RGBA-bytegelijk aan Hayro. De vroegere eenvoudige
 éénstapsmengregel week op 56 pixels van een geroteerde fixture één
 kleurwaarde af en is vóór activering vervangen. Fractionele vectorfills en
-strokes onder zo'n clip, polygonale clips en algemene transparantie blijven
+strokes onder zo'n clip, algemene polygonale clips en transparantie blijven
 op Hayro terugvallen.
 
 Sommige decimale randen liggen zo dicht bij een halve 8-bit-dekkingsstap dat

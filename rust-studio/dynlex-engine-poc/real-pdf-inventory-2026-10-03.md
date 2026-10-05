@@ -31,7 +31,10 @@ rechthoeken (`W`); de overige twaalf gebruiken `W*` met 5 tot 327
 lijnsegmenten en vragen nog algemene polygonale clipping. Veel
 rechthoekcoördinaten zijn na de globale 0,1-schaal
 fractioneel; een gecontroleerde subpixel-rechthoek wordt nu via OPDL-v6
-beelddekking bytegelijk aan Hayro gerenderd. Polygonale clips ontbreken nog.
+beelddekking bytegelijk aan Hayro gerenderd. Een aparte proef ondersteunt
+alleen één kleine convexe polygonale beeldclip met 3–8 zijden en zekere
+8-bit-randdekking; deze twaalf complexe `W*`-paden zijn daarmee niet als
+ondersteund aangetoond.
 Een read-only image-inventaris op 5 oktober
 vond 38 image-XObjects: 36 DeviceRGB8/FlateDecode-stroken met PNG-predictor
 15 (meestal 3843×68, laatste 3843×25), plus twee Indexed/DeviceRGB-beelden.
