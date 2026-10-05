@@ -750,6 +750,7 @@ fn image_bytes<'a>(
         b"BitsPerComponent",
         b"Length",
         b"Filter",
+        b"DecodeParms",
     ];
     if dict
         .iter()
@@ -776,17 +777,55 @@ fn image_bytes<'a>(
         ));
     }
     let expected_len = source_width as usize * source_height as usize * 3;
+    let png_predictor = if dict.has(b"DecodeParms") {
+        if !dict.has(b"Filter") || dict.get(b"Filter")?.as_name()? != b"FlateDecode" {
+            return Err(fail(
+                "image DecodeParms require a single FlateDecode filter",
+            ));
+        }
+        let (_, params) = document.dereference(dict.get(b"DecodeParms")?)?;
+        let params = params.as_dict()?;
+        if params.iter().any(|(key, _)| {
+            ![
+                b"Predictor".as_slice(),
+                b"Columns",
+                b"Colors",
+                b"BitsPerComponent",
+            ]
+            .contains(&key.as_slice())
+        }) || params.get(b"Predictor")?.as_i64()? != 15
+            || params.get(b"Columns")?.as_i64()? != i64::from(source_width)
+            || params.get(b"Colors")?.as_i64()? != 3
+            || params
+                .get(b"BitsPerComponent")
+                .ok()
+                .is_some_and(|value| value.as_i64().ok() != Some(8))
+        {
+            return Err(fail("unsupported PNG image predictor parameters"));
+        }
+        true
+    } else {
+        false
+    };
     let pixels = if dict.has(b"Filter") {
         if dict.get(b"Filter")?.as_name()? != b"FlateDecode" {
             return Err(fail("only a single FlateDecode image filter is supported"));
         }
-        let decoded =
-            miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(content, expected_len)
-                .map_err(|_| fail("invalid or oversized FlateDecode image"))?;
-        if decoded.len() != expected_len {
+        let decoded_len = if png_predictor {
+            source_height as usize * (source_width as usize * 3 + 1)
+        } else {
+            expected_len
+        };
+        let decoded = miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(content, decoded_len)
+            .map_err(|_| fail("invalid or oversized FlateDecode image"))?;
+        if decoded.len() != decoded_len {
             return Err(fail("wrong decoded RGB image byte length"));
         }
-        std::borrow::Cow::Owned(decoded)
+        std::borrow::Cow::Owned(if png_predictor {
+            decode_png_rgb8_rows(&decoded, source_width as usize, source_height as usize)?
+        } else {
+            decoded
+        })
     } else {
         if content.len() != expected_len {
             return Err(fail("wrong RGB image byte length"));
@@ -836,6 +875,93 @@ fn image_bytes<'a>(
         }
     }
     Ok(std::borrow::Cow::Owned(output))
+}
+
+fn decode_png_rgb8_rows(
+    encoded: &[u8],
+    width: usize,
+    height: usize,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let row_bytes = width
+        .checked_mul(3)
+        .ok_or_else(|| fail("PNG row overflow"))?;
+    if encoded.len()
+        != height
+            .checked_mul(row_bytes + 1)
+            .ok_or_else(|| fail("PNG image overflow"))?
+    {
+        return Err(fail("wrong PNG predictor byte length"));
+    }
+    let mut output = Vec::with_capacity(height * row_bytes);
+    for row in 0..height {
+        let encoded_at = row * (row_bytes + 1);
+        let filter = encoded[encoded_at];
+        if filter > 4 {
+            return Err(fail("unsupported PNG row filter"));
+        }
+        let row_at = output.len();
+        for column in 0..row_bytes {
+            let left = if column >= 3 {
+                output[row_at + column - 3]
+            } else {
+                0
+            };
+            let up = if row > 0 {
+                output[row_at - row_bytes + column]
+            } else {
+                0
+            };
+            let upper_left = if row > 0 && column >= 3 {
+                output[row_at - row_bytes + column - 3]
+            } else {
+                0
+            };
+            let prediction = match filter {
+                0 => 0,
+                1 => left,
+                2 => up,
+                3 => ((u16::from(left) + u16::from(up)) / 2) as u8,
+                4 => {
+                    let p = i32::from(left) + i32::from(up) - i32::from(upper_left);
+                    let a = (p - i32::from(left)).abs();
+                    let b = (p - i32::from(up)).abs();
+                    let c = (p - i32::from(upper_left)).abs();
+                    if a <= b && a <= c {
+                        left
+                    } else if b <= c {
+                        up
+                    } else {
+                        upper_left
+                    }
+                }
+                _ => unreachable!(),
+            };
+            output.push(encoded[encoded_at + 1 + column].wrapping_add(prediction));
+        }
+    }
+    Ok(output)
+}
+
+#[cfg(test)]
+mod png_predictor_tests {
+    use super::decode_png_rgb8_rows;
+
+    #[test]
+    fn all_png_row_filters_and_invalid_rows() {
+        // First row uses None. Each following row exercises a different filter.
+        let encoded = [
+            0, 10, 20, 30, 40, 50, 60, 1, 10, 20, 30, 10, 20, 30, 2, 5, 5, 5, 5, 5, 5, 3, 5, 5, 5,
+            5, 5, 5, 4, 5, 5, 5, 5, 5, 5,
+        ];
+        let decoded = decode_png_rgb8_rows(&encoded, 2, 5).unwrap();
+        assert_eq!(decoded.len(), 30);
+        assert_eq!(&decoded[..6], &[10, 20, 30, 40, 50, 60]);
+        let mut invalid = encoded;
+        invalid[7] = 5;
+        assert!(decode_png_rgb8_rows(&invalid, 2, 5).is_err());
+        assert!(decode_png_rgb8_rows(&encoded[..encoded.len() - 1], 2, 5).is_err());
+        assert!(decode_png_rgb8_rows(&encoded, usize::MAX, 5).is_err());
+    }
 }
 
 fn image_to_display(

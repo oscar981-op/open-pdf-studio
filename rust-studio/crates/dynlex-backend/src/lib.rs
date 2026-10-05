@@ -654,6 +654,55 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
+    fn flate_png_predictor_images_match_hayro() {
+        for (name, bytes) in [
+            (
+                "raster",
+                include_bytes!("../tests/fixtures/predictor-raster.pdf").as_slice(),
+            ),
+            (
+                "hybrid",
+                include_bytes!("../tests/fixtures/predictor-hybrid.pdf").as_slice(),
+            ),
+            (
+                "rotated",
+                include_bytes!("../tests/fixtures/predictor-rotated-cropped.pdf").as_slice(),
+            ),
+            (
+                "large-strip",
+                include_bytes!("../tests/fixtures/predictor-large-strip.pdf").as_slice(),
+            ),
+        ] {
+            let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+            let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(rendered.used, Backend::Dynlex, "{name}");
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            assert_eq!(rendered.raster.rgba, expected.rgba, "{name}");
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn invalid_png_predictor_parameters_fall_back() {
+        let original = include_bytes!("../tests/fixtures/predictor-raster.pdf");
+        for (old, new) in [
+            (b"/Columns 320".as_slice(), b"/Columns 319".as_slice()),
+            (b"/Predictor 15".as_slice(), b"/Predictor 12".as_slice()),
+            (b"/Colors 3".as_slice(), b"/Colors 4".as_slice()),
+        ] {
+            let mut bytes = original.to_vec();
+            let at = bytes
+                .windows(old.len())
+                .position(|window| window == old)
+                .unwrap();
+            bytes[at..at + old.len()].copy_from_slice(new);
+            assert!(page_to_opdl_ordered_bytes(&bytes).is_err());
+            assert!(try_render(&bytes, 1, 1.0).unwrap().is_none());
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
     fn scaled_images_outside_validated_subset_fall_back() {
         for bytes in [
             include_bytes!("../tests/fixtures/scaled-interpolate-unsupported.pdf").as_slice(),

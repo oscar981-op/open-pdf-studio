@@ -39,6 +39,36 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
+def png_predictor_rgb(rgb, width, height):
+    """Encode rows with PNG filters 0..4 in rotation for PDF Predictor 15."""
+    row_bytes = width * 3
+    encoded = bytearray()
+    previous = bytes(row_bytes)
+    for y in range(height):
+        row = rgb[y * row_bytes:(y + 1) * row_bytes]
+        filter_kind = y % 5
+        encoded.append(filter_kind)
+        for i, value in enumerate(row):
+            left = row[i - 3] if i >= 3 else 0
+            up = previous[i]
+            upper_left = previous[i - 3] if i >= 3 else 0
+            if filter_kind == 0:
+                predicted = 0
+            elif filter_kind == 1:
+                predicted = left
+            elif filter_kind == 2:
+                predicted = up
+            elif filter_kind == 3:
+                predicted = (left + up) // 2
+            else:
+                p = left + up - upper_left
+                differences = (abs(p - left), abs(p - up), abs(p - upper_left))
+                predicted = (left, up, upper_left)[differences.index(min(differences))]
+            encoded.append((value - predicted) & 255)
+        previous = row
+    return bytes(encoded)
+
+
 def build_many_images_pdf(image_count=12, compress_alternate=False):
     """A controlled layered PDF with distinct XObject names and vector fills."""
     if not 1 <= image_count <= 257:
@@ -87,7 +117,7 @@ def build_many_images_pdf(image_count=12, compress_alternate=False):
     return bytes(pdf)
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None, second_image_placement=None, second_image_after_vector=False, image_source_size=None, image_source_override=None):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None, second_image_placement=None, second_image_after_vector=False, image_source_size=None, image_source_override=None, png_predictor=False):
     content = bytearray(pre_content)
     if mode != "vector":
         image_x, image_y, image_width, image_height = image_placement or (0, 0, width, height)
@@ -168,8 +198,13 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
            else image_rgb(source_width, source_height)) if mode != "vector" else b""
     if mode != "vector" and len(rgb) != source_width * source_height * 3:
         raise ValueError("image_source_override has the wrong RGB8 byte length")
-    image_payload = zlib.compress(rgb + image_bytes_extra) if flate_image else rgb
+    if png_predictor and (not flate_image or second_image_placement):
+        raise ValueError("PNG predictor fixture requires one Flate image")
+    encoded_rgb = png_predictor_rgb(rgb, source_width, source_height) if png_predictor else rgb
+    image_payload = zlib.compress(encoded_rgb + image_bytes_extra) if flate_image else rgb
     image_filter = "/Filter /FlateDecode" if flate_image else ""
+    if png_predictor:
+        image_filter += f" /DecodeParms << /Predictor 15 /Columns {source_width} /Colors 3 >>"
     has_image = mode != "vector"
     content_id = 6 if second_image_placement else (5 if has_image else 4)
     resources = ("/Resources << /XObject << /Im0 4 0 R /Im1 5 0 R >> >>"

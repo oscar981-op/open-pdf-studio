@@ -1,11 +1,12 @@
 # Inventarisatie van echte tekeningen voor de DynLex-kern
 
-De huidige PDF→OPDL-adapter accepteert bewust één ongeroteerde pagina met
-een nul-oorsprong, maximaal 1024×1024 pixels en hoogstens 16.384
-tekenopdrachten. De oorspronkelijke limiet bij de inventarisatie was 64.
-Dat is voldoende voor pixelcontrole van de beperkte testfixtures, maar niet
-voor de technische tekeningen in deze repository. Deze inventarisatie leest
-alleen PDF-inhoud; ze verruimt de render- of parseclaims niet.
+Bij deze oorspronkelijke inventarisatie accepteerde de PDF→OPDL-v2-adapter
+één ongeroteerde nul-oorsprongpagina van maximaal 1024×1024 pixels en
+16.384 tekenopdrachten (aanvankelijk 64). De latere experimentele
+geordende route ondersteunt een bewezen subset op geroteerde/gecropte pagina's
+tot 4096 pixels per zijde en 6 miljoen pixels totaal. Zij rendert nog steeds
+geen volledige technische tekening. Deze inventarisatie leest alleen
+PDF-inhoud; ze verruimt de render- of parseclaims niet.
 
 Het Rust-commando `inspect_pdf` telt PDF-contentoperators per pagina, volgt
 geërfde MediaBox en Rotate in de paginaboom en toont de zestien meest gebruikte
@@ -23,12 +24,19 @@ cargo run --release -p opds-opdl-adapter --bin inspect_pdf -- \
 
 `Combinatie Raster, vector, tekening images.pdf` heeft één pagina van
 1684×1191 pt met 8.721 operators, waaronder 4.034 `c`, 2.697 `l`,
-375 `f`, 43 `W` en 47 `cm`. Ook deze pagina past niet in de huidige
-dimensielimiet; de naam alleen bewijst geen precieze raster-/vectorverdeling.
+375 `f`, 43 `W` en 47 `cm`. Een read-only image-inventaris op 5 oktober
+vond 38 image-XObjects: 36 DeviceRGB8/FlateDecode-stroken met PNG-predictor
+15 (meestal 3843×68, laatste 3843×25), plus twee Indexed/DeviceRGB-beelden.
+De content begint met `0.1 0 0 0.1 0 0 cm`; daarop volgen fractionele
+beeldtransformaties. De native DynLex-route ondersteunt nu Predictor 15 voor
+een beperkte RGB8-subset, maar niet de gecombineerde CTM, alle curven,
+clippaden of Indexed-kleuren van deze echte pagina. Reproduceer de metadata
+met `inspect_pdf --image-ops` op dit bestand. De naam alleen bewijst geen
+precieze raster-/vectorverdeling.
 
 Deze aantallen geven prioriteit aan een schaalbare pad-display-list met
-`m/l/c/h`, graphics-state/CTM en clipping, plus tegelcoördinaten voor pagina's
-groter dan 1024. Tekst en fonts zijn voor de A1-tekening direct relevant.
+`m/l/c/h`, graphics-state/CTM, clipping en Indexed-kleuren. Tekst en fonts
+zijn voor de A1-tekening direct relevant.
 Een snellere 45°-lijn alleen maakt deze documenten niet renderbaar. Elke nieuwe
 deelset moet eerst per pagina en resolutie tegen Hayro/Poppler worden
 vergeleken; buiten de bewezen deelset blijft de bestaande Hayro-route actief.

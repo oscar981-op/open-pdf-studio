@@ -65,7 +65,12 @@ Rust valideert de complete OPDL-scene opnieuw voor de DynLex-ABI; alleen dan
 draait de hybride v2-modus of de geordende v3-modus. FlateDecode
 wordt met een harde limiet van exact de verwachte RGB-bytelengte uitgepakt.
 De begrensde decompressor is de pure-Rust `miniz_oxide`-bibliotheek.
-Onbekende afbeeldingsdictionarysleutels, waaronder `/DecodeParms` en
+Voor enkelvoudige FlateDecode op DeviceRGB8 ondersteunt de adapter ook
+`/DecodeParms` met `/Predictor 15`, `/Colors 3`, acht bits per component
+en `/Columns` gelijk aan de bronbreedte. Elke PNG-rij heeft een expliciete
+filterbyte (None, Sub, Up, Average of Paeth); de decompressor begrenst de
+uitvoer op `hoogte × (3 × breedte + 1)` bytes en de Rust-decoder controleert
+filter en exacte rijlengtes. Andere predictors, parameters of filterketens,
 alfamaskers, andere beeldfilters, ongeldige paginageometrie en ongedekte
 PDF-operatoren vallen
 terug op Hayro. Dit is geen algemene PDF-afbeeldingsdecoder.
@@ -126,7 +131,7 @@ dat laatste geval de Hayro-fallback.
 Shear, willekeurige beeld-CTM, scenes boven de byte-/opdrachtlimiet en andere
 filters zijn nog niet bewezen.
 Een pagina met geërfde `/Rotate 90` is nu bytegelijk via DynLex;
-een ongeldige Flate-stroom, decodeparameters en een opgeblazen beeldstroom
+een ongeldige Flate-stroom, niet-ondersteunde decodeparameters en een opgeblazen beeldstroom
 worden niet aan DynLex doorgegeven.
 Zeven aanvullende geschaalde beeld-PDF's testen vergroting, verkleining,
 ongelijke schaalfactoren, raw/Flate en vectoroverlay; een 2048×64-beeldstrook
@@ -143,6 +148,15 @@ geschaald beeld en fill is op 1984×1484 zichtbare pixels eveneens bytegelijk
 aan Hayro. Ongeldige rotatie, CropBox buiten MediaBox en geërfde `/UserUnit`
 blijven buiten de deelset. Andere PDF-afbeeldingsfilters en kleurmodellen
 ontbreken nog.
+
+Vier aanvullende PDF's met FlateDecode en PNG-predictor 15 zijn in de native
+route RGBA-bytegelijk aan Hayro: raster, hybride, geroteerd/gecropt en een
+3843×68 RGB-bronstrook op een 1684×1191-pagina. De fixturegenerator wisselt
+alle vijf PNG-rijfilters af. Verkeerde Predictor-, Columns- en Colors-waarden,
+een onbekend rijfilter en afgekorte rijen worden geweigerd. Dit brengt de
+echte combinatie-PDF dichterbij, maar die gebruikt ook fractionele/globale
+CTM-transformaties, duizenden Bézier-curven, clipping en Indexed-kleurbeelden;
+de volledige pagina valt nog terecht terug op Hayro.
 
 De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
 `rust-studio`:
@@ -180,3 +194,12 @@ en 27.700/30.640 KiB; DynLex won 14 van 15 paren. De 15 ruwe paren staan in
 `dynlex-engine-poc/rgba/native-rotated-cropped-image-bench-2026-10-05.json`.
 Ook dit meet slechts een gecontroleerde kleine inhoud op een groot canvas,
 met warme cache en processtart, geen echte technische tekening.
+
+De PNG-predictor-strook op 1684×1191 is met hetzelfde afwisselend gepaarde
+protocol en 15 warme procesruns gemeten. DynLex/Hayro mediane wandtijd was
+57,23/75,34 ms; het gepaarde mediane verschil was -17,43 ms en DynLex won
+14 van 15 paren. Mediane piek-RSS was 20.028/23.240 KiB. Alle 8.022.576
+RGBA-bytes hadden per run dezelfde SHA-256. Ruwe samples staan in
+`dynlex-engine-poc/rgba/native-predictor-strip-bench-2026-10-05.json`.
+Dit is een synthetische pagina met één geschaalde strook en vectoroverlay;
+de echte combinatie-PDF en algemene PDF-objecten zijn hiermee niet gemeten.
