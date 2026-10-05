@@ -1,0 +1,204 @@
+{
+  "pdf": "crates/dynlex-backend/tests/fixtures/large-rotated-cropped-image.pdf",
+  "probe": "target/release/backend_probe",
+  "runs": 15,
+  "cache": "warm process and OS cache; cache was not cleared",
+  "includes": "PDF parse, render, raw RGBA file write and process startup",
+  "samples": {
+    "dynlex": [
+      {
+        "wall_ms": 74.837285,
+        "peak_rss_kib": 27684,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 65.915287,
+        "peak_rss_kib": 27620,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 67.964461,
+        "peak_rss_kib": 27560,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 73.561375,
+        "peak_rss_kib": 27728,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 70.650786,
+        "peak_rss_kib": 27700,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 67.030975,
+        "peak_rss_kib": 27704,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 64.257749,
+        "peak_rss_kib": 27600,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 81.007818,
+        "peak_rss_kib": 27748,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 67.507963,
+        "peak_rss_kib": 27636,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 63.151891,
+        "peak_rss_kib": 27680,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 73.609195,
+        "peak_rss_kib": 27684,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 73.832679,
+        "peak_rss_kib": 27708,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 73.178248,
+        "peak_rss_kib": 27776,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 75.194172,
+        "peak_rss_kib": 27716,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 63.618849,
+        "peak_rss_kib": 27756,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      }
+    ],
+    "hayro": [
+      {
+        "wall_ms": 88.3209,
+        "peak_rss_kib": 30640,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 74.951267,
+        "peak_rss_kib": 30640,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 74.314036,
+        "peak_rss_kib": 30636,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 77.643852,
+        "peak_rss_kib": 30692,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 96.556637,
+        "peak_rss_kib": 30672,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 72.592319,
+        "peak_rss_kib": 30640,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 78.029579,
+        "peak_rss_kib": 30696,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 71.192574,
+        "peak_rss_kib": 30628,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 71.631602,
+        "peak_rss_kib": 30576,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 75.458145,
+        "peak_rss_kib": 30576,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 73.86562,
+        "peak_rss_kib": 30644,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 77.845526,
+        "peak_rss_kib": 30440,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 76.399062,
+        "peak_rss_kib": 30692,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 97.160467,
+        "peak_rss_kib": 30704,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      },
+      {
+        "wall_ms": 80.446169,
+        "peak_rss_kib": 30528,
+        "sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413",
+        "bytes": 11777024
+      }
+    ]
+  },
+  "median_wall_ms": {
+    "dynlex": 70.650786,
+    "hayro": 76.399062
+  },
+  "median_peak_rss_kib": {
+    "dynlex": 27700,
+    "hayro": 30640
+  },
+  "median_paired_dynlex_minus_hayro_ms": -6.3495750000000015,
+  "dynlex_wins": 14,
+  "rgba_sha256": "d890c23470b81a90d2b41e8e5ac6d12661c87434cb3b74fce17fe214ddf77413"
+}

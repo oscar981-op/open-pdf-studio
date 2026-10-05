@@ -796,6 +796,12 @@ fn image_bytes<'a>(
     if (source_width, source_height) == (placed_width, placed_height) {
         return Ok(pixels);
     }
+    if placed_width
+        .checked_mul(placed_height)
+        .is_none_or(|count| count > 6_000_000)
+    {
+        return Err(fail("placed RGB image exceeds pixel bound"));
+    }
     let target_len = placed_width as usize * placed_height as usize * 3;
     let mut output = vec![0; target_len];
     if source_width > placed_width || source_height > placed_height {
@@ -830,6 +836,91 @@ fn image_bytes<'a>(
         }
     }
     Ok(std::borrow::Cow::Owned(output))
+}
+
+fn image_to_display(
+    pixels: &[u8],
+    [x, y, placed_width, placed_height]: [u32; 4],
+    crop: [u32; 4],
+    turn: u32,
+) -> Result<([u32; 4], Vec<u8>), Box<dyn Error>> {
+    let right = x
+        .checked_add(placed_width)
+        .ok_or_else(|| fail("image overflow"))?;
+    let top = y
+        .checked_add(placed_height)
+        .ok_or_else(|| fail("image overflow"))?;
+    let visible = [
+        x.max(crop[0]),
+        y.max(crop[1]),
+        right.min(crop[2]),
+        top.min(crop[3]),
+    ];
+    if visible[0] >= visible[2] || visible[1] >= visible[3] {
+        return Err(fail("image outside visible CropBox"));
+    }
+    let view_width = visible[2] - visible[0];
+    let view_height = visible[3] - visible[1];
+    let rect = geometry_v1::rectangle_to_display(
+        crop,
+        turn,
+        visible[0],
+        visible[1],
+        view_width,
+        view_height,
+    )?;
+    let output_width = (rect[2] - rect[0]) as usize;
+    let output_height = (rect[3] - rect[1]) as usize;
+    let mut output = vec![0; output_width * output_height * 3];
+    let source_left = visible[0] - x;
+    let source_top = top - visible[3];
+    for out_y in 0..output_height {
+        for out_x in 0..output_width {
+            let (in_x, in_y) = match turn {
+                0 => (out_x, out_y),
+                90 => (out_y, view_height as usize - 1 - out_x),
+                180 => (
+                    view_width as usize - 1 - out_x,
+                    view_height as usize - 1 - out_y,
+                ),
+                270 => (view_width as usize - 1 - out_y, out_x),
+                _ => return Err(fail("unsupported image page rotation")),
+            };
+            let source = ((source_top as usize + in_y) * placed_width as usize
+                + source_left as usize
+                + in_x)
+                * 3;
+            let target = (out_y * output_width + out_x) * 3;
+            output[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+        }
+    }
+    Ok((rect, output))
+}
+
+fn visible_rect_to_display(
+    crop: [u32; 4],
+    turn: u32,
+    [x, y, w, h]: [u32; 4],
+) -> Result<[u32; 4], Box<dyn Error>> {
+    let right = x.checked_add(w).ok_or_else(|| fail("rectangle overflow"))?;
+    let top = y.checked_add(h).ok_or_else(|| fail("rectangle overflow"))?;
+    let visible = [
+        x.max(crop[0]),
+        y.max(crop[1]),
+        right.min(crop[2]),
+        top.min(crop[3]),
+    ];
+    if visible[0] >= visible[2] || visible[1] >= visible[3] {
+        return Ok([0, 0, 0, 0]);
+    }
+    geometry_v1::rectangle_to_display(
+        crop,
+        turn,
+        visible[0],
+        visible[1],
+        visible[2] - visible[0],
+        visible[3] - visible[1],
+    )
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -890,39 +981,67 @@ fn page_to_opdl_bytes_internal(
     }
     let page_id = *pages.values().next().ok_or_else(|| fail("missing page"))?;
     let page = document.get_dictionary(page_id)?;
-    if page.has(b"Rotate") || page.has(b"CropBox") || page.has(b"Annots") || page.has(b"UserUnit") {
+    if !ordered_images
+        && (page.has(b"Rotate")
+            || page.has(b"CropBox")
+            || page.has(b"Annots")
+            || page.has(b"UserUnit"))
+    {
         return Err(fail(
             "rotation, crop, user units and annotations are not in this subset",
         ));
     }
-    let mut parent = page
-        .get(b"Parent")
-        .ok()
-        .map(Object::as_reference)
-        .transpose()?;
-    let mut visited = std::collections::HashSet::new();
-    while let Some(parent_id) = parent {
-        if !visited.insert(parent_id) || visited.len() > 16 {
-            return Err(fail("cyclic or deep page tree"));
-        }
-        let node = document.get_dictionary(parent_id)?;
-        if node.has(b"Rotate") || node.has(b"CropBox") || node.has(b"UserUnit") {
-            return Err(fail("inherited page geometry is outside this subset"));
-        }
-        parent = node
+    if !ordered_images {
+        let mut parent = page
             .get(b"Parent")
             .ok()
             .map(Object::as_reference)
             .transpose()?;
+        let mut visited = std::collections::HashSet::new();
+        while let Some(parent_id) = parent {
+            if !visited.insert(parent_id) || visited.len() > 16 {
+                return Err(fail("cyclic or deep page tree"));
+            }
+            let node = document.get_dictionary(parent_id)?;
+            if node.has(b"Rotate") || node.has(b"CropBox") || node.has(b"UserUnit") {
+                return Err(fail("inherited page geometry is outside this subset"));
+            }
+            parent = node
+                .get(b"Parent")
+                .ok()
+                .map(Object::as_reference)
+                .transpose()?;
+        }
     }
-    let media_box = page.get(b"MediaBox")?.as_array()?;
-    let [x0, y0, x1, y1] = operands::<4>(media_box)?;
-    if x0 != 0.0 || y0 != 0.0 {
-        return Err(fail("fixture page must have zero origin"));
-    }
+    let geometry = ordered_images
+        .then(|| geometry_v1::page_geometry(&document, page_id))
+        .transpose()?;
     let coordinate_limit = if ordered_images { 4096 } else { LIMIT };
-    let width = exact_u32_with_limit(x1, coordinate_limit)?;
-    let height = exact_u32_with_limit(y1, coordinate_limit)?;
+    let (width, height, media, crop, turn) = if let Some(page_geometry) = geometry {
+        let media = page_geometry.media;
+        let crop = page_geometry.crop;
+        let (width, height) = if matches!(page_geometry.turn, 90 | 270) {
+            (crop[3] - crop[1], crop[2] - crop[0])
+        } else {
+            (crop[2] - crop[0], crop[3] - crop[1])
+        };
+        (width, height, media, crop, page_geometry.turn)
+    } else {
+        let media_box = page.get(b"MediaBox")?.as_array()?;
+        let [x0, y0, x1, y1] = operands::<4>(media_box)?;
+        if x0 != 0.0 || y0 != 0.0 {
+            return Err(fail("fixture page must have zero origin"));
+        }
+        let width = exact_u32_with_limit(x1, coordinate_limit)?;
+        let height = exact_u32_with_limit(y1, coordinate_limit)?;
+        (
+            width,
+            height,
+            [0, 0, width, height],
+            [0, 0, width, height],
+            0,
+        )
+    };
     if width == 0 || height == 0 {
         return Err(fail("empty page"));
     }
@@ -1023,8 +1142,9 @@ fn page_to_opdl_bytes_internal(
                     if placed_width == 0
                         || placed_height == 0
                         || x.checked_add(placed_width)
-                            .is_none_or(|right| right > width)
-                        || y.checked_add(placed_height).is_none_or(|top| top > height)
+                            .is_none_or(|right| right > media[2])
+                        || y.checked_add(placed_height)
+                            .is_none_or(|top| top > media[3])
                     {
                         return Err(fail("RGB image placement is outside the page"));
                     }
@@ -1067,22 +1187,21 @@ fn page_to_opdl_bytes_internal(
                     ordered_images,
                 )?;
                 if ordered_images {
-                    if ordered_image_bytes.len().saturating_add(pixels.len())
+                    let (rect, display_pixels) =
+                        image_to_display(&pixels, [x, y, placed_width, placed_height], crop, turn)?;
+                    if ordered_image_bytes
+                        .len()
+                        .saturating_add(display_pixels.len())
                         > MAX_ORDERED_SCENE_BYTES
                     {
                         return Err(fail("ordered image data exceeds scene byte limit"));
                     }
                     let offset = u32::try_from(ordered_image_bytes.len())?;
-                    let top = height - y - placed_height;
-                    commands.push((
-                        6,
-                        [x, top, x + placed_width, top + placed_height],
-                        offset.to_le_bytes(),
-                    ));
+                    commands.push((6, rect, offset.to_le_bytes()));
                     if commands.len() > MAX_COMMANDS {
                         return Err(fail("too many commands"));
                     }
-                    ordered_image_bytes.extend_from_slice(&pixels);
+                    ordered_image_bytes.extend_from_slice(&display_pixels);
                 } else if image_count == 0
                     && [x, y, placed_width, placed_height] == [0, 0, width, height]
                 {
@@ -1123,10 +1242,10 @@ fn page_to_opdl_bytes_internal(
                     exact_u32(w)?,
                     exact_u32(h)?,
                 ];
-                if x + w > width || y + h > height {
+                if x + w > media[2] || y + h > media[3] {
                     return Err(fail("rectangle outside page"));
                 }
-                pending_rect = Some([x, height - y - h, x + w, height - y]);
+                pending_rect = Some(visible_rect_to_display(crop, turn, [x, y, w, h])?);
             }
             "W" if !image_matrix
                 && op.operands.is_empty()
@@ -1200,7 +1319,7 @@ fn page_to_opdl_bytes_internal(
                     return Err(fail("cubic stroke rasterization is not yet verified"));
                 }
                 if path.points.len() >= 3 && path.collapsed_line().is_err() {
-                    if clip.is_some() {
+                    if clip.is_some() || (ordered_images && (crop != media || turn != 0)) {
                         return Err(fail("orthogonal path with active clip is unsupported"));
                     }
                     let rectangles = path.orthogonal_rects(width, height)?;
@@ -1214,17 +1333,36 @@ fn page_to_opdl_bytes_internal(
                     continue;
                 }
                 let (start, end) = path.collapsed_line()?;
+                let oriented_page = ordered_images && (crop != media || turn != 0);
                 let (kind, rect) = if start[1] == end[1] {
                     let left = exact_u32(start[0].min(end[0]))?;
                     let right = exact_u32(start[0].max(end[0]))?;
-                    let top = exact_u32(f64::from(height) - start[1] - 0.5)?;
-                    (3, [left, top, right, top + 1])
+                    if oriented_page {
+                        let y = exact_u32(start[1] - 0.5)?;
+                        (
+                            3,
+                            visible_rect_to_display(crop, turn, [left, y, right - left, 1])?,
+                        )
+                    } else {
+                        let top = exact_u32(f64::from(height) - start[1] - 0.5)?;
+                        (3, [left, top, right, top + 1])
+                    }
                 } else if start[0] == end[0] {
                     let left = exact_u32(start[0] - 0.5)?;
-                    let top = height - exact_u32(start[1].max(end[1]))?;
-                    let bottom = height - exact_u32(start[1].min(end[1]))?;
-                    (3, [left, top, left + 1, bottom])
-                } else if clip.is_none()
+                    if oriented_page {
+                        let bottom = exact_u32(start[1].min(end[1]))?;
+                        let top = exact_u32(start[1].max(end[1]))?;
+                        (
+                            3,
+                            visible_rect_to_display(crop, turn, [left, bottom, 1, top - bottom])?,
+                        )
+                    } else {
+                        let top = height - exact_u32(start[1].max(end[1]))?;
+                        let bottom = height - exact_u32(start[1].min(end[1]))?;
+                        (3, [left, top, left + 1, bottom])
+                    }
+                } else if !oriented_page
+                    && clip.is_none()
                     && end[0] > start[0]
                     && end[0] - start[0] == start[1] - end[1]
                     && start[0].fract() == 0.5
@@ -1237,7 +1375,8 @@ fn page_to_opdl_bytes_internal(
                     let right = exact_u32(end[0] + 0.5)?;
                     let bottom = exact_u32(f64::from(height) - end[1] + 0.5)?;
                     (4, [left, top, right, bottom])
-                } else if clip.is_none()
+                } else if !oriented_page
+                    && clip.is_none()
                     && end[0] > start[0]
                     && end[0] - start[0] == end[1] - start[1]
                     && start[0].fract() == 0.5

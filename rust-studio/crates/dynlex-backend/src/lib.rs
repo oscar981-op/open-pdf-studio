@@ -603,12 +603,66 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
+    fn inherited_rotation_and_crop_orient_images_and_vectors() {
+        for (turn, bytes) in [
+            (
+                0,
+                include_bytes!("../tests/fixtures/rotated-cropped-image-0.pdf").as_slice(),
+            ),
+            (
+                90,
+                include_bytes!("../tests/fixtures/rotated-cropped-image-90.pdf").as_slice(),
+            ),
+            (
+                180,
+                include_bytes!("../tests/fixtures/rotated-cropped-image-180.pdf").as_slice(),
+            ),
+            (
+                270,
+                include_bytes!("../tests/fixtures/rotated-cropped-image-270.pdf").as_slice(),
+            ),
+        ] {
+            let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+            let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(rendered.used, Backend::Dynlex, "turn {turn}");
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            assert_eq!(rendered.raster.rgba.len(), expected.rgba.len());
+            let mismatch = rendered
+                .raster
+                .rgba
+                .iter()
+                .zip(&expected.rgba)
+                .position(|(a, b)| a != b);
+            assert_eq!(mismatch, None, "turn {turn}: first differing RGBA byte");
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn large_rotated_cropped_image_matches_hayro() {
+        let bytes = include_bytes!("../tests/fixtures/large-rotated-cropped-image.pdf");
+        let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+        let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert_eq!(rendered.used, Backend::Dynlex);
+        assert_eq!(
+            (rendered.raster.width, rendered.raster.height),
+            (1984, 1484)
+        );
+        let expected = pdf.render_page(1, 1.0).unwrap();
+        assert_eq!(rendered.raster.rgba, expected.rgba);
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
     fn scaled_images_outside_validated_subset_fall_back() {
         for bytes in [
             include_bytes!("../tests/fixtures/scaled-interpolate-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/scaled-source-oversized.pdf").as_slice(),
             include_bytes!("../tests/fixtures/large-page-pixel-limit.pdf").as_slice(),
             include_bytes!("../tests/fixtures/large-page-side-limit.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/image-invalid-rotation.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/image-invalid-crop.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/image-inherited-userunit.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
@@ -695,12 +749,12 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
-    fn unsupported_image_state_never_enters_dynlex() {
+    fn inherited_rotation_works_and_unsupported_image_states_fall_back() {
         let rotated = include_bytes!("../tests/fixtures/full-page-inherited-rotate.pdf").to_vec();
-        assert!(try_render(&rotated, 1, 1.0).unwrap().is_none());
+        assert!(try_render(&rotated, 1, 1.0).unwrap().is_some());
         let pdf = ParsedPdf::open(Arc::new(rotated.clone())).unwrap();
         let result = render_with_report(&pdf, &rotated, 1, 1.0, Backend::Dynlex).unwrap();
-        assert_eq!(result.used, Backend::Hayro);
+        assert_eq!(result.used, Backend::Dynlex);
         let hayro = pdf.render_page(1, 1.0).unwrap();
         assert_eq!(result.raster.rgba, hayro.rgba);
 

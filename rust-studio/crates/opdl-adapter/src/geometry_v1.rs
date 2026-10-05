@@ -2,7 +2,7 @@
 use super::{fail, has_compound_operand, number, operands};
 use lopdf::{
     content::{Content, Operation},
-    Document, Object,
+    Document, Object, ObjectId,
 };
 use std::{collections::HashSet, error::Error, path::Path};
 
@@ -30,28 +30,20 @@ pub(crate) struct PageFixture {
     pub operations: Vec<Operation>,
 }
 
-pub(crate) fn load_page(path: &Path) -> Result<PageFixture, Box<dyn Error>> {
-    let source = std::fs::read(path)?;
-    load_page_bytes(&source)
+#[derive(Clone, Copy)]
+pub(crate) struct PageGeometry {
+    pub media: [u32; 4],
+    pub crop: [u32; 4],
+    pub turn: u32,
 }
 
-pub(crate) fn load_page_bytes(source: &[u8]) -> Result<PageFixture, Box<dyn Error>> {
-    if source.len() > 16_000_000 {
-        return Err(fail("PDF fixture is too large"));
-    }
-    let doc = Document::load_mem(&source)?;
-    let pages = doc.get_pages();
-    if pages.len() != 1 {
-        return Err(fail("OPGM requires one page"));
-    }
-    let page_id = *pages.values().next().ok_or_else(|| fail("missing page"))?;
+pub(crate) fn page_geometry(
+    doc: &Document,
+    page_id: ObjectId,
+) -> Result<PageGeometry, Box<dyn Error>> {
     let page = doc.get_dictionary(page_id)?;
     if page.has(b"Annots") || page.has(b"UserUnit") {
         return Err(fail("unsupported page state"));
-    }
-    let resources = page.get(b"Resources")?.as_dict()?;
-    if !resources.is_empty() {
-        return Err(fail("OPGM requires empty resources"));
     }
     let mut media = None;
     let mut crop = None;
@@ -108,6 +100,30 @@ pub(crate) fn load_page_bytes(source: &[u8]) -> Result<PageFixture, Box<dyn Erro
     {
         return Err(fail("OPGM page exceeds pixel bound"));
     }
+    Ok(PageGeometry { media, crop, turn })
+}
+
+pub(crate) fn load_page(path: &Path) -> Result<PageFixture, Box<dyn Error>> {
+    let source = std::fs::read(path)?;
+    load_page_bytes(&source)
+}
+
+pub(crate) fn load_page_bytes(source: &[u8]) -> Result<PageFixture, Box<dyn Error>> {
+    if source.len() > 16_000_000 {
+        return Err(fail("PDF fixture is too large"));
+    }
+    let doc = Document::load_mem(&source)?;
+    let pages = doc.get_pages();
+    if pages.len() != 1 {
+        return Err(fail("OPGM requires one page"));
+    }
+    let page_id = *pages.values().next().ok_or_else(|| fail("missing page"))?;
+    let page = doc.get_dictionary(page_id)?;
+    let resources = page.get(b"Resources")?.as_dict()?;
+    if !resources.is_empty() {
+        return Err(fail("OPGM requires empty resources"));
+    }
+    let PageGeometry { media, crop, turn } = page_geometry(&doc, page_id)?;
     let bytes = doc.get_page_content(page_id)?;
     if bytes.len() > 2_000_000 || has_compound_operand(&bytes) {
         return Err(fail("unsupported PDF content syntax"));

@@ -37,9 +37,10 @@ Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
 tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
 Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
 één of meer ongefilterde of enkelvoudig met FlateDecode gecomprimeerde,
-niet geïnterpoleerde RGB8-XObjects op een ongeroteerde pagina. De oude
+niet geïnterpoleerde RGB8-XObjects. De oude
 OPDL-v2-route blijft maximaal 1024×1024; de geordende OPDL-v3-route accepteert
-maximaal 4096 pixels per zijde en 6 miljoen paginapixels.
+maximaal 4096 pixels per zijde en 6 miljoen paginapixels en zet geërfde
+MediaBox/CropBox en kwartslagrotatie om naar zichtbare paginacoördinaten.
 Een afbeelding mag de hele pagina vullen of een kleiner pixeluitgelijnd
 rechthoekig deel. De bron mag een andere pixelmaat hebben: bij verkleinen
 wordt de pure Rust-bibliotheek `pic-scale` 0.7.12 met Catmull–Rom gebruikt,
@@ -65,7 +66,7 @@ draait de hybride v2-modus of de geordende v3-modus. FlateDecode
 wordt met een harde limiet van exact de verwachte RGB-bytelengte uitgepakt.
 De begrensde decompressor is de pure-Rust `miniz_oxide`-bibliotheek.
 Onbekende afbeeldingsdictionarysleutels, waaronder `/DecodeParms` en
-alfamaskers, andere beeldfilters, geërfde rotatie, CropBox en ongedekte
+alfamaskers, andere beeldfilters, ongeldige paginageometrie en ongedekte
 PDF-operatoren vallen
 terug op Hayro. Dit is geen algemene PDF-afbeeldingsdecoder.
 Bij elke niet-ondersteunde PDF,
@@ -122,9 +123,9 @@ XObjects uitgevoerd: bij 256 was de 196.608-byte RGBA-uitvoer identiek aan
 Hayro (SHA-256 `18fc2be16dcb4f52a338295da2cfbe99bc2771f0f371a2549da3d4d7ccb7f485`);
 bij 257 schreef de DynLex-probe geen uitvoer. De native app gebruikt voor
 dat laatste geval de Hayro-fallback.
-Rotatie, shear, scenes boven de byte-/opdrachtlimiet en andere
+Shear, willekeurige beeld-CTM, scenes boven de byte-/opdrachtlimiet en andere
 filters zijn nog niet bewezen.
-Een pagina met geërfde `/Rotate 90` volgt aantoonbaar de Hayro-fallback;
+Een pagina met geërfde `/Rotate 90` is nu bytegelijk via DynLex;
 een ongeldige Flate-stroom, decodeparameters en een opgeblazen beeldstroom
 worden niet aan DynLex doorgegeven.
 Zeven aanvullende geschaalde beeld-PDF's testen vergroting, verkleining,
@@ -134,9 +135,14 @@ identiek aan Hayro. Een achtste A2-achtige 1684×1191-pagina zet de strook
 rechts van x=1024 en legt daar een rode rechthoek overheen; ook alle
 8.022.576 RGBA-bytes zijn gelijk aan Hayro. `/Interpolate true`, een bron
 breder dan 4096 pixels, een pagina met meer dan 6 miljoen pixels of een zijde
-boven 4096 pixels
-worden vóór de DynLex-aanroep geweigerd. Dit dekt nog geen gedraaide/gecropte
-beeldpagina of andere PDF-afbeeldingsfilters en kleurmodellen.
+boven 4096 pixels worden vóór de DynLex-aanroep geweigerd. Vier extra kleine
+PDF's testen een geschaald beeld dat gedeeltelijk buiten de CropBox ligt,
+vectorfill en asgerichte strokecropping, met `/Rotate 0/90/180/270` geërfd uit
+de paginaboom. Een A1-achtige pagina met `/Rotate 90`, verschoven CropBox,
+geschaald beeld en fill is op 1984×1484 zichtbare pixels eveneens bytegelijk
+aan Hayro. Ongeldige rotatie, CropBox buiten MediaBox en geërfde `/UserUnit`
+blijven buiten de deelset. Andere PDF-afbeeldingsfilters en kleurmodellen
+ontbreken nog.
 
 De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
 `rust-studio`:
@@ -169,3 +175,8 @@ Op de A2-achtige 1684×1191-pagina waren 15 warme procesparen
 57,27/58,85 ms en 20.024/22.612 KiB; DynLex won slechts 9 van 15 paren.
 De ruwe samples staan in
 `dynlex-engine-poc/rgba/native-large-scaled-strip-bench-2026-10-05.json`.
+Op de geroteerde/gecropte A1-achtige fixture waren de medianen 70,65/76,40 ms
+en 27.700/30.640 KiB; DynLex won 14 van 15 paren. De 15 ruwe paren staan in
+`dynlex-engine-poc/rgba/native-rotated-cropped-image-bench-2026-10-05.json`.
+Ook dit meet slechts een gecontroleerde kleine inhoud op een groot canvas,
+met warme cache en processtart, geen echte technische tekening.
