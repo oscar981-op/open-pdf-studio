@@ -233,16 +233,21 @@ struct OutlineInventory {
     cubics: usize,
     closes: usize,
     points: Vec<[f64; 2]>,
+    contours: Vec<Vec<[f64; 2]>>,
 }
 
 impl ttf_parser::OutlineBuilder for OutlineInventory {
     fn move_to(&mut self, x: f32, y: f32) {
         self.moves += 1;
         self.points.push([f64::from(x), f64::from(y)]);
+        self.contours.push(vec![[f64::from(x), f64::from(y)]]);
     }
     fn line_to(&mut self, x: f32, y: f32) {
         self.lines += 1;
         self.points.push([f64::from(x), f64::from(y)]);
+        if let Some(contour) = self.contours.last_mut() {
+            contour.push([f64::from(x), f64::from(y)]);
+        }
     }
     fn quad_to(&mut self, _x1: f32, _y1: f32, _x: f32, _y: f32) {
         self.quads += 1;
@@ -253,6 +258,73 @@ impl ttf_parser::OutlineBuilder for OutlineInventory {
     fn close(&mut self) {
         self.closes += 1;
     }
+}
+
+fn multi_glyph_scene(
+    font: &Font,
+    record: &GlyphRecord,
+) -> Result<(Vec<u8>, [f64; 2]), Box<dyn Error>> {
+    let face = ttf_parser::Face::parse(&font.data, 0)?;
+    let mut outline = OutlineInventory::default();
+    face.outline_glyph(ttf_parser::GlyphId(record.gid), &mut outline)
+        .ok_or_else(|| fail("glyph has no outline"))?;
+    if !(2..=8).contains(&outline.moves)
+        || outline.closes != outline.moves
+        || outline.quads != 0
+        || outline.cubics != 0
+        || outline.lines + 2 * outline.moves > 256
+        || outline.contours.iter().any(|c| c.len() < 3)
+    {
+        return Err(fail("glyph is not bounded line-only multi-contour").into());
+    }
+    let [a, b, c, d, e, f] = record.transform;
+    for contour in &mut outline.contours {
+        for point in contour {
+            let [x, y] = *point;
+            *point = [a * x + c * y + e, b * x + d * y + f];
+        }
+    }
+    let (min_x, max_x, min_y, max_y) = outline.contours.iter().flatten().fold(
+        (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        ),
+        |(x0, x1, y0, y1), p| (x0.min(p[0]), x1.max(p[0]), y0.min(p[1]), y1.max(p[1])),
+    );
+    if max_x - min_x > 240.0 || max_y - min_y > 176.0 {
+        return Err(fail("glyph exceeds experimental tile").into());
+    }
+    let shift = [128.0 - (min_x + max_x) / 2.0, 96.0 - (min_y + max_y) / 2.0];
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"OPM2");
+    for value in [1_u32, 256, 192, u32::try_from(outline.contours.len())?] {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    for mut contour in outline.contours {
+        for point in &mut contour {
+            point[0] += shift[0];
+            point[1] += shift[1];
+        }
+        if contour.last() != Some(&contour[0]) {
+            contour.push(contour[0]);
+        }
+        bytes.extend_from_slice(&u32::try_from(contour.len())?.to_le_bytes());
+        for point in contour {
+            for value in point {
+                if !value.is_finite() || value.abs() > 4096.0 {
+                    return Err(fail("glyph point outside limit").into());
+                }
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+    }
+    println!(
+        "multi_outline gid={} contours={} lines={}",
+        record.gid, outline.moves, outline.lines
+    );
+    Ok((bytes, shift))
 }
 
 // OPLN is a local 256x192 experiment, not a PDF page or a production glyph scene.
@@ -422,9 +494,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("TGR1 page={page} glyphs={count}");
         return Ok(());
     }
-    let outline_mode = input == "--outline" || input == "--isolate";
-    let isolate_mode = input == "--isolate";
-    let input = if outline_mode {
+    let inventory_mode = input == "--outline-inventory";
+    let multi_mode = input == "--isolate-multi";
+    let outline_mode = input == "--outline" || input == "--isolate" || multi_mode;
+    let isolate_mode = input == "--isolate" || multi_mode;
+    let input = if outline_mode || inventory_mode {
         args.next().ok_or("--outline requires PDF")?
     } else {
         input
@@ -455,6 +529,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     if args.next().is_some() {
         return Err("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr]".into());
+    }
+    for target in output.iter().chain(pdf_output.iter()) {
+        if let Ok(source) = Path::new(&input).canonicalize() {
+            if Path::new(target).canonicalize().ok() == Some(source) {
+                return Err("output must not overwrite the source PDF".into());
+            }
+        }
     }
     let input = read_bounded(Path::new(&input), MAX_PDF_BYTES)?;
     let mut document = Document::load_mem(&input)?;
@@ -639,6 +720,35 @@ fn main() -> Result<(), Box<dyn Error>> {
         );
     }
     println!("skipped_text_ops={skipped}");
+    if inventory_mode {
+        let mut seen = std::collections::BTreeSet::new();
+        for (index, record) in records.iter().enumerate() {
+            if !seen.insert((record.font.clone(), record.gid)) {
+                continue;
+            }
+            let font = fonts
+                .get(&record.font)
+                .ok_or_else(|| fail("glyph font unavailable"))?;
+            let face = ttf_parser::Face::parse(&font.data, 0)?;
+            let mut outline = OutlineInventory::default();
+            if face
+                .outline_glyph(ttf_parser::GlyphId(record.gid), &mut outline)
+                .is_some()
+                && outline.moves >= 2
+                && outline.quads == 0
+                && outline.cubics == 0
+            {
+                println!(
+                    "multi_line_record={index} font={} gid={} contours={} lines={}",
+                    String::from_utf8_lossy(&record.font),
+                    record.gid,
+                    outline.moves,
+                    outline.lines
+                );
+            }
+        }
+        return Ok(());
+    }
     if let Some(output) = output {
         if skipped != 0 {
             return Err(fail("cannot export a partial glyph run").into());
@@ -657,7 +767,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let font = fonts
                     .get(&record.font)
                     .ok_or_else(|| fail("glyph font unavailable"))?;
-                if let Ok((opln, shift)) = simple_glyph_opln(font, record) {
+                let result = if multi_mode {
+                    multi_glyph_scene(font, record)
+                } else {
+                    simple_glyph_opln(font, record)
+                };
+                if let Ok((opln, shift)) = result {
                     selected = Some((candidate, opln, shift));
                     break;
                 }

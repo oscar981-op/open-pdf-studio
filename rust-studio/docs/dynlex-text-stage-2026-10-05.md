@@ -94,3 +94,41 @@ fontresource uit de technische PDF; resourcekoppeling, compositing,
 clipping, kleur en laagvolgorde moeten vóór integratie expliciet worden
 gevalideerd. De Hayro-vergelijking is een correcte maar smalle oracle;
 prestatiewinst is niet gemeten.
+
+## Tweecontourproef met echt CID-glyph
+
+De optionele `--outline-inventory` toont daadwerkelijk gebruikte glyphs met
+meerdere gesloten rechte contouren. Record 26/GID 76 heeft twee losse
+contouren; record 264/GID 23 heeft een buitencontour en een gat. De aparte
+`--isolate-multi`-route schrijft een OPM2-buffer en een tijdelijke PDF met
+slechts dat glyph. OPM2 bevat versie, 256×192-tegelmaat en per contour een
+expliciet puntental plus `f64`-punten. De experimentele Rust-grens controleert
+exacte lengte, maximaal acht contouren/256 punten, gesloten eindige punten,
+oriëntatie, zelfkruising en rakende/kruisende contouren voordat de bestaande
+DynLex-pixeloppervlaktefunctie wordt aangeroepen. Rust combineert voor deze
+proef de **onafgeronde** DynLex-oppervlakken volgens de getekende winding en
+rondt één keer naar 8-bit af; dit is nog geen zelfstandige DynLex-OPM2-kernel.
+
+Beide geïsoleerde echte glyphs geven elk **49.152/49.152 pixels** gelijk aan
+Hayro: respectievelijk 18 en 14 zichtbare inktpixels. Afgekapt OPM2, extra
+bytes, NaN, zelfkruising en contouraanraking worden geweigerd. Reproduceren
+vanuit `rust-studio` met de bestaande statische DynLex-area-library:
+
+```sh
+cargo build --release --offline -p opds-opdl-adapter --bin stage_type0_text
+cargo build --release --offline -p opds-engine-probe
+rustc --edition=2024 -O dynlex-engine-poc/rgba/glyph_multi_probe.rs \
+  -L native=/tmp/opds-curve-pixel-build -o /tmp/opds-glyph-multi-probe
+python3 dynlex-engine-poc/rgba/verify_real_multi_glyph.py \
+  --stage target/release/stage_type0_text \
+  --hayro target/release/opds-engine-probe \
+  --probe /tmp/opds-glyph-multi-probe \
+  --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf'
+```
+
+De proef gebruikt alleen zwarte geïsoleerde line-only-glyphs; samengestelde
+tekstlagen, rotatie/CropBox op de uitvoertegel, kleur, clips, quadratic/cubic
+TrueType-contouren en PDF-fontfallback zijn niet gevalideerd. De native app
+blijft tekst via Hayro renderen. Een volgende stap is de getekende
+meercontour-compositie binnen één begrensde DynLex-kernel en pixeltests voor
+meer oriëntaties, kleuren en lastigere glyphs.
