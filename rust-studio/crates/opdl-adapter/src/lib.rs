@@ -219,6 +219,8 @@ use std::{error::Error, fs, path::Path, time::Instant};
 
 const LIMIT: u32 = 1024;
 const MAX_COMMANDS: usize = 16_384;
+const MAX_ORDERED_IMAGES: usize = 256;
+const MAX_ORDERED_SCENE_BYTES: usize = 3_538_984;
 
 // The fixture generator writes one canonical, whitespace-separated operation per
 // line. Other PDF syntax stays on lopdf's general parser path.
@@ -263,7 +265,14 @@ fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
                 if operands.len() > 6 {
                     return None;
                 }
-            } else if first == b'/' && matches!(word, b"/Im0" | b"/Im1") && operator.is_none() {
+            } else if first == b'/'
+                && word.len() > 1
+                && word.len() <= 128
+                && word[1..]
+                    .iter()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(*byte, b'-' | b'_' | b'.'))
+                && operator.is_none()
+            {
                 operands.push(Object::Name(word[1..].to_vec()));
             } else {
                 if words.next().is_some() {
@@ -303,9 +312,7 @@ fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
             "cm" | "c" => 6,
             _ => return None,
         };
-        if operands.len() != arity
-            || (operator == "Do" && !matches!(operands[0].as_name().ok(), Some(b"Im0" | b"Im1")))
-        {
+        if operands.len() != arity || (operator == "Do" && operands[0].as_name().is_err()) {
             return None;
         }
         operations.push(Operation { operator, operands });
@@ -347,6 +354,7 @@ mod fast_decode_tests {
         assert_eq!(fast.encode().unwrap(), general.encode().unwrap());
         assert!(decode_canonical_content(b"1 0 0 rg\n").is_some());
         assert!(decode_canonical_content(b"/Im1 Do").is_some());
+        assert!(decode_canonical_content(b"/Picture-42 Do").is_some());
     }
 
     #[test]
@@ -357,7 +365,7 @@ mod fast_decode_tests {
             b"%comment\n1 0 0 rg".as_slice(),
             b"1e3 0 0 rg".as_slice(),
             b"1 0 0 xx".as_slice(),
-            b"/Other Do".as_slice(),
+            b"/Im#31 Do".as_slice(),
             b"(text) Tj".as_slice(),
             b"[1 2] re".as_slice(),
             b"1\t0 0 rg".as_slice(),
@@ -717,8 +725,8 @@ fn image_bytes<'a>(
     width: u32,
     height: u32,
 ) -> Result<std::borrow::Cow<'a, [u8]>, Box<dyn Error>> {
-    if name != b"Im0" && name != b"Im1" {
-        return Err(fail("only /Im0 and /Im1 are supported"));
+    if name.is_empty() || name.len() > 127 {
+        return Err(fail("image resource name is outside the bounded subset"));
     }
     let xobjects = resources.get(b"XObject")?;
     let (_, xobjects) = document.dereference(xobjects)?;
@@ -888,7 +896,7 @@ fn page_to_opdl_bytes_internal(
     let mut image_matrix = false;
     let mut image_placement: Option<[u32; 4]> = None;
     let mut image_drawn = false;
-    let mut image_count = 0_u8;
+    let mut image_count = 0_usize;
     let mut translation: Option<[f64; 2]> = None;
     let mut image = None;
     let mut color = [0_u8; 3];
@@ -940,7 +948,12 @@ fn page_to_opdl_bytes_internal(
                 if b == 0.0
                     && c == 0.0
                     && !(a == 1.0 && d == 1.0)
-                    && image_count < 2
+                    && image_count
+                        < if ordered_images {
+                            MAX_ORDERED_IMAGES
+                        } else {
+                            2
+                        }
                     && (ordered_images || commands.is_empty())
                     && clip.is_none()
                 {
@@ -970,7 +983,15 @@ fn page_to_opdl_bytes_internal(
                     ));
                 }
             }
-            "Do" if depth == 1 && image_matrix && image_count < 2 => {
+            "Do" if depth == 1
+                && image_matrix
+                && image_count
+                    < if ordered_images {
+                        MAX_ORDERED_IMAGES
+                    } else {
+                        2
+                    } =>
+            {
                 let [name] = op.operands.as_slice() else {
                     return Err(fail("Do requires one name"));
                 };
@@ -984,6 +1005,11 @@ fn page_to_opdl_bytes_internal(
                     placed_height,
                 )?;
                 if ordered_images {
+                    if ordered_image_bytes.len().saturating_add(pixels.len())
+                        > MAX_ORDERED_SCENE_BYTES
+                    {
+                        return Err(fail("ordered image data exceeds scene byte limit"));
+                    }
                     let offset = u32::try_from(ordered_image_bytes.len())?;
                     let top = height - y - placed_height;
                     commands.push((
@@ -1226,6 +1252,9 @@ fn page_to_opdl_bytes_internal(
         output.extend_from_slice(&rgba);
     }
     output.extend_from_slice(&ordered_image_bytes);
+    if ordered_images && output.len() > MAX_ORDERED_SCENE_BYTES {
+        return Err(fail("ordered scene exceeds byte limit"));
+    }
     timings.encode_ms = started.elapsed().as_secs_f64() * 1000.0;
     Ok((output, timings))
 }

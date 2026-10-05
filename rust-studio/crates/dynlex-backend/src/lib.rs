@@ -328,7 +328,7 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
         return Err("invalid ordered OPDL command table".into());
     }
     let mut image_bytes = 0_usize;
-    let mut images = 0_u8;
+    let mut images = 0_usize;
     for index in 0..count {
         let at = 40 + index * 24;
         let kind = word(&scene, at)?;
@@ -352,7 +352,7 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
             6 => {
                 images += 1;
                 let offset = usize::try_from(word(&scene, at + 20)?).map_err(|e| e.to_string())?;
-                if images > 2 || offset != image_bytes {
+                if images > 256 || offset != image_bytes {
                     return Err("invalid ordered image offset or count".into());
                 }
                 image_bytes = (rect[2] - rect[0])
@@ -495,6 +495,10 @@ mod tests {
                 "second-after-vector",
                 include_bytes!("../tests/fixtures/two-images-wrong-order.pdf").as_slice(),
             ),
+            (
+                "third-after-images",
+                include_bytes!("../tests/fixtures/three-images-layered.pdf").as_slice(),
+            ),
         ] {
             let bytes = bytes.to_vec();
             let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
@@ -514,6 +518,31 @@ mod tests {
                 mismatch.map(|i| result.raster.rgba[i]),
                 mismatch.map(|i| hayro.rgba[i])
             );
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn many_named_rgb_images_and_vector_layers_match_hayro() {
+        for bytes in [
+            include_bytes!("../tests/fixtures/many-images-raw.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/many-images-mixed-flate.pdf").as_slice(),
+        ] {
+            let bytes = bytes.to_vec();
+            let scene = page_to_opdl_ordered_bytes(&bytes).unwrap();
+            assert_eq!(word(&scene, 4).unwrap(), 3);
+            assert!(validated_ordered_scene(scene).is_ok());
+            let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let result = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(result.used, Backend::Dynlex);
+            let hayro = pdf.render_page(1, 1.0).unwrap();
+            let mismatch = result
+                .raster
+                .rgba
+                .iter()
+                .zip(&hayro.rgba)
+                .position(|(a, b)| a != b);
+            assert_eq!(mismatch, None, "first differing RGBA byte");
         }
     }
 
@@ -564,6 +593,23 @@ mod tests {
         let mut bad_bounds = scene;
         bad_bounds[image_command + 12..image_command + 16].copy_from_slice(&2048_u32.to_le_bytes());
         assert!(validated_ordered_scene(bad_bounds).is_err());
+
+        let make_image_count = |count: u32| {
+            let mut scene = Vec::new();
+            scene.extend_from_slice(b"OPDL");
+            for value in [3, 1, 1, 0, 0, 1, 1, 0, count] {
+                scene.extend_from_slice(&value.to_le_bytes());
+            }
+            for index in 0..count {
+                for value in [6, 0, 0, 1, 1, index * 3] {
+                    scene.extend_from_slice(&value.to_le_bytes());
+                }
+            }
+            scene.resize(scene.len() + count as usize * 3, 0);
+            scene
+        };
+        assert!(validated_ordered_scene(make_image_count(256)).is_ok());
+        assert!(validated_ordered_scene(make_image_count(257)).is_err());
     }
 
     #[cfg(feature = "kernel")]
@@ -588,7 +634,5 @@ mod tests {
         assert!(try_render(outside, 1, 1.0).unwrap().is_none());
         let fractional = include_bytes!("../tests/fixtures/placed-raster-fractional.pdf");
         assert!(try_render(fractional, 1, 1.0).unwrap().is_none());
-        let third_image = include_bytes!("../tests/fixtures/three-images-unsupported.pdf");
-        assert!(try_render(third_image, 1, 1.0).unwrap().is_none());
     }
 }

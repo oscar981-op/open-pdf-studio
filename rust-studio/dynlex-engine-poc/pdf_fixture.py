@@ -39,6 +39,54 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
+def build_many_images_pdf(image_count=12, compress_alternate=False):
+    """A controlled layered PDF with distinct XObject names and vector fills."""
+    if not 1 <= image_count <= 257:
+        raise ValueError("image_count must be 1..257")
+    content = bytearray()
+    image_objects = []
+    resources = []
+    for index in range(image_count):
+        if index in (2, 8):
+            content.extend(f"1 0 0 rg\n{20 + index} 58 48 30 re\nf\n".encode())
+        name = f"Picture-{index:03}"
+        x, y = 9 + (index * 13) % 175, 11 + (index * 7) % 135
+        w, h = 48, 32
+        content.extend(f"q\n{w} 0 0 {h} {x} {y} cm\n/{name} Do\nQ\n".encode())
+        rgb = bytes((channel + index * 19) % 256 for channel in image_rgb(w, h))
+        compressed = compress_alternate and index % 2 == 1
+        payload = zlib.compress(rgb) if compressed else rgb
+        filter_entry = "/Filter /FlateDecode" if compressed else ""
+        image_objects.append(
+            f"<< /Type /XObject /Subtype /Image /Width {w} /Height {h} "
+            f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {filter_entry} "
+            f"/Length {len(payload)} >>\nstream\n".encode()
+            + payload + b"\nendstream"
+        )
+        resources.append(f"/{name} {4 + index} 0 R")
+    content_id = 4 + image_count
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+        (f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {WIDTH} {HEIGHT}] "
+         f"/Resources << /XObject << {' '.join(resources)} >> >> "
+         f"/Contents {content_id} 0 R >>").encode(),
+        *image_objects,
+        f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"endstream",
+    ]
+    pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, 1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{index} 0 obj\n".encode() + obj + b"\nendobj\n")
+    xref = len(pdf)
+    pdf.extend(f"xref\n0 {len(offsets)}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]:
+        pdf.extend(f"{offset:010d} 00000 n \n".encode())
+    pdf.extend(f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+    return bytes(pdf)
+
+
 def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None, second_image_placement=None, second_image_after_vector=False):
     content = bytearray(pre_content)
     if mode != "vector":

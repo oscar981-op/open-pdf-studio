@@ -36,7 +36,7 @@ andere kleurruimtes en willekeurige paden zijn nog niet ondersteund.
 Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
 tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
 Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
-één of twee ongefilterde of enkelvoudig met FlateDecode gecomprimeerde,
+één of meer ongefilterde of enkelvoudig met FlateDecode gecomprimeerde,
 niet geïnterpoleerde RGB8-XObjects op een ongeroteerde pagina tot 1024×1024.
 Een afbeelding mag de hele pagina vullen of een kleiner pixeluitgelijnd
 rechthoekig deel zonder resampling; de bronpixels moeten exact overeenkomen
@@ -47,8 +47,12 @@ vectorinhoud komt, gebruikt de native route een nieuwe experimentele
 OPDL-v3-scene met geordende 24-byte opdrachten en een aansluitende RGB-blob.
 Een afbeeldingsopdracht (kind 6) verwijst met een gecontroleerde byte-offset
 naar zijn pixeldata. De Rust-grens eist aaneengesloten offsets, exacte
-record- en beeldlengtes, maximaal twee afbeeldingen en maximaal 3.538.984
+record- en beeldlengtes, maximaal 256 afbeeldingen en maximaal 3.538.984
 scenebytes voordat DynLex wordt aangeroepen. OPDL-v1/v2 blijven ongewijzigd.
+Afbeeldingen worden via hun PDF-resource-naam opgezocht; de naam is dus niet
+beperkt tot `/Im0` of `/Im1`. De snelle contentdecoder verwerkt eenvoudige
+ASCII-namen, terwijl de algemene lopdf-decoder andere geldige PDF-syntaxis
+afhandelt. Onbekende resources worden geweigerd.
 Rust valideert de complete OPDL-scene opnieuw voor de DynLex-ABI; alleen dan
 draait de hybride v2-modus of de geordende v3-modus. FlateDecode
 wordt met een harde limiet van exact de verwachte RGB-bytelengte uitgepakt.
@@ -101,10 +105,39 @@ Vier andere PDF's overlappen een tweede
 72×56-beeld met het eerste, weer in raster/hybride en raw/Flate, telkens
 RGBA-bytegelijk aan Hayro. Twee extra PDF's plaatsen de eerste of tweede
 afbeelding ná vectorinhoud en zijn pixelgelijk aan Hayro via OPDL-v3.
-Afgekorte of extra beeldbytes, ongeldige offsets, opdrachtsoorten en grenzen
-worden aan de Rust-FFI-grens geweigerd.
-Rotatie, shear, geschaalde bronpixels, drie of meer afbeeldingen en andere
+Een nieuwe 12-image-PDF met verschillende namen, gedeeltelijke overlap,
+afwisselende raw/Flate-stromen en tussenliggende vectorfills is ook
+RGBA-bytegelijk. Een derde herhaalde afbeelding is eveneens gecontroleerd.
+De Rust-FFI-grens weigert afgekorte of extra beeldbytes, ongeldige offsets,
+opdrachtsoorten, grenzen en een scene met 257 beeldopdrachten.
+De generator is daarnaast rechtstreeks met 256 en 257 verschillende
+XObjects uitgevoerd: bij 256 was de 196.608-byte RGBA-uitvoer identiek aan
+Hayro (SHA-256 `18fc2be16dcb4f52a338295da2cfbe99bc2771f0f371a2549da3d4d7ccb7f485`);
+bij 257 schreef de DynLex-probe geen uitvoer. De native app gebruikt voor
+dat laatste geval de Hayro-fallback.
+Rotatie, shear, geschaalde bronpixels, scenes boven de byte-/opdrachtlimiet en andere
 filters zijn nog niet bewezen.
 Een pagina met geërfde `/Rotate 90` volgt aantoonbaar de Hayro-fallback;
 een ongeldige Flate-stroom, decodeparameters en een opgeblazen beeldstroom
 worden niet aan DynLex doorgegeven.
+
+De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
+`rust-studio`:
+
+```sh
+cargo build --release -p opds-dynlex-backend --features kernel --bin backend_probe --offline
+python3 dynlex-engine-poc/rgba/benchmark_native_backend.py \
+  crates/dynlex-backend/tests/fixtures/many-images-mixed-flate.pdf \
+  --probe target/release/backend_probe --runs 30
+```
+
+`backend_probe` schrijft in beide modi dezelfde ruwe RGBA-bytes; `--hayro`
+kiest de referentierenderer. Het script wisselt de procesvolgorde per ronde,
+controleert bij ieder paar de SHA-256 en meet wandtijd inclusief PDF-parse,
+renderen, raw-bestand schrijven en processtart, plus piek-RSS per proces.
+Op deze kleine 256×192-fixture waren de warme medianen DynLex/Hayro
+8,16/8,04 ms en 4.688/6.610 KiB; DynLex won 18 van 30 paren. Het gepaarde
+mediane tijdverschil was -0,30 ms. De ruwe samples staan in
+`dynlex-engine-poc/rgba/native-many-image-bench-2026-10-05.json`.
+De OS-cache werd niet gewist en de timings liggen dicht bij elkaar: dit is
+geen overtuigend of algemeen snelheidsvoordeel.
