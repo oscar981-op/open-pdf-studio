@@ -2,7 +2,7 @@
 //! Unsupported PDFs return None so the host can keep its existing renderer.
 use opds_engine_probe::{ParsedPdf, Raster, RenderError};
 #[cfg(feature = "kernel")]
-use opds_opdl_adapter::geometry_v3::page_to_opgm_v3_bytes;
+use opds_opdl_adapter::{geometry_v3::page_to_opgm_v3_bytes, page_to_opdl_bytes};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
@@ -97,11 +97,19 @@ pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap
     }
     #[cfg(feature = "kernel")]
     {
-        let geometry = match page_to_opgm_v3_bytes(bytes) {
-            Ok(geometry) => geometry,
-            Err(_) => return Ok(None),
+        let (scene, width, height) = if let Ok(geometry) = page_to_opgm_v3_bytes(bytes) {
+            validated_scene(&geometry)?
+        } else {
+            let scene = match page_to_opdl_bytes(bytes) {
+                Ok(scene) => scene,
+                Err(_) => return Ok(None),
+            };
+            match validated_rgb_scene(scene) {
+                Ok(validated) => validated,
+                Err(_) => return Ok(None),
+            }
         };
-        let (scene, width, height) = validated_scene(&geometry)?;
+        let mode = if word(&scene, 32)? == 0 { 2 } else { 3 };
         let pixel_bytes = usize::try_from(width)
             .unwrap()
             .checked_mul(usize::try_from(height).unwrap())
@@ -116,7 +124,7 @@ pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap
                 i32::try_from(scene.len()).map_err(|_| "scene too large")?,
                 output.as_mut_ptr(),
                 i32::try_from(output.len()).map_err(|_| "output too large")?,
-                2,
+                mode,
             )
         };
         if code != 0 {
@@ -207,6 +215,76 @@ fn validated_scene(geometry: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     Ok((scene, width, height))
 }
 
+/// The older PDF adapter supports only one unfiltered, full-page RGB8 XObject
+/// before its vector commands. Revalidate its bytes before crossing the ABI.
+#[cfg(feature = "kernel")]
+fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
+    if scene.len() < 40
+        || scene.len() > 3_538_984
+        || scene.get(..4) != Some(b"OPDL")
+        || word(&scene, 4)? != 2
+    {
+        return Err("invalid RGB OPDL header".into());
+    }
+    let width = word(&scene, 8)?;
+    let height = word(&scene, 12)?;
+    if width == 0
+        || height == 0
+        || width > 1024
+        || height > 1024
+        || [
+            word(&scene, 16)?,
+            word(&scene, 20)?,
+            word(&scene, 24)?,
+            word(&scene, 28)?,
+        ] != [0, 0, width, height]
+    {
+        return Err("invalid RGB OPDL page".into());
+    }
+    let image_len = usize::try_from(word(&scene, 32)?).map_err(|e| e.to_string())?;
+    let required_rgb = usize::try_from(width)
+        .unwrap()
+        .checked_mul(usize::try_from(height).unwrap())
+        .and_then(|n| n.checked_mul(3))
+        .ok_or("RGB byte count overflow")?;
+    if image_len != required_rgb {
+        return Err("RGB OPDL needs one full-page image".into());
+    }
+    let count_at = 36_usize
+        .checked_add(image_len)
+        .ok_or("RGB offset overflow")?;
+    let count = usize::try_from(word(&scene, count_at)?).map_err(|e| e.to_string())?;
+    if count > 16_384
+        || count_at
+            .checked_add(4)
+            .and_then(|n| count.checked_mul(24).and_then(|m| n.checked_add(m)))
+            != Some(scene.len())
+    {
+        return Err("invalid RGB OPDL commands".into());
+    }
+    for index in 0..count {
+        let at = count_at + 4 + index * 24;
+        let kind = word(&scene, at)?;
+        let rect = [
+            word(&scene, at + 4)?,
+            word(&scene, at + 8)?,
+            word(&scene, at + 12)?,
+            word(&scene, at + 16)?,
+        ];
+        if !matches!(kind, 1 | 3)
+            || rect[0] >= rect[2]
+            || rect[1] >= rect[3]
+            || rect[2] > width
+            || rect[3] > height
+            || (kind == 3 && rect[2] - rect[0] != 1 && rect[3] - rect[1] != 1)
+            || scene[at + 23] != 255
+        {
+            return Err("invalid RGB OPDL command".into());
+        }
+    }
+    Ok((scene, width, height))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,5 +340,59 @@ mod tests {
         assert_eq!(result.used, Backend::Dynlex);
         let hayro = pdf.render_page(1, 1.0).unwrap();
         assert_eq!(result.raster.rgba, hayro.rgba);
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn full_page_rgb_image_and_vector_overlay_match_hayro() {
+        for bytes in [
+            include_bytes!("../tests/fixtures/full-page-raster.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/full-page-hybrid.pdf").as_slice(),
+        ] {
+            let bytes = bytes.to_vec();
+            let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let result = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(result.used, Backend::Dynlex);
+            let hayro = pdf.render_page(1, 1.0).unwrap();
+            assert_eq!(result.raster.rgba.len(), hayro.rgba.len());
+            assert!(result.raster.rgba == hayro.rgba, "RGB image pixels differ");
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn rgb_scene_boundary_rejects_corruption() {
+        let bytes = include_bytes!("../tests/fixtures/full-page-hybrid.pdf");
+        let scene = page_to_opdl_bytes(bytes).unwrap();
+        assert!(validated_rgb_scene(scene.clone()).is_ok());
+        let mut truncated = scene.clone();
+        truncated.pop();
+        assert!(validated_rgb_scene(truncated).is_err());
+        let mut bad_image_length = scene.clone();
+        bad_image_length[32..36].copy_from_slice(&0_u32.to_le_bytes());
+        assert!(validated_rgb_scene(bad_image_length).is_err());
+        let mut bad_alpha = scene.clone();
+        let at = scene.len() - 1;
+        bad_alpha[at] = 0;
+        assert!(validated_rgb_scene(bad_alpha).is_err());
+        let mut bad_kind = scene;
+        let image_len = usize::try_from(word(&bad_kind, 32).unwrap()).unwrap();
+        bad_kind[40 + image_len..44 + image_len].copy_from_slice(&9_u32.to_le_bytes());
+        assert!(validated_rgb_scene(bad_kind).is_err());
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn unsupported_image_state_never_enters_dynlex() {
+        let rotated = include_bytes!("../tests/fixtures/full-page-inherited-rotate.pdf").to_vec();
+        assert!(try_render(&rotated, 1, 1.0).unwrap().is_none());
+        let pdf = ParsedPdf::open(Arc::new(rotated.clone())).unwrap();
+        let result = render_with_report(&pdf, &rotated, 1, 1.0, Backend::Dynlex).unwrap();
+        assert_eq!(result.used, Backend::Hayro);
+        let hayro = pdf.render_page(1, 1.0).unwrap();
+        assert_eq!(result.raster.rgba, hayro.rgba);
+
+        let filtered = include_bytes!("../tests/fixtures/full-page-filtered-unsupported.pdf");
+        assert!(try_render(filtered, 1, 1.0).unwrap().is_none());
     }
 }

@@ -38,7 +38,7 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra=""):
     content = bytearray(pre_content)
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
@@ -113,13 +113,13 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     resources = "/Resources << /XObject << /Im0 4 0 R >> >>" if has_image else "/Resources << >>"
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Count 1 /Kids [3 0 R] >>",
+        f"<< /Type /Pages /Count 1 /Kids [3 0 R] {pages_extra} >>".encode(),
         f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] "
         f"{resources} /Contents {content_id} 0 R >>".encode(),
     ]
     if has_image:
         objects.append(f"<< /Type /XObject /Subtype /Image /Width {width} /Height {height} "
-                       f"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length {len(rgb)} >>\nstream\n".encode()
+                       f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {image_extra} /Length {len(rgb)} >>\nstream\n".encode()
                        + rgb + b"\nendstream")
     objects.append(f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"endstream")
     pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")

@@ -35,6 +35,13 @@ van 0 tot 1. De RGB-waarden worden naar 8-bit afgerond; transparantie,
 andere kleurruimtes en willekeurige paden zijn nog niet ondersteund.
 Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
 tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
+Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
+één ongefilterde, niet geïnterpoleerde RGB8-XObject over een volledige
+ongeroteerde pagina tot 1024×1024, eventueel gevolgd door bewezen
+rechthoekfills en 1px-strokes. Rust valideert de complete OPDL-scene opnieuw
+voor de DynLex-ABI; alleen dan draait de hybride kernelmodus. Beeldfilters,
+alfamaskers, geërfde rotatie, CropBox en ongedekte PDF-operatoren vallen
+terug op Hayro. Dit is geen algemene PDF-afbeeldingsdecoder.
 Bij elke niet-ondersteunde PDF,
 pagina of schaal rendert Hayro. Dit voorkomt dat een nog onvolledige
 DynLex-kernel PDF-inhoud stil weglaat. Er is nog geen
@@ -42,7 +49,7 @@ PDFium-backend in de Rust-app en geen
 100% PDF-objectdekking.
 
 De native app roept de kernel alleen via de veilige Rust-router aan.
-Deze valideert de gegenereerde OPGM-v3-scene opnieuw vóór de C-ABI,
+Deze valideert de gegenereerde OPGM-v3- of RGB-OPDL-scene opnieuw vóór de C-ABI,
 begrenst de uitvoer tot 6 miljoen pixels en gebruikt de bestaande
 Hayro-renderer als fallback. De standaardbuild compileert de DynLex-
 toolchain niet; `build.rs` doet dat alleen bij de feature `kernel`.
@@ -69,3 +76,7 @@ de beschreven deelset.
 Twee aanvullende pagina's testen hergebruik en `q/Q`-herstel van vulkleur,
 lijnkleur en lijnbreedte; de directe native backendtest is ook daarvoor
 bytegelijk aan Hayro.
+Twee echte RGB-image-PDF's, één raster en één met vectoroverlay, worden
+in de native backend op 256×192 pixel voor pixel met Hayro vergeleken.
+Een pagina met geërfde `/Rotate 90` volgt aantoonbaar de Hayro-fallback;
+een niet-ondersteunde afbeeldingsfilter wordt niet aan DynLex doorgegeven.

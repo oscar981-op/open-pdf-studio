@@ -763,10 +763,22 @@ pub fn page_to_opdl(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
 }
 
 pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings), Box<dyn Error>> {
-    let mut timings = AdapterTimings::default();
     let started = Instant::now();
     let bytes = fs::read(path)?;
-    timings.read_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let read_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let (scene, mut timings) = page_to_opdl_bytes_with_timings(&bytes)?;
+    timings.read_ms = read_ms;
+    Ok((scene, timings))
+}
+
+pub fn page_to_opdl_bytes(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    Ok(page_to_opdl_bytes_with_timings(bytes)?.0)
+}
+
+fn page_to_opdl_bytes_with_timings(
+    bytes: &[u8],
+) -> Result<(Vec<u8>, AdapterTimings), Box<dyn Error>> {
+    let mut timings = AdapterTimings::default();
     if bytes.len() > 16_000_000 {
         return Err(fail("fixture PDF is too large"));
     }
@@ -780,10 +792,30 @@ pub fn page_to_opdl_with_timings(path: &Path) -> Result<(Vec<u8>, AdapterTimings
     }
     let page_id = *pages.values().next().ok_or_else(|| fail("missing page"))?;
     let page = document.get_dictionary(page_id)?;
-    if page.has(b"Rotate") || page.has(b"CropBox") || page.has(b"Annots") {
+    if page.has(b"Rotate") || page.has(b"CropBox") || page.has(b"Annots") || page.has(b"UserUnit") {
         return Err(fail(
-            "rotation, crop and annotations are not in this subset",
+            "rotation, crop, user units and annotations are not in this subset",
         ));
+    }
+    let mut parent = page
+        .get(b"Parent")
+        .ok()
+        .map(Object::as_reference)
+        .transpose()?;
+    let mut visited = std::collections::HashSet::new();
+    while let Some(parent_id) = parent {
+        if !visited.insert(parent_id) || visited.len() > 16 {
+            return Err(fail("cyclic or deep page tree"));
+        }
+        let node = document.get_dictionary(parent_id)?;
+        if node.has(b"Rotate") || node.has(b"CropBox") || node.has(b"UserUnit") {
+            return Err(fail("inherited page geometry is outside this subset"));
+        }
+        parent = node
+            .get(b"Parent")
+            .ok()
+            .map(Object::as_reference)
+            .transpose()?;
     }
     let media_box = page.get(b"MediaBox")?.as_array()?;
     let [x0, y0, x1, y1] = operands::<4>(media_box)?;
