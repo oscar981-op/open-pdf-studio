@@ -39,10 +39,11 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b""):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None):
     content = bytearray(pre_content)
     if mode != "vector":
-        content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
+        image_x, image_y, image_width, image_height = image_placement or (0, 0, width, height)
+        content.extend(f"q\n{image_width} 0 0 {image_height} {image_x} {image_y} cm\n/Im0 Do\nQ\n".encode())
     if mode != "raster":
         for x0, y0, x1, y1, (r, g, b) in rectangles(width, height, dense):
             content.extend(f"{r / 255:g} {g / 255:g} {b / 255:g} rg\n"
@@ -108,7 +109,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
             endpoints = f"20 {pdf_y:g} m\n60 {pdf_y:g} l\n100 {pdf_y:g} l"
         content.extend(f"1 w\n0 0 0 RG\n{endpoints}\nS\n".encode())
     content.extend(extra_content)
-    rgb = image_rgb(width, height) if mode != "vector" else b""
+    rgb = image_rgb(image_width, image_height) if mode != "vector" else b""
     image_payload = zlib.compress(rgb + image_bytes_extra) if flate_image else rgb
     image_filter = "/Filter /FlateDecode" if flate_image else ""
     has_image = mode != "vector"
@@ -121,7 +122,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         f"{resources} /Contents {content_id} 0 R >>".encode(),
     ]
     if has_image:
-        objects.append(f"<< /Type /XObject /Subtype /Image /Width {width} /Height {height} "
+        objects.append(f"<< /Type /XObject /Subtype /Image /Width {image_width} /Height {image_height} "
                        f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {image_filter} {image_extra} /Length {len(image_payload)} >>\nstream\n".encode()
                        + image_payload + b"\nendstream")
     objects.append(f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"endstream")

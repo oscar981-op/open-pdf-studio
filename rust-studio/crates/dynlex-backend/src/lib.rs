@@ -363,6 +363,24 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
+    fn placed_rgb_image_and_vector_overlay_match_hayro() {
+        for bytes in [
+            include_bytes!("../tests/fixtures/placed-raster.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/placed-hybrid.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/placed-raster-flate.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/placed-hybrid-flate.pdf").as_slice(),
+        ] {
+            let bytes = bytes.to_vec();
+            let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let result = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(result.used, Backend::Dynlex);
+            let hayro = pdf.render_page(1, 1.0).unwrap();
+            assert_eq!(result.raster.rgba, hayro.rgba);
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
     fn rgb_scene_boundary_rejects_corruption() {
         let bytes = include_bytes!("../tests/fixtures/full-page-hybrid.pdf");
         let scene = page_to_opdl_bytes(bytes).unwrap();
@@ -401,5 +419,11 @@ mod tests {
         assert!(try_render(predictor, 1, 1.0).unwrap().is_none());
         let oversized = include_bytes!("../tests/fixtures/full-page-flate-oversized.pdf");
         assert!(try_render(oversized, 1, 1.0).unwrap().is_none());
+        let outside = include_bytes!("../tests/fixtures/placed-raster-outside.pdf");
+        assert!(try_render(outside, 1, 1.0).unwrap().is_none());
+        let fractional = include_bytes!("../tests/fixtures/placed-raster-fractional.pdf");
+        assert!(try_render(fractional, 1, 1.0).unwrap().is_none());
+        let wrong_order = include_bytes!("../tests/fixtures/placed-raster-after-vector.pdf");
+        assert!(try_render(wrong_order, 1, 1.0).unwrap().is_none());
     }
 }

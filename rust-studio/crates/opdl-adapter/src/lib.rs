@@ -749,7 +749,7 @@ fn image_bytes<'a>(
         || dict.get(b"Height")?.as_i64()? != i64::from(height)
     {
         return Err(fail(
-            "image must be an unmasked, uninterpolated RGB8 full-page fixture",
+            "image must be an unmasked, uninterpolated RGB8 source matching its placement",
         ));
     }
     let expected_len = width as usize * height as usize * 3;
@@ -873,6 +873,7 @@ fn page_to_opdl_bytes_with_timings(
     timings.page_decode_ms = timings.content_ms + timings.operator_decode_ms;
     let mut depth = 0_u8;
     let mut image_matrix = false;
+    let mut image_placement: Option<[u32; 4]> = None;
     let mut translation: Option<[f64; 2]> = None;
     let mut image = None;
     let mut color = [0_u8; 3];
@@ -911,6 +912,7 @@ fn page_to_opdl_bytes_with_timings(
                 depth -= 1;
                 translation = None;
                 image_matrix = false;
+                image_placement = None;
             }
             "cm" if depth == 1
                 && !image_matrix
@@ -918,12 +920,25 @@ fn page_to_opdl_bytes_with_timings(
                 && pending_path.is_none() =>
             {
                 let [a, b, c, d, e, f] = operands::<6>(&op.operands)?;
-                if [a, b, c, d, e, f] == [f64::from(width), 0.0, 0.0, f64::from(height), 0.0, 0.0]
+                if b == 0.0
+                    && c == 0.0
+                    && !(a == 1.0 && d == 1.0)
                     && image.is_none()
                     && commands.is_empty()
                     && clip.is_none()
                 {
+                    let [placed_width, placed_height, x, y] =
+                        [exact_u32(a)?, exact_u32(d)?, exact_u32(e)?, exact_u32(f)?];
+                    if placed_width == 0
+                        || placed_height == 0
+                        || x.checked_add(placed_width)
+                            .is_none_or(|right| right > width)
+                        || y.checked_add(placed_height).is_none_or(|top| top > height)
+                    {
+                        return Err(fail("RGB image placement is outside the page"));
+                    }
                     image_matrix = true;
+                    image_placement = Some([x, y, placed_width, placed_height]);
                 } else if [a, b, c, d] == [1.0, 0.0, 0.0, 1.0]
                     && e.fract() == 0.0
                     && f.fract() == 0.0
@@ -941,13 +956,29 @@ fn page_to_opdl_bytes_with_timings(
                 let [name] = op.operands.as_slice() else {
                     return Err(fail("Do requires one name"));
                 };
-                image = Some(image_bytes(
+                let [x, y, placed_width, placed_height] =
+                    image_placement.ok_or_else(|| fail("image placement is missing"))?;
+                let pixels = image_bytes(
                     &document,
                     resources,
                     name.as_name()?,
-                    width,
-                    height,
-                )?);
+                    placed_width,
+                    placed_height,
+                )?;
+                if [x, y, placed_width, placed_height] == [0, 0, width, height] {
+                    image = Some(pixels);
+                } else {
+                    let mut page_rgb = vec![255_u8; width as usize * height as usize * 3];
+                    let row_bytes = placed_width as usize * 3;
+                    let top = height - y - placed_height;
+                    for row in 0..placed_height as usize {
+                        let source = row * row_bytes;
+                        let target = ((top as usize + row) * width as usize + x as usize) * 3;
+                        page_rgb[target..target + row_bytes]
+                            .copy_from_slice(&pixels[source..source + row_bytes]);
+                    }
+                    image = Some(std::borrow::Cow::Owned(page_rgb));
+                }
             }
             "rg" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
                 let rgb = operands::<3>(&op.operands)?;

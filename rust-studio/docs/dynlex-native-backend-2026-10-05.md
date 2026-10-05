@@ -37,9 +37,13 @@ Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
 tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
 Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
 één ongefilterde of enkelvoudig met FlateDecode gecomprimeerde, niet
-geïnterpoleerde RGB8-XObject over een volledige
-ongeroteerde pagina tot 1024×1024, eventueel gevolgd door bewezen
-rechthoekfills en 1px-strokes. Rust valideert de complete OPDL-scene opnieuw
+geïnterpoleerde RGB8-XObject op een ongeroteerde pagina tot 1024×1024.
+De afbeelding mag de hele pagina vullen of een kleiner pixeluitgelijnd
+rechthoekig deel zonder resampling; de bronpixels moeten exact overeenkomen
+met de positieve gehele breedte en hoogte in de PDF-plaatsingsmatrix.
+Buiten de afbeelding is de pagina wit. Daarna zijn bewezen rechthoekfills
+en 1px-strokes toegestaan; een afbeelding ná vectorinhoud wordt geweigerd.
+Rust valideert de complete OPDL-scene opnieuw
 voor de DynLex-ABI; alleen dan draait de hybride kernelmodus. FlateDecode
 wordt met een harde limiet van exact de verwachte RGB-bytelengte uitgepakt.
 De begrensde decompressor is de pure-Rust `miniz_oxide`-bibliotheek.
@@ -84,6 +88,11 @@ bytegelijk aan Hayro.
 Vier echte RGB-image-PDF's, raster en met vectoroverlay, zowel ongefilterd
 als FlateDecode, worden
 in de native backend op 256×192 pixel voor pixel met Hayro vergeleken.
+Vier extra PDF's plaatsen een 64×48-beeld op (31,27) binnen die pagina:
+raster/hybride, raw/Flate, telkens RGBA-bytegelijk aan Hayro. Een plaatsing
+buiten de pagina, een fractionele positie en beeldinhoud na vectorinhoud
+vallen aantoonbaar terug op Hayro. Rotatie, shear, geschaalde bronpixels,
+meerdere afbeeldingen en andere filters zijn nog niet bewezen.
 Een pagina met geërfde `/Rotate 90` volgt aantoonbaar de Hayro-fallback;
 een ongeldige Flate-stroom, decodeparameters en een opgeblazen beeldstroom
 worden niet aan DynLex doorgegeven.
