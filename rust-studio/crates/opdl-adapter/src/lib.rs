@@ -722,8 +722,9 @@ fn image_bytes<'a>(
     document: &'a Document,
     resources: &'a lopdf::Dictionary,
     name: &[u8],
-    width: u32,
-    height: u32,
+    placed_width: u32,
+    placed_height: u32,
+    allow_scaling: bool,
 ) -> Result<std::borrow::Cow<'a, [u8]>, Box<dyn Error>> {
     if name.is_empty() || name.len() > 127 {
         return Err(fail("image resource name is outside the bounded subset"));
@@ -750,18 +751,26 @@ fn image_bytes<'a>(
     {
         return Err(fail("unsupported image dictionary key"));
     }
+    let source_width = u32::try_from(dict.get(b"Width")?.as_i64()?)?;
+    let source_height = u32::try_from(dict.get(b"Height")?.as_i64()?)?;
     if dict.get(b"Subtype")?.as_name()? != b"Image"
         || dict.get(b"ColorSpace")?.as_name()? != b"DeviceRGB"
         || dict.get(b"BitsPerComponent")?.as_i64()? != 8
-        || dict.get(b"Width")?.as_i64()? != i64::from(width)
-        || dict.get(b"Height")?.as_i64()? != i64::from(height)
+        || source_width == 0
+        || source_height == 0
+        || source_width > 4096
+        || source_height > 4096
+        || source_width
+            .checked_mul(source_height)
+            .is_none_or(|pixels| pixels > 6_000_000)
+        || (!allow_scaling && (source_width != placed_width || source_height != placed_height))
     {
         return Err(fail(
-            "image must be an unmasked, uninterpolated RGB8 source matching its placement",
+            "image is outside bounded RGB8 source/placement subset",
         ));
     }
-    let expected_len = width as usize * height as usize * 3;
-    if dict.has(b"Filter") {
+    let expected_len = source_width as usize * source_height as usize * 3;
+    let pixels = if dict.has(b"Filter") {
         if dict.get(b"Filter")?.as_name()? != b"FlateDecode" {
             return Err(fail("only a single FlateDecode image filter is supported"));
         }
@@ -771,12 +780,50 @@ fn image_bytes<'a>(
         if decoded.len() != expected_len {
             return Err(fail("wrong decoded RGB image byte length"));
         }
-        return Ok(std::borrow::Cow::Owned(decoded));
+        std::borrow::Cow::Owned(decoded)
+    } else {
+        if content.len() != expected_len {
+            return Err(fail("wrong RGB image byte length"));
+        }
+        std::borrow::Cow::Borrowed(content.as_slice())
+    };
+    if (source_width, source_height) == (placed_width, placed_height) {
+        return Ok(pixels);
     }
-    if content.len() != expected_len {
-        return Err(fail("wrong RGB image byte length"));
+    let target_len = placed_width as usize * placed_height as usize * 3;
+    let mut output = vec![0; target_len];
+    if source_width > placed_width || source_height > placed_height {
+        use pic_scale::{ImageSize, ImageStore, ImageStoreMut, ResamplingFunction, Scaler};
+        let source = ImageStore::<u8, 3>::from_slice(
+            &pixels,
+            source_width as usize,
+            source_height as usize,
+        )?;
+        let mut target = ImageStoreMut::<u8, 3>::from_slice(
+            &mut output,
+            placed_width as usize,
+            placed_height as usize,
+        )?;
+        let plan = Scaler::new(ResamplingFunction::CatmullRom).plan_rgb_resampling(
+            ImageSize::new(source_width as usize, source_height as usize),
+            ImageSize::new(placed_width as usize, placed_height as usize),
+        )?;
+        plan.resample(&source, &mut target)?;
+    } else {
+        // Non-interpolated PDF images use nearest sampling at pixel centres.
+        for y in 0..placed_height as usize {
+            let source_y = ((2 * y + 1) * source_height as usize / (2 * placed_height as usize))
+                .min(source_height as usize - 1);
+            for x in 0..placed_width as usize {
+                let source_x = ((2 * x + 1) * source_width as usize / (2 * placed_width as usize))
+                    .min(source_width as usize - 1);
+                let from = (source_y * source_width as usize + source_x) * 3;
+                let to = (y * placed_width as usize + x) * 3;
+                output[to..to + 3].copy_from_slice(&pixels[from..from + 3]);
+            }
+        }
     }
-    Ok(std::borrow::Cow::Borrowed(content.as_slice()))
+    Ok(std::borrow::Cow::Owned(output))
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -1003,6 +1050,7 @@ fn page_to_opdl_bytes_internal(
                     name.as_name()?,
                     placed_width,
                     placed_height,
+                    ordered_images,
                 )?;
                 if ordered_images {
                     if ordered_image_bytes.len().saturating_add(pixels.len())

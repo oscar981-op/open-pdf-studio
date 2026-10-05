@@ -39,8 +39,13 @@ Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
 één of meer ongefilterde of enkelvoudig met FlateDecode gecomprimeerde,
 niet geïnterpoleerde RGB8-XObjects op een ongeroteerde pagina tot 1024×1024.
 Een afbeelding mag de hele pagina vullen of een kleiner pixeluitgelijnd
-rechthoekig deel zonder resampling; de bronpixels moeten exact overeenkomen
-met de positieve gehele breedte en hoogte in de PDF-plaatsingsmatrix.
+rechthoekig deel. De bron mag een andere pixelmaat hebben: bij verkleinen
+wordt de pure Rust-bibliotheek `pic-scale` 0.7.12 met Catmull–Rom gebruikt,
+bij vergroten de dichtstbijzijnde bronpixel. DynLex tekent het voorbereide
+RGB-beeld daarna in de geordende paginascene. De bron is begrensd op 4096
+pixels per zijde en 6 miljoen pixels totaal; de zichtbare pagina blijft in
+deze route maximaal 1024×1024. Dit is nog geen volledig in DynLex uitgevoerde
+resampling.
 Buiten de afbeeldingen is de pagina wit. Overlap volgt de PDF-tekenvolgorde.
 Bewezen rechthoekfills en 1px-strokes zijn toegestaan. Als een afbeelding ná
 vectorinhoud komt, gebruikt de native route een nieuwe experimentele
@@ -115,11 +120,17 @@ XObjects uitgevoerd: bij 256 was de 196.608-byte RGBA-uitvoer identiek aan
 Hayro (SHA-256 `18fc2be16dcb4f52a338295da2cfbe99bc2771f0f371a2549da3d4d7ccb7f485`);
 bij 257 schreef de DynLex-probe geen uitvoer. De native app gebruikt voor
 dat laatste geval de Hayro-fallback.
-Rotatie, shear, geschaalde bronpixels, scenes boven de byte-/opdrachtlimiet en andere
+Rotatie, shear, scenes boven de byte-/opdrachtlimiet en andere
 filters zijn nog niet bewezen.
 Een pagina met geërfde `/Rotate 90` volgt aantoonbaar de Hayro-fallback;
 een ongeldige Flate-stroom, decodeparameters en een opgeblazen beeldstroom
 worden niet aan DynLex doorgegeven.
+Zeven aanvullende geschaalde beeld-PDF's testen vergroting, verkleining,
+ongelijke schaalfactoren, raw/Flate en vectoroverlay; een 2048×64-beeldstrook
+wordt op een 768×192-pagina naar 512×16 verkleind. Alle RGBA-bytes zijn
+identiek aan Hayro. `/Interpolate true` en een bron breder dan 4096 pixels
+worden vóór de DynLex-aanroep geweigerd. Dit dekt nog geen gedraaide/gecropte
+beeldpagina of andere PDF-afbeeldingsfilters en kleurmodellen.
 
 De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
 `rust-studio`:
@@ -141,3 +152,10 @@ mediane tijdverschil was -0,30 ms. De ruwe samples staan in
 `dynlex-engine-poc/rgba/native-many-image-bench-2026-10-05.json`.
 De OS-cache werd niet gewist en de timings liggen dicht bij elkaar: dit is
 geen overtuigend of algemeen snelheidsvoordeel.
+
+Op de aparte 2048×64→512×16-strook (15 gepaarde warme procesruns) waren de
+medianen DynLex/Hayro 9,32/10,39 ms en piek-RSS 5.560/7.408 KiB;
+DynLex won 13 van 15 paren. Dit omvat ook PDF-parsing, pure-Rust-beeldschaling,
+processtart en RGBA-bestand schrijven. Ruwe samples:
+`dynlex-engine-poc/rgba/native-scaled-strip-bench-2026-10-05.json`.
+De kleine gecontroleerde pagina rechtvaardigt geen algemene snelheidsclaim.

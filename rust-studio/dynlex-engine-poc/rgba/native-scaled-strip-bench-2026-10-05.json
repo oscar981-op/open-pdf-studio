@@ -1,0 +1,204 @@
+{
+  "pdf": "crates/dynlex-backend/tests/fixtures/scaled-strip-flate.pdf",
+  "probe": "target/release/backend_probe",
+  "runs": 15,
+  "cache": "warm process and OS cache; cache was not cleared",
+  "includes": "PDF parse, render, raw RGBA file write and process startup",
+  "samples": {
+    "dynlex": [
+      {
+        "wall_ms": 8.953959,
+        "peak_rss_kib": 5568,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 8.540052,
+        "peak_rss_kib": 5628,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.418538,
+        "peak_rss_kib": 5608,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.345376,
+        "peak_rss_kib": 5568,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.06127,
+        "peak_rss_kib": 5520,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 8.796767,
+        "peak_rss_kib": 5512,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 12.230717,
+        "peak_rss_kib": 5516,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 8.859678,
+        "peak_rss_kib": 5520,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.320186,
+        "peak_rss_kib": 5528,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.742873,
+        "peak_rss_kib": 5612,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.60494,
+        "peak_rss_kib": 5516,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 21.266889,
+        "peak_rss_kib": 5560,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.316876,
+        "peak_rss_kib": 5628,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 8.582792,
+        "peak_rss_kib": 5508,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.325606,
+        "peak_rss_kib": 5592,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      }
+    ],
+    "hayro": [
+      {
+        "wall_ms": 10.354714,
+        "peak_rss_kib": 7400,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 11.393083,
+        "peak_rss_kib": 7376,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 10.365104,
+        "peak_rss_kib": 7356,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 10.084589,
+        "peak_rss_kib": 7644,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 9.870496,
+        "peak_rss_kib": 7540,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 13.199685,
+        "peak_rss_kib": 7484,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 10.613408,
+        "peak_rss_kib": 7412,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 10.315163,
+        "peak_rss_kib": 7280,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 12.777757,
+        "peak_rss_kib": 7484,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 11.120188,
+        "peak_rss_kib": 7360,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 10.387105,
+        "peak_rss_kib": 7356,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 10.280983,
+        "peak_rss_kib": 7408,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 10.542067,
+        "peak_rss_kib": 7412,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 11.337342,
+        "peak_rss_kib": 7320,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      },
+      {
+        "wall_ms": 10.388165,
+        "peak_rss_kib": 7468,
+        "sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1",
+        "bytes": 589824
+      }
+    ]
+  },
+  "median_wall_ms": {
+    "dynlex": 9.320186,
+    "hayro": 10.388165
+  },
+  "median_peak_rss_kib": {
+    "dynlex": 5560,
+    "hayro": 7408
+  },
+  "median_paired_dynlex_minus_hayro_ms": -1.2251909999999988,
+  "dynlex_wins": 13,
+  "rgba_sha256": "d828fffb5fa5d75ecd0b440c07cfd6461c68fd7b0b9838e9eaa186275cb4c8d1"
+}

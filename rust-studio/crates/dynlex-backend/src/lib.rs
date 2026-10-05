@@ -548,6 +548,66 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
+    fn scaled_rgb_images_match_hayro() {
+        for (name, bytes) in [
+            (
+                "up-raster",
+                include_bytes!("../tests/fixtures/scaled-up-raster.pdf").as_slice(),
+            ),
+            (
+                "up-hybrid",
+                include_bytes!("../tests/fixtures/scaled-up-hybrid.pdf").as_slice(),
+            ),
+            (
+                "down-raster",
+                include_bytes!("../tests/fixtures/scaled-down-raster.pdf").as_slice(),
+            ),
+            (
+                "down-hybrid",
+                include_bytes!("../tests/fixtures/scaled-down-hybrid.pdf").as_slice(),
+            ),
+            (
+                "wide-strip",
+                include_bytes!("../tests/fixtures/scaled-strip-flate.pdf").as_slice(),
+            ),
+            (
+                "odd-upscale",
+                include_bytes!("../tests/fixtures/scaled-up-odd.pdf").as_slice(),
+            ),
+            (
+                "mixed-scale",
+                include_bytes!("../tests/fixtures/scaled-mixed.pdf").as_slice(),
+            ),
+        ] {
+            let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+            let result = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(result.used, Backend::Dynlex, "{name}");
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            assert_eq!(result.raster.rgba.len(), expected.rgba.len(), "{name}");
+            let mismatch = result
+                .raster
+                .rgba
+                .iter()
+                .zip(&expected.rgba)
+                .position(|(a, b)| a != b);
+            assert_eq!(mismatch, None, "{name}: first differing RGBA byte");
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn scaled_images_outside_validated_subset_fall_back() {
+        for bytes in [
+            include_bytes!("../tests/fixtures/scaled-interpolate-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/scaled-source-oversized.pdf").as_slice(),
+        ] {
+            assert!(page_to_opdl_ordered_bytes(bytes).is_err());
+            assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
     fn rgb_scene_boundary_rejects_corruption() {
         let bytes = include_bytes!("../tests/fixtures/full-page-hybrid.pdf");
         let scene = page_to_opdl_bytes(bytes).unwrap();

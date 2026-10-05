@@ -87,7 +87,7 @@ def build_many_images_pdf(image_count=12, compress_alternate=False):
     return bytes(pdf)
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None, second_image_placement=None, second_image_after_vector=False):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b"", image_placement=None, second_image_placement=None, second_image_after_vector=False, image_source_size=None, image_source_override=None):
     content = bytearray(pre_content)
     if mode != "vector":
         image_x, image_y, image_width, image_height = image_placement or (0, 0, width, height)
@@ -163,7 +163,11 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         x, y, w, h = second_image_placement
         content.extend(f"q\n{w} 0 0 {h} {x} {y} cm\n/Im1 Do\nQ\n".encode())
     content.extend(extra_content)
-    rgb = image_rgb(image_width, image_height) if mode != "vector" else b""
+    source_width, source_height = (image_source_size or (image_width, image_height)) if mode != "vector" else (0, 0)
+    rgb = (image_source_override if image_source_override is not None
+           else image_rgb(source_width, source_height)) if mode != "vector" else b""
+    if mode != "vector" and len(rgb) != source_width * source_height * 3:
+        raise ValueError("image_source_override has the wrong RGB8 byte length")
     image_payload = zlib.compress(rgb + image_bytes_extra) if flate_image else rgb
     image_filter = "/Filter /FlateDecode" if flate_image else ""
     has_image = mode != "vector"
@@ -179,7 +183,7 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         f"{resources} /Contents {content_id} 0 R >>".encode(),
     ]
     if has_image:
-        objects.append(f"<< /Type /XObject /Subtype /Image /Width {image_width} /Height {image_height} "
+        objects.append(f"<< /Type /XObject /Subtype /Image /Width {source_width} /Height {source_height} "
                        f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {image_filter} {image_extra} /Length {len(image_payload)} >>\nstream\n".encode()
                        + image_payload + b"\nendstream")
     if second_image_placement:
