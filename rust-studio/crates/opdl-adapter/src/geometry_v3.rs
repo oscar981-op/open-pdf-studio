@@ -12,16 +12,17 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut records = Vec::new();
     let mut i = 0;
     let mut translation = [0_i32; 2];
+    let mut clip: Option<[u32; 4]> = None;
     let mut stack = Vec::new();
     while i < ops.len() {
         match ops[i].operator.as_str() {
             "q" if ops[i].operands.is_empty() && stack.len() < 2 => {
-                stack.push(translation);
+                stack.push((translation, clip));
                 i += 1;
                 continue;
             }
             "Q" if ops[i].operands.is_empty() => {
-                translation = stack.pop().ok_or_else(|| fail("unmatched Q"))?;
+                (translation, clip) = stack.pop().ok_or_else(|| fail("unmatched Q"))?;
                 i += 1;
                 continue;
             }
@@ -39,6 +40,28 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
                     .filter(|v| v.abs() <= 4096)
                     .ok_or_else(|| fail("translation exceeds bound"))?;
                 i += 1;
+                continue;
+            }
+            "re" if i + 2 < ops.len()
+                && ops[i + 1].operator == "W"
+                && ops[i + 2].operator == "n"
+                && ops[i + 1].operands.is_empty()
+                && ops[i + 2].operands.is_empty() =>
+            {
+                let [x, y, w, h] = operands::<4>(&ops[i].operands)?;
+                let next = rectangle_to_display(
+                    page.crop,
+                    page.turn,
+                    translated(x, translation[0])?,
+                    translated(y, translation[1])?,
+                    integer(w)?,
+                    integer(h)?,
+                )?;
+                clip = Some(match clip {
+                    Some(current) => intersect(current, next),
+                    None => next,
+                });
+                i += 3;
                 continue;
             }
             _ => {}
@@ -111,6 +134,11 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
             }
             _ => return Err(fail("unsupported OPGM-v3 operator")),
         };
+        let rect = clip.map_or(rect, |current| intersect(rect, current));
+        if rect[0] >= rect[2] || rect[1] >= rect[3] {
+            i += consumed;
+            continue;
+        }
         for value in [kind, rect[0], rect[1], rect[2], rect[3]] {
             records.extend_from_slice(&value.to_le_bytes());
         }
@@ -137,6 +165,15 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     }
     out.extend_from_slice(&records);
     Ok(out)
+}
+
+fn intersect(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
+    [
+        a[0].max(b[0]),
+        a[1].max(b[1]),
+        a[2].min(b[2]),
+        a[3].min(b[3]),
+    ]
 }
 
 fn signed_integer(value: f64) -> Result<i32, Box<dyn Error>> {

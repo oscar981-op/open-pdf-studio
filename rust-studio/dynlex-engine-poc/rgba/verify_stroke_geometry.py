@@ -27,13 +27,16 @@ def main():
            ('rot180',192,256,(0,0,192,256),180),('rot270',192,256,(0,0,192,256),270),
            ('crop90',220,280,(20,30,170,230),90),('a1-90',1684,2384,(0,0,1684,2384),90),
            ('nested-90',192,256,(0,0,192,256),90),('translated-a1',1684,2384,(0,0,1684,2384),90),
-           ('restore90',192,256,(0,0,192,256),90)]
+           ('restore90',192,256,(0,0,192,256),90),
+           ('clip90',192,256,(0,0,192,256),90),('clip-restore90',192,256,(0,0,192,256),90),
+           ('clip-intersection90',192,256,(0,0,192,256),90),
+           ('clip-a1',1684,2384,(0,0,1684,2384),90)]
     report={'cases':{},'unsupported_pdfs_rejected':0,'invalid_records_rejected':0}
     with tempfile.TemporaryDirectory(prefix='opds-opgm-v3-') as d:
         root=Path(d)
         for name,mw,mh,crop,turn in cases:
             width,height=display_size(crop,turn)
-            if name in ('a1-90','translated-a1'):
+            if name in ('a1-90','translated-a1','clip-a1'):
                 records=[(1,(100,80,400,280),COLORS[0]),(3,(120,220,490,221),COLORS[1]),
                          (3,(380,100,381,330),COLORS[2])]
             else:
@@ -48,16 +51,37 @@ def main():
                 first=records[0];x,y,w,h=pdf_rect(crop,turn,first[1]);content=(
                     b'q\n1 0 0 1 7 9 cm\n'+command((x-7,y-9,w,h),first[0],first[2])+b'Q\n'
                     +b''.join(command(pdf_rect(crop,turn,rect),kind,ink) for kind,rect,ink in records[1:]))
+            expected_records=records
+            if name in ('clip90','clip-restore90','clip-intersection90','clip-a1'):
+                clip=(180,150,450,350) if name=='clip-a1' else (40,30,100,80)
+                cx,cy,cw,ch=pdf_rect(crop,turn,clip)
+                clipping=f'{cx} {cy} {cw} {ch} re\nW\nn\n'.encode()
+                if name=='clip90':content=clipping+content
+                elif name=='clip-a1':content=clipping+content
+                elif name=='clip-intersection90':
+                    second=(50,35,90,70);sx,sy,sw,sh=pdf_rect(crop,turn,second)
+                    content=clipping+f'{sx} {sy} {sw} {sh} re\nW\nn\n'.encode()+content
+                    clip=second
+                else:
+                    first=records[0]
+                    content=(b'q\n'+clipping+command(pdf_rect(crop,turn,first[1]),first[0],first[2])+b'Q\n'
+                             +b''.join(command(pdf_rect(crop,turn,rect),kind,ink) for kind,rect,ink in records[1:]))
+                expected_records=[]
+                for idx,(kind,rect,ink) in enumerate(records):
+                    if name=='clip-restore90' and idx>0:expected_records.append((kind,rect,ink));continue
+                    l,t,r,b=rect;cl,ct,cr,cb=clip
+                    result=(max(l,cl),max(t,ct),min(r,cr),min(b,cb))
+                    if result[0]<result[2] and result[1]<result[3]:expected_records.append((kind,result,ink))
             pdf=root/f'{name}.pdf';opgm=root/f'{name}.opgm';opdl=root/f'{name}.opdl'
             pdf.write_bytes(pdf_with_stream(content,mw,mh,f'/Rotate {turn} /CropBox [{" ".join(map(str,crop))}]'.encode()))
             run_checked([EXPORTER,pdf,opgm]);run_checked([GEOMETRY,opgm,opdl])
-            expected_geom=b'OPGM'+struct.pack('<9I',3,mw,mh,*crop,turn,len(records))+b''.join(
-                struct.pack('<5I4B',kind,*rect,*ink,255) for kind,rect,ink in records)
+            expected_geom=b'OPGM'+struct.pack('<9I',3,mw,mh,*crop,turn,len(expected_records))+b''.join(
+                struct.pack('<5I4B',kind,*rect,*ink,255) for kind,rect,ink in expected_records)
             if opgm.read_bytes()!=expected_geom:raise RuntimeError(name+' geometry differs')
             out=root/f'{name}.rgba';reference=root/f'{name}-hayro.rgba'
             run_checked([KERNEL,'2',opdl,out,'--experimental-large']);run_checked([HAYRO,pdf,'1',reference])
             pix=bytearray(b'\xff\xff\xff\xff'*(width*height))
-            for _,rect,ink in records:
+            for _,rect,ink in expected_records:
                 l,t,r,b=rect
                 for y in range(t,b):
                     for x in range(l,r):pix[4*(y*width+x):4*(y*width+x)+4]=bytes(ink)+b'\xff'
@@ -70,7 +94,10 @@ def main():
              b'Q\n1 0 0 rg\n20 20 30 30 re\nf\n',
              b'q\n2 0 0 1 5 5 cm\n1 0 0 rg\n20 20 30 30 re\nf\nQ\n',
              b'q\n1 0 0 1 0.5 5 cm\n1 0 0 rg\n20 20 30 30 re\nf\nQ\n',
-             b'q\nq\nq\n1 0 0 rg\n20 20 30 30 re\nf\nQ\nQ\nQ\n']
+             b'q\nq\nq\n1 0 0 rg\n20 20 30 30 re\nf\nQ\nQ\nQ\n',
+             b'10 10 30 30 re\nW*\nn\n1 0 0 rg\n20 20 30 30 re\nf\n',
+             b'10 10 30 30 re\nW\n1 0 0 rg\n20 20 30 30 re\nf\n',
+             b'10 10 30 30 re\nW\nn\n10 10 20 20 re\nW\n']
         for index,stream in enumerate(bad):
             pdf=root/f'bad{index}.pdf';out=root/f'bad{index}.opgm'
             pdf.write_bytes(pdf_with_stream(stream,192,256,b'/Rotate 90'))
