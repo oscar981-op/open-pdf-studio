@@ -11,16 +11,18 @@ previewfallback. PDF Save As schrijft de native annotaties als printbare
 `/AP`-streams. Deze paden zijn nog niet door één DynLex-annotatierenderer
 vervangen.
 
-De opt-in `opds-dynlex-backend::render_native_annotation_overlay` maakt nu
-een **afzonderlijke in-process proef**: hij zet een reeds opaak gerenderde
-pagina plus pixeluitgelijnde native rechthoeken en Highlights om in een
-gevalideerde OPDL-v2-scene. De bestaande DynLex-bufferkernel componeert de
-annotaties in model-/laagvolgorde. Square wordt als vier stroken van 2 px
-getekend; Highlight als één geel vlak met de 8-bit-dekkingsstap 90/255 die
-bij de PDF-appearance met `/ca 0.35` hoort. De invoer is tot 1024×1024,
-64 annotaties en 3.538.984 scenebytes begrensd. De Rust-grens controleert
-paginaformaat, ondoorzichtige bronpixels, gehele rechthoekcoördinaten,
-grenzen, aantallen en alle OPDL-opdrachten vóór de DynLex-ABI.
+De opt-in `opds-dynlex-backend::render_native_annotation_overlay` gebruikt nu
+een **afzonderlijke in-process DynLex-kernel**. Een versieerbare OPAN-v1-lijst
+bevat alleen gevalideerde pixeluitgelijnde native Square- en
+Highlight-opdrachten. Rust maakt één RGBA-uitvoer van de reeds gerenderde
+pagina; DynLex tekent de vormen daarin direct in model-/laagvolgorde. Een
+volledige tweede RGB-paginalaag in OPDL is niet meer nodig. Square is een
+2px-rand, Highlight één geel vlak met de 8-bit-dekkingsstap 90/255 die bij
+de PDF-appearance met `/ca 0.35` hoort. De invoer is tot 4096 px per zijde,
+6 miljoen pixels, 64 annotaties en 1556 OPAN-bytes begrensd. De Rust-grens
+controleert paginaformaat, ondoorzichtige bronpixels, gehele
+rechthoekcoördinaten, grenzen en aantallen vóór de DynLex-ABI; de ABI
+weigert null/te korte buffers en ongeldige totale lengtes.
 
 Een gecontroleerde PDF vergelijkt de
 DynLex-composiet rechtstreeks met Hayro na Save As: afzonderlijke rode Square,
@@ -36,6 +38,11 @@ RGB-pixels binnen de rechthoek wit zijn. Een directe 8-bit-beeldpatch met de
 alternatieve Vello-/256-menging week op de witte achtergrond af en is niet
 ingeschakeld. Een dekkende blauwe Square **over gekleurde pagina-inhoud** was
 wel bytegelijk. De annotatie blijft bij afwijzing zichtbaar via Iced.
+Een extra gecontroleerde PDF met verschoven CropBox en `/Rotate 90` toont
+beide annotaties op een zichtbare 1100×1000-pagina: de volledige RGBA-uitvoer
+is na Save As bytegelijk aan Hayro. Daarmee is de oude 1024px-grens voor
+deze annotatieroute opgeheven. Dit bewijst nog geen algemene grote-pagina-
+prestatie of subpixelplaatsing.
 
 De opt-in app toont de DynLex-composiet als een gecachte pagina-afbeelding
 wanneer de gebruiker DynLex heeft gekozen, de pagina op 100% staat, alle

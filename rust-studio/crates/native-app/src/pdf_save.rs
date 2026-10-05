@@ -1061,6 +1061,83 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn dynlex_native_annotations_match_on_large_rotated_crop_page() {
+        use opds_dynlex_backend::render_native_annotation_overlay;
+        use opds_engine_probe::ParsedPdf;
+
+        let mut doc = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let parent_id = doc
+            .get_object(page_id)
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"Parent")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        doc.get_object_mut(parent_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .set(
+                "MediaBox",
+                vec![0.into(), 0.into(), 1200.into(), 1400.into()],
+            );
+        let page = doc.get_object_mut(page_id).unwrap().as_dict_mut().unwrap();
+        page.set(
+            "CropBox",
+            vec![100.into(), 200.into(), 1100.into(), 1300.into()],
+        );
+        page.set("Rotate", 90);
+        let mut source = Vec::new();
+        doc.save_to(&mut source).unwrap();
+        let base = ParsedPdf::open(Arc::new(source.clone()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert_eq!((base.width, base.height), (1100, 1000));
+        let marks = [
+            Annotation {
+                id: 201,
+                page: 0,
+                bounds: Rect {
+                    x: 75.0,
+                    y: 80.0,
+                    width: 92.0,
+                    height: 64.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [0, 80, 240],
+                },
+            },
+            Annotation {
+                id: 202,
+                page: 0,
+                bounds: Rect {
+                    x: 600.0,
+                    y: 700.0,
+                    width: 140.0,
+                    height: 90.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [255, 226, 67],
+                },
+            },
+        ];
+        let dynlex = render_native_annotation_overlay(&base, &marks, 0)
+            .unwrap()
+            .expect("large rotated page is within the bounded native route");
+        let saved = export_annotations(&source, &marks).unwrap();
+        let hayro = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert_eq!(dynlex.rgba, hayro.rgba);
+    }
+
     #[test]
     fn incremental_export_preserves_source_and_printable_appearances() {
         let source = source_pdf();

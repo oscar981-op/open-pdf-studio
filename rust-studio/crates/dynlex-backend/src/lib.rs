@@ -90,6 +90,17 @@ unsafe extern "C" {
     ) -> i32;
 }
 
+#[cfg(feature = "kernel")]
+#[link(name = "opds_dynlex_annotation", kind = "static")]
+unsafe extern "C" {
+    fn opds_paint_annotations(
+        scene: *const u8,
+        scene_len: i32,
+        rgba: *mut u8,
+        rgba_len: i32,
+    ) -> i32;
+}
+
 /// Only a first-page 72-dpi rendering is supported by OPGM-v3.
 /// Every unsupported PDF shape or requested zoom is left to the host backend.
 pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap>, String> {
@@ -229,14 +240,6 @@ fn validated_scene(geometry: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
 /// Revalidate its bytes before crossing the ABI.
 #[cfg(feature = "kernel")]
 fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
-    validated_rgb_scene_for_annotations(scene, false)
-}
-
-#[cfg(feature = "kernel")]
-fn validated_rgb_scene_for_annotations(
-    scene: Vec<u8>,
-    allow_annotation_alpha: bool,
-) -> Result<(Vec<u8>, u32, u32), String> {
     if scene.len() < 40
         || scene.len() > 3_538_984
         || scene.get(..4) != Some(b"OPDL")
@@ -295,8 +298,7 @@ fn validated_rgb_scene_for_annotations(
             || rect[2] > width
             || rect[3] > height
             || (kind == 3 && rect[2] - rect[0] != 1 && rect[3] - rect[1] != 1)
-            || (scene[at + 23] != 255
-                && !(allow_annotation_alpha && kind == 1 && scene[at + 23] == 90))
+            || scene[at + 23] != 255
         {
             return Err("invalid RGB OPDL command".into());
         }

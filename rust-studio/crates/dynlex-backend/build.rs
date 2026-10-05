@@ -22,7 +22,13 @@ fn main() {
     for name in ["OPDS_DYNLEX_COMPILER", "OPDS_LLVM_OPT", "OPDS_LLVM_LLC"] {
         println!("cargo:rerun-if-env-changed={name}");
     }
-    for name in ["build_buffer.py", "buffer_kernel.dl", "renderer.dl"] {
+    for name in [
+        "build_buffer.py",
+        "buffer_kernel.dl",
+        "build_annotation.py",
+        "annotation_kernel.dl",
+        "renderer.dl",
+    ] {
         println!("cargo:rerun-if-changed={}", root.join(name).display());
     }
     let status = Command::new("python3")
@@ -43,6 +49,25 @@ fn main() {
         status.success(),
         "DynLex kernel build failed; see dynlex-engine-poc/README.md"
     );
+    let annotation_status = Command::new("python3")
+        .arg(root.join("build_annotation.py"))
+        .args([
+            "--compiler",
+            compiler.to_str().expect("compiler path"),
+            "--opt",
+            opt.to_str().expect("opt path"),
+            "--llc",
+            llc.to_str().expect("llc path"),
+            "--output-dir",
+            output.to_str().expect("output path"),
+        ])
+        .status()
+        .expect("start DynLex annotation build");
+    assert!(
+        annotation_status.success(),
+        "DynLex annotation build failed"
+    );
     println!("cargo:rustc-link-search=native={}", output.display());
     println!("cargo:rustc-link-lib=static=opds_dynlex_buffer");
+    println!("cargo:rustc-link-lib=static=opds_dynlex_annotation");
 }
