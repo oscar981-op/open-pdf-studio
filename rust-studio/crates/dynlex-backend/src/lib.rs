@@ -308,8 +308,11 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
     let height = word(&scene, 12)?;
     if width == 0
         || height == 0
-        || width > 1024
-        || height > 1024
+        || width > 4096
+        || height > 4096
+        || width
+            .checked_mul(height)
+            .is_none_or(|pixels| pixels > 6_000_000)
         || [
             word(&scene, 16)?,
             word(&scene, 20)?,
@@ -578,6 +581,10 @@ mod tests {
                 "mixed-scale",
                 include_bytes!("../tests/fixtures/scaled-mixed.pdf").as_slice(),
             ),
+            (
+                "large-scaled-strip-hybrid",
+                include_bytes!("../tests/fixtures/large-scaled-strip-hybrid.pdf").as_slice(),
+            ),
         ] {
             let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
             let result = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
@@ -600,6 +607,8 @@ mod tests {
         for bytes in [
             include_bytes!("../tests/fixtures/scaled-interpolate-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/scaled-source-oversized.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/large-page-pixel-limit.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/large-page-side-limit.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
@@ -670,6 +679,18 @@ mod tests {
         };
         assert!(validated_ordered_scene(make_image_count(256)).is_ok());
         assert!(validated_ordered_scene(make_image_count(257)).is_err());
+
+        let base =
+            page_to_opdl_ordered_bytes(include_bytes!("../tests/fixtures/scaled-up-raster.pdf"))
+                .unwrap();
+        for (width, height) in [(4097_u32, 1_u32), (3000, 3000)] {
+            let mut oversized = base.clone();
+            oversized[8..12].copy_from_slice(&width.to_le_bytes());
+            oversized[12..16].copy_from_slice(&height.to_le_bytes());
+            oversized[24..28].copy_from_slice(&width.to_le_bytes());
+            oversized[28..32].copy_from_slice(&height.to_le_bytes());
+            assert!(validated_ordered_scene(oversized).is_err());
+        }
     }
 
     #[cfg(feature = "kernel")]

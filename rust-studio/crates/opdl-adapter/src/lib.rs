@@ -431,7 +431,11 @@ fn number(object: &Object) -> Result<f64, Box<dyn Error>> {
 }
 
 fn exact_u32(value: f64) -> Result<u32, Box<dyn Error>> {
-    if !value.is_finite() || value < 0.0 || value > f64::from(LIMIT) || value.fract() != 0.0 {
+    exact_u32_with_limit(value, LIMIT)
+}
+
+fn exact_u32_with_limit(value: f64, limit: u32) -> Result<u32, Box<dyn Error>> {
+    if !value.is_finite() || value < 0.0 || value > f64::from(limit) || value.fract() != 0.0 {
         return Err(fail(
             "only nonnegative integer fixture coordinates are supported",
         ));
@@ -452,7 +456,9 @@ fn operands<const N: usize>(items: &[Object]) -> Result<[f64; N], Box<dyn Error>
 
 fn intersect_rect(rect: [u32; 4], clip: Option<[u32; 4]>) -> Option<[u32; 4]> {
     let [left, top, right, bottom] = rect;
-    let [clip_left, clip_top, clip_right, clip_bottom] = clip.unwrap_or([0, 0, LIMIT, LIMIT]);
+    let Some([clip_left, clip_top, clip_right, clip_bottom]) = clip else {
+        return (left < right && top < bottom).then_some(rect);
+    };
     let result = [
         left.max(clip_left),
         top.max(clip_top),
@@ -914,11 +920,19 @@ fn page_to_opdl_bytes_internal(
     if x0 != 0.0 || y0 != 0.0 {
         return Err(fail("fixture page must have zero origin"));
     }
-    let width = exact_u32(x1)?;
-    let height = exact_u32(y1)?;
+    let coordinate_limit = if ordered_images { 4096 } else { LIMIT };
+    let width = exact_u32_with_limit(x1, coordinate_limit)?;
+    let height = exact_u32_with_limit(y1, coordinate_limit)?;
     if width == 0 || height == 0 {
         return Err(fail("empty page"));
     }
+    if width
+        .checked_mul(height)
+        .is_none_or(|pixels| pixels > 6_000_000)
+    {
+        return Err(fail("page exceeds bounded pixel count"));
+    }
+    let exact_u32 = |value| exact_u32_with_limit(value, coordinate_limit);
     let (resources, inherited) = document.get_page_resources(page_id)?;
     if !inherited.is_empty() {
         return Err(fail("inherited resources are not in this subset"));
@@ -1020,8 +1034,8 @@ fn page_to_opdl_bytes_internal(
                 } else if [a, b, c, d] == [1.0, 0.0, 0.0, 1.0]
                     && e.fract() == 0.0
                     && f.fract() == 0.0
-                    && e.abs() <= f64::from(LIMIT)
-                    && f.abs() <= f64::from(LIMIT)
+                    && e.abs() <= f64::from(coordinate_limit)
+                    && f.abs() <= f64::from(coordinate_limit)
                 {
                     translation = Some([e, f]);
                 } else {

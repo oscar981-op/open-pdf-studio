@@ -37,14 +37,16 @@ Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
 tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
 Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
 één of meer ongefilterde of enkelvoudig met FlateDecode gecomprimeerde,
-niet geïnterpoleerde RGB8-XObjects op een ongeroteerde pagina tot 1024×1024.
+niet geïnterpoleerde RGB8-XObjects op een ongeroteerde pagina. De oude
+OPDL-v2-route blijft maximaal 1024×1024; de geordende OPDL-v3-route accepteert
+maximaal 4096 pixels per zijde en 6 miljoen paginapixels.
 Een afbeelding mag de hele pagina vullen of een kleiner pixeluitgelijnd
 rechthoekig deel. De bron mag een andere pixelmaat hebben: bij verkleinen
 wordt de pure Rust-bibliotheek `pic-scale` 0.7.12 met Catmull–Rom gebruikt,
 bij vergroten de dichtstbijzijnde bronpixel. DynLex tekent het voorbereide
 RGB-beeld daarna in de geordende paginascene. De bron is begrensd op 4096
-pixels per zijde en 6 miljoen pixels totaal; de zichtbare pagina blijft in
-deze route maximaal 1024×1024. Dit is nog geen volledig in DynLex uitgevoerde
+pixels per zijde en 6 miljoen pixels totaal; de geordende zichtbare pagina
+heeft dezelfde zijde- en pixellimieten. Dit is nog geen volledig in DynLex uitgevoerde
 resampling.
 Buiten de afbeeldingen is de pagina wit. Overlap volgt de PDF-tekenvolgorde.
 Bewezen rechthoekfills en 1px-strokes zijn toegestaan. Als een afbeelding ná
@@ -128,7 +130,11 @@ worden niet aan DynLex doorgegeven.
 Zeven aanvullende geschaalde beeld-PDF's testen vergroting, verkleining,
 ongelijke schaalfactoren, raw/Flate en vectoroverlay; een 2048×64-beeldstrook
 wordt op een 768×192-pagina naar 512×16 verkleind. Alle RGBA-bytes zijn
-identiek aan Hayro. `/Interpolate true` en een bron breder dan 4096 pixels
+identiek aan Hayro. Een achtste A2-achtige 1684×1191-pagina zet de strook
+rechts van x=1024 en legt daar een rode rechthoek overheen; ook alle
+8.022.576 RGBA-bytes zijn gelijk aan Hayro. `/Interpolate true`, een bron
+breder dan 4096 pixels, een pagina met meer dan 6 miljoen pixels of een zijde
+boven 4096 pixels
 worden vóór de DynLex-aanroep geweigerd. Dit dekt nog geen gedraaide/gecropte
 beeldpagina of andere PDF-afbeeldingsfilters en kleurmodellen.
 
@@ -159,3 +165,7 @@ DynLex won 13 van 15 paren. Dit omvat ook PDF-parsing, pure-Rust-beeldschaling,
 processtart en RGBA-bestand schrijven. Ruwe samples:
 `dynlex-engine-poc/rgba/native-scaled-strip-bench-2026-10-05.json`.
 De kleine gecontroleerde pagina rechtvaardigt geen algemene snelheidsclaim.
+Op de A2-achtige 1684×1191-pagina waren 15 warme procesparen
+57,27/58,85 ms en 20.024/22.612 KiB; DynLex won slechts 9 van 15 paren.
+De ruwe samples staan in
+`dynlex-engine-poc/rgba/native-large-scaled-strip-bench-2026-10-05.json`.
