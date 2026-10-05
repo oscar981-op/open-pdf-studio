@@ -92,7 +92,7 @@ fn read_scene(bytes: &[u8]) -> Result<Vec<(Vec<u64>, [u8; 3])>, Box<dyn Error>> 
     Ok(scenes)
 }
 
-fn render(scenes: &[(Vec<u64>, [u8; 3])]) -> Result<Vec<u8>, Box<dyn Error>> {
+fn render_layer(scenes: &[(Vec<u64>, [u8; 3])]) -> Result<Vec<u8>, Box<dyn Error>> {
     // PDF page content is first composited inside an isolated transparency
     // group. The completed group is then composited over the white page.
     // Painting each glyph directly over white differs by one byte at some
@@ -128,15 +128,25 @@ fn render(scenes: &[(Vec<u64>, [u8; 3])]) -> Result<Vec<u8>, Box<dyn Error>> {
             layer[offset + 3] = ((numerator + 255) >> 8) as u8;
         }
     }
+    Ok(layer)
+}
+
+fn over_white(layer: &[u8]) -> Vec<u8> {
     let mut rgba = vec![255_u8; layer.len()];
     for (target, pixel) in rgba.chunks_exact_mut(4).zip(layer.chunks_exact(4)) {
         for channel in 0..3 {
             target[channel] = pixel[channel].saturating_add(255 - pixel[3]);
         }
     }
-    Ok(rgba)
+    rgba
 }
 
 pub fn render_opgs(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
-    render(&read_scene(bytes)?)
+    Ok(over_white(&render_layer(&read_scene(bytes)?)?))
+}
+
+/// Premultiplied RGBA glyph group. A page compositor may place this group
+/// over a validated opaque page after the PDF blending rule is proved.
+pub fn render_opgs_layer(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_layer(&read_scene(bytes)?)
 }

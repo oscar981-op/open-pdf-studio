@@ -1,12 +1,11 @@
 //! Direct, bounded native Text Box -> OPGS staging for the opt-in DynLex path.
 //! The model and same Liberation Sans bytes used by Save As are the inputs.
 use super::text_layout;
-use lopdf::{Document, Object};
+use lopdf::Document;
 use opds_native_core::annotations::{Annotation, Kind, TextAlign, TEXT_FONT_SIZES};
 use opds_opdl_adapter::text_quad_glyph::{self, Source};
-use std::collections::HashSet;
 
-fn plain_page_geometry(source: &[u8], page: usize, width: u32, height: u32) -> bool {
+fn supported_page_geometry(source: &[u8], page: usize, width: u32, height: u32) -> bool {
     if source.len() > 16_000_000 {
         return false;
     }
@@ -22,58 +21,25 @@ fn plain_page_geometry(source: &[u8], page: usize, width: u32, height: u32) -> b
     else {
         return false;
     };
-    let Some(mut id) = doc.get_pages().get(&page_number).copied() else {
+    let Some(page_id) = doc.get_pages().get(&page_number).copied() else {
         return false;
     };
-    if doc.get_dictionary(id).is_ok_and(|node| node.has(b"Annots")) {
+    if doc
+        .get_dictionary(page_id)
+        .is_ok_and(|node| node.has(b"Annots"))
+    {
         // An existing /AP on the source page must never be painted twice.
         return false;
     }
-    let mut seen = HashSet::new();
-    let mut media = None;
-    loop {
-        if !seen.insert(id) || seen.len() > 32 {
-            return false;
-        }
-        let Ok(node) = doc.get_dictionary(id) else {
-            return false;
-        };
-        if node.has(b"Rotate") || node.has(b"CropBox") || node.has(b"UserUnit") {
-            return false;
-        }
-        if media.is_none() {
-            if let Ok(value) = node.get(b"MediaBox") {
-                let Ok((_, value)) = doc.dereference(value) else {
-                    return false;
-                };
-                let Ok(values) = value.as_array() else {
-                    return false;
-                };
-                if values.len() != 4 {
-                    return false;
-                }
-                let number = |value: &Object| match value {
-                    Object::Integer(n) => Some(*n as f64),
-                    Object::Real(n) => Some(f64::from(*n)),
-                    _ => None,
-                };
-                media = values.iter().map(number).collect::<Option<Vec<_>>>();
-                if media.is_none() {
-                    return false;
-                }
-            }
-        }
-        match node.get(b"Parent") {
-            Ok(parent) => {
-                let Ok(parent) = parent.as_reference() else {
-                    return false;
-                };
-                id = parent;
-            }
-            Err(_) => break,
-        }
-    }
-    media.is_some_and(|values| values == [0.0, 0.0, f64::from(width), f64::from(height)])
+    let Ok((crop, rotation)) = super::pdf_save::print_page_geometry(&doc, page_id) else {
+        return false;
+    };
+    let visible = if matches!(rotation, 90 | 270) {
+        [crop[3] - crop[1], crop[2] - crop[0]]
+    } else {
+        [crop[2] - crop[0], crop[3] - crop[1]]
+    };
+    visible == [f64::from(width), f64::from(height)]
 }
 
 /// Paint one validated run over an opaque white, one-pixel-per-point page.
@@ -98,7 +64,7 @@ pub fn render_white_page_text_box(
             .any(|pixel| pixel != [255, 255, 255, 255])
         || mark.bounds.x + mark.bounds.width > f64::from(width)
         || mark.bounds.y + mark.bounds.height > f64::from(height)
-        || !plain_page_geometry(source_pdf, page, width, height)
+        || !supported_page_geometry(source_pdf, page, width, height)
     {
         return Ok(None);
     }

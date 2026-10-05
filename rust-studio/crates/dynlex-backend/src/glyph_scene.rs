@@ -17,6 +17,20 @@ pub fn render_validated_glyph_scene(scene: &[u8]) -> Result<Bitmap, String> {
     })
 }
 
+/// Return the validated glyph group's premultiplied RGBA tile without page
+/// composition. The same DynLex coverage kernel paints every glyph.
+pub fn render_validated_glyph_layer(scene: &[u8]) -> Result<Bitmap, String> {
+    let rgba = core::render_opgs_layer(scene).map_err(|error| error.to_string())?;
+    if rgba.len() != 256 * 192 * 4 {
+        return Err("DynLex glyph layer produced an invalid tile".into());
+    }
+    Ok(Bitmap {
+        width: 256,
+        height: 192,
+        rgba,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

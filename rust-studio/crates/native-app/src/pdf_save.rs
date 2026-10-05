@@ -118,7 +118,10 @@ fn appearance_matrix(rotation: u16, width: f64, height: f64) -> Option<String> {
 }
 
 /// Visible page region in default user space, before /Rotate is applied.
-fn print_page_geometry(doc: &Document, page_id: ObjectId) -> Result<([f64; 4], u16), String> {
+pub(super) fn print_page_geometry(
+    doc: &Document,
+    page_id: ObjectId,
+) -> Result<([f64; 4], u16), String> {
     let media =
         box_values(inherited(doc, page_id, b"MediaBox")?.ok_or("PDF page has no MediaBox")?)?;
     let crop = inherited(doc, page_id, b"CropBox")?
@@ -1401,6 +1404,173 @@ mod tests {
             accepted >= 8,
             "too few text cases reached DynLex: {accepted}, rejected {rejected:?}"
         );
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn colored_page_text_keeps_fallback_until_group_blend_matches() {
+        use opds_engine_probe::ParsedPdf;
+
+        let mut doc = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let page = doc.get_dictionary(page_id).unwrap();
+        let contents_id = page.get(b"Contents").unwrap().as_reference().unwrap();
+        doc.get_object_mut(page_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .remove(b"Annots");
+        doc.get_object_mut(contents_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .content = b"0.2 0.5 0.8 rg 0 0 200 300 re f".to_vec();
+        let mut source = Vec::new();
+        doc.save_to(&mut source).unwrap();
+        let base = ParsedPdf::open(Arc::new(source.clone()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let mark = Annotation {
+            id: 11,
+            page: 0,
+            bounds: Rect {
+                x: 10.0,
+                y: 28.0,
+                width: 180.0,
+                height: 64.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        let saved = export_annotations(&source, &[mark.clone()]).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let scene = crate::native_text_scene::stage_native_text_box_scene(&mark).unwrap();
+        let layer = opds_dynlex_backend::render_validated_glyph_layer(&scene).unwrap();
+        assert!(crate::native_text_scene::render_white_page_text_box(
+            &source,
+            0,
+            &base.rgba,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &mark,
+        )
+        .unwrap()
+        .is_none());
+        let mut differing_channels = 0_usize;
+        for y in 0..192_usize {
+            for x in 0..200_usize {
+                let at = (y * 200 + x) * 4;
+                let tile_at = (y * 256 + x) * 4;
+                let alpha = u32::from(layer.rgba[tile_at + 3]);
+                for channel in 0..3 {
+                    let bg = u32::from(base.rgba[at + channel]);
+                    let fg = u32::from(layer.rgba[tile_at + channel]);
+                    let attenuation = bg * (255 - alpha);
+                    // The current low-precision SrcOver formula cannot yet
+                    // reproduce the saved PDF's colored antialias edges.
+                    let candidate = (fg + (attenuation + 255) / 256).min(255) as u8;
+                    if candidate != expected.rgba[at + channel] {
+                        differing_channels += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(differing_channels, 207);
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn native_text_on_rotated_cropped_pages_matches_saved_appearance() {
+        use opds_engine_probe::ParsedPdf;
+
+        for rotation in [0, 90, 180, 270] {
+            let mut doc = Document::load_mem(&source_pdf()).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let parent_id = doc
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Parent")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let parent = doc
+                .get_object_mut(parent_id)
+                .unwrap()
+                .as_dict_mut()
+                .unwrap();
+            parent.set(
+                "MediaBox",
+                vec![20.into(), 30.into(), 220.into(), 330.into()],
+            );
+            if rotation == 180 {
+                parent.set(
+                    "CropBox",
+                    vec![40.into(), 60.into(), 200.into(), 260.into()],
+                );
+            }
+            if rotation == 270 {
+                parent.set("Rotate", rotation);
+            }
+            let page = doc.get_object_mut(page_id).unwrap().as_dict_mut().unwrap();
+            page.remove(b"Annots");
+            if rotation != 180 {
+                page.set(
+                    "CropBox",
+                    vec![40.into(), 60.into(), 200.into(), 260.into()],
+                );
+            }
+            if rotation != 270 {
+                page.set("Rotate", rotation);
+            }
+            let mut source = Vec::new();
+            doc.save_to(&mut source).unwrap();
+            let base = ParsedPdf::open(Arc::new(source.clone()))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let mark = Annotation {
+                id: 100 + rotation as u64,
+                page: 0,
+                bounds: Rect {
+                    x: 10.0,
+                    y: 28.0,
+                    width: 140.0,
+                    height: 64.0,
+                },
+                kind: Kind::Text {
+                    value: "ΩΩ\nЖЖ".into(),
+                    color_rgb: [0, 80, 240],
+                    font_size: 16,
+                    align: TextAlign::Center,
+                },
+            };
+            let saved = export_annotations(&source, &[mark.clone()]).unwrap();
+            let expected = ParsedPdf::open(Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let actual = crate::native_text_scene::render_white_page_text_box(
+                &source,
+                0,
+                &base.rgba,
+                base.width,
+                base.height,
+                (base.page_width_pt, base.page_height_pt),
+                &mark,
+            )
+            .unwrap()
+            .expect("white rotated/CropBox page must use DynLex");
+            assert_eq!(actual, expected.rgba, "text differs at /Rotate {rotation}");
+        }
     }
 
     #[test]

@@ -124,8 +124,8 @@ vier expliciete of automatisch afgebroken visuele regels met samen 2–32
 ondersteunde zichtbare glyphs die zonder clipping in een 256×192-tegel
 past, gehele paginacoördinaten, 100% zoom en een volledig witte bronpagina
 zonder bestaande `/Annots` worden geaccepteerd. De Rust-route controleert
-expliciet dat de bronpagina een bij de bitmap passende MediaBox vanaf nul
-heeft en geen directe of geërfde Rotate/CropBox/UserUnit. De DynLex-kernel schrijft de glyphtegel in-process;
+expliciet dat de zichtbare CropBox na de geërfde /Rotate 0/90/180/270 bij de
+bitmap past en dat /UserUnit 1 is. De DynLex-kernel schrijft de glyphtegel in-process;
 de app kopieert het zichtbare deel in de witte paginabitmap en houdt de
 Iced-laag voor selectie, grepen en inline bewerking. Een 200×300-pagina met
 een gecentreerde blauwe `ΩΩΩ`-Text Box is over de **hele pagina** RGBA-
@@ -133,14 +133,20 @@ bytegelijk aan de echte Save As-/AP-uitvoer in Hayro. De aanvullende proef
 vergelijkt achttien echte Save As-PDF's met uiteenlopende letters, Unicode,
 groottes, kleuren, uitlijningen, spaties, lege regels en zachte/expliciete
 regelafbreking; ieder door de begrensde route geaccepteerd geval is bytegelijk.
+Vier extra echte PDF's met geërfde verschoven MediaBox, CropBox en alle
+kwartslagen zijn volledig RGBA-bytegelijk met de opgeslagen /AP in Hayro.
 Glyphs met uitsluitend rechte contouren gebruiken dezelfde
 1000-unit pure-Rust fontuitlezing als Hayro: de ruwe TrueType-coördinaten
 gaven bij `Hello` nog 33 afwijkende kleurbytes en zijn daarom niet gebruikt.
 Een gekleurde onderlaag, tekst die clipping vraagt, ontbrekende glyph of een vorm buiten de tegel valt
 terug zonder gedeeltelijke DynLex-bitmap. De opgeslagen scènebytes en de
 modelscène verschillen op lage floatbits, maar hun gerenderde pixels zijn
-gelijk. Niet-ondersteunde glyphcontouren, rotatie/CropBox, clipping en gemengde lagen
+gelijk. Niet-ondersteunde glyphcontouren, clipping en gemengde lagen
 vereisen verdere pariteitstests; dit is nog geen volledige Text Box-dekking.
+Een afzonderlijke gekleurde-paginaproef laat zien waarom de fallback nog nodig
+is: eenvoudige 8-bit-SrcOver van de huidige premultiplied glyphlaag wijkt op
+207 kleurkanalen af van een echte opgeslagen PDF. De proef bewaakt dat de app
+voor zulke pagina's niet stilzwijgend die onjuiste compositie gebruikt.
 
 Gerichte reproductie vanuit `rust-studio`:
 
