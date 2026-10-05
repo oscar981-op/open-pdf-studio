@@ -291,7 +291,7 @@ fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
     Ok((scene, width, height))
 }
 
-/// OPDL-v3/v4 stores images after the fixed-width command table; kinds 6/7 carry
+/// Ordered OPDL-v3/v5 stores images after the fixed-width command table; kinds 6/7 carry
 /// byte offsets into the trailing RGB/binary-alpha blobs. Offsets are contiguous, so the
 /// DynLex kernel cannot read unvalidated gaps, aliases or truncated images.
 #[cfg(feature = "kernel")]
@@ -778,6 +778,10 @@ mod tests {
                 "mixed image records",
                 include_bytes!("../tests/fixtures/fractional-mixed-image-records.pdf").as_slice(),
             ),
+            (
+                "existing rectangular clip",
+                include_bytes!("../tests/fixtures/fractional-clipped.pdf").as_slice(),
+            ),
         ] {
             let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
             let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
@@ -836,8 +840,55 @@ mod tests {
     #[test]
     fn unproven_fractional_image_states_fall_back() {
         for bytes in [
-            include_bytes!("../tests/fixtures/fractional-clipped-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/fractional-interpolate-unsupported.pdf").as_slice(),
+        ] {
+            assert!(page_to_opdl_ordered_bytes(bytes).is_err());
+            assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn rectangular_clipped_images_match_hayro() {
+        for (name, bytes) in [
+            (
+                "fractional RGB",
+                include_bytes!("../tests/fixtures/clipped-fractional-rgb.pdf").as_slice(),
+            ),
+            (
+                "rotate CropBox",
+                include_bytes!("../tests/fixtures/clipped-fractional-rotate-crop.pdf").as_slice(),
+            ),
+            (
+                "double clip",
+                include_bytes!("../tests/fixtures/clipped-double-intersection.pdf").as_slice(),
+            ),
+            (
+                "q/Q restoration",
+                include_bytes!("../tests/fixtures/clipped-restore-after-image.pdf").as_slice(),
+            ),
+            (
+                "Indexed RGB",
+                include_bytes!("../tests/fixtures/clipped-indexed-rgb.pdf").as_slice(),
+            ),
+        ] {
+            let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+            let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(rendered.used, Backend::Dynlex, "{name}");
+            assert_eq!(
+                rendered.raster.rgba,
+                pdf.render_page(1, 1.0).unwrap().rgba,
+                "{name}"
+            );
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn unsupported_image_clips_fall_back() {
+        for bytes in [
+            include_bytes!("../tests/fixtures/clipped-fully-outside.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-nonrect-unsupported.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());

@@ -1078,6 +1078,30 @@ fn image_to_display_channels(
     Ok((rect, output))
 }
 
+fn clip_display_image(
+    rect: [u32; 4],
+    pixels: Vec<u8>,
+    clip: [u32; 4],
+    channels: usize,
+) -> Result<([u32; 4], Vec<u8>), Box<dyn Error>> {
+    let visible = intersect_rect(rect, Some(clip))
+        .ok_or_else(|| fail("image is wholly outside its rectangular clip"))?;
+    if visible == rect {
+        return Ok((rect, pixels));
+    }
+    let source_width = (rect[2] - rect[0]) as usize;
+    let target_width = (visible[2] - visible[0]) as usize;
+    let target_height = (visible[3] - visible[1]) as usize;
+    let row_bytes = target_width * channels;
+    let mut output = Vec::with_capacity(row_bytes * target_height);
+    for y in visible[1]..visible[3] {
+        let from =
+            ((y - rect[1]) as usize * source_width + (visible[0] - rect[0]) as usize) * channels;
+        output.extend_from_slice(&pixels[from..from + row_bytes]);
+    }
+    Ok((visible, output))
+}
+
 fn image_source_dimensions(
     document: &Document,
     resources: &lopdf::Dictionary,
@@ -1569,9 +1593,6 @@ fn page_to_opdl_bytes_internal(
                     return Err(fail("Do requires one name"));
                 };
                 if ordered_images {
-                    if clip.is_some() {
-                        return Err(fail("clipped image requires image coverage masking"));
-                    }
                     let name = name.as_name()?;
                     let (kind, rect, display_pixels) =
                         if let Ok([x, y, placed_width, placed_height]) =
@@ -1635,6 +1656,16 @@ fn page_to_opdl_bytes_internal(
                             has_fractional_image = true;
                             (7, rect, display_pixels)
                         };
+                    let (rect, display_pixels) = if let Some(clip) = clip {
+                        clip_display_image(
+                            rect,
+                            display_pixels,
+                            clip,
+                            if kind == 7 { 4 } else { 3 },
+                        )?
+                    } else {
+                        (rect, display_pixels)
+                    };
                     if ordered_image_bytes
                         .len()
                         .saturating_add(display_pixels.len())

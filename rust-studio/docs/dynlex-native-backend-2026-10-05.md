@@ -236,6 +236,17 @@ De ruwe samples staan in
 `dynlex-engine-poc/rgba/native-indexed-large-bench-2026-10-05.json`.
 Door de spreiding is dit geen overtuigend of algemeen snelheidsvoordeel.
 
+De geordende route snijdt nu een RGB- of Indexed-beeldpatch aan een bewezen
+pixeluitgelijnd rechthoekig PDF-clipvak (`re W n`). De adapter zet het
+clipvak eerst via MediaBox/CropBox en paginarotatie naar schermcoördinaten
+om en snijdt daarna de RGB- of binaire-RGBA-patch uit, vóór de DynLex-ABI.
+Opeenvolgende clipvakken worden doorsneden; `q/Q` bewaart en herstelt hun
+toestand. Vijf gecontroleerde PDF's met fractionele beeldranden, vectorlaag
+onder het beeld, dubbele clip, `q/Q` en 90°/CropBox zijn RGBA-bytegelijk
+aan Hayro. Een volledig weggeclipt beeld valt voorlopig op Hayro terug;
+niet-rechthoekige clipvormen en antialiased clipranden zijn nog niet bewezen.
+`dynlex-engine-poc/rgba/clipped_image_fixture.py` maakt de fixtures.
+
 De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
 `rust-studio`:
 
