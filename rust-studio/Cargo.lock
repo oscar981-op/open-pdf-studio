@@ -2193,6 +2193,7 @@ dependencies = [
  "lopdf",
  "miniz_oxide 0.8.9",
  "pic-scale",
+ "skrifa 0.42.1",
  "ttf-parser",
 ]
 

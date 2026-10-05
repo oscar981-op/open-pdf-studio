@@ -3,6 +3,9 @@
 //! The parabola integral/subdivision mathematics follows the Apache-2.0/MIT
 //! licensed vello_common 0.0.8 `flatten_simd.rs`. This code calls neither
 //! Vello nor Kurbo at runtime. DynLex rasterization remains a separate step.
+use skrifa::instance::{LocationRef, Size};
+use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, OutlinePen, Target};
+use skrifa::{FontRef, GlyphId, MetadataProvider};
 use std::error::Error;
 
 type Point = [f64; 2];
@@ -91,6 +94,30 @@ impl ttf_parser::OutlineBuilder for Outline {
             self.overflow = true;
         }
     }
+}
+
+impl OutlinePen for Outline {
+    fn move_to(&mut self, x: f32, y: f32) {
+        ttf_parser::OutlineBuilder::move_to(self, x, y);
+    }
+    fn line_to(&mut self, x: f32, y: f32) {
+        ttf_parser::OutlineBuilder::line_to(self, x, y);
+    }
+    fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
+        ttf_parser::OutlineBuilder::quad_to(self, x1, y1, x, y);
+    }
+    fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
+        ttf_parser::OutlineBuilder::curve_to(self, x1, y1, x2, y2, x, y);
+    }
+    fn close(&mut self) {
+        ttf_parser::OutlineBuilder::close(self);
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum Source {
+    RawTtf,
+    SkrifaAtThousand,
 }
 
 fn add(a: Point, b: Point) -> Point {
@@ -253,11 +280,56 @@ pub fn stage(
     font_data: &[u8],
     gid: u16,
     matrix: [f64; 6],
+    source: Source,
 ) -> Result<(Vec<u8>, Point, Vec<u8>), Box<dyn Error>> {
     let face = ttf_parser::Face::parse(font_data, 0)?;
     let mut outline = Outline::default();
-    face.outline_glyph(ttf_parser::GlyphId(gid), &mut outline)
-        .ok_or("glyph has no outline")?;
+    let matrix = match source {
+        Source::RawTtf => {
+            face.outline_glyph(ttf_parser::GlyphId(gid), &mut outline)
+                .ok_or("glyph has no outline")?;
+            matrix
+        }
+        Source::SkrifaAtThousand => {
+            let font = FontRef::from_index(font_data, 0)?;
+            let glyphs = font.outline_glyphs();
+            let glyph = glyphs
+                .get(GlyphId::new(u32::from(gid)))
+                .ok_or("glyph has no embedded outline")?;
+            // Match Hayro's fixed 1000-unit outline request. The returned
+            // coordinates are already quantized by the pure-Rust font parser;
+            // scale TGR1's original-UPEM basis back before raster staging.
+            let instance = if glyphs.require_interpreter() {
+                HintingInstance::new(
+                    &glyphs,
+                    Size::new(1000.0),
+                    LocationRef::default(),
+                    HintingOptions {
+                        engine: Engine::Interpreter,
+                        target: Target::Mono,
+                    },
+                )
+                .ok()
+            } else {
+                None
+            };
+            let settings = if let Some(instance) = instance.as_ref() {
+                DrawSettings::hinted(instance, false)
+            } else {
+                DrawSettings::unhinted(Size::new(1000.0), LocationRef::default())
+            };
+            glyph.draw(settings, &mut outline)?;
+            let factor = f64::from(face.units_per_em()) / 1000.0;
+            [
+                matrix[0] * factor,
+                matrix[1] * factor,
+                matrix[2] * factor,
+                matrix[3] * factor,
+                matrix[4],
+                matrix[5],
+            ]
+        }
+    };
     if outline.overflow
         || !(1..=8).contains(&outline.contours.len())
         || outline.quads == 0
@@ -366,9 +438,9 @@ mod tests {
     fn outline_builder_stops_storing_unbounded_segments() {
         use ttf_parser::OutlineBuilder;
         let mut outline = Outline::default();
-        outline.move_to(0.0, 0.0);
+        OutlineBuilder::move_to(&mut outline, 0.0, 0.0);
         for _ in 0..300 {
-            outline.line_to(1.0, 1.0);
+            OutlineBuilder::line_to(&mut outline, 1.0, 1.0);
         }
         assert!(outline.overflow);
         assert_eq!(outline.contours[0].segments.len(), 256);
@@ -378,10 +450,10 @@ mod tests {
     fn raw_quadratic_records_keep_curve_controls() {
         use ttf_parser::OutlineBuilder;
         let mut outline = Outline::default();
-        outline.move_to(1.0, 2.0);
-        outline.quad_to(3.0, 4.0, 5.0, 6.0);
-        outline.line_to(1.0, 2.0);
-        outline.close();
+        OutlineBuilder::move_to(&mut outline, 1.0, 2.0);
+        OutlineBuilder::quad_to(&mut outline, 3.0, 4.0, 5.0, 6.0);
+        OutlineBuilder::line_to(&mut outline, 1.0, 2.0);
+        OutlineBuilder::close(&mut outline);
         let bytes =
             raw_quadratic_path(&outline, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0], [10.0, 20.0]).unwrap();
         assert_eq!(&bytes[..4], b"OPQ1");

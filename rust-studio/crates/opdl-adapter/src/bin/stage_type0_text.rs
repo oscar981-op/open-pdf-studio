@@ -498,7 +498,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let inventory_mode = input == "--outline-inventory";
     let multi_mode = input == "--isolate-multi";
-    let quad_mode = input == "--isolate-quad";
+    let quad_skrifa_mode = input == "--isolate-quad-skrifa";
+    let quad_mode = input == "--isolate-quad" || quad_skrifa_mode;
     let outline_mode = input == "--outline" || input == "--isolate" || multi_mode || quad_mode;
     let isolate_mode = input == "--isolate" || multi_mode || quad_mode;
     let input = if outline_mode || inventory_mode {
@@ -789,7 +790,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .get(&record.font)
                     .ok_or_else(|| fail("glyph font unavailable"))?;
                 let result = if quad_mode {
-                    quad_glyph::stage(&font.data, record.gid, record.transform)
+                    let source = if quad_skrifa_mode {
+                        quad_glyph::Source::SkrifaAtThousand
+                    } else {
+                        quad_glyph::Source::RawTtf
+                    };
+                    quad_glyph::stage(&font.data, record.gid, record.transform, source)
                         .map(|(opm, shift, raw)| (opm, shift, Some(raw)))
                 } else if multi_mode {
                     multi_glyph_scene(font, record).map(|(opm, shift)| (opm, shift, None))

@@ -392,3 +392,45 @@ python3 dynlex-engine-poc/rgba/verify_real_quad_glyphs.py \
   --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf' \
   --output dynlex-engine-poc/rgba/real-quad-glyphs-2026-10-05.json
 ```
+
+## Experimentele Rust-fontfrontend vóór DynLex
+
+`stage_type0_text --isolate-quad-skrifa` gebruikt nu dezelfde ingebedde
+Type0/Identity-H-resourcekoppeling en TGR1-transformatie, maar haalt de
+outline binnen de Rust-adapter met `skrifa` 0.42.1 op een vaste schaal van
+1000 fontunits op. De TGR1-basis wordt met de originele `units_per_em` naar
+die schaal omgerekend. Na de begrensde kwadratische afvlakking schrijft de
+frontend OPM2; **DynLex** doet de feitelijke analytische glyphdekking. Er
+is geen Vello-, Hayro- of C++-aanroep in deze uitvoerroute. `skrifa` is een
+pure-Rust fontparser, geen eigen TrueType-decoder van DynLex.
+
+`verify_native_quad_glyphs.py` vergeleek 25 onderscheiden, werkelijk
+gebruikte glyphs met elk hun originele embedded font en een geïsoleerde
+PDF-pagina. Alle 25 × 49.152 pixels zijn bytegelijk aan Hayro. Twee
+ongeschikte records werden zonder uitvoer afgewezen. Deze stap ondersteunt
+nog geen samengestelde tekstpagina: één zwarte glyph per 256×192-tegel,
+zonder fontwisselingen binnen een tekstlaag, TJ, kleur, rotatie/CropBox,
+clipping of transparantie. De gewone native app blijft op Hayro terugvallen
+voor tekst; dit is geen 100%-PDF-dekking en er is geen end-to-end
+snelheidsmeting.
+
+Reproduceren vanuit `rust-studio`, met de eerder gedocumenteerde
+`opds_dynlex_curve_pixel`-library voor de probe:
+
+```sh
+cargo build --offline --release -p opds-opdl-adapter --bin stage_type0_text
+python3 dynlex-engine-poc/rgba/build_glyph_strip.py \
+  --compiler ~/.cache/opds-toolchains/dynlex-0.0.1/dynlex/bin/dynlex \
+  --opt ~/.cache/opds-toolchains/llvm-20/root/usr/bin/opt-20 \
+  --llc ~/.cache/opds-toolchains/llvm-20/root/usr/bin/llc-20 \
+  --output-dir /tmp/opds-glyph-strip-quad-build
+rustc --edition=2024 -O dynlex-engine-poc/rgba/glyph_strip_native_probe.rs \
+  -L native=/tmp/opds-glyph-strip-quad-build \
+  -L native=/tmp/opds-curve-pixel-build \
+  -o /tmp/opds-glyph-strip-quad-probe
+python3 dynlex-engine-poc/rgba/verify_native_quad_glyphs.py \
+  --stage target/release/stage_type0_text \
+  --dynlex /tmp/opds-glyph-strip-quad-probe \
+  --hayro target/release/opds-engine-probe \
+  --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf'
+```
