@@ -50,12 +50,19 @@ fn number(value: &Object) -> Result<f64, Box<dyn Error>> {
     Ok(value)
 }
 
-fn endpoint_channel(value: &Object) -> Option<u8> {
-    match number(value).ok()? {
-        0.0 => Some(0),
-        1.0 => Some(255),
-        _ => None,
+fn rgb_channel(value: &Object) -> Option<u8> {
+    let value = number(value).ok()?;
+    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        return None;
     }
+    let channel = (value * 255.0).round() as u8;
+    // OPGS-v1 stores only 8-bit RGB. Admit the native Save As encoding
+    // (`{byte / 255:.3}`) and exact endpoints; do not silently quantize an
+    // arbitrary PDF color with more precision than the scene can preserve.
+    let canonical = format!("{:.3}", f64::from(channel) / 255.0)
+        .parse::<f64>()
+        .ok()?;
+    ((value - canonical).abs() <= 0.00001).then_some(channel)
 }
 
 fn six(operands: &[Object]) -> Result<[f64; 6], Box<dyn Error>> {
@@ -773,13 +780,13 @@ fn main() -> Result<(), Box<dyn Error>> {
                 ) = saved.pop().ok_or_else(|| fail("unbalanced Q"))?;
             }
             ("rg", [red, green, blue]) => {
-                fill_ink = endpoint_channel(red)
-                    .zip(endpoint_channel(green))
-                    .zip(endpoint_channel(blue))
+                fill_ink = rgb_channel(red)
+                    .zip(rgb_channel(green))
+                    .zip(rgb_channel(blue))
                     .map(|((red, green), blue)| [red, green, blue]);
             }
             ("g", [gray]) => {
-                fill_ink = endpoint_channel(gray).map(|value| [value; 3]);
+                fill_ink = rgb_channel(gray).map(|value| [value; 3]);
             }
             ("gs", [Object::Name(name)]) => {
                 paint_safe &= opaque_states.get(name).copied().unwrap_or(false);
@@ -1037,8 +1044,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 scene.extend_from_slice(&opm);
                 let [a, b, c, d, e, f] = record.transform;
                 let text = format!(
-                    "q {} {} {} rg BT /{} {} Tf {:.12} {:.12} {:.12} {:.12} {:.12} {:.12} Tm <{:04X}> Tj ET Q\n",
-                    if color[0] == 255 { 1 } else { 0 }, 0, 0,
+                    "q {:.3} {:.3} {:.3} rg BT /{} {} Tf {:.12} {:.12} {:.12} {:.12} {:.12} {:.12} Tm <{:04X}> Tj ET Q\n",
+                    f64::from(color[0]) / 255.0,
+                    f64::from(color[1]) / 255.0,
+                    f64::from(color[2]) / 255.0,
                     String::from_utf8_lossy(&record.font), font.units_per_em,
                     a, -b, c, -d, e + shift[0], 192.0 - f - shift[1], record.cid
                 );
@@ -1143,6 +1152,17 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_device_rgb_channels_include_native_annotation_color() {
+        assert_eq!(rgb_channel(&Object::Real(0.314)), Some(80));
+        assert_eq!(rgb_channel(&Object::Real(0.941)), Some(240));
+        assert_eq!(rgb_channel(&Object::Integer(0)), Some(0));
+        assert_eq!(rgb_channel(&Object::Integer(1)), Some(255));
+        assert_eq!(rgb_channel(&Object::Real(-0.01)), None);
+        assert_eq!(rgb_channel(&Object::Real(1.01)), None);
+        assert_eq!(rgb_channel(&Object::Real(0.1234)), None);
+    }
 
     #[test]
     fn glyph_run_rejects_truncation_and_corrupt_structure() {

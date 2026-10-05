@@ -4,6 +4,10 @@ mod annotation_overlay;
 pub use annotation_overlay::{
     render_native_annotation_overlay, render_native_annotation_overlay_pixels,
 };
+#[cfg(feature = "kernel")]
+mod appearance_stage;
+#[cfg(feature = "kernel")]
+pub use appearance_stage::flatten_native_free_text_appearance;
 use opds_engine_probe::{ParsedPdf, Raster, RenderError};
 #[cfg(feature = "kernel")]
 use opds_opdl_adapter::{

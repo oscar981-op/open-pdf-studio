@@ -1138,6 +1138,114 @@ mod tests {
         assert_eq!(dynlex.rgba, hayro.rgba);
     }
 
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn native_text_appearance_can_be_staged_as_page_content() {
+        use opds_dynlex_backend::flatten_native_free_text_appearance;
+        use opds_engine_probe::ParsedPdf;
+
+        let mut blank = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *blank.get_pages().get(&1).unwrap();
+        blank
+            .get_object_mut(page_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .remove(b"Annots");
+        let mut source = Vec::new();
+        blank.save_to(&mut source).unwrap();
+        assert!(flatten_native_free_text_appearance(&source, 1).is_err());
+        let mark = Annotation {
+            id: 321,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        let saved = export_annotations(&source, &[mark]).unwrap();
+        let flattened = flatten_native_free_text_appearance(&saved, 1).unwrap();
+        if let Some(directory) = std::env::var_os("OPDS_AP_FIXTURE_DIR") {
+            let directory = std::path::PathBuf::from(directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            std::fs::write(directory.join("saved-freetext.pdf"), &saved).unwrap();
+            std::fs::write(directory.join("flattened-freetext.pdf"), &flattened).unwrap();
+        }
+        let original = ParsedPdf::open(Arc::new(saved.clone()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let staged = ParsedPdf::open(Arc::new(flattened.clone()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert_eq!(original.rgba, staged.rgba);
+        let flattened_doc = Document::load_mem(&flattened).unwrap();
+        let content = flattened_doc.get_page_content(page_id).unwrap();
+        assert!(content.windows(2).any(|window| window == b"Tj"));
+        assert!(flatten_native_free_text_appearance(&flattened, 1).is_err());
+        let mut inherited_rotation = Document::load_mem(&saved).unwrap();
+        let page_id = *inherited_rotation.get_pages().get(&1).unwrap();
+        let parent_id = inherited_rotation
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Parent")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        inherited_rotation
+            .get_object_mut(parent_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .set("Rotate", 90);
+        inherited_rotation.trailer.remove(b"Prev");
+        let mut rotated = Vec::new();
+        inherited_rotation.save_to(&mut rotated).unwrap();
+        assert!(flatten_native_free_text_appearance(&rotated, 1).is_err());
+        let mut unsupported_appearance = Document::load_mem(&saved).unwrap();
+        let page_id = *unsupported_appearance.get_pages().get(&1).unwrap();
+        let annotation_id = unsupported_appearance
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = unsupported_appearance
+            .get_dictionary(annotation_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        unsupported_appearance
+            .get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .content
+            .extend_from_slice(b"\n0 0 m\n");
+        unsupported_appearance.trailer.remove(b"Prev");
+        let mut unsupported = Vec::new();
+        unsupported_appearance.save_to(&mut unsupported).unwrap();
+        assert!(flatten_native_free_text_appearance(&unsupported, 1).is_err());
+    }
+
     #[test]
     fn incremental_export_preserves_source_and_printable_appearances() {
         let source = source_pdf();

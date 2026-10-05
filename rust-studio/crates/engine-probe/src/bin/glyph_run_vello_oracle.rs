@@ -2,7 +2,7 @@
 //! This diagnostic is never used by the DynLex kernel or native app.
 use std::{env, error::Error, fs};
 use vello_cpu::{
-    color::palette::css,
+    color::{palette::css, AlphaColor, Srgb},
     kurbo::{BezPath, Rect, Shape},
     Pixmap, RenderContext, Resources,
 };
@@ -106,11 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             return Err("unsupported OPGS glyph mapping or flags".into());
         }
         let color = &bytes[at + 36..at + 39];
-        match color {
-            [0, 0, 0] => context.set_paint(css::BLACK),
-            [255, 0, 0] => context.set_paint(css::RED),
-            _ => return Err("unsupported oracle glyph color".into()),
-        }
+        context.set_paint(AlphaColor::<Srgb>::from_rgb8(color[0], color[1], color[2]));
         let length = u32_at(&bytes, at + 40)? as usize;
         at += 44;
         if length > 4148 || at + length > bytes.len() {

@@ -64,6 +64,55 @@ zonder `/AP`, tekst/free-text, meerdere kleurmodellen, transparantiegroepen,
 rotatie/CropBox en subpixelplaatsing met echte PDF's worden geverifieerd.
 De huidige app bevat nog geen PDFium-backend; Hayro blijft de fallback.
 
+## Geïsoleerde native Text Box-appearance
+
+`flatten_native_free_text_appearance` is nu een **read-only onderzoeksbrug**
+in de DynLex-backend. Zij accepteert één door Open PDF Studio opgeslagen
+`/FreeText`-annotatie met een ongecomprimeerde Form `/AP`, ingebed `/OPDS0`
+Type0/Identity-H-font, één lege ongefilterde oorspronkelijke paginastream en geen
+rotatie/CropBox. Onbekende appearance-operators, extra annotaties, andere
+fonts en geërfde paginatransformaties worden geweigerd; ontbrekende glyphs
+moeten door de opvolgende tekststaging worden afgewezen.
+De bron-PDF blijft ongewijzigd; een tijdelijke kopie zet de Form-content op
+de pagina met de annotatieverschuiving. Een oude `/Prev`-verwijzing uit een
+incrementele brontrailer wordt bij deze volledige proefopslag verwijderd.
+
+Een door de app opgeslagen gecentreerde blauwe Text Box met drie `Ω`-glyphs
+uit ingebed Liberation Sans levert na deze normalisatie dezelfde **240.000
+RGBA-bytes** als de oorspronkelijke `/AP` in Hayro. De bestaande
+`stage_type0_text` leest drie TGR1-records uit de genormaliseerde PDF,
+zonder overgeslagen tekstshows. De zelfstandige DynLex-glyphstripkernel
+rendert een OPGS-scene met de oorspronkelijke glyphvolgorde en blauwe
+8-bit-kleur. In het 200×192 zichtbare proefgebied zijn **153.600/153.600
+RGBA-bytes** gelijk aan de werkelijke opgeslagen `/AP` in Hayro. De
+read-only Vello-oracle is eveneens bytegelijk aan de DynLex-proef.
+`stage_type0_text` bewaart hiervoor uitsluitend de canonieke 3-decimale
+DeviceRGB-kleuren die de native Save As uit 8-bit RGB schrijft; overige
+PDF-kleurprecisie wordt niet stilzwijgend afgerond.
+
+Reproduceren vanuit `rust-studio`, na het bouwen van de zelfstandige
+glyphstrip-probe volgens `docs/dynlex-text-stage-2026-10-05.md`:
+
+```sh
+OPDS_AP_FIXTURE_DIR=/tmp/opds-ap-stage cargo test --offline -p opds-native-app \
+  --features dynlex-experimental native_text_appearance_can_be_staged_as_page_content
+cargo build --release --offline -p opds-opdl-adapter --bin stage_type0_text
+python3 dynlex-engine-poc/rgba/verify_native_text_appearance.py \
+  --saved /tmp/opds-ap-stage/saved-freetext.pdf \
+  --flattened /tmp/opds-ap-stage/flattened-freetext.pdf \
+  --stage target/release/stage_type0_text \
+  --dynlex /tmp/opds-glyph-run-probe \
+  --hayro target/release/opds-engine-probe \
+  --vello target/release/glyph_run_vello_oracle
+```
+
+Dit bewijst één geïsoleerde Unicode-tekstfixture, **niet** de gehele Text
+Box in de normale DynLex-app. De glyphkernel is nog een afzonderlijke
+256×192-proef; clipping, meerdere regels, andere glyphcontouren, rotatie,
+onderliggende paginakleur en editinteracties vereisen aparte pariteitstests
+en een begrensde in-process integratie. Daarom blijft Text Box in de app
+voorlopig bij de bestaande fallback.
+
 Gerichte reproductie vanuit `rust-studio`:
 
 ```sh
