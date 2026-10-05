@@ -24,7 +24,12 @@ cargo run --release -p opds-opdl-adapter --bin inspect_pdf -- \
 
 `Combinatie Raster, vector, tekening images.pdf` heeft één pagina van
 1684×1191 pt met 8.721 operators, waaronder 4.034 `c`, 2.697 `l`,
-375 `f`, 43 `W` en 47 `cm`. Een read-only image-inventaris op 5 oktober
+375 `f`, 43 `W`, 12 `W*` en 47 `cm`. De read-only `inspect_pdf --clip-ops`
+classificeert 41 clipopdrachten als één `re`-rechthoek en 14 als
+`m/l/h`-paden. Veel rechthoekcoördinaten zijn na de globale 0,1-schaal
+fractioneel; een gecontroleerde subpixel-rechthoek wordt nu via OPDL-v6
+beelddekking bytegelijk aan Hayro gerenderd. Polygonale clips ontbreken nog.
+Een read-only image-inventaris op 5 oktober
 vond 38 image-XObjects: 36 DeviceRGB8/FlateDecode-stroken met PNG-predictor
 15 (meestal 3843×68, laatste 3843×25), plus twee Indexed/DeviceRGB-beelden.
 De content begint met `0.1 0 0 0.1 0 0 cm`; daarop volgen fractionele

@@ -198,8 +198,8 @@ python3 dynlex-engine-poc/rgba/fractional_image_verify.py \
   --probe target/release/backend_probe --cases 200 --seed 20261005
 ```
 
-Een actief clipvak, `/Interpolate true`, scheve of omgekeerde beeldmatrix en
-andere onbewezen PDF-states blijven op Hayro terugvallen. De echte
+Een niet-rechthoekig clipvak, `/Interpolate true`, scheve of omgekeerde
+beeldmatrix en andere onbewezen PDF-states blijven op Hayro terugvallen. De echte
 combinatie-PDF bevat bovendien duizenden curven en clippaden; deze proef
 bewijst geen volledige objectdekking.
 
@@ -244,8 +244,40 @@ Opeenvolgende clipvakken worden doorsneden; `q/Q` bewaart en herstelt hun
 toestand. Vijf gecontroleerde PDF's met fractionele beeldranden, vectorlaag
 onder het beeld, dubbele clip, `q/Q` en 90°/CropBox zijn RGBA-bytegelijk
 aan Hayro. Een volledig weggeclipt beeld valt voorlopig op Hayro terug;
-niet-rechthoekige clipvormen en antialiased clipranden zijn nog niet bewezen.
+niet-rechthoekige clipvormen zijn nog niet bewezen.
 `dynlex-engine-poc/rgba/clipped_image_fixture.py` maakt de fixtures.
+
+Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht
+(`kind=8`) met RGBA-patch en een 8-bit-dekkingswaarde per pixel. De
+pure-Rust-adapter berekent de overlap van het pixelvak met het via
+MediaBox/CropBox/rotatie getransformeerde PDF-clipvak. DynLex mengt de
+beeldkleur in tekenvolgorde met de bestaande pagina; de 8-bit-bron- en
+achtergrondbijdrage worden afzonderlijk afgerond zoals in de gecontroleerde
+Hayro/Vello-uitvoer. De Rust-grens valideert versie, opdrachtsoort,
+beeldgrenzen, byte-offsets en lengte voordat de ABI wordt aangeroepen.
+`W` en `W*` geven bij één rechthoek hetzelfde clipresultaat. Zeven extra
+gecontroleerde PDF's testen fractionele randen, overlap met een eerdere
+vectorlaag, fractionele beeldrand, de vier kwartslagen, CropBox en een globale
+`0.1`-CTM; zij zijn RGBA-bytegelijk aan Hayro. De vroegere eenvoudige
+éénstapsmengregel week op 56 pixels van een geroteerde fixture één
+kleurwaarde af en is vóór activering vervangen. Fractionele vectorfills en
+strokes onder zo'n clip, polygonale clips en algemene transparantie blijven
+op Hayro terugvallen.
+
+Sommige decimale randen liggen zo dicht bij een halve 8-bit-dekkingsstap dat
+de f32-PDF-padtransformatie de afronding één waarde kan veranderen. Zulke
+ambiguë randen worden expliciet afgewezen en via Hayro gerenderd. Twee
+deterministische differentiële reeksen van elk 1.000 fractionele clip-PDF's
+gaven respectievelijk 948/948 en 959/959 bytegelijke DynLex-resultaten;
+52 en 41 gevallen vielen terug. Dit is een begrensde steekproef, geen bewijs
+voor willekeurige PDF-clippaden. Herhaal vanuit `rust-studio` met:
+
+```sh
+python3 dynlex-engine-poc/rgba/fractional_clip_verify.py \
+  --probe target/release/backend_probe --cases 1000 --seed 20261005
+python3 dynlex-engine-poc/rgba/fractional_clip_verify.py \
+  --probe target/release/backend_probe --cases 1000 --seed 20261006
+```
 
 De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
 `rust-studio`:

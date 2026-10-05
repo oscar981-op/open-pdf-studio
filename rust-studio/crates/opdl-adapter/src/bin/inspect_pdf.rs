@@ -72,10 +72,11 @@ fn describe_bounded(document: &Document, object: &Object, depth: usize) -> Strin
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
     let input = args.next().ok_or(
-        "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--head N] [--around INDEX]",
+        "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--head N] [--around INDEX]",
     )?;
     let mut selected = None;
     let mut image_ops = false;
+    let mut clip_ops = false;
     let mut head = 0_usize;
     let mut around = None;
     while let Some(arg) = args.next() {
@@ -89,6 +90,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 );
             }
             Some("--image-ops") if !image_ops => image_ops = true,
+            Some("--clip-ops") if !clip_ops => clip_ops = true,
             Some("--head") if head == 0 => {
                 head = args
                     .next()
@@ -108,7 +110,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 );
             }
             _ => return Err(
-                "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--head N] [--around INDEX]"
+                "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--head N] [--around INDEX]"
                     .into(),
             ),
         }
@@ -174,6 +176,37 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .map(|value| describe(&document, value))
                     .collect::<Vec<_>>();
                 println!("op={index} {} {}", operands.join(" "), operation.operator);
+            }
+        }
+        if clip_ops {
+            for (index, operation) in content.operations.iter().enumerate() {
+                if !matches!(operation.operator.as_str(), "W" | "W*") {
+                    continue;
+                }
+                let mut path_counts = BTreeMap::<String, usize>::new();
+                for previous in content.operations[..index].iter().rev() {
+                    match previous.operator.as_str() {
+                        "m" | "l" | "c" | "v" | "y" | "h" | "re" => {
+                            *path_counts.entry(previous.operator.clone()).or_default() += 1;
+                        }
+                        "n" | "S" | "s" | "f" | "F" | "f*" | "B" | "B*" | "b" | "b*" => break,
+                        _ => {}
+                    }
+                }
+                let counts = path_counts
+                    .iter()
+                    .map(|(name, count)| format!("{name}:{count}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let nearby = content.operations[index.saturating_sub(5)..index]
+                    .iter()
+                    .map(|op| op.operator.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                println!(
+                    "clip_op={index} rule={} path={counts} recent={nearby}",
+                    operation.operator
+                );
             }
         }
         if image_ops {

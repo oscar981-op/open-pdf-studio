@@ -1102,6 +1102,104 @@ fn clip_display_image(
     Ok((visible, output))
 }
 
+fn fractional_clip_to_display(
+    [x, y, w, h]: [f64; 4],
+    crop: [u32; 4],
+    turn: u32,
+) -> Result<[f64; 4], Box<dyn Error>> {
+    let left = x.max(f64::from(crop[0]));
+    let bottom = y.max(f64::from(crop[1]));
+    // lopdf stores PDF real operands as f32. Hayro's path builder adds the
+    // rectangle extent at that precision before antialias coverage is found.
+    // Keeping the sum in f64 can move a nominal half-pixel edge just below
+    // the half-pixel and change one 8-bit coverage value.
+    let right = f64::from((x as f32) + (w as f32)).min(f64::from(crop[2]));
+    let top = f64::from((y as f32) + (h as f32)).min(f64::from(crop[3]));
+    if left >= right || bottom >= top {
+        return Err(fail("fractional clip is outside the visible CropBox"));
+    }
+    // The 180-degree page transform uses f32 subtraction in Hayro's path
+    // coordinates. Widening the edge before that subtraction shifts some
+    // half-pixel coverages by one byte. The other turns retain f64 page
+    // subtraction, as their f32 form has different edge rounding.
+    let display = match turn {
+        0 => [
+            left - f64::from(crop[0]),
+            f64::from(crop[3]) - top,
+            right - f64::from(crop[0]),
+            f64::from(crop[3]) - bottom,
+        ],
+        90 => [
+            bottom - f64::from(crop[1]),
+            left - f64::from(crop[0]),
+            top - f64::from(crop[1]),
+            right - f64::from(crop[0]),
+        ],
+        180 => [
+            f64::from((crop[2] as f32) - (right as f32)),
+            bottom - f64::from(crop[1]),
+            f64::from((crop[2] as f32) - (left as f32)),
+            top - f64::from(crop[1]),
+        ],
+        270 => [
+            f64::from(crop[3]) - top,
+            f64::from(crop[2]) - right,
+            f64::from(crop[3]) - bottom,
+            f64::from(crop[2]) - left,
+        ],
+        _ => return Err(fail("unsupported fractional clip rotation")),
+    };
+    Ok(display)
+}
+
+fn mask_fractional_image_clip(
+    rect: [u32; 4],
+    pixels: Vec<u8>,
+    clip: [f64; 4],
+    channels: usize,
+) -> Result<([u32; 4], Vec<u8>), Box<dyn Error>> {
+    let bounds = [
+        (clip[0].floor() as u32).max(rect[0]),
+        (clip[1].floor() as u32).max(rect[1]),
+        (clip[2].ceil() as u32).min(rect[2]),
+        (clip[3].ceil() as u32).min(rect[3]),
+    ];
+    let (rect, pixels) = clip_display_image(rect, pixels, bounds, channels)?;
+    let mut output = vec![0; (rect[2] - rect[0]) as usize * (rect[3] - rect[1]) as usize * 4];
+    for y in rect[1]..rect[3] {
+        let coverage_y =
+            (clip[3].min(f64::from(y + 1)) - clip[1].max(f64::from(y))).clamp(0.0, 1.0);
+        for x in rect[0]..rect[2] {
+            let coverage_x =
+                (clip[2].min(f64::from(x + 1)) - clip[0].max(f64::from(x))).clamp(0.0, 1.0);
+            let pixel =
+                (y - rect[1]) as usize * (rect[2] - rect[0]) as usize + (x - rect[0]) as usize;
+            let source = pixel * channels;
+            let target = pixel * 4;
+            output[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+            let scaled_coverage = coverage_x * coverage_y * 255.0;
+            let fractional_part = scaled_coverage.fract();
+            let quarter_aligned = |value: f64| (value * 4.0 - (value * 4.0).round()).abs() < 1e-8;
+            if (fractional_part - 0.5).abs() < 0.01
+                && !(quarter_aligned(coverage_x) && quarter_aligned(coverage_y))
+            {
+                // A decimal PDF edge near a half-integer alpha threshold can
+                // round either way after Hayro's f32 path transform. Until the
+                // full path rasterizer is available, use the established
+                // renderer rather than silently returning an off-by-one pixel.
+                return Err(fail("ambiguous fractional clip coverage"));
+            }
+            let coverage = (scaled_coverage + 0.5) as u8;
+            output[target + 3] = if channels == 4 && pixels[source + 3] == 0 {
+                0
+            } else {
+                coverage
+            };
+        }
+    }
+    Ok((rect, output))
+}
+
 fn image_source_dimensions(
     document: &Document,
     resources: &lopdf::Dictionary,
@@ -1481,13 +1579,17 @@ fn page_to_opdl_bytes_internal(
     let mut stroke_color = [0_u8; 3];
     let mut one_pixel_stroke = false;
     let mut pending_rect = None;
+    let mut pending_fractional_rect: Option<[f64; 4]> = None;
     let mut pending_clip = false;
     let mut clip = None;
     let mut saved_clips: Vec<Option<[u32; 4]>> = Vec::new();
+    let mut fractional_clip: Option<[f64; 4]> = None;
+    let mut saved_fractional_clips: Vec<Option<[f64; 4]>> = Vec::new();
     let mut pending_path: Option<PathStage> = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
     let mut ordered_image_bytes = Vec::new();
     let mut has_fractional_image = false;
+    let mut has_fractional_clip_image = false;
     let started = Instant::now();
     for op in &content.operations {
         match op.operator.as_str() {
@@ -1500,6 +1602,7 @@ fn page_to_opdl_bytes_internal(
                 && pending_path.is_none() =>
             {
                 saved_clips.push(clip);
+                saved_fractional_clips.push(fractional_clip);
                 saved_ctms.push(ctm);
                 saved_styles.push((color, stroke_color, one_pixel_stroke));
                 depth += 1;
@@ -1514,6 +1617,9 @@ fn page_to_opdl_bytes_internal(
                 clip = saved_clips
                     .pop()
                     .ok_or_else(|| fail("restore without save"))?;
+                fractional_clip = saved_fractional_clips
+                    .pop()
+                    .ok_or_else(|| fail("fractional clip restore without save"))?;
                 depth -= 1;
                 ctm = saved_ctms
                     .pop()
@@ -1666,6 +1772,18 @@ fn page_to_opdl_bytes_internal(
                     } else {
                         (rect, display_pixels)
                     };
+                    let (kind, rect, display_pixels) = if let Some(clip) = fractional_clip {
+                        let (rect, pixels) = mask_fractional_image_clip(
+                            rect,
+                            display_pixels,
+                            clip,
+                            if kind == 7 { 4 } else { 3 },
+                        )?;
+                        has_fractional_clip_image = true;
+                        (8, rect, pixels)
+                    } else {
+                        (kind, rect, display_pixels)
+                    };
                     if ordered_image_bytes
                         .len()
                         .saturating_add(display_pixels.len())
@@ -1729,7 +1847,24 @@ fn page_to_opdl_bytes_internal(
             "re" if !image_matrix && pending_rect.is_none() && pending_path.is_none() => {
                 let [x, y, w, h] = operands::<4>(&op.operands)?;
                 let [x, y, w, h] = if ordered_images {
-                    ctm.pixel_rect([x, y, w, h], coordinate_limit)?
+                    let [tx, ty] = ctm.point([x, y]);
+                    let transformed = [tx, ty, w * ctm.sx, h * ctm.sy];
+                    if transformed.iter().any(|value| !value.is_finite())
+                        || transformed[0] < 0.0
+                        || transformed[1] < 0.0
+                        || transformed[2] <= 0.0
+                        || transformed[3] <= 0.0
+                        || transformed[0] + transformed[2] > f64::from(media[2])
+                        || transformed[1] + transformed[3] > f64::from(media[3])
+                    {
+                        return Err(fail("rectangle outside page"));
+                    }
+                    if let Ok(aligned) = ctm.pixel_rect([x, y, w, h], coordinate_limit) {
+                        aligned
+                    } else {
+                        pending_fractional_rect = Some(transformed);
+                        [0, 0, 0, 0]
+                    }
                 } else {
                     let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
                     [
@@ -1742,12 +1877,17 @@ fn page_to_opdl_bytes_internal(
                 if x + w > media[2] || y + h > media[3] {
                     return Err(fail("rectangle outside page"));
                 }
-                pending_rect = Some(visible_rect_to_display(crop, turn, [x, y, w, h])?);
+                pending_rect = Some(if pending_fractional_rect.is_some() {
+                    [0, 0, 0, 0]
+                } else {
+                    visible_rect_to_display(crop, turn, [x, y, w, h])?
+                });
             }
-            "W" if !image_matrix
-                && op.operands.is_empty()
-                && pending_rect.is_some()
-                && !pending_clip =>
+            "W" | "W*"
+                if !image_matrix
+                    && op.operands.is_empty()
+                    && pending_rect.is_some()
+                    && !pending_clip =>
             {
                 pending_clip = true;
             }
@@ -1755,10 +1895,29 @@ fn page_to_opdl_bytes_internal(
                 let rect = pending_rect
                     .take()
                     .ok_or_else(|| fail("clip without rectangle"))?;
-                clip = Some(intersect_rect(rect, clip).unwrap_or([0, 0, 0, 0]));
+                if let Some(fractional) = pending_fractional_rect.take() {
+                    let display = fractional_clip_to_display(fractional, crop, turn)?;
+                    fractional_clip = Some(if let Some(prior) = fractional_clip {
+                        [
+                            display[0].max(prior[0]),
+                            display[1].max(prior[1]),
+                            display[2].min(prior[2]),
+                            display[3].min(prior[3]),
+                        ]
+                    } else {
+                        display
+                    });
+                } else {
+                    clip = Some(intersect_rect(rect, clip).unwrap_or([0, 0, 0, 0]));
+                }
                 pending_clip = false;
             }
             "f" if !image_matrix && op.operands.is_empty() && !pending_clip => {
+                if pending_fractional_rect.is_some() || fractional_clip.is_some() {
+                    return Err(fail(
+                        "fractional clip or fill requires general path coverage",
+                    ));
+                }
                 let rect = pending_rect
                     .take()
                     .ok_or_else(|| fail("fill without rectangle"))?;
@@ -1832,6 +1991,9 @@ fn page_to_opdl_bytes_internal(
                     .cubic_to(curve)?;
             }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
+                if fractional_clip.is_some() {
+                    return Err(fail("strokes under fractional clip are not yet supported"));
+                }
                 if ordered_images && (ctm.sx != 1.0 || ctm.sy != 1.0) {
                     return Err(fail("scaled stroke width is outside the proven subset"));
                 }
@@ -1939,11 +2101,13 @@ fn page_to_opdl_bytes_internal(
     }
     if depth != 0
         || pending_rect.is_some()
+        || pending_fractional_rect.is_some()
         || pending_clip
         || pending_path.is_some()
         || image_matrix
         || translation.is_some()
         || !saved_clips.is_empty()
+        || !saved_fractional_clips.is_empty()
         || !saved_ctms.is_empty()
         || !saved_styles.is_empty()
     {
@@ -1958,7 +2122,9 @@ fn page_to_opdl_bytes_internal(
     output.extend_from_slice(b"OPDL");
     for value in [
         if ordered_images {
-            if has_fractional_image {
+            if has_fractional_clip_image {
+                6
+            } else if has_fractional_image {
                 5
             } else {
                 3

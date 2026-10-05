@@ -291,7 +291,7 @@ fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
     Ok((scene, width, height))
 }
 
-/// Ordered OPDL-v3/v5 stores images after the fixed-width command table; kinds 6/7 carry
+/// Ordered OPDL-v3/v5/v6 stores images after the fixed-width command table; kinds 6/7/8 carry
 /// byte offsets into the trailing RGB/binary-alpha blobs. Offsets are contiguous, so the
 /// DynLex kernel cannot read unvalidated gaps, aliases or truncated images.
 #[cfg(feature = "kernel")]
@@ -299,7 +299,7 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
     if scene.len() < 40
         || scene.len() > 3_538_984
         || scene.get(..4) != Some(b"OPDL")
-        || !matches!(word(&scene, 4)?, 3 | 5)
+        || !matches!(word(&scene, 4)?, 3 | 5 | 6)
         || word(&scene, 32)? != 0
     {
         return Err("invalid ordered OPDL header".into());
@@ -353,9 +353,9 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
                     return Err("invalid ordered vector command".into());
                 }
             }
-            6 | 7 => {
-                if kind == 7 && version != 5 {
-                    return Err("binary-alpha image requires ordered OPDL-v5".into());
+            6 | 7 | 8 => {
+                if (kind == 7 && version < 5) || (kind == 8 && version != 6) {
+                    return Err("image coverage kind requires a newer ordered OPDL version".into());
                 }
                 images += 1;
                 let offset = usize::try_from(word(&scene, at + 20)?).map_err(|e| e.to_string())?;
@@ -364,7 +364,7 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
                 }
                 let length = (rect[2] - rect[0])
                     .checked_mul(rect[3] - rect[1])
-                    .and_then(|n| n.checked_mul(if kind == 7 { 4 } else { 3 }))
+                    .and_then(|n| n.checked_mul(if kind == 6 { 3 } else { 4 }))
                     .and_then(|n| usize::try_from(n).ok())
                     .ok_or("ordered image size overflow")?;
                 let start = image_start
@@ -815,11 +815,26 @@ mod tests {
             let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
             let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
             assert_eq!(rendered.used, Backend::Dynlex, "{name}");
-            assert_eq!(
-                rendered.raster.rgba,
-                pdf.render_page(1, 1.0).unwrap().rgba,
-                "{name}"
-            );
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            if rendered.raster.rgba != expected.rgba {
+                let first = rendered
+                    .raster
+                    .rgba
+                    .iter()
+                    .zip(&expected.rgba)
+                    .position(|(actual, wanted)| actual != wanted)
+                    .unwrap();
+                let mismatches = rendered
+                    .raster
+                    .rgba
+                    .iter()
+                    .zip(&expected.rgba)
+                    .filter(|(actual, wanted)| actual != wanted)
+                    .count();
+                let start = first / 4 * 4;
+                panic!("{name}: first RGBA byte {first}, mismatch bytes {mismatches}, actual {:?}, expected {:?}",
+                    &rendered.raster.rgba[start..start+4], &expected.rgba[start..start+4]);
+            }
         }
     }
 
@@ -871,15 +886,58 @@ mod tests {
                 "Indexed RGB",
                 include_bytes!("../tests/fixtures/clipped-indexed-rgb.pdf").as_slice(),
             ),
+            (
+                "subpixel RGB",
+                include_bytes!("../tests/fixtures/clipped-subpixel-rgb.pdf").as_slice(),
+            ),
+            (
+                "subpixel image edge",
+                include_bytes!("../tests/fixtures/clipped-subpixel-image.pdf").as_slice(),
+            ),
+            (
+                "subpixel Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-subpixel-rotate.pdf").as_slice(),
+            ),
+            (
+                "subpixel Rotate 180",
+                include_bytes!("../tests/fixtures/clipped-subpixel-rotate-180.pdf").as_slice(),
+            ),
+            (
+                "subpixel Rotate 270",
+                include_bytes!("../tests/fixtures/clipped-subpixel-rotate-270.pdf").as_slice(),
+            ),
+            (
+                "subpixel global CTM",
+                include_bytes!("../tests/fixtures/clipped-subpixel-global-ctm.pdf").as_slice(),
+            ),
+            (
+                "subpixel even-odd rectangle",
+                include_bytes!("../tests/fixtures/clipped-subpixel-evenodd.pdf").as_slice(),
+            ),
         ] {
             let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
             let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
             assert_eq!(rendered.used, Backend::Dynlex, "{name}");
-            assert_eq!(
-                rendered.raster.rgba,
-                pdf.render_page(1, 1.0).unwrap().rgba,
-                "{name}"
-            );
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            if rendered.raster.rgba != expected.rgba {
+                let first = rendered
+                    .raster
+                    .rgba
+                    .iter()
+                    .zip(&expected.rgba)
+                    .position(|(actual, wanted)| actual != wanted)
+                    .unwrap();
+                let mismatches = rendered
+                    .raster
+                    .rgba
+                    .iter()
+                    .zip(&expected.rgba)
+                    .filter(|(actual, wanted)| actual != wanted)
+                    .count();
+                let start = first / 4 * 4;
+                panic!("{name}: first RGBA byte {first}, mismatch bytes {mismatches}, actual {:?}, expected {:?}",
+                    &rendered.raster.rgba[start..start+4], &expected.rgba[start..start+4]);
+            }
         }
     }
 
@@ -889,6 +947,8 @@ mod tests {
         for bytes in [
             include_bytes!("../tests/fixtures/clipped-fully-outside.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-nonrect-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-subpixel-unsupported-fill.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-subpixel-ambiguous.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
@@ -1045,6 +1105,31 @@ mod tests {
         let image_start = 40 + word(&scene, 36).unwrap() as usize * 24;
         invalid_alpha[image_start + 3] = 128;
         assert!(validated_ordered_scene(invalid_alpha).is_err());
+        let mut truncated = scene;
+        truncated.pop();
+        assert!(validated_ordered_scene(truncated).is_err());
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn fractional_clip_scene_boundary_rejects_corruption() {
+        let pdf = include_bytes!("../tests/fixtures/clipped-subpixel-rgb.pdf");
+        let scene = page_to_opdl_ordered_bytes(pdf).unwrap();
+        assert_eq!(word(&scene, 4).unwrap(), 6);
+        let image_at = (0..word(&scene, 36).unwrap() as usize)
+            .map(|index| 40 + index * 24)
+            .find(|at| word(&scene, *at).unwrap() == 8)
+            .unwrap();
+        assert!(validated_ordered_scene(scene.clone()).is_ok());
+        let mut old_version = scene.clone();
+        old_version[4..8].copy_from_slice(&5_u32.to_le_bytes());
+        assert!(validated_ordered_scene(old_version).is_err());
+        let mut bad_kind = scene.clone();
+        bad_kind[image_at..image_at + 4].copy_from_slice(&9_u32.to_le_bytes());
+        assert!(validated_ordered_scene(bad_kind).is_err());
+        let mut bad_offset = scene.clone();
+        bad_offset[image_at + 20..image_at + 24].copy_from_slice(&1_u32.to_le_bytes());
+        assert!(validated_ordered_scene(bad_offset).is_err());
         let mut truncated = scene;
         truncated.pop();
         assert!(validated_ordered_scene(truncated).is_err());

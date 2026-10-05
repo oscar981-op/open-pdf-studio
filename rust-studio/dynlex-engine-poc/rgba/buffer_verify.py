@@ -572,7 +572,7 @@ def main():
             "unsupported-diagonal": b"q\n1 0 0 1 10 7 cm\n20 20 m\n30 29 l\nS\nQ\n",
             "unfinished-stroke": b"q\n1 0 0 1 10 7 cm\n20 20 m\nQ\n",
             "missing-clip-end": b"10 10 20 20 re\nW\n",
-            "unsupported-evenodd-clip": b"10 10 20 20 re\nW*\nn\n",
+            "unsupported-polygon-clip": b"10 10 m\n20 10 l\n20 20 l\nh\nW*\nn\n",
             "missing-clip-path": b"W\nn\n",
             "too-deep-save": b"q\nq\nq\nQ\nQ\nQ\n",
             "unfinished-group-clip": b"q\n10 10 20 20 re\nW\nQ\n",
