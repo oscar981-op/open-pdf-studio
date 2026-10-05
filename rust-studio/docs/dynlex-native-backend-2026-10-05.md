@@ -36,11 +36,16 @@ andere kleurruimtes en willekeurige paden zijn nog niet ondersteund.
 Vul- en lijnkleur en de expliciete 1pt-lijnbreedte blijven tussen meerdere
 tekenopdrachten behouden; `q/Q` bewaart en herstelt deze staat.
 Een tweede, eveneens opt-in route hergebruikt de beperkte OPDL-v2-adapter:
-één ongefilterde, niet geïnterpoleerde RGB8-XObject over een volledige
+één ongefilterde of enkelvoudig met FlateDecode gecomprimeerde, niet
+geïnterpoleerde RGB8-XObject over een volledige
 ongeroteerde pagina tot 1024×1024, eventueel gevolgd door bewezen
 rechthoekfills en 1px-strokes. Rust valideert de complete OPDL-scene opnieuw
-voor de DynLex-ABI; alleen dan draait de hybride kernelmodus. Beeldfilters,
-alfamaskers, geërfde rotatie, CropBox en ongedekte PDF-operatoren vallen
+voor de DynLex-ABI; alleen dan draait de hybride kernelmodus. FlateDecode
+wordt met een harde limiet van exact de verwachte RGB-bytelengte uitgepakt.
+De begrensde decompressor is de pure-Rust `miniz_oxide`-bibliotheek.
+Onbekende afbeeldingsdictionarysleutels, waaronder `/DecodeParms` en
+alfamaskers, andere beeldfilters, geërfde rotatie, CropBox en ongedekte
+PDF-operatoren vallen
 terug op Hayro. Dit is geen algemene PDF-afbeeldingsdecoder.
 Bij elke niet-ondersteunde PDF,
 pagina of schaal rendert Hayro. Dit voorkomt dat een nog onvolledige
@@ -76,7 +81,9 @@ de beschreven deelset.
 Twee aanvullende pagina's testen hergebruik en `q/Q`-herstel van vulkleur,
 lijnkleur en lijnbreedte; de directe native backendtest is ook daarvoor
 bytegelijk aan Hayro.
-Twee echte RGB-image-PDF's, één raster en één met vectoroverlay, worden
+Vier echte RGB-image-PDF's, raster en met vectoroverlay, zowel ongefilterd
+als FlateDecode, worden
 in de native backend op 256×192 pixel voor pixel met Hayro vergeleken.
 Een pagina met geërfde `/Rotate 90` volgt aantoonbaar de Hayro-fallback;
-een niet-ondersteunde afbeeldingsfilter wordt niet aan DynLex doorgegeven.
+een ongeldige Flate-stroom, decodeparameters en een opgeblazen beeldstroom
+worden niet aan DynLex doorgegeven.

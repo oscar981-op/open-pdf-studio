@@ -348,6 +348,8 @@ mod tests {
         for bytes in [
             include_bytes!("../tests/fixtures/full-page-raster.pdf").as_slice(),
             include_bytes!("../tests/fixtures/full-page-hybrid.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/full-page-raster-flate.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/full-page-hybrid-flate.pdf").as_slice(),
         ] {
             let bytes = bytes.to_vec();
             let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
@@ -394,5 +396,10 @@ mod tests {
 
         let filtered = include_bytes!("../tests/fixtures/full-page-filtered-unsupported.pdf");
         assert!(try_render(filtered, 1, 1.0).unwrap().is_none());
+        let predictor =
+            include_bytes!("../tests/fixtures/full-page-flate-predictor-unsupported.pdf");
+        assert!(try_render(predictor, 1, 1.0).unwrap().is_none());
+        let oversized = include_bytes!("../tests/fixtures/full-page-flate-oversized.pdf");
+        assert!(try_render(oversized, 1, 1.0).unwrap().is_none());
     }
 }

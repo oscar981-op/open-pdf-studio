@@ -2,6 +2,7 @@
 """Generate three small, valid PDFs with real RGB image and filled path objects."""
 
 from pathlib import Path
+import zlib
 
 WIDTH, HEIGHT = 256, 192
 RECTS = ((25, 20, 190, 24, (255, 0, 0)),
@@ -38,7 +39,7 @@ def image_rgb(width, height):
                  for channel in ((x * 3 + y) % 256, (y * 5 + 37) % 256, (x ^ y) % 256))
 
 
-def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra=""):
+def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, translated=False, clipped=False, pre_content=b"", clip_case=None, diagonal=False, diagonal_color=(0, 0, 0), falling=False, many_rects=False, multi_segment=False, vertical_multi=False, pages_extra="", image_extra="", flate_image=False, image_bytes_extra=b""):
     content = bytearray(pre_content)
     if mode != "vector":
         content.extend(f"q\n{width} 0 0 {height} 0 0 cm\n/Im0 Do\nQ\n".encode())
@@ -108,6 +109,8 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
         content.extend(f"1 w\n0 0 0 RG\n{endpoints}\nS\n".encode())
     content.extend(extra_content)
     rgb = image_rgb(width, height) if mode != "vector" else b""
+    image_payload = zlib.compress(rgb + image_bytes_extra) if flate_image else rgb
+    image_filter = "/Filter /FlateDecode" if flate_image else ""
     has_image = mode != "vector"
     content_id = 5 if has_image else 4
     resources = "/Resources << /XObject << /Im0 4 0 R >> >>" if has_image else "/Resources << >>"
@@ -119,8 +122,8 @@ def build_pdf(mode, extra_content=b"", width=WIDTH, height=HEIGHT, dense=False, 
     ]
     if has_image:
         objects.append(f"<< /Type /XObject /Subtype /Image /Width {width} /Height {height} "
-                       f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {image_extra} /Length {len(rgb)} >>\nstream\n".encode()
-                       + rgb + b"\nendstream")
+                       f"/ColorSpace /DeviceRGB /BitsPerComponent 8 {image_filter} {image_extra} /Length {len(image_payload)} >>\nstream\n".encode()
+                       + image_payload + b"\nendstream")
     objects.append(f"<< /Length {len(content)} >>\nstream\n".encode() + content + b"endstream")
     pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
     offsets = [0]

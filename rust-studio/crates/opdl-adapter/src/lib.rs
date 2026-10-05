@@ -716,7 +716,7 @@ fn image_bytes<'a>(
     name: &[u8],
     width: u32,
     height: u32,
-) -> Result<&'a [u8], Box<dyn Error>> {
+) -> Result<std::borrow::Cow<'a, [u8]>, Box<dyn Error>> {
     if name != b"Im0" {
         return Err(fail("only /Im0 is supported"));
     }
@@ -726,25 +726,49 @@ fn image_bytes<'a>(
     let reference = xobjects.get(name)?;
     let (_, image) = document.dereference(reference)?;
     let Stream { dict, content, .. } = image.as_stream()?;
+    const IMAGE_KEYS: &[&[u8]] = &[
+        b"Type",
+        b"Subtype",
+        b"Width",
+        b"Height",
+        b"ColorSpace",
+        b"BitsPerComponent",
+        b"Length",
+        b"Filter",
+    ];
+    if dict
+        .iter()
+        .any(|(key, _)| !IMAGE_KEYS.contains(&key.as_slice()))
+    {
+        return Err(fail("unsupported image dictionary key"));
+    }
     if dict.get(b"Subtype")?.as_name()? != b"Image"
         || dict.get(b"ColorSpace")?.as_name()? != b"DeviceRGB"
         || dict.get(b"BitsPerComponent")?.as_i64()? != 8
         || dict.get(b"Width")?.as_i64()? != i64::from(width)
         || dict.get(b"Height")?.as_i64()? != i64::from(height)
-        || dict.has(b"Filter")
-        || dict.has(b"SMask")
-        || dict.has(b"Mask")
-        || dict.has(b"Decode")
-        || dict.has(b"Interpolate")
     {
         return Err(fail(
-            "image must be an unfiltered, uninterpolated RGB8 full-page fixture",
+            "image must be an unmasked, uninterpolated RGB8 full-page fixture",
         ));
     }
-    if content.len() != width as usize * height as usize * 3 {
+    let expected_len = width as usize * height as usize * 3;
+    if dict.has(b"Filter") {
+        if dict.get(b"Filter")?.as_name()? != b"FlateDecode" {
+            return Err(fail("only a single FlateDecode image filter is supported"));
+        }
+        let decoded =
+            miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(content, expected_len)
+                .map_err(|_| fail("invalid or oversized FlateDecode image"))?;
+        if decoded.len() != expected_len {
+            return Err(fail("wrong decoded RGB image byte length"));
+        }
+        return Ok(std::borrow::Cow::Owned(decoded));
+    }
+    if content.len() != expected_len {
         return Err(fail("wrong RGB image byte length"));
     }
-    Ok(content.as_slice())
+    Ok(std::borrow::Cow::Borrowed(content.as_slice()))
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -1107,7 +1131,7 @@ fn page_to_opdl_bytes_with_timings(
     }
     timings.operators_ms = started.elapsed().as_secs_f64() * 1000.0;
     let started = Instant::now();
-    let image = image.unwrap_or_default();
+    let image = image.unwrap_or(std::borrow::Cow::Borrowed(&[]));
     let mut output = Vec::with_capacity(40 + image.len() + commands.len() * 24);
     output.extend_from_slice(b"OPDL");
     for value in [2, width, height, 0, 0, width, height, image.len() as u32] {

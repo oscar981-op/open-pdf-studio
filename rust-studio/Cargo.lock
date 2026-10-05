@@ -2189,6 +2189,7 @@ name = "opds-opdl-adapter"
 version = "0.1.0"
 dependencies = [
  "lopdf",
+ "miniz_oxide 0.8.9",
 ]
 
 [[package]]

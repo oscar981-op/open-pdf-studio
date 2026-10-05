@@ -7,3 +7,4 @@ publish.workspace = true
 
 [dependencies]
 lopdf = { version = "=0.34.0", default-features = false, features = ["nom_parser"] }
+miniz_oxide = "=0.8.9"
