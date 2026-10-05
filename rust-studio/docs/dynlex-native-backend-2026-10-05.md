@@ -260,14 +260,16 @@ ambigue randen vielen terug. Herhaal met de bovenstaande
 algemene polygonale clipping.
 `dynlex-engine-poc/rgba/clipped_image_fixture.py` maakt de fixtures.
 
-Een afzonderlijke, nog smalle route accepteert nu één gesloten convexe
-`m/l/.../h W/W* n`-clip met drie tot acht verschillende, op kwartpixels
-uitgelijnde hoekpunten rond een beeldlaag. De Rust-adapter valideert de
-convexiteit, rekent de polygonale overlap per pixel analytisch uit, beperkt
-de beeldpatch tot 65.536 pixels en schrijft de dekking als geordende OPDL-v6
-RGBA-patch. DynLex mengt die met de onderliggende kleur. Vier gecontroleerde
-PDF's met driehoek/vierhoek, `W`/`W*`, 90°/CropBox en een vijfde met `q/Q`
-en een latere zichtbare afbeelding zijn bytegelijk aan Hayro. Bij dekking
+Een afzonderlijke, nog smalle route accepteert nu één gesloten, eenvoudig
+`m/l/.../h W/W* n`-clippad met drie tot acht verschillende hoekpunten rond
+een beeldlaag. De Rust-adapter begrenst alle coördinaten tot ±4096, wijst
+kruisingen/zelfaanrakingen en meer dan één holle hoek af, rekent de
+polygonale overlap per pixel analytisch uit en beperkt de beeldpatch tot
+65.536 pixels. Hij schrijft de dekking als geordende OPDL-v6 RGBA-patch;
+DynLex mengt die met de onderliggende kleur. Bij één eenvoudig contour zijn
+`W` en `W*` gelijk. Zeven gecontroleerde PDF's met convexe en éénhoekig
+holle vormen, `W`/`W*`, 90°/CropBox en `q/Q`-herstel met een latere zichtbare
+afbeelding zijn bytegelijk aan Hayro. Bij dekking
 binnen 0,01 van een halve 8-bit-stap valt de hele pagina terug op Hayro:
 de f32-randberekening kan daar één kleurwaarde anders afronden. Twee
 deterministische reeksen van elk 1.000 wisselende drie-/vierhoeken gaven
@@ -284,11 +286,30 @@ python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
   --probe target/release/backend_probe --cases 1000 --quarter
 ```
 
-Niet-convexe/zelfkruisende paden, samengestelde polygonale clips, fills of
-strokes onder de polygonale clip en onzekere randdekking blijven fallback.
-Dit toont alleen de begrensde beeldsubset. In de echte combinatie-PDF zijn
-twaalf `W*`-polygonen met 5–327 segmenten; de pagina heeft ook duizenden
-curven en tekstoperatoren en valt nog volledig op Hayro terug.
+De uitbreiding met één holle hoek is in vijf extra deterministische reeksen
+van elk 1.000 gevallen vergeleken. Ondersteunde gevallen waren
+453/453 (gehele coördinaten), 278/278 (kwartpixels), 538/538 (gewone
+decimale PDF-coördinaten), 440/440 (convexe decimalen) en 553/553
+(decimale coördinaten onder een globale 0,1-CTM), steeds exact gelijk aan
+Hayro; de overige gevallen vielen terug. Reproduceer onder meer met:
+
+```sh
+python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
+  --probe target/release/backend_probe --cases 1000 --concave --decimal
+python3 dynlex-engine-poc/rgba/polygon_clip_verify.py \
+  --probe target/release/backend_probe --cases 1000 --concave --decimal \
+  --global-ctm --seed 20261007
+```
+
+Het echte `W*`-pad bij contentoperator 582 van `Combinatie Raster, vector,
+tekening images.pdf` heeft zes hoekpunten, één holle hoek en staat onder
+`0.1 0 0 0.1 0 0 cm`. Een geïsoleerde 1684×1191-PDF met precies die
+coördinaten wordt geometrisch herkend, maar raakt een onzekere halve
+8-bit-dekkingsstap en valt expliciet terug. De andere elf complexe
+`W*`-paden en de duizenden curven/tekstoperatoren zijn niet bewezen;
+de hele echte pagina blijft Hayro gebruiken. Meerdere holle hoeken,
+zelfkruisende of open paden, samengestelde polygonale clips, fills/strokes
+onder de polygonale clip en onzekere randdekking blijven fallback.
 
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht
 (`kind=8`) met RGBA-patch en een 8-bit-dekkingswaarde per pixel. De

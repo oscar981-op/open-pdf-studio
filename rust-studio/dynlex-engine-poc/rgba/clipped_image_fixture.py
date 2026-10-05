@@ -86,6 +86,12 @@ def main() -> None:
     diamond = b"40 19 m\n68 36 l\n40 77 l\n30 36 l\nh\nW*\nn\n"
     output.joinpath("clipped-diamond.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + diamond, **common))
+    concave = b"33 28 m\n72 28 l\n66 39 l\n72 75 l\n33 75 l\nh\nW*\nn\n"
+    output.joinpath("clipped-concave.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + concave, **common))
+    output.joinpath("clipped-concave-rotate.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + concave,
+        pages_extra="/Rotate 90 /CropBox [8 12 248 180]", **common))
     output.joinpath("clipped-triangle-restored.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + b"q\n" + triangle,
         extra_content=b"Q\nq\n20 0 0 16 100 90 cm\n/Im0 Do\nQ\n", **common))
@@ -96,6 +102,17 @@ def main() -> None:
         "raster", pre_content=triangle + b"0 1 0 rg\n15 20 100 80 re\nf\n", **common))
     output.joinpath("clipped-polygon-intersection-unsupported.pdf").write_bytes(build_pdf(
         "raster", pre_content=triangle + diamond, **common))
+    # Clip operator 582 from the real combination PDF, isolated around a
+    # controlled solid image. Its 0.1 CTM creates decimal edge coordinates;
+    # the current analytic mask deliberately falls back at ambiguous bytes.
+    real_clip = (b"16825 402 m\n16823.8 400.801 l\n16441 18 l\n"
+                 b"16438.6 16.8008 l\n16826.2 15.6016 l\n16826.2 402 l\n"
+                 b"h\nW*\nn\n")
+    output.joinpath("clipped-real-shape-582-fallback.pdf").write_bytes(build_pdf(
+        "raster", width=1684, height=1191,
+        pre_content=b"q\n0.1 0 0 0.1 0 0 cm\nq\n" + real_clip,
+        extra_content=b"Q\nQ\n", image_placement=(16000, 0, 840, 800),
+        image_source_size=(4, 4), image_source_override=bytes([255, 0, 0]) * 16))
     output.joinpath("clipped-subpixel-unsupported-fill.pdf").write_bytes(build_pdf(
         "raster", pre_content=fractional + b"0 1 0 rg\n10.25 12 20 10 re\nf\n", **common))
     output.joinpath("clipped-subpixel-ambiguous.pdf").write_bytes(build_pdf(
@@ -110,8 +127,9 @@ def main() -> None:
         extra_content=b"Q\nq\n20 0 0 16 100 90 cm\n/Im0 Do\nQ\n", **common))
     output.joinpath("clipped-subpixel-fully-outside.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + b"100.25 100.5 20.5 20.25 re\nW\nn\n", **common))
-    output.joinpath("clipped-nonrect-unsupported.pdf").write_bytes(build_pdf(
-        "raster", pre_content=b"30 25 m\n75 25 l\n55 40 l\n75 60 l\n30 60 l\nh\nW\nn\n", **common))
+    output.joinpath("clipped-oversized-polygon-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=b"40 20 m\n55 22 l\n70 30 l\n80 45 l\n75 60 l\n"
+        b"60 70 l\n45 68 l\n30 58 l\n25 40 l\nh\nW*\nn\n", **common))
     output.joinpath("clipped-path-open-unsupported.pdf").write_bytes(build_pdf(
         "raster", pre_content=polygon_rectangle.replace(b"h\n", b""), **common))
     output.joinpath("clipped-path-bowtie-unsupported.pdf").write_bytes(build_pdf(

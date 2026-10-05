@@ -578,7 +578,7 @@ impl PathStage {
         Ok([left, bottom, right - left, top - bottom])
     }
 
-    fn bounded_convex_clip(&self) -> Result<Vec<[f64; 2]>, Box<dyn Error>> {
+    fn bounded_simple_clip(&self) -> Result<Vec<[f64; 2]>, Box<dyn Error>> {
         if !self.closed || !self.cubics.is_empty() || !(3..=8).contains(&self.points.len()) {
             return Err(fail(
                 "only one closed three-to-eight-edge clip is supported",
@@ -588,16 +588,21 @@ impl PathStage {
             .points
             .iter()
             .flatten()
-            .any(|value| !value.is_finite() || (value * 4.0 - (value * 4.0).round()).abs() > 1e-8)
+            .any(|value| !value.is_finite() || value.abs() > 4096.0)
         {
-            return Err(fail(
-                "polygon clip coordinates must be quarter-pixel aligned",
-            ));
+            return Err(fail("polygon clip coordinates exceed trial limits"));
         }
-        let mut turn = 0_i8;
         let orient = |a: [f64; 2], b: [f64; 2], c: [f64; 2]| {
             (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
         };
+        let on_segment = |a: [f64; 2], b: [f64; 2], p: [f64; 2]| {
+            p[0] >= a[0].min(b[0])
+                && p[0] <= a[0].max(b[0])
+                && p[1] >= a[1].min(b[1])
+                && p[1] <= a[1].max(b[1])
+        };
+        let mut signed_area2 = 0.0;
+        let mut turns = Vec::with_capacity(self.points.len());
         for index in 0..self.points.len() {
             let a = self.points[index];
             let b = self.points[(index + 1) % self.points.len()];
@@ -606,11 +611,8 @@ impl PathStage {
             if cross == 0.0 || !cross.is_finite() {
                 return Err(fail("degenerate polygon clip edge"));
             }
-            let direction = if cross > 0.0 { 1 } else { -1 };
-            if turn != 0 && direction != turn {
-                return Err(fail("nonconvex or self-crossing polygon clip"));
-            }
-            turn = direction;
+            turns.push(cross);
+            signed_area2 += a[0] * b[1] - b[0] * a[1];
             for other in index + 1..self.points.len() {
                 if a == self.points[other] {
                     return Err(fail("duplicate polygon clip vertex"));
@@ -620,12 +622,29 @@ impl PathStage {
                 }
                 let c = self.points[other];
                 let d = self.points[(other + 1) % self.points.len()];
-                if orient(a, b, c) * orient(a, b, d) < 0.0
-                    && orient(c, d, a) * orient(c, d, b) < 0.0
+                let ab_c = orient(a, b, c);
+                let ab_d = orient(a, b, d);
+                let cd_a = orient(c, d, a);
+                let cd_b = orient(c, d, b);
+                if (ab_c * ab_d < 0.0 && cd_a * cd_b < 0.0)
+                    || (ab_c == 0.0 && on_segment(a, b, c))
+                    || (ab_d == 0.0 && on_segment(a, b, d))
+                    || (cd_a == 0.0 && on_segment(c, d, a))
+                    || (cd_b == 0.0 && on_segment(c, d, b))
                 {
                     return Err(fail("self-crossing polygon clip"));
                 }
             }
+        }
+        if signed_area2 == 0.0
+            || !signed_area2.is_finite()
+            || turns
+                .into_iter()
+                .filter(|cross| cross.signum() != signed_area2.signum())
+                .count()
+                > 1
+        {
+            return Err(fail("polygon clip has multiple concave turns"));
         }
         Ok(self.points.clone())
     }
@@ -779,7 +798,7 @@ mod path_stage_tests {
     }
 
     #[test]
-    fn polygon_clip_requires_a_simple_bounded_convex_loop() {
+    fn polygon_clip_requires_a_simple_bounded_loop() {
         let stage = |points: &[[f64; 2]], closed: bool| {
             let mut path = PathStage::start(points[0]);
             for &point in &points[1..] {
@@ -788,11 +807,11 @@ mod path_stage_tests {
             if closed {
                 path.close().unwrap();
             }
-            path.bounded_convex_clip()
+            path.bounded_simple_clip()
         };
         assert!(stage(&[[35.0, 28.0], [90.0, 28.0], [35.0, 68.0]], true).is_ok());
         assert!(stage(&[[35.0, 28.0], [90.0, 28.0], [35.0, 68.0]], false).is_err());
-        assert!(stage(&[[35.0, 28.0], [90.1, 28.0], [35.0, 68.0]], true).is_err());
+        assert!(stage(&[[35.0, 28.0], [4097.0, 28.0], [35.0, 68.0]], true).is_err());
         assert!(stage(
             &[
                 [30.0, 25.0],
@@ -803,9 +822,28 @@ mod path_stage_tests {
             ],
             true
         )
-        .is_err());
+        .is_ok());
         assert!(stage(
             &[[30.0, 25.0], [75.0, 60.0], [75.0, 25.0], [30.0, 60.0]],
+            true
+        )
+        .is_err());
+        assert!(stage(
+            &[[0.0, 0.0], [6.0, 0.0], [6.0, 6.0], [3.0, 0.0], [0.0, 6.0]],
+            true
+        )
+        .is_err());
+        assert!(stage(
+            &[
+                [0.0, 0.0],
+                [8.0, 0.0],
+                [8.0, 8.0],
+                [6.0, 8.0],
+                [6.0, 3.0],
+                [2.0, 3.0],
+                [2.0, 8.0],
+                [0.0, 8.0],
+            ],
             true
         )
         .is_err());
@@ -2264,7 +2302,7 @@ fn page_to_opdl_bytes_internal(
                     if polygon_clip.is_some() || fractional_clip.is_some() {
                         return Err(fail("polygon clip intersection is not yet verified"));
                     }
-                    pending_polygon_clip = Some(path.bounded_convex_clip()?);
+                    pending_polygon_clip = Some(path.bounded_simple_clip()?);
                 }
                 pending_clip = true;
             }

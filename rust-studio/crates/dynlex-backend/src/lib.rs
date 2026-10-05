@@ -921,6 +921,14 @@ mod tests {
                 include_bytes!("../tests/fixtures/clipped-diamond.pdf").as_slice(),
             ),
             (
+                "simple concave even-odd clip",
+                include_bytes!("../tests/fixtures/clipped-concave.pdf").as_slice(),
+            ),
+            (
+                "simple concave Rotate/CropBox clip",
+                include_bytes!("../tests/fixtures/clipped-concave-rotate.pdf").as_slice(),
+            ),
+            (
                 "convex clip restored before later image",
                 include_bytes!("../tests/fixtures/clipped-triangle-restored.pdf").as_slice(),
             ),
@@ -983,7 +991,8 @@ mod tests {
     #[test]
     fn unsupported_image_clips_fall_back() {
         for bytes in [
-            include_bytes!("../tests/fixtures/clipped-nonrect-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-oversized-polygon-unsupported.pdf")
+                .as_slice(),
             include_bytes!("../tests/fixtures/clipped-path-open-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-path-bowtie-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-subpixel-unsupported-fill.pdf").as_slice(),
@@ -992,10 +1001,16 @@ mod tests {
             include_bytes!("../tests/fixtures/clipped-polygon-fill-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-intersection-unsupported.pdf")
                 .as_slice(),
+            include_bytes!("../tests/fixtures/clipped-real-shape-582-fallback.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
         }
+        let real_shape = include_bytes!("../tests/fixtures/clipped-real-shape-582-fallback.pdf");
+        assert!(page_to_opdl_ordered_bytes(real_shape)
+            .unwrap_err()
+            .to_string()
+            .contains("ambiguous polygon edge coverage"));
     }
 
     #[cfg(feature = "kernel")]
