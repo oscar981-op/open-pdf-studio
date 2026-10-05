@@ -27,9 +27,15 @@ def main():
     parser.add_argument("--layout", choices=("one-hole", "two-holes", "disjoint", "four", "ring12", "concave-hole"),
                         default="one-hole")
     parser.add_argument("--failed-pdf", type=Path)
+    parser.add_argument("--capture-index", type=int)
+    parser.add_argument("--capture-pdf", type=Path)
     args = parser.parse_args()
     if not 1 <= args.cases <= 2000:
         parser.error("--cases must be 1..2000")
+    if (args.capture_index is None) != (args.capture_pdf is None):
+        parser.error("--capture-index and --capture-pdf must be used together")
+    if args.capture_index is not None and not 0 <= args.capture_index < args.cases:
+        parser.error("--capture-index must be within --cases")
     probe = args.probe.resolve(strict=True)
     rng = random.Random(args.seed)
     rgb = bytes(channel for y in range(4) for x in range(4)
@@ -92,6 +98,8 @@ def main():
                 pages_extra=f"/Rotate {turn} /CropBox [8 12 248 180]",
                 image_source_size=(4, 4), image_source_override=rgb,
                 image_placement=(21.25, 31.5, 63.5, 47.25)))
+            if index == args.capture_index:
+                args.capture_pdf.write_bytes(pdf.read_bytes())
             try:
                 dynlex = run_probe(probe, pdf, directory / "dynlex.rgba", False)
             except RuntimeError as error:

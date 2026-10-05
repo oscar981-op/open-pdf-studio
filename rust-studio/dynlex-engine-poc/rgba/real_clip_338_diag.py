@@ -84,6 +84,14 @@ def pixel_area(polygon, x, y):
     return min(abs(cross) * .5, 1.)
 
 
+def vello_final_rounding(area):
+    """Candidate for Vello's final even-odd f32 conversion, without strip areas."""
+    area = f32(area)
+    wrap = math.floor(f32(area * .5 + .5))
+    coverage = abs(f32(-2. * wrap + area))
+    return min(255, int(f32(coverage * 255. + .5)))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--path", type=Path, default=Path(__file__).with_name("real-clip-338.content"))
@@ -94,6 +102,8 @@ def main():
                                            "f64-input-f32-display"), required=True)
     parser.add_argument("--expect-mismatches", type=int)
     parser.add_argument("--rotate-crop", action="store_true")
+    parser.add_argument("--rounding", choices=("nearest-f64", "vello-f32-final"),
+                        default="nearest-f64")
     args = parser.parse_args()
     if args.hayro_rgba is not None:
         pixels = args.hayro_rgba.read_bytes()
@@ -124,7 +134,8 @@ def main():
             scaled = area * 255.
             if abs(scaled % 1 - .5) < .002:
                 near_half += 1
-            expected_red = min(255, int(scaled + .5))
+            expected_red = (vello_final_rounding(area) if args.rounding == "vello-f32-final"
+                            else min(255, int(scaled + .5)))
             actual = pixels[(y * width + x) * 4:(y * width + x) * 4 + 4]
             # Only image pixels over the blue underlay are comparable.
             in_image = (10 <= x < 60 and 0 <= y < 180) if args.rotate_crop else (
@@ -134,6 +145,7 @@ def main():
                 deviations.append(dict(x=x, y=y, analytic=scaled, rounded=expected_red,
                                        hayro=list(actual)))
     print(json.dumps(dict(mode=args.mode, rotate_crop=args.rotate_crop,
+                          rounding=args.rounding,
                           contours=[len(p) for p in contours], signs=signs,
                           bounds=bounds, near_half=near_half,
                           mismatch_pixels=len(deviations), first=deviations[:30]), indent=2))

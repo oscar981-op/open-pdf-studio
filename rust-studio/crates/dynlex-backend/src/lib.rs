@@ -1067,6 +1067,7 @@ mod tests {
             include_bytes!("../tests/fixtures/clipped-subpixel-ambiguous.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-ambiguous.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-ambiguous-rotate.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-multi-half-step-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-fill-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-polygon-intersection-unsupported.pdf")
                 .as_slice(),

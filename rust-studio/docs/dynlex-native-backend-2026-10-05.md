@@ -411,6 +411,26 @@ layouts en drie extra reeksen van elk 1.000 enkelcontourgevallen bij
 geaccepteerde DynLex-uitvoer bytegelijk aan Hayro. De echte operator 338
 raakt nog steeds de onzekere grens en blijft fallback.
 
+Een vervolgproef onderzocht de laatste 8-bit-afronding. Vello CPU berekent
+de even-odd-dekking en de omzetting naar 8-bit met `f32` en bouwt de
+randoppervlakte op uit `f32`-stroken; de eigen analytische integraal gebruikt
+`f64`. Een reproduceerbare één-gat-PDF uit seed `394727`, index `100`, heeft
+bij schermpixel `(59,138)` analytische oppervlakte
+`0,49999999999909051` (dus `127,499999999768` op de 8-bit-schaal). Zonder
+veiligheidsmarge is daar één blauw kanaalbyte anders dan Hayro. Alleen de
+eindafronding naar `f32` verhelpt dit geval en gaf ook 9.000/9.000 exacte
+geaccepteerde resultaten voor de eenvoudige een-gat-, twee-gaten-,
+disjuncte-, vier-contour- en holle-gat-layouts. Zij is echter **geen**
+algemene oplossing: op 2.000 twaalfhoekige PDF's waren 4 geaccepteerde
+resultaten nog één byte anders dan Hayro, ook met die `f32`-eindafronding.
+Vello's strookgewijze oppervlakte-opbouw blijft dus bepalend. De tijdelijke
+testwijziging is teruggedraaid; de normale adapter behoudt de conservatieve
+halve-byte-fallback. De geselecteerde PDF is als
+`clipped-multi-half-step-unsupported.pdf` een blijvende regressietest.
+`nested_clip_verify.py --capture-index 100 --capture-pdf ...` reproduceert
+de case; `real_clip_338_diag.py --rounding vello-f32-final` vergelijkt de
+eindafrondingskandidaat op de geïsoleerde echte contour.
+
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht
 (`kind=8`) met RGBA-patch en een 8-bit-dekkingswaarde per pixel. De
 pure-Rust-adapter berekent de overlap van het pixelvak met het via
