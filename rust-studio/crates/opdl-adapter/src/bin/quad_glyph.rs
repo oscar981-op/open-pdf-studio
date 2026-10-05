@@ -187,13 +187,73 @@ fn transform(point: Point, matrix: [f64; 6]) -> Point {
     ]
 }
 
+// OPQ1 is a read-only oracle format. Each fixed-size record has opcode,
+// zero flags and four f64 coordinates. It retains the unflattened quadratic
+// geometry so the independent flattener can be compared segment by segment.
+fn raw_quadratic_path(
+    outline: &Outline,
+    matrix: [f64; 6],
+    shift: Point,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let mut records = Vec::<(u32, [f64; 4])>::new();
+    let map = |p| add(transform(p, matrix), shift);
+    let bounded = |p: Point| -> Result<Point, Box<dyn Error>> {
+        let p = map(p);
+        if p.iter()
+            .any(|v| !v.is_finite() || !(0.0..=4096.0).contains(v))
+        {
+            return Err("raw quadratic point outside tile bounds".into());
+        }
+        Ok(p)
+    };
+    for contour in &outline.contours {
+        let p = bounded(contour.start)?;
+        records.push((1, [p[0], p[1], 0.0, 0.0]));
+        for segment in &contour.segments {
+            match segment {
+                Segment::Line(p) => {
+                    let p = bounded(*p)?;
+                    records.push((2, [p[0], p[1], 0.0, 0.0]));
+                }
+                Segment::Quad(c, p) => {
+                    let c = bounded(*c)?;
+                    let p = bounded(*p)?;
+                    records.push((3, [c[0], c[1], p[0], p[1]]));
+                }
+            }
+        }
+        records.push((4, [0.0; 4]));
+    }
+    if records.len() > 272 {
+        return Err("raw quadratic command limit exceeded".into());
+    }
+    let mut bytes = Vec::with_capacity(20 + records.len() * 40);
+    bytes.extend_from_slice(b"OPQ1");
+    for word in [
+        1_u32,
+        outline.contours.len() as u32,
+        records.len() as u32,
+        0,
+    ] {
+        bytes.extend_from_slice(&word.to_le_bytes());
+    }
+    for (opcode, values) in records {
+        bytes.extend_from_slice(&opcode.to_le_bytes());
+        bytes.extend_from_slice(&0_u32.to_le_bytes());
+        for value in values {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    Ok(bytes)
+}
+
 /// Build a bounded OPM2 scene from one embedded quadratic TrueType glyph.
 /// The returned shift is used only to make an isolated 256×192 PDF oracle.
 pub fn stage(
     font_data: &[u8],
     gid: u16,
     matrix: [f64; 6],
-) -> Result<(Vec<u8>, Point), Box<dyn Error>> {
+) -> Result<(Vec<u8>, Point, Vec<u8>), Box<dyn Error>> {
     let face = ttf_parser::Face::parse(font_data, 0)?;
     let mut outline = Outline::default();
     face.outline_glyph(ttf_parser::GlyphId(gid), &mut outline)
@@ -241,6 +301,7 @@ pub fn stage(
         return Err("quadratic glyph exceeds 256x192 tile".into());
     }
     let shift = [128.0 - (min_x + max_x) / 2.0, 96.0 - (min_y + max_y) / 2.0];
+    let raw = raw_quadratic_path(&outline, matrix, shift)?;
     let mut encoded = Vec::new();
     encoded.extend_from_slice(b"OPM2");
     for value in [1_u32, 256, 192, u32::try_from(outline.contours.len())?] {
@@ -285,7 +346,7 @@ pub fn stage(
             }
         }
     }
-    Ok((encoded, shift))
+    Ok((encoded, shift, raw))
 }
 
 #[cfg(test)]
@@ -311,5 +372,23 @@ mod tests {
         }
         assert!(outline.overflow);
         assert_eq!(outline.contours[0].segments.len(), 256);
+    }
+
+    #[test]
+    fn raw_quadratic_records_keep_curve_controls() {
+        use ttf_parser::OutlineBuilder;
+        let mut outline = Outline::default();
+        outline.move_to(1.0, 2.0);
+        outline.quad_to(3.0, 4.0, 5.0, 6.0);
+        outline.line_to(1.0, 2.0);
+        outline.close();
+        let bytes =
+            raw_quadratic_path(&outline, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0], [10.0, 20.0]).unwrap();
+        assert_eq!(&bytes[..4], b"OPQ1");
+        assert_eq!(u32::from_le_bytes(bytes[12..16].try_into().unwrap()), 4);
+        assert_eq!(bytes.len(), 20 + 4 * 40);
+        assert_eq!(u32::from_le_bytes(bytes[60..64].try_into().unwrap()), 3);
+        assert_eq!(f64::from_le_bytes(bytes[68..76].try_into().unwrap()), 13.0);
+        assert_eq!(f64::from_le_bytes(bytes[84..92].try_into().unwrap()), 15.0);
     }
 }

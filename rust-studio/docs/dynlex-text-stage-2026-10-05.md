@@ -337,18 +337,44 @@ laagvolgorde. De native app blijft voor tekst Hayro gebruiken.
 Bij record 0 is een afwijkend pixel (124,86) volgens exacte clipping van
 de **eigen afgevlakte OPM2-veelhoek** 93,4283/255 gedekt; DynLex rondt naar
 93 en Hayro geeft 94. Dit is geen halve-bytegeval van de rechte-glyphproef.
-De eerste vervolgstap is daarom de kwadratische segmentverdeling en de
-f32-punten van deze exporter rechtstreeks naast Vello's flattening te leggen,
-voordat algemene quadratic-pariteit kan worden geclaimd.
+
+Een nieuwe onafhankelijke diagnose scheidt de foutbronnen. De exporter kan
+optioneel een begrensde OPQ1-container met de **onafgevlakte**
+`move/line/quad/close`-records schrijven. `quad_flatten_oracle` valideert
+die container en vraagt uitsluitend in de read-only test de echte
+`vello_common` 0.0.8-flattener om zijn lijnstukken; hij kan dezelfde
+kwadratische vorm ook direct met Vello CPU tekenen. Over alle 25 glyphs
+geven (1) Vello CPU op onze OPM2-lijnen en (2) Vello CPU direct op onze
+OPQ1-kwadraten **nul** dekkingsbyteverschillen met DynLex. De aantallen
+tegen de geïsoleerde Hayro-PDF blijven 13 exacte glyphs en 114 afwijkende
+randpixels in de andere twaalf. Op records 0 en 2 hebben de eigen en
+Vello-segmentreeksen dezelfde lengte en volgorde; de grootste gemeten
+coördinaatafwijking is ongeveer 0,0000075 px, de f32-uitvoer van Vello.
+Ook wanneer die Vello-punten als OPM2 naar DynLex gaan, blijven de
+Hayro-verschillen bestaan. Dit sluit een groot verschil in de DynLex-
+area-rasterstap voor **dezelfde geometrie** uit; de bron van de kleine
+Hayro-verschillen ligt vóór of in het vormen van zijn originele glyphpad.
+
+De lokale Hayro 0.7.1-bron haalt TrueType-outlines via `skrifa` 0.42.1 op
+en gebruikt, indien beschikbaar, een TrueType-hintinginterpreter bij een
+vaste grootte van 1000 fontunits. Onze proef gebruikt ruwe `ttf-parser`-
+punten. Hinting is daarmee een concrete hypothese, nog geen bewezen
+oorzaak. De volgende stap is een afzonderlijke skrifa-oracle die de
+ruwe/hinted `move/line/quad`-records vóór de PDF-transformatie vergelijkt.
+De normale app blijft op Hayro terugvallen voor deze tekst.
 
 Reproduceren vanuit `rust-studio`:
 
 ```sh
 cargo build --offline --release -p opds-opdl-adapter --bin stage_type0_text
+cargo build --offline --release -p opds-engine-probe \
+  --bin glyph_vello_probe --bin quad_flatten_oracle
 python3 dynlex-engine-poc/rgba/verify_real_quad_glyphs.py \
   --stage target/release/stage_type0_text \
   --hayro target/release/opds-engine-probe \
   --dynlex /tmp/opds-glyph-strip-native-probe \
+  --vello target/release/glyph_vello_probe \
+  --quad-oracle target/release/quad_flatten_oracle \
   --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf' \
   --output dynlex-engine-poc/rgba/real-quad-glyphs-2026-10-05.json
 ```

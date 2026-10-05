@@ -483,7 +483,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
     let input = args
         .next()
-        .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr] | --validate INPUT.tgr | --isolate-quad INPUT.pdf PAGE RECORD_INDEX OUTPUT.opm OUTPUT.pdf")?;
+        .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr] | --validate INPUT.tgr | --isolate-quad INPUT.pdf PAGE RECORD_INDEX OUTPUT.opm OUTPUT.pdf [OUTPUT.opq]")?;
     if input == "--validate" {
         let path = args.next().ok_or("--validate requires a file")?;
         if args.next().is_some() {
@@ -527,13 +527,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     } else {
         None
     };
+    let raw_output = if quad_mode { args.next() } else { None };
     if outline_mode && output.is_none() {
         return Err("--outline requires output OPLN path".into());
     }
     if args.next().is_some() {
         return Err("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr]".into());
     }
-    for target in output.iter().chain(pdf_output.iter()) {
+    for target in output
+        .iter()
+        .chain(pdf_output.iter())
+        .chain(raw_output.iter())
+    {
         if let Ok(source) = Path::new(&input).canonicalize() {
             if Path::new(target).canonicalize().ok() == Some(source) {
                 return Err("output must not overwrite the source PDF".into());
@@ -783,19 +788,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                     .ok_or_else(|| fail("glyph font unavailable"))?;
                 let result = if quad_mode {
                     quad_glyph::stage(&font.data, record.gid, record.transform)
+                        .map(|(opm, shift, raw)| (opm, shift, Some(raw)))
                 } else if multi_mode {
-                    multi_glyph_scene(font, record)
+                    multi_glyph_scene(font, record).map(|(opm, shift)| (opm, shift, None))
                 } else {
-                    simple_glyph_opln(font, record)
+                    simple_glyph_opln(font, record).map(|(opm, shift)| (opm, shift, None))
                 };
-                if let Ok((opln, shift)) = result {
-                    selected = Some((candidate, opln, shift));
+                if let Ok((opln, shift, raw)) = result {
+                    selected = Some((candidate, opln, shift, raw));
                     break;
                 }
             }
-            let (index, opln, shift) =
+            let (index, opln, shift, raw) =
                 selected.ok_or_else(|| fail("no bounded glyph contour for requested mode"))?;
             std::fs::write(output, opln)?;
+            if let Some(raw_output) = raw_output {
+                std::fs::write(
+                    raw_output,
+                    raw.ok_or_else(|| fail("quadratic path missing"))?,
+                )?;
+            }
             println!("selected_record={index}");
             if let Some(pdf_output) = pdf_output {
                 let record = &records[index];

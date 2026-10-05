@@ -442,5 +442,8 @@
   },
   "exact": 13,
   "one_byte_only": 12,
-  "invalid_rejected": 2
+  "invalid_rejected": 2,
+  "vello_same_opm_mismatch_bytes": 0,
+  "vello_direct_quad_mismatch_bytes": 0,
+  "invalid_opq_rejected": 6
 }
