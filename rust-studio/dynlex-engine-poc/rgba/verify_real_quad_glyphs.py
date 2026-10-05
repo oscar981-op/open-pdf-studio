@@ -24,6 +24,8 @@ def main():
                         help="read-only Vello CPU oracle for the same flattened OPM2")
     parser.add_argument("--quad-oracle", type=Path,
                         help="read-only Vello CPU oracle for unflattened OPQ1 quadratics")
+    parser.add_argument("--skrifa-oracle", type=Path,
+                        help="read-only comparison with Hayro's skrifa outline settings")
     parser.add_argument("--pdf", type=Path, required=True)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -31,7 +33,12 @@ def main():
               "one_byte_only": 0, "invalid_rejected": 0,
               "vello_same_opm_mismatch_bytes": 0,
               "vello_direct_quad_mismatch_bytes": 0,
-              "invalid_opq_rejected": 0}
+              "invalid_opq_rejected": 0,
+              "skrifa_hayro_exact": 0,
+              "skrifa_interpreter_used": 0,
+              "invalid_font_oracle_rejected": 0}
+    if args.skrifa_oracle and not args.quad_oracle:
+        raise ValueError("--skrifa-oracle requires --quad-oracle")
     with tempfile.TemporaryDirectory(prefix="opds-real-quadratic-") as folder:
         root = Path(folder)
         scene, isolated = root / "glyph.opm", root / "isolated.pdf"
@@ -39,26 +46,59 @@ def main():
         vello_raw = root / "vello.raw"
         quad_raw, quad_flat, quad_oracle_raw = (
             root / "glyph.opq", root / "quad-flat.txt", root / "quad-vello.raw")
+        font_raw, skrifa_text, skrifa_opq, skrifa_opm, skrifa_raw = (
+            root / "glyph.ttf", root / "skrifa.txt", root / "skrifa.opq",
+            root / "skrifa.opm", root / "skrifa.raw")
         for index, expected_mismatch in EXPECTED.items():
             for path in (scene, isolated, raw, rgba, vello_raw,
-                         quad_raw, quad_flat, quad_oracle_raw):
+                         quad_raw, quad_flat, quad_oracle_raw, font_raw,
+                         skrifa_text, skrifa_opq, skrifa_opm, skrifa_raw):
                 path.unlink(missing_ok=True)
             command = [args.stage, "--isolate-quad", args.pdf, "2", str(index),
                        scene, isolated]
             if args.quad_oracle:
                 command.append(quad_raw)
+            if args.skrifa_oracle:
+                command.append(font_raw)
             staged = subprocess.run(
                 command,
                 check=True, capture_output=True, text=True,
             )
             if f"selected_record={index}" not in staged.stdout:
                 raise AssertionError(f"wrong TGR1 record selected: {index}")
+            if args.skrifa_oracle:
+                gid = int(next(line.split("=", 1)[1] for line in staged.stdout.splitlines()
+                               if line.startswith("selected_gid=")))
+                transform = next(line for line in staged.stdout.splitlines()
+                                 if line.startswith("selected_transform="))
+                values = transform.replace("selected_transform=", "").replace(
+                    "shift=", "").split()
+                if len(values) != 8:
+                    raise AssertionError("missing TGR1 and tile transform")
+                subprocess.run([args.skrifa_oracle, font_raw, str(gid),
+                                "skrifa-hayro", skrifa_text, skrifa_opq, *values],
+                               check=True, capture_output=True)
+                if "interpreter_used=true" in skrifa_text.read_text().splitlines()[0]:
+                    report["skrifa_interpreter_used"] += 1
+                subprocess.run([args.quad_oracle, skrifa_opq, quad_flat, skrifa_opm],
+                               check=True, capture_output=True)
+                subprocess.run([args.dynlex, skrifa_opm, skrifa_raw],
+                               check=True, capture_output=True)
             subprocess.run([args.dynlex, scene, raw], check=True, capture_output=True)
             subprocess.run([args.hayro, isolated, "2", rgba], check=True,
                            capture_output=True)
             coverage, pixels = raw.read_bytes(), rgba.read_bytes()
             if len(coverage) != 256 * 192 or len(pixels) != len(coverage) * 4:
                 raise AssertionError(f"record {index}: wrong page dimensions")
+            if args.skrifa_oracle:
+                oracle = skrifa_raw.read_bytes()
+                if len(oracle) != len(coverage):
+                    raise AssertionError(f"record {index}: skrifa glyph length changed")
+                oracle_wrong = sum(oracle[p] != 255 - pixels[4 * p]
+                                   for p in range(len(oracle)))
+                report["records"][str(index)] = {"skrifa_hayro_mismatches": oracle_wrong}
+                if not oracle_wrong:
+                    report["skrifa_hayro_exact"] += 1
             if args.vello:
                 subprocess.run([args.vello, "--opm", scene, vello_raw], check=True,
                                capture_output=True)
@@ -95,12 +135,12 @@ def main():
                     abs(dynlex - hayro) != 1 for _, _, dynlex, hayro in mismatches):
                 raise AssertionError(
                     f"record {index}: {len(mismatches)} mismatches, first={mismatches[:5]}")
-            report["records"][str(index)] = {
+            report["records"].setdefault(str(index), {}).update({
                 "mismatch_pixels": len(mismatches),
                 "ink_pixels": sum(bool(value) for value in coverage),
                 "opm_bytes": scene.stat().st_size,
                 "first_mismatches": mismatches[:5],
-            }
+            })
             report["exact" if not mismatches else "one_byte_only"] += 1
         for invalid_index in (16, 999999):
             scene.unlink(missing_ok=True)
@@ -138,13 +178,28 @@ def main():
                 if result.returncode == 0 or destination.exists():
                     raise AssertionError(f"invalid OPQ1 variant {index} was accepted")
                 report["invalid_opq_rejected"] += 1
+        if args.skrifa_oracle:
+            for source_bytes, gid in ((b"not a font", "37"),
+                                      (font_raw.read_bytes(), "65535")):
+                source, destination = root / "bad-font.ttf", root / "bad-outline.txt"
+                source.write_bytes(source_bytes)
+                destination.unlink(missing_ok=True)
+                result = subprocess.run([args.skrifa_oracle, source, gid,
+                                         "skrifa-hayro", destination], capture_output=True)
+                if result.returncode == 0 or destination.exists():
+                    raise AssertionError("invalid font or GID was accepted by oracle")
+                report["invalid_font_oracle_rejected"] += 1
     if report["exact"] != 13 or report["one_byte_only"] != 12:
         raise AssertionError("quadratic glyph parity summary changed")
+    if args.skrifa_oracle and report["skrifa_hayro_exact"] != len(EXPECTED):
+        raise AssertionError("skrifa-mode glyph parity changed")
     encoded = json.dumps(report, indent=2) + "\n"
     if args.output:
         args.output.write_text(encoded)
-    print(f"{len(EXPECTED)} real Type0 quadratic glyphs: {report['exact']} exact, "
-          f"{report['one_byte_only']} with only one-byte edge differences; "
+    print(f"{len(EXPECTED)} real Type0 quadratic glyphs: raw ttf-parser "
+          f"{report['exact']} exact, {report['one_byte_only']} with only "
+          f"one-byte edge differences; skrifa oracle "
+          f"{report['skrifa_hayro_exact']} exact; "
           f"{report['invalid_rejected']} unsupported records rejected")
 
 

@@ -483,7 +483,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
     let input = args
         .next()
-        .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr] | --validate INPUT.tgr | --isolate-quad INPUT.pdf PAGE RECORD_INDEX OUTPUT.opm OUTPUT.pdf [OUTPUT.opq]")?;
+        .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr] | --validate INPUT.tgr | --isolate-quad INPUT.pdf PAGE RECORD_INDEX OUTPUT.opm OUTPUT.pdf [OUTPUT.opq [OUTPUT.ttf]]")?;
     if input == "--validate" {
         let path = args.next().ok_or("--validate requires a file")?;
         if args.next().is_some() {
@@ -528,6 +528,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         None
     };
     let raw_output = if quad_mode { args.next() } else { None };
+    let font_output = if quad_mode { args.next() } else { None };
     if outline_mode && output.is_none() {
         return Err("--outline requires output OPLN path".into());
     }
@@ -538,6 +539,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .iter()
         .chain(pdf_output.iter())
         .chain(raw_output.iter())
+        .chain(font_output.iter())
     {
         if let Ok(source) = Path::new(&input).canonicalize() {
             if Path::new(target).canonicalize().ok() == Some(source) {
@@ -808,7 +810,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                     raw.ok_or_else(|| fail("quadratic path missing"))?,
                 )?;
             }
+            if let Some(font_output) = font_output {
+                let record = &records[index];
+                let font = fonts
+                    .get(&record.font)
+                    .ok_or_else(|| fail("glyph font unavailable"))?;
+                std::fs::write(font_output, &font.data)?;
+            }
             println!("selected_record={index}");
+            if quad_mode {
+                println!("selected_gid={}", records[index].gid);
+                let m = records[index].transform;
+                println!(
+                    "selected_transform={} {} {} {} {} {} shift={} {}",
+                    m[0], m[1], m[2], m[3], m[4], m[5], shift[0], shift[1]
+                );
+            }
             if let Some(pdf_output) = pdf_output {
                 let record = &records[index];
                 let font = &fonts[&record.font];

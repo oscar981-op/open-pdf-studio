@@ -2164,6 +2164,8 @@ dependencies = [
  "hayro",
  "image",
  "lopdf",
+ "skrifa 0.42.1",
+ "ttf-parser",
  "vello_common 0.0.8",
  "vello_cpu",
 ]

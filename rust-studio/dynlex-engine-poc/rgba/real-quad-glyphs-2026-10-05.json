@@ -2,6 +2,7 @@
   "page": 2,
   "records": {
     "0": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 11,
       "ink_pixels": 776,
       "opm_bytes": 848,
@@ -39,6 +40,7 @@
       ]
     },
     "1": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 6,
       "ink_pixels": 509,
       "opm_bytes": 732,
@@ -76,6 +78,7 @@
       ]
     },
     "2": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 38,
       "ink_pixels": 626,
       "opm_bytes": 956,
@@ -113,6 +116,7 @@
       ]
     },
     "3": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 10,
       "ink_pixels": 512,
       "opm_bytes": 956,
@@ -150,6 +154,7 @@
       ]
     },
     "4": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 18,
       "ink_pixels": 415,
       "opm_bytes": 440,
@@ -187,6 +192,7 @@
       ]
     },
     "7": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 8,
       "ink_pixels": 725,
       "opm_bytes": 824,
@@ -224,6 +230,7 @@
       ]
     },
     "8": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 2,
       "ink_pixels": 238,
       "opm_bytes": 344,
@@ -243,6 +250,7 @@
       ]
     },
     "9": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 11,
       "ink_pixels": 452,
       "opm_bytes": 684,
@@ -280,6 +288,7 @@
       ]
     },
     "11": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 6,
       "ink_pixels": 541,
       "opm_bytes": 700,
@@ -317,6 +326,7 @@
       ]
     },
     "12": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 2,
       "ink_pixels": 72,
       "opm_bytes": 344,
@@ -336,6 +346,7 @@
       ]
     },
     "18": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 1,
       "ink_pixels": 53,
       "opm_bytes": 504,
@@ -349,18 +360,21 @@
       ]
     },
     "27": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 27,
       "opm_bytes": 284,
       "first_mismatches": []
     },
     "30": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 35,
       "opm_bytes": 360,
       "first_mismatches": []
     },
     "52": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 1,
       "ink_pixels": 12,
       "opm_bytes": 380,
@@ -374,66 +388,77 @@
       ]
     },
     "53": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 12,
       "opm_bytes": 392,
       "first_mismatches": []
     },
     "58": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 20,
       "opm_bytes": 428,
       "first_mismatches": []
     },
     "64": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 8,
       "opm_bytes": 184,
       "first_mismatches": []
     },
     "72": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 10,
       "opm_bytes": 608,
       "first_mismatches": []
     },
     "77": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 8,
       "opm_bytes": 360,
       "first_mismatches": []
     },
     "88": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 7,
       "opm_bytes": 312,
       "first_mismatches": []
     },
     "94": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 8,
       "opm_bytes": 344,
       "first_mismatches": []
     },
     "95": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 8,
       "opm_bytes": 568,
       "first_mismatches": []
     },
     "140": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 11,
       "opm_bytes": 508,
       "first_mismatches": []
     },
     "196": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 19,
       "opm_bytes": 520,
       "first_mismatches": []
     },
     "208": {
+      "skrifa_hayro_mismatches": 0,
       "mismatch_pixels": 0,
       "ink_pixels": 11,
       "opm_bytes": 540,
@@ -445,5 +470,8 @@
   "invalid_rejected": 2,
   "vello_same_opm_mismatch_bytes": 0,
   "vello_direct_quad_mismatch_bytes": 0,
-  "invalid_opq_rejected": 6
+  "invalid_opq_rejected": 6,
+  "skrifa_hayro_exact": 25,
+  "skrifa_interpreter_used": 0,
+  "invalid_font_oracle_rejected": 2
 }

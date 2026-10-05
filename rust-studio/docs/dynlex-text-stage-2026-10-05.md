@@ -356,25 +356,39 @@ area-rasterstap voor **dezelfde geometrie** uit; de bron van de kleine
 Hayro-verschillen ligt vóór of in het vormen van zijn originele glyphpad.
 
 De lokale Hayro 0.7.1-bron haalt TrueType-outlines via `skrifa` 0.42.1 op
-en gebruikt, indien beschikbaar, een TrueType-hintinginterpreter bij een
-vaste grootte van 1000 fontunits. Onze proef gebruikt ruwe `ttf-parser`-
-punten. Hinting is daarmee een concrete hypothese, nog geen bewezen
-oorzaak. De volgende stap is een afzonderlijke skrifa-oracle die de
-ruwe/hinted `move/line/quad`-records vóór de PDF-transformatie vergelijkt.
-De normale app blijft op Hayro terugvallen voor deze tekst.
+bij een vaste grootte van 1000 fontunits. Onze eerste proef gebruikte ruwe
+`ttf-parser`-punten uit een font met 2048 units per em. De afzonderlijke
+`ttf_outline_oracle` leest hetzelfde ingebedde FontFile2, gebruikt Hayro's
+`skrifa`-instellingen en schaalt de TGR1-basis terug van 2048 naar 1000
+fontunits. Alle **25 geïsoleerde glyph-PDF's** zijn vervolgens met dezelfde
+DynLex-kernel **49.152/49.152 pixels** exact gelijk aan Hayro. In dit font
+was `interpreter_used=false` bij alle 25; TrueType-hinting is dus niet de
+oorzaak van deze 114 oorspronkelijke verschillen. Het verschil zat in
+fontoutline-schaal/kwantisatie en soms de segmentindeling vóór de
+DynLex-rasterstap. `skrifa` is hier alleen een pure-Rust read-only oracle,
+nog geen fontdecoder in de normale DynLex-backend. De gewone app blijft
+tekst via Hayro renderen. De volgende stap is een begrensde experimentele
+fontfrontend die deze resourcekoppeling en vorming expliciet beheert, en
+daarna kleur, rotatie/CropBox, clipping en tekstlaagvolgorde test.
+De optionele laatste argumenten van `--isolate-quad` schrijven voor deze
+proef de versieerbare OPQ1-records en de ruwe embedded FontFile2 naar
+tijdelijke bestanden buiten de repo. Twee ongeschikte TGR1-records, zes
+corrupte OPQ1-vormen en twee ongeldige font/GID-combinaties worden zonder
+oracle-uitvoer afgewezen.
 
 Reproduceren vanuit `rust-studio`:
 
 ```sh
 cargo build --offline --release -p opds-opdl-adapter --bin stage_type0_text
 cargo build --offline --release -p opds-engine-probe \
-  --bin glyph_vello_probe --bin quad_flatten_oracle
+  --bin glyph_vello_probe --bin quad_flatten_oracle --bin ttf_outline_oracle
 python3 dynlex-engine-poc/rgba/verify_real_quad_glyphs.py \
   --stage target/release/stage_type0_text \
   --hayro target/release/opds-engine-probe \
   --dynlex /tmp/opds-glyph-strip-native-probe \
   --vello target/release/glyph_vello_probe \
   --quad-oracle target/release/quad_flatten_oracle \
+  --skrifa-oracle target/release/ttf_outline_oracle \
   --pdf '../test pdf-bestanden/Originele bestanden/Technische tekening.pdf' \
   --output dynlex-engine-poc/rgba/real-quad-glyphs-2026-10-05.json
 ```

@@ -11,6 +11,8 @@ vello_cpu = { version = "=0.0.8", default-features = false, features = ["std", "
 vello_common = "=0.0.8"
 fearless_simd = "=0.4.1"
 image = { version = "0.25", default-features = false, features = ["png"] }
+skrifa = "=0.42.1"
+ttf-parser = "=0.25.1"
 
 [dev-dependencies]
 lopdf = { version = "=0.34.0", default-features = false, features = ["nom_parser"] }
