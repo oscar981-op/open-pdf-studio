@@ -1331,6 +1331,10 @@ mod tests {
             ("789", 32, TextAlign::Center, [0, 0, 0]),
             ("ΩΣ", 24, TextAlign::Right, [30, 60, 90]),
             ("éé", 16, TextAlign::Left, [80, 30, 140]),
+            ("ΩΩ\nЖЖ", 16, TextAlign::Center, [0, 80, 240]),
+            ("A B\nC D", 16, TextAlign::Right, [40, 100, 20]),
+            ("Hi\n\nΩΩ", 16, TextAlign::Left, [150, 20, 90]),
+            ("Hello World", 16, TextAlign::Center, [20, 50, 90]),
         ];
         let mut accepted = 0;
         let mut rejected = Vec::new();
@@ -1341,7 +1345,7 @@ mod tests {
                 bounds: Rect {
                     x: 10.0,
                     y: 28.0,
-                    width: 180.0,
+                    width: if value == "Hello World" { 60.0 } else { 180.0 },
                     height: 64.0,
                 },
                 kind: Kind::Text {
@@ -1359,7 +1363,7 @@ mod tests {
             if let Err(error) = crate::native_text_scene::stage_native_text_box_scene(&mark) {
                 rejected.push((value, error));
             }
-            if let Some(dynlex) = crate::native_text_scene::render_white_page_text_box(
+            let rendered = crate::native_text_scene::render_white_page_text_box(
                 &source,
                 0,
                 &base.rgba,
@@ -1368,8 +1372,14 @@ mod tests {
                 (base.page_width_pt, base.page_height_pt),
                 &mark,
             )
-            .unwrap()
-            {
+            .unwrap();
+            if value.contains('\n') || value == "Hello World" {
+                assert!(
+                    rendered.is_some(),
+                    "multi-line or wrapped case {value:?} fell back"
+                );
+            }
+            if let Some(dynlex) = rendered {
                 let differences: Vec<_> = dynlex
                     .iter()
                     .zip(&hayro.rgba)

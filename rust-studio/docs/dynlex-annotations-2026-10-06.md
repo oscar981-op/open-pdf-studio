@@ -119,8 +119,9 @@ Dit bewijst één geïsoleerde Unicode-tekstfixture, **niet** de gehele Text
 Box in de normale DynLex-app. De glyphkernel is nu in de backend aanwezig,
 en de opt-in app kan nu één niet-geselecteerde native Text Box **rechtstreeks
 uit het actuele annotatiemodel** naar OPGS stagen. De begrensde route gebruikt
-dezelfde Liberation Sans-fontbytes en tekstafbreking als Save As; alleen één
-regel met 2–32 ondersteunde glyphs die zonder clipping in een 256×192-tegel
+dezelfde Liberation Sans-fontbytes en tekstafbreking als Save As; maximaal
+vier expliciete of automatisch afgebroken visuele regels met samen 2–32
+ondersteunde zichtbare glyphs die zonder clipping in een 256×192-tegel
 past, gehele paginacoördinaten, 100% zoom en een volledig witte bronpagina
 zonder bestaande `/Annots` worden geaccepteerd. De Rust-route controleert
 expliciet dat de bronpagina een bij de bitmap passende MediaBox vanaf nul
@@ -129,13 +130,13 @@ de app kopieert het zichtbare deel in de witte paginabitmap en houdt de
 Iced-laag voor selectie, grepen en inline bewerking. Een 200×300-pagina met
 een gecentreerde blauwe `ΩΩΩ`-Text Box is over de **hele pagina** RGBA-
 bytegelijk aan de echte Save As-/AP-uitvoer in Hayro. De aanvullende proef
-vergelijkt veertien echte Save As-PDF's met uiteenlopende letters, Unicode,
-groottes, kleuren en uitlijningen; ieder door de begrensde route geaccepteerd
-geval is bytegelijk. Glyphs met uitsluitend rechte contouren gebruiken dezelfde
+vergelijkt achttien echte Save As-PDF's met uiteenlopende letters, Unicode,
+groottes, kleuren, uitlijningen, spaties, lege regels en zachte/expliciete
+regelafbreking; ieder door de begrensde route geaccepteerd geval is bytegelijk.
+Glyphs met uitsluitend rechte contouren gebruiken dezelfde
 1000-unit pure-Rust fontuitlezing als Hayro: de ruwe TrueType-coördinaten
 gaven bij `Hello` nog 33 afwijkende kleurbytes en zijn daarom niet gebruikt.
-Een gekleurde onderlaag,
-meerregelige invoer, ontbrekende glyph of een vorm buiten de tegel valt
+Een gekleurde onderlaag, tekst die clipping vraagt, ontbrekende glyph of een vorm buiten de tegel valt
 terug zonder gedeeltelijke DynLex-bitmap. De opgeslagen scènebytes en de
 modelscène verschillen op lage floatbits, maar hun gerenderde pixels zijn
 gelijk. Niet-ondersteunde glyphcontouren, rotatie/CropBox, clipping en gemengde lagen

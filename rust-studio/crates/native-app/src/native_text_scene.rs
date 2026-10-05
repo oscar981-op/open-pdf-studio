@@ -107,6 +107,23 @@ pub fn render_white_page_text_box(
         Err(_) => return Ok(None),
     };
     let tile = opds_dynlex_backend::render_validated_glyph_scene(&scene)?;
+    let (left, top, right, bottom) = (
+        mark.bounds.x as usize,
+        mark.bounds.y as usize,
+        (mark.bounds.x + mark.bounds.width) as usize,
+        (mark.bounds.y + mark.bounds.height) as usize,
+    );
+    // OPGS has no appearance clip yet. Reject a run if even its antialias
+    // fringe escapes the saved annotation's exact rectangle.
+    for y in 0..tile.height as usize {
+        for x in 0..tile.width as usize {
+            if (x < left || x >= right || y < top || y >= bottom)
+                && tile.rgba[(y * tile.width as usize + x) * 4..][..4] != [255; 4]
+            {
+                return Ok(None);
+            }
+        }
+    }
     let mut output = base_rgba.to_vec();
     for y in 0..height.min(tile.height) as usize {
         let dst = y * width as usize * 4;
@@ -141,90 +158,113 @@ pub fn stage_native_text_box_scene(mark: &Annotation) -> Result<Vec<u8>, String>
     }
     let face = text_layout::font_face().ok_or("native embedded font unavailable")?;
     let lines = text_layout::wrap_text(value, bounds.width, f64::from(*font_size), face);
-    let count = value.chars().count();
-    if !(2..=32).contains(&count)
-        || lines.len() != 1
-        || lines[0].text != value
-        || value.chars().any(char::is_control)
+    if value.chars().count() > 64
+        || !(1..=4).contains(&lines.len())
+        || value.chars().any(|ch| ch.is_control() && ch != '\n')
     {
         return Err("Text Box run or wrapping is outside proven tile".into());
     }
     let units = f64::from(face.units_per_em());
     let size = f64::from(*font_size);
-    let width = text_layout::text_width(face, value, size);
-    let x = match align {
-        TextAlign::Left => 0.0,
-        TextAlign::Center => (bounds.width - width) / 2.0,
-        TextAlign::Right => bounds.width - width,
-    };
-    // Save As writes the per-line text matrix with three decimal places.
-    let line_x = format!("{x:.3}")
-        .parse::<f64>()
-        .map_err(|_| "invalid native line origin")?;
-    let mut scene = Vec::new();
+    let mut records = Vec::new();
+    let mut glyph_count = 0_usize;
+    for (index, line) in lines.iter().enumerate() {
+        // Save As sums unscaled advances first, then scales the line once.
+        let advance_units = line.text.chars().try_fold(0_u64, |total, ch| {
+            let gid = face.glyph_index(ch).ok_or("native glyph missing")?;
+            let advance = face
+                .glyph_hor_advance(gid)
+                .ok_or("native glyph width missing")?;
+            total
+                .checked_add(u64::from(advance))
+                .ok_or("native line advance exceeds bound")
+        })?;
+        let width = advance_units as f64 * size / units;
+        let x = match align {
+            TextAlign::Left => 0.0,
+            TextAlign::Center => (bounds.width - width) / 2.0,
+            TextAlign::Right => bounds.width - width,
+        };
+        // Save As writes every visual line's text matrix to three decimals.
+        let line_x = format!("{x:.3}")
+            .parse::<f64>()
+            .map_err(|_| "invalid native line origin")?;
+        let mut offset = 0.0_f64;
+        for ch in line.text.chars() {
+            let code = ch as u32;
+            let allowed = (0x20..=0x024F).contains(&code)
+                || (0x0370..=0x052F).contains(&code)
+                || (0x2000..=0x206F).contains(&code)
+                || code == 0x20AC;
+            if !allowed {
+                return Err("Text Box script unsupported by native Save As".into());
+            }
+            let gid = face.glyph_index(ch).ok_or("native glyph missing")?;
+            let advance = face
+                .glyph_hor_advance(gid)
+                .ok_or("native glyph width missing")?;
+            if ch != ' ' {
+                let matrix = [
+                    size / units,
+                    0.0,
+                    0.0,
+                    -size / units,
+                    bounds.x + line_x + offset,
+                    bounds.y + size + index as f64 * (size + 4.0),
+                ];
+                let (mut opm, old_shift) = text_quad_glyph::stage(
+                    text_layout::FONT_BYTES,
+                    gid.0,
+                    matrix,
+                    Source::SkrifaAtThousand,
+                )
+                .map(|(scene, shift, _)| (scene, shift))
+                .or_else(|_| {
+                    text_quad_glyph::stage_line_only(text_layout::FONT_BYTES, gid.0, matrix)
+                })
+                .map_err(|error| error.to_string())?;
+                let glyph = text_quad_glyph::absolute_bounds(&opm, old_shift)
+                    .map_err(|error| error.to_string())?;
+                if glyph[0] < bounds.x
+                    || glyph[1] < bounds.y
+                    || glyph[2] > bounds.x + bounds.width
+                    || glyph[3] > bounds.y + bounds.height
+                {
+                    return Err("native glyph would require Text Box clipping".into());
+                }
+                text_quad_glyph::rebase(&mut opm, old_shift, [0.0, 0.0])
+                    .map_err(|error| error.to_string())?;
+                let mut name = [0_u8; 32];
+                name[..5].copy_from_slice(b"OPDS0");
+                records.extend_from_slice(&name);
+                records.extend_from_slice(&gid.0.to_le_bytes()); // Identity CID
+                records.extend_from_slice(&gid.0.to_le_bytes()); // Identity GID
+                records.extend_from_slice(color_rgb);
+                records.push(0);
+                records.extend_from_slice(&(opm.len() as u32).to_le_bytes());
+                records.extend_from_slice(&opm);
+                glyph_count += 1;
+                if records.len() + 20 > 140_000 {
+                    return Err("native glyph scene exceeds bound".into());
+                }
+            }
+            // The PDF CID width is a lopdf Real (f32), not an unrounded
+            // TTF advance. Match each Tj text cursor exactly.
+            let cid_width = (f64::from(advance) * 1000.0 / units) as f32;
+            offset += f64::from(cid_width) * size / 1000.0;
+        }
+    }
+    // OPGS v1 is deliberately bounded to a small number of painted glyphs.
+    // Spaces and blank visual lines affect placement but create no records.
+    if !(2..=32).contains(&glyph_count) {
+        return Err("native painted glyph count outside OPGS limit".into());
+    }
+    let mut scene = Vec::with_capacity(20 + records.len());
     scene.extend_from_slice(b"OPGS");
-    for word in [1_u32, 256, 192, count as u32] {
+    for word in [1_u32, 256, 192, glyph_count as u32] {
         scene.extend_from_slice(&word.to_le_bytes());
     }
-    let mut offset = 0.0_f64;
-    for ch in value.chars() {
-        let code = ch as u32;
-        let allowed = (0x20..=0x024F).contains(&code)
-            || (0x0370..=0x052F).contains(&code)
-            || (0x2000..=0x206F).contains(&code)
-            || code == 0x20AC;
-        if !allowed {
-            return Err("Text Box script unsupported by native Save As".into());
-        }
-        let gid = face.glyph_index(ch).ok_or("native glyph missing")?;
-        let advance = face
-            .glyph_hor_advance(gid)
-            .ok_or("native glyph width missing")?;
-        let matrix = [
-            size / units,
-            0.0,
-            0.0,
-            -size / units,
-            bounds.x + line_x + offset,
-            bounds.y + size,
-        ];
-        let (mut opm, old_shift) = text_quad_glyph::stage(
-            text_layout::FONT_BYTES,
-            gid.0,
-            matrix,
-            Source::SkrifaAtThousand,
-        )
-        .map(|(scene, shift, _)| (scene, shift))
-        .or_else(|_| text_quad_glyph::stage_line_only(text_layout::FONT_BYTES, gid.0, matrix))
-        .map_err(|error| error.to_string())?;
-        let glyph =
-            text_quad_glyph::absolute_bounds(&opm, old_shift).map_err(|error| error.to_string())?;
-        if glyph[0] < bounds.x
-            || glyph[1] < bounds.y
-            || glyph[2] > bounds.x + bounds.width
-            || glyph[3] > bounds.y + bounds.height
-        {
-            return Err("native glyph would require Text Box clipping".into());
-        }
-        text_quad_glyph::rebase(&mut opm, old_shift, [0.0, 0.0])
-            .map_err(|error| error.to_string())?;
-        let mut name = [0_u8; 32];
-        name[..5].copy_from_slice(b"OPDS0");
-        scene.extend_from_slice(&name);
-        scene.extend_from_slice(&gid.0.to_le_bytes()); // Identity CID
-        scene.extend_from_slice(&gid.0.to_le_bytes()); // Identity GID
-        scene.extend_from_slice(color_rgb);
-        scene.push(0);
-        scene.extend_from_slice(&(opm.len() as u32).to_le_bytes());
-        scene.extend_from_slice(&opm);
-        // The PDF CID width is a lopdf Real (f32), not an unrounded TTF
-        // advance. Match the staged Tj text cursor exactly.
-        let cid_width = (f64::from(advance) * 1000.0 / units) as f32;
-        offset += f64::from(cid_width) * size / 1000.0;
-    }
-    if scene.len() > 140_000 {
-        return Err("native glyph scene exceeds bound".into());
-    }
+    scene.extend_from_slice(&records);
     Ok(scene)
 }
 
@@ -276,7 +316,10 @@ mod tests {
         if let Kind::Text { value, .. } = &mut multiline.kind {
             *value = "Ω\nΩ".into();
         }
-        assert!(stage_native_text_box_scene(&multiline).is_err());
+        assert!(stage_native_text_box_scene(&multiline).is_ok());
+        let mut clipped = multiline.clone();
+        clipped.bounds.height = 25.0;
+        assert!(stage_native_text_box_scene(&clipped).is_err());
         let mut outside = mark.clone();
         outside.bounds.y = 150.0;
         assert!(stage_native_text_box_scene(&outside).is_err());
