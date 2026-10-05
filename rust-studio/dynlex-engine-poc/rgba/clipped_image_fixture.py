@@ -102,6 +102,41 @@ def main() -> None:
     output.joinpath("clipped-two-contour-hole-restored.pdf").write_bytes(build_pdf(
         "raster", pre_content=blue + b"q\n" + nested_hole,
         extra_content=b"Q\nq\n20 0 0 16 100 90 cm\n/Im0 Do\nQ\n", **common))
+    def contour(left, bottom, right, top):
+        return (f"{left} {bottom} m\n{right} {bottom} l\n"
+                f"{right} {top} l\n{left} {top} l\nh\n").encode()
+
+    two_holes = (contour(28, 23, 90, 75) + contour(38, 35, 48, 55)
+                 + contour(62, 36, 73, 59) + b"W*\nn\n")
+    disjoint = (contour(28, 23, 46, 70) + contour(55, 25, 83, 75)
+                + b"W*\nn\n")
+    four_contours = (contour(28, 25, 52, 72) + contour(33, 36, 45, 57)
+                     + contour(58, 23, 88, 75) + contour(64, 35, 78, 60)
+                     + b"W*\nn\n")
+    for label, path in (("two-holes", two_holes), ("disjoint", disjoint),
+                        ("four-contours", four_contours)):
+        output.joinpath(f"clipped-multi-{label}.pdf").write_bytes(build_pdf(
+            "raster", pre_content=blue + path, **common))
+        output.joinpath(f"clipped-multi-{label}-rotate.pdf").write_bytes(build_pdf(
+            "raster", pre_content=path,
+            pages_extra="/Rotate 90 /CropBox [8 12 248 180]", **common))
+    twelve_points = ((82.52, 50), (78.97, 63.84), (69.05, 74.34),
+                     (55, 77.97), (41.1, 74.08), (30.65, 64.06),
+                     (26.75, 50), (30.45, 35.83), (40.75, 25.32),
+                     (55, 21.51), (68.91, 25.9), (78.9, 36.2))
+    twelve_path = (f"{twelve_points[0][0]} {twelve_points[0][1]} m\n"
+                   + "".join(f"{x} {y} l\n" for x, y in twelve_points[1:])
+                   + "h\n").encode()
+    output.joinpath("clipped-multi-twelve-vertices.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + twelve_path + contour(45, 40, 65, 60)
+        + b"W*\nn\n", **common))
+    output.joinpath("clipped-multi-crossing-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=contour(28, 23, 60, 75) + contour(50, 36, 83, 59)
+        + b"W*\nn\n", **common))
+    output.joinpath("clipped-multi-five-unsupported.pdf").write_bytes(build_pdf(
+        "raster", pre_content=contour(28, 23, 90, 75)
+        + b"".join(contour(x, 35, x + 6, 55) for x in (34, 45, 56, 67))
+        + b"W*\nn\n", **common))
     triangle_hole = (b"28 23 m\n90 23 l\n90 75 l\n28 75 l\nh\n"
                      b"44 38 m\n68 38 l\n56 58 l\nh\nW*\nn\n")
     output.joinpath("clipped-two-contour-triangle-hole.pdf").write_bytes(build_pdf(
@@ -117,7 +152,7 @@ def main() -> None:
             b"69 36", b"109 36").replace(b"69 59", b"109 59").replace(
             b"43 59", b"83 59"), **common))
     third_contour = b"48 41 m\n56 41 l\n56 48 l\n48 48 l\nh\n"
-    output.joinpath("clipped-three-contour-unsupported.pdf").write_bytes(build_pdf(
+    output.joinpath("clipped-three-contour-nested.pdf").write_bytes(build_pdf(
         "raster", pre_content=nested_hole.replace(b"W*\nn\n",
                                                   third_contour + b"W*\nn\n"), **common))
     output.joinpath("clipped-two-contour-open-unsupported.pdf").write_bytes(build_pdf(

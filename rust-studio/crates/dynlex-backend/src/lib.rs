@@ -947,6 +947,39 @@ mod tests {
                     .as_slice(),
             ),
             (
+                "three contours with two holes",
+                include_bytes!("../tests/fixtures/clipped-multi-two-holes.pdf").as_slice(),
+            ),
+            (
+                "three nested contours with restored island",
+                include_bytes!("../tests/fixtures/clipped-three-contour-nested.pdf").as_slice(),
+            ),
+            (
+                "three contours with two holes Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-multi-two-holes-rotate.pdf").as_slice(),
+            ),
+            (
+                "disjoint contours",
+                include_bytes!("../tests/fixtures/clipped-multi-disjoint.pdf").as_slice(),
+            ),
+            (
+                "disjoint contours Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-multi-disjoint-rotate.pdf").as_slice(),
+            ),
+            (
+                "four contours with two islands and holes",
+                include_bytes!("../tests/fixtures/clipped-multi-four-contours.pdf").as_slice(),
+            ),
+            (
+                "four contours Rotate/CropBox",
+                include_bytes!("../tests/fixtures/clipped-multi-four-contours-rotate.pdf")
+                    .as_slice(),
+            ),
+            (
+                "twelve-vertex convex outer contour",
+                include_bytes!("../tests/fixtures/clipped-multi-twelve-vertices.pdf").as_slice(),
+            ),
+            (
                 "isolated real W* shape under global CTM",
                 include_bytes!("../tests/fixtures/clipped-real-shape-582.pdf").as_slice(),
             ),
@@ -1029,8 +1062,9 @@ mod tests {
             include_bytes!("../tests/fixtures/clipped-two-contour-overlap-unsupported.pdf")
                 .as_slice(),
             include_bytes!("../tests/fixtures/clipped-two-contour-triangle-hole.pdf").as_slice(),
-            include_bytes!("../tests/fixtures/clipped-three-contour-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-two-contour-open-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-multi-crossing-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/clipped-multi-five-unsupported.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());

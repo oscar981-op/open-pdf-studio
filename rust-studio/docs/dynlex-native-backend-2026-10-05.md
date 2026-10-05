@@ -328,28 +328,39 @@ hebben één contour met 8–48 hoekpunten. Daarmee valt de echte pagina nog
 buiten de begrensde beeldclip. Zelfkruisende/open paden, meerdere holle hoeken,
 fills/strokes onder de polygonale clip en onzekere randdekking blijven fallback.
 
-Een afzonderlijke gecontroleerde subset ondersteunt nu twee gesloten
-`m/l/h`-contouren met `W*`: een strikt convex buitenpad en een volledig daarin
-gelegen gat. Beide contouren worden afzonderlijk gevalideerd (3–8 hoekpunten,
-geen zelfkruising), de buiten-/binnenrelatie mag nergens de grens raken en de
-even-odd-dekking wordt als **één** analytisch pixeloppervlak berekend voordat
-8-bit-afronding en beeldcompositie plaatsvinden. Omgekeerde contourvolgorde,
-een blauwe onderlaag en een 90°/CropBox-fixture zijn via de native DynLex-route
-RGBA-bytegelijk aan Hayro. Twee deterministische reeksen van 400 geneste
-rechthoek-PDF's met vier kwartslagen, gehele/kwart-/decimale randen en beide
-contourvolgordes gaven 339/339 en 330/330 geaccepteerde resultaten bytegelijk;
-61/70 twijfelachtige randgevallen vielen op Hayro terug. Herhalen vanuit
-`rust-studio`:
+De begrensde `W*`-beeldclip accepteert nu twee tot vier expliciet gesloten
+`m/l/h`-contouren. Iedere contour is strikt convex met 3–32 hoekpunten en
+coördinaten binnen ±4096; een contour mag geheel in een andere liggen of
+er geheel los van staan. Rakende/kruisende grenzen, zelfkruising, vijfde
+contour en onzekere 8-bit-dekking geven Hayro-fallback. De adapter valideert
+iedere contour, bouwt de containmentdiepte op en telt per pixel de
+analytische oppervlakken op met afwisselend teken. Pas daarna rondt hij de
+even-odd-dekking eenmaal af en mengt de beeldlaag via de bestaande begrensde
+OPDL-v6-patch. Een enkel contour met hoogstens één holle hoek behoudt zijn
+bestaande aparte subset.
+
+Gerichte echte PDF-fixtures voor twee gaten, twee disjuncte vlakken, vier
+contouren met twee gaten, een genest eiland en een twaalfhoekig buitenpad
+zijn RGBA-bytegelijk aan Hayro; rotatie/CropBox, blauwe onderlaag,
+omgekeerde contourvolgorde en `q/Q`-herstel zijn meegetest. Vijf layouts
+in twee deterministische reeksen van 400 PDF's gaven samen 2.703/2.703
+geaccepteerde DynLex-resultaten bytegelijk aan Hayro. De overige 1.297
+gevallen vielen terug, meestal door ambigue dekking nabij een halve
+8-bit-stap. Herhalen vanuit `rust-studio`:
 
 ```sh
-python3 dynlex-engine-poc/rgba/nested_clip_verify.py --probe target/release/backend_probe --cases 400 --seed 20261005
-python3 dynlex-engine-poc/rgba/nested_clip_verify.py --probe target/release/backend_probe --cases 400 --seed 394727
+for layout in one-hole two-holes disjoint four ring12; do
+  python3 dynlex-engine-poc/rgba/nested_clip_verify.py --probe target/release/backend_probe --cases 400 --seed 20261005 --layout "$layout"
+  python3 dynlex-engine-poc/rgba/nested_clip_verify.py --probe target/release/backend_probe --cases 400 --seed 394727 --layout "$layout"
+done
 ```
 
-`W` met twee contouren, overlappende grenzen, een derde contour en een
-driehoekig gat met twijfelachtige 8-bit-randdekking worden expliciet geweigerd.
-Deze subset gebruikt nog steeds het begrensde OPDL-v6-beeldmasker en is geen
-algemene even-odd-clippadrenderer.
+`W` met meerdere contouren, overlappende/open grenzen, een vijfde contour
+en een driehoekig gat met twijfelachtige 8-bit-randdekking worden geweigerd.
+De echte `W*`-operator 338 heeft wel vier contouren, maar 108/68/99/56
+hoekpunten en is dus niet bewezen of geactiveerd. Deze subset is geen
+algemene even-odd-clippadrenderer en ondersteunt geen complex pad onder
+vectorfills of strokes.
 
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht
 (`kind=8`) met RGBA-patch en een 8-bit-dekkingswaarde per pixel. De

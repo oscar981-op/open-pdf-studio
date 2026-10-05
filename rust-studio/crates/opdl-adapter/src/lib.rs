@@ -649,6 +649,47 @@ impl PathStage {
         Ok(self.points.clone())
     }
 
+    fn bounded_convex_clip(&self) -> Result<Vec<[f64; 2]>, Box<dyn Error>> {
+        if !self.closed || !self.cubics.is_empty() || !(3..=32).contains(&self.points.len()) {
+            return Err(fail("multi-contour clip requires 3–32 straight vertices"));
+        }
+        if self
+            .points
+            .iter()
+            .flatten()
+            .any(|value| !value.is_finite() || value.abs() > 4096.0)
+        {
+            return Err(fail("multi-contour clip coordinates exceed trial limits"));
+        }
+        let area = signed_polygon_area2(&self.points);
+        if !area.is_finite() || area.abs() <= 1e-6 {
+            return Err(fail("degenerate multi-contour clip"));
+        }
+        for index in 0..self.points.len() {
+            let a = self.points[index];
+            let b = self.points[(index + 1) % self.points.len()];
+            let c = self.points[(index + 2) % self.points.len()];
+            let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+            if cross * area.signum() <= 1e-6 {
+                return Err(fail("multi-contour clip is not strictly convex"));
+            }
+            for other in index + 2..self.points.len() {
+                if index == 0 && other + 1 == self.points.len() {
+                    continue;
+                }
+                if edges_touch_or_cross(
+                    a,
+                    b,
+                    self.points[other],
+                    self.points[(other + 1) % self.points.len()],
+                ) {
+                    return Err(fail("multi-contour clip is self-crossing"));
+                }
+            }
+        }
+        Ok(self.points.clone())
+    }
+
     fn to_v3_segments(self) -> Vec<path_v3::Segment> {
         use path_v3::Segment;
         let mut segments =
@@ -848,6 +889,34 @@ mod path_stage_tests {
         )
         .is_err());
         assert!(stage(&[[35.0, 28.0], [90.0, 28.0], [35.0, 28.0]], true).is_err());
+    }
+
+    #[test]
+    fn twelve_vertex_convex_clip_is_bounded() {
+        let points = [
+            [55.0, 20.0],
+            [70.0, 24.0],
+            [80.0, 33.0],
+            [85.0, 50.0],
+            [80.0, 67.0],
+            [70.0, 76.0],
+            [55.0, 80.0],
+            [40.0, 76.0],
+            [30.0, 67.0],
+            [25.0, 50.0],
+            [30.0, 33.0],
+            [40.0, 24.0],
+        ];
+        let mut path = PathStage::start(points[0]);
+        for point in &points[1..] {
+            path.line_to(*point).unwrap();
+        }
+        path.close().unwrap();
+        assert!(
+            path.bounded_convex_clip().is_ok(),
+            "{:?}",
+            path.bounded_convex_clip()
+        );
     }
 
     #[test]
@@ -1435,8 +1504,13 @@ fn polygon_to_display(
 
 #[derive(Clone)]
 struct PolygonImageClip {
-    outer: Vec<[f64; 2]>,
-    hole: Option<Vec<[f64; 2]>>,
+    contours: Vec<SignedClipContour>,
+}
+
+#[derive(Clone)]
+struct SignedClipContour {
+    points: Vec<[f64; 2]>,
+    sign: f64,
 }
 
 fn signed_polygon_area2(points: &[[f64; 2]]) -> f64 {
@@ -1450,37 +1524,96 @@ fn signed_polygon_area2(points: &[[f64; 2]]) -> f64 {
         .sum()
 }
 
-fn nested_even_odd_clip(
-    first: Vec<[f64; 2]>,
-    second: Vec<[f64; 2]>,
-) -> Result<PolygonImageClip, Box<dyn Error>> {
-    let (outer, hole) = if signed_polygon_area2(&first).abs() > signed_polygon_area2(&second).abs()
-    {
-        (first, second)
-    } else {
-        (second, first)
-    };
-    let orientation = signed_polygon_area2(&outer).signum();
-    // A strictly convex outer loop makes containment of every hole vertex
-    // sufficient to prove the two contour boundaries cannot intersect.
-    for index in 0..outer.len() {
-        let a = outer[index];
-        let b = outer[(index + 1) % outer.len()];
-        let c = outer[(index + 2) % outer.len()];
-        let turn = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
-        if turn * orientation <= 1e-6 {
-            return Err(fail("multi-contour clip requires a convex outer boundary"));
+fn point_in_convex_polygon(point: [f64; 2], polygon: &[[f64; 2]]) -> Result<bool, Box<dyn Error>> {
+    let direction = signed_polygon_area2(polygon).signum();
+    let mut on_boundary = false;
+    for index in 0..polygon.len() {
+        let a = polygon[index];
+        let b = polygon[(index + 1) % polygon.len()];
+        let side =
+            ((b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0])) * direction;
+        if side < -1e-6 {
+            return Ok(false);
         }
-        for point in &hole {
-            let side = (b[0] - a[0]) * (point[1] - a[1]) - (b[1] - a[1]) * (point[0] - a[0]);
-            if side * orientation <= 1e-6 {
-                return Err(fail("multi-contour clip has overlapping boundaries"));
+        on_boundary |= side.abs() <= 1e-6;
+    }
+    if on_boundary {
+        return Err(fail("multi-contour clip touches a boundary"));
+    }
+    Ok(true)
+}
+
+fn edges_touch_or_cross(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> bool {
+    let orient = |p: [f64; 2], q: [f64; 2], r: [f64; 2]| {
+        (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    };
+    let on_segment = |p: [f64; 2], q: [f64; 2], r: [f64; 2]| {
+        r[0] >= p[0].min(q[0]) - 1e-6
+            && r[0] <= p[0].max(q[0]) + 1e-6
+            && r[1] >= p[1].min(q[1]) - 1e-6
+            && r[1] <= p[1].max(q[1]) + 1e-6
+    };
+    let ac = orient(a, b, c);
+    let ad = orient(a, b, d);
+    let ca = orient(c, d, a);
+    let cb = orient(c, d, b);
+    (ac * ad < 0.0 && ca * cb < 0.0)
+        || (ac.abs() <= 1e-6 && on_segment(a, b, c))
+        || (ad.abs() <= 1e-6 && on_segment(a, b, d))
+        || (ca.abs() <= 1e-6 && on_segment(c, d, a))
+        || (cb.abs() <= 1e-6 && on_segment(c, d, b))
+}
+
+fn multi_even_odd_clip(paths: Vec<PathStage>) -> Result<PolygonImageClip, Box<dyn Error>> {
+    if !(2..=4).contains(&paths.len()) {
+        return Err(fail("multi-contour clip requires two to four paths"));
+    }
+    let polygons = paths
+        .iter()
+        .map(PathStage::bounded_convex_clip)
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut depth = vec![0_usize; polygons.len()];
+    for first in 0..polygons.len() {
+        for second in first + 1..polygons.len() {
+            let a_in_b = polygons[first]
+                .iter()
+                .map(|&point| point_in_convex_polygon(point, &polygons[second]))
+                .collect::<Result<Vec<_>, _>>()?;
+            let b_in_a = polygons[second]
+                .iter()
+                .map(|&point| point_in_convex_polygon(point, &polygons[first]))
+                .collect::<Result<Vec<_>, _>>()?;
+            if (a_in_b.iter().any(|inside| *inside) && !a_in_b.iter().all(|inside| *inside))
+                || (b_in_a.iter().any(|inside| *inside) && !b_in_a.iter().all(|inside| *inside))
+                || (a_in_b.iter().all(|inside| *inside) && b_in_a.iter().all(|inside| *inside))
+            {
+                return Err(fail("multi-contour boundaries overlap"));
             }
+            for edge_a in 0..polygons[first].len() {
+                for edge_b in 0..polygons[second].len() {
+                    if edges_touch_or_cross(
+                        polygons[first][edge_a],
+                        polygons[first][(edge_a + 1) % polygons[first].len()],
+                        polygons[second][edge_b],
+                        polygons[second][(edge_b + 1) % polygons[second].len()],
+                    ) {
+                        return Err(fail("multi-contour boundaries cross or touch"));
+                    }
+                }
+            }
+            depth[first] += usize::from(a_in_b.iter().all(|inside| *inside));
+            depth[second] += usize::from(b_in_a.iter().all(|inside| *inside));
         }
     }
     Ok(PolygonImageClip {
-        outer,
-        hole: Some(hole),
+        contours: polygons
+            .into_iter()
+            .zip(depth)
+            .map(|(points, depth)| SignedClipContour {
+                points,
+                sign: if depth % 2 == 0 { 1.0 } else { -1.0 },
+            })
+            .collect(),
     })
 }
 
@@ -1549,12 +1682,12 @@ fn polygon_pixel_coverage(
     x: u32,
     y: u32,
 ) -> Result<u8, Box<dyn Error>> {
-    let outer = polygon_pixel_area(&polygon.outer, x, y);
-    let hole = polygon
-        .hole
-        .as_ref()
-        .map_or(0.0, |hole| polygon_pixel_area(hole, x, y));
-    let scaled = (outer - hole).clamp(0.0, 1.0) * 255.0;
+    let area: f64 = polygon
+        .contours
+        .iter()
+        .map(|contour| contour.sign * polygon_pixel_area(&contour.points, x, y))
+        .sum();
+    let scaled = area.clamp(0.0, 1.0) * 255.0;
     // Hayro computes the edge area with f32 path coordinates. When the
     // analytic f64 result is near a byte-rounding boundary, its rasterizer
     // can round in either direction. Leave those pages to the fallback.
@@ -1571,23 +1704,27 @@ fn mask_polygon_image_clip(
     channels: usize,
 ) -> Result<Option<([u32; 4], Vec<u8>)>, Box<dyn Error>> {
     let left = polygon
-        .outer
+        .contours
         .iter()
+        .flat_map(|contour| &contour.points)
         .map(|point| point[0])
         .fold(f64::INFINITY, f64::min);
     let right = polygon
-        .outer
+        .contours
         .iter()
+        .flat_map(|contour| &contour.points)
         .map(|point| point[0])
         .fold(f64::NEG_INFINITY, f64::max);
     let top = polygon
-        .outer
+        .contours
         .iter()
+        .flat_map(|contour| &contour.points)
         .map(|point| point[1])
         .fold(f64::INFINITY, f64::min);
     let bottom = polygon
-        .outer
+        .contours
         .iter()
+        .flat_map(|contour| &contour.points)
         .map(|point| point[1])
         .fold(f64::NEG_INFINITY, f64::max);
     let bounds = [
@@ -2010,14 +2147,16 @@ fn page_to_opdl_bytes_internal(
     let mut polygon_clip: Option<PolygonImageClip> = None;
     let mut saved_polygon_clips: Vec<Option<PolygonImageClip>> = Vec::new();
     let mut pending_path: Option<PathStage> = None;
-    let mut first_clip_contour: Option<PathStage> = None;
+    let mut closed_clip_contours: Vec<PathStage> = Vec::new();
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
     let mut ordered_image_bytes = Vec::new();
     let mut has_fractional_image = false;
     let mut has_fractional_clip_image = false;
     let started = Instant::now();
     for op in &content.operations {
-        if first_clip_contour.is_some() && !matches!(op.operator.as_str(), "m" | "l" | "h" | "W*") {
+        if !closed_clip_contours.is_empty()
+            && !matches!(op.operator.as_str(), "m" | "l" | "h" | "W*")
+        {
             return Err(fail("unfinished two-contour even-odd clip"));
         }
         match op.operator.as_str() {
@@ -2348,14 +2487,14 @@ fn page_to_opdl_bytes_internal(
                 let path = pending_path
                     .take()
                     .ok_or_else(|| fail("clip path is missing"))?;
-                if let Some(first) = first_clip_contour.take() {
+                if !closed_clip_contours.is_empty() {
                     if op.operator != "W*" || polygon_clip.is_some() || fractional_clip.is_some() {
-                        return Err(fail("two-contour clip needs isolated W* state"));
+                        return Err(fail("multi-contour clip needs isolated W* state"));
                     }
-                    pending_polygon_clip = Some(nested_even_odd_clip(
-                        first.bounded_simple_clip()?,
-                        path.bounded_simple_clip()?,
-                    )?);
+                    closed_clip_contours.push(path);
+                    pending_polygon_clip = Some(multi_even_odd_clip(std::mem::take(
+                        &mut closed_clip_contours,
+                    ))?);
                 } else if let Ok(rect) = path.closed_axis_rectangle() {
                     if rect[0] < 0.0
                         || rect[1] < 0.0
@@ -2383,8 +2522,10 @@ fn page_to_opdl_bytes_internal(
                         return Err(fail("polygon clip intersection is not yet verified"));
                     }
                     pending_polygon_clip = Some(PolygonImageClip {
-                        outer: path.bounded_simple_clip()?,
-                        hole: None,
+                        contours: vec![SignedClipContour {
+                            points: path.bounded_simple_clip()?,
+                            sign: 1.0,
+                        }],
                     });
                 }
                 pending_clip = true;
@@ -2392,12 +2533,16 @@ fn page_to_opdl_bytes_internal(
             "n" if !image_matrix && op.operands.is_empty() && pending_clip => {
                 if let Some(polygon) = pending_polygon_clip.take() {
                     polygon_clip = Some(PolygonImageClip {
-                        outer: polygon_to_display(&polygon.outer, media, crop, turn)?,
-                        hole: polygon
-                            .hole
-                            .as_ref()
-                            .map(|hole| polygon_to_display(hole, media, crop, turn))
-                            .transpose()?,
+                        contours: polygon
+                            .contours
+                            .into_iter()
+                            .map(|contour| {
+                                Ok(SignedClipContour {
+                                    points: polygon_to_display(&contour.points, media, crop, turn)?,
+                                    sign: contour.sign,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, Box<dyn Error>>>()?,
                     });
                 } else if let Some(fractional) = pending_fractional_rect.take() {
                     pending_rect
@@ -2468,10 +2613,10 @@ fn page_to_opdl_bytes_internal(
             }
             "m" if !image_matrix && pending_rect.is_none() => {
                 if let Some(previous) = pending_path.take() {
-                    if !ordered_images || !previous.closed || first_clip_contour.is_some() {
+                    if !ordered_images || !previous.closed || closed_clip_contours.len() >= 3 {
                         return Err(fail("unsupported additional PDF path contour"));
                     }
-                    first_clip_contour = Some(previous);
+                    closed_clip_contours.push(previous);
                 }
                 let [x, y] = operands::<2>(&op.operands)?;
                 let point = if ordered_images {
@@ -2519,7 +2664,7 @@ fn page_to_opdl_bytes_internal(
                     .close()?;
             }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
-                if first_clip_contour.is_some() {
+                if !closed_clip_contours.is_empty() {
                     return Err(fail("multi-contour stroke is unsupported"));
                 }
                 if fractional_clip.is_some() || polygon_clip.is_some() {
@@ -2639,7 +2784,7 @@ fn page_to_opdl_bytes_internal(
         || pending_polygon_clip.is_some()
         || pending_clip
         || pending_path.is_some()
-        || first_clip_contour.is_some()
+        || !closed_clip_contours.is_empty()
         || image_matrix
         || translation.is_some()
         || !saved_clips.is_empty()
