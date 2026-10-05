@@ -10,6 +10,12 @@ pub enum Backend {
     Dynlex,
 }
 
+impl Default for Backend {
+    fn default() -> Self {
+        Self::Hayro
+    }
+}
+
 /// Keep Hayro operational for every page/zoom outside the verified DynLex subset.
 pub fn render_with_fallback(
     pdf: &ParsedPdf,

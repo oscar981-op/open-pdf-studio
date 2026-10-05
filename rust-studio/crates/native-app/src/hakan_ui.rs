@@ -913,6 +913,27 @@ pub fn view(app: &App) -> Element<'_, Message> {
             ],
         ));
     }
+    if app.active_ribbon == RibbonTab::Help {
+        groups = groups.push(group(
+            "PDF Engine",
+            vec![
+                large_tool_active(
+                    "Hayro",
+                    DOC,
+                    (!app.busy)
+                        .then_some(Message::SelectBackend(opds_dynlex_backend::Backend::Hayro)),
+                    app.backend == opds_dynlex_backend::Backend::Hayro,
+                ),
+                large_tool_active(
+                    "DynLex",
+                    icon_asset!("zoom_ext.svg"),
+                    (!app.busy && cfg!(feature = "dynlex-experimental"))
+                        .then_some(Message::SelectBackend(opds_dynlex_backend::Backend::Dynlex)),
+                    app.backend == opds_dynlex_backend::Backend::Dynlex,
+                ),
+            ],
+        ));
+    }
     if !matches!(
         app.active_ribbon,
         RibbonTab::Home | RibbonTab::Comment | RibbonTab::Format

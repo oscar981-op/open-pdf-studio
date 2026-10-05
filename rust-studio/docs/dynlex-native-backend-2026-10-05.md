@@ -17,13 +17,19 @@ cargo run --release --offline -p opds-native-app \
 ```
 
 Zet `OPDS_RENDER_BACKEND=dynlex` voor het starten om DynLex te kiezen.
-Zonder die variabele kiest de app Hayro. De huidige OPGM-v3-adapter kan
+Zonder die variabele kiest de app Hayro. In de **Settings**-ribbon staan
+Hayro en DynLex als directe keuzes. Wisselen maakt pagina- en
+miniaturencaches leeg en negeert oudere asynchrone renderresultaten.
+DynLex is alleen klikbaar in een build met `dynlex-experimental`.
+De actieve knop toont de voorkeursbackend; bij een niet-ondersteunde
+pagina gebruikt de router Hayro zonder de selectie te veranderen.
+De huidige OPGM-v3-adapter kan
 uitsluitend één pagina op schaal 1,0 verwerken, met 1–64 dekkende
 pixeluitgelijnde rechthoekfills/1px asgerichte strokes, beperkte q/Q,
 gehele translatie en rechthoekige clips. Bij elke niet-ondersteunde PDF,
 pagina of schaal rendert Hayro. Dit voorkomt dat een nog onvolledige
-DynLex-kernel PDF-inhoud stil weglaat. Er is nog geen zichtbare
-backendkeuze in de UI, geen PDFium-backend in de Rust-app en geen
+DynLex-kernel PDF-inhoud stil weglaat. Er is nog geen
+PDFium-backend in de Rust-app en geen
 100% PDF-objectdekking.
 
 De native app roept de kernel alleen via de veilige Rust-router aan.
@@ -37,6 +43,9 @@ standaard.
 
 Verificatie: een echte fill/stroke-PDF is in de Rust-router bytegelijk
 aan Hayro; een tekst-PDF volgt de fallback en blijft identiek aan Hayro.
+In het draaiende 1200×832-venster zijn beide Settings-knoppen geklikt;
+na wisselen rendert de pagina opnieuw. Zoom In bij DynLex-selectie
+ging van 100% naar 125% en werd via de Hayro-fallback getoond.
 `rgba/verify_stroke_geometry.py` vergeleek dertien gecontroleerde PDF's,
 inclusief rotatie/CropBox/A1, byte voor byte met Hayro en de onafhankelijke
 referentie. Deze tests bewijzen slechts de beschreven deelset.

@@ -24,12 +24,8 @@ fn render_page_selected(
     source: &[u8],
     page: usize,
     scale: f32,
+    backend: Backend,
 ) -> Result<Raster, String> {
-    let backend = if std::env::var("OPDS_RENDER_BACKEND").ok().as_deref() == Some("dynlex") {
-        Backend::Dynlex
-    } else {
-        Backend::Hayro
-    };
     opds_dynlex_backend::render_with_fallback(pdf, source, page, scale, backend)
         .map_err(|error| error.to_string())
 }
@@ -144,6 +140,11 @@ fn theme(_: &App) -> Theme {
 
 fn boot() -> (App, Task<Message>) {
     let mut app = App::default();
+    if cfg!(feature = "dynlex-experimental")
+        && std::env::var("OPDS_RENDER_BACKEND").ok().as_deref() == Some("dynlex")
+    {
+        app.backend = Backend::Dynlex;
+    }
     app.text_font_size = DEFAULT_TEXT_FONT_SIZE;
     if let Some(path) = std::env::args().nth(1) {
         app.path_input = path;
@@ -202,6 +203,8 @@ fn scroll_browser_to(y: f32) -> Task<Message> {
 
 #[derive(Default)]
 struct App {
+    backend: Backend,
+    backend_generation: u64,
     path_input: String,
     browser_dir: PathBuf,
     browser_entries: Vec<BrowserEntry>,
@@ -721,8 +724,9 @@ enum Message {
     PageScrolled(scrollable::Viewport),
     ThumbnailsScrolled(scrollable::Viewport),
     GoToPage(usize),
-    Rendered(RenderTicket, Result<Raster, String>),
-    ThumbnailRendered(u64, usize, Result<Raster, String>),
+    Rendered(u64, RenderTicket, Result<Raster, String>),
+    ThumbnailRendered(u64, u64, usize, Result<Raster, String>),
+    SelectBackend(Backend),
     SelectRibbon(RibbonTab),
     ToggleRibbonCollapsed,
     DragWindow,
@@ -1155,6 +1159,27 @@ impl App {
                 return self.render_nearby_thumbnail();
             }
             Message::ToggleProperties => self.hide_properties = !self.hide_properties,
+            Message::SelectBackend(backend) => {
+                if self.busy
+                    || self.backend == backend
+                    || (backend == Backend::Dynlex && !cfg!(feature = "dynlex-experimental"))
+                {
+                    return Task::none();
+                }
+                self.backend = backend;
+                self.backend_generation = self.backend_generation.wrapping_add(1);
+                if let Some(document) = &mut self.document {
+                    document.page_cache.clear();
+                    document.bitmap = None;
+                    document.thumbnails.clear();
+                    document.thumbnail_failed.clear();
+                    document.thumbnail_in_flight = None;
+                    return Task::batch([
+                        self.render_current_page(),
+                        self.render_nearby_thumbnail(),
+                    ]);
+                }
+            }
             Message::PageScrolled(viewport) => {
                 self.page_scroll_offset = viewport.absolute_offset();
             }
@@ -1538,6 +1563,7 @@ impl App {
                 self.open_dialog = false;
                 self.next_load += 1;
                 let token = self.next_load;
+                let backend = self.backend;
                 self.busy = true;
                 self.message = "Opening PDF…".into();
                 return Task::perform(
@@ -1551,7 +1577,7 @@ impl App {
                         let (page_width, _) =
                             pdf.page_dimensions(1).map_err(|error| error.to_string())?;
                         let initial_scale = (550.0 / page_width).clamp(0.1, 1.0);
-                        let raster = render_page_selected(&pdf, &bytes, 1, initial_scale)?;
+                        let raster = render_page_selected(&pdf, &bytes, 1, initial_scale, backend)?;
                         Ok((path, bytes, pdf, initial_scale, raster))
                     },
                     move |result| Message::Loaded(token, result),
@@ -1619,8 +1645,8 @@ impl App {
                 }
                 return self.render_current_page();
             }
-            Message::ThumbnailRendered(token, page, result) => {
-                if token != self.next_load {
+            Message::ThumbnailRendered(token, generation, page, result) => {
+                if token != self.next_load || generation != self.backend_generation {
                     return Task::none();
                 }
                 let Some(document) = &mut self.document else {
@@ -1700,7 +1726,10 @@ impl App {
                     scroll_thumbnail_to(page),
                 ]);
             }
-            Message::Rendered(ticket, result) => {
+            Message::Rendered(generation, ticket, result) => {
+                if generation != self.backend_generation {
+                    return Task::none();
+                }
                 let Some(document) = &mut self.document else {
                     return Task::none();
                 };
@@ -1788,13 +1817,15 @@ impl App {
         let pdf = Arc::clone(&document.pdf);
         let source = Arc::clone(&document.source_bytes);
         let token = self.next_load;
+        let generation = self.backend_generation;
+        let backend = self.backend;
         Task::perform(
             async move {
                 let (width, height) = pdf.page_dimensions(page + 1).map_err(|e| e.to_string())?;
                 let scale = thumbnail_scale(width, height)?;
-                render_page_selected(&pdf, &source, page + 1, scale)
+                render_page_selected(&pdf, &source, page + 1, scale, backend)
             },
-            move |result| Message::ThumbnailRendered(token, page, result),
+            move |result| Message::ThumbnailRendered(token, generation, page, result),
         )
     }
 
@@ -1822,11 +1853,13 @@ impl App {
         }
         let pdf = Arc::clone(&document.pdf);
         let source = Arc::clone(&document.source_bytes);
+        let generation = self.backend_generation;
+        let backend = self.backend;
         self.busy = true;
         self.message = format!("Rendering page {page} at {:.0}%…", scale * 100.0);
         Task::perform(
-            async move { render_page_selected(&pdf, &source, page, scale) },
-            move |result| Message::Rendered(ticket, result),
+            async move { render_page_selected(&pdf, &source, page, scale, backend) },
+            move |result| Message::Rendered(generation, ticket, result),
         )
     }
 
