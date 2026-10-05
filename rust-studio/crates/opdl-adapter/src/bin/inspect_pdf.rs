@@ -129,14 +129,67 @@ fn contour_summary(operations: &[lopdf::content::Operation]) -> String {
     )
 }
 
+fn text_operand_bytes(operation: &lopdf::content::Operation) -> (usize, usize, bool) {
+    match (operation.operator.as_str(), operation.operands.as_slice()) {
+        ("Tj" | "'", [Object::String(value, _)]) => (1, value.len(), false),
+        ("\"", [first, second, Object::String(value, _)])
+            if pdf_number(first).is_some() && pdf_number(second).is_some() =>
+        {
+            (1, value.len(), false)
+        }
+        ("TJ", [Object::Array(items)]) => {
+            let mut strings = 0;
+            let mut bytes = 0;
+            for item in items {
+                match item {
+                    Object::String(value, _) => {
+                        strings += 1;
+                        bytes += value.len();
+                    }
+                    Object::Integer(_) | Object::Real(_) => {}
+                    _ => return (strings, bytes, true),
+                }
+            }
+            (strings, bytes, false)
+        }
+        _ => (0, 0, true),
+    }
+}
+
+fn descendant_font<'a>(
+    document: &'a Document,
+    font: &'a lopdf::Dictionary,
+) -> Option<&'a lopdf::Dictionary> {
+    font.get(b"DescendantFonts")
+        .ok()
+        .and_then(|value| document.dereference(value).ok())
+        .and_then(|(_, value)| value.as_array().ok())
+        .and_then(|fonts| fonts.first())
+        .and_then(|value| document.dereference(value).ok())
+        .and_then(|(_, value)| value.as_dict().ok())
+}
+
+fn font_descriptor<'a>(
+    document: &'a Document,
+    font: &'a lopdf::Dictionary,
+) -> Option<&'a lopdf::Dictionary> {
+    descendant_font(document, font)
+        .unwrap_or(font)
+        .get(b"FontDescriptor")
+        .ok()
+        .and_then(|value| document.dereference(value).ok())
+        .and_then(|(_, value)| value.as_dict().ok())
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
     let input = args.next().ok_or(
-        "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--head N] [--around INDEX] [--dump-clip INDEX]",
+        "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--font-ops] [--head N] [--around INDEX] [--dump-clip INDEX]",
     )?;
     let mut selected = None;
     let mut image_ops = false;
     let mut clip_ops = false;
+    let mut font_ops = false;
     let mut head = 0_usize;
     let mut around = None;
     let mut dump_clip = None;
@@ -152,6 +205,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
             Some("--image-ops") if !image_ops => image_ops = true,
             Some("--clip-ops") if !clip_ops => clip_ops = true,
+            Some("--font-ops") if !font_ops => font_ops = true,
             Some("--head") if head == 0 => {
                 head = args
                     .next()
@@ -179,14 +233,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 );
             }
             _ => return Err(
-                "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--head N] [--around INDEX] [--dump-clip INDEX]"
+                "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--clip-ops] [--font-ops] [--head N] [--around INDEX] [--dump-clip INDEX]"
                     .into(),
             ),
         }
     }
     let document = Document::load(Path::new(&input))?;
     if dump_clip.is_some()
-        && (selected.is_none() || image_ops || clip_ops || head > 0 || around.is_some())
+        && (selected.is_none() || image_ops || clip_ops || font_ops || head > 0 || around.is_some())
     {
         return Err("--dump-clip needs --page and no other display options".into());
     }
@@ -413,6 +467,77 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
                 }
             }
+        }
+        if font_ops {
+            for (name, font) in document.get_page_fonts(id)? {
+                let label = |key: &[u8]| -> String {
+                    font.get(key)
+                        .map(|value| describe(&document, value))
+                        .unwrap_or_else(|_| "-".into())
+                };
+                let embedded = font_descriptor(&document, font).is_some_and(|descriptor| {
+                    descriptor.has(b"FontFile")
+                        || descriptor.has(b"FontFile2")
+                        || descriptor.has(b"FontFile3")
+                });
+                let descendant = descendant_font(&document, font);
+                let cid_to_gid = descendant
+                    .and_then(|descendant| descendant.get(b"CIDToGIDMap").ok())
+                    .map(|value| describe(&document, value))
+                    .unwrap_or_else(|| "-".into());
+                println!(
+                    "font={} subtype={} base={} encoding={} to_unicode={} embedded={} char_procs={} descendant_subtype={} cid_to_gid={}",
+                    String::from_utf8_lossy(&name),
+                    label(b"Subtype"), label(b"BaseFont"), label(b"Encoding"),
+                    font.has(b"ToUnicode"), embedded, font.has(b"CharProcs"),
+                    descendant
+                        .and_then(|font| font.get(b"Subtype").ok())
+                        .map(|value| describe(&document, value))
+                        .unwrap_or_else(|| "-".into()),
+                    cid_to_gid
+                );
+            }
+            let mut selected_fonts = BTreeMap::<String, (usize, usize, usize)>::new();
+            let mut active_font = String::from("(unselected)");
+            let mut saved_fonts = Vec::<String>::new();
+            let mut malformed = 0_usize;
+            for operation in &content.operations {
+                match operation.operator.as_str() {
+                    "q" => saved_fonts.push(active_font.clone()),
+                    "Q" => {
+                        if let Some(saved) = saved_fonts.pop() {
+                            active_font = saved;
+                        }
+                    }
+                    "Tf" if operation.operands.len() == 2 => {
+                        active_font = operation.operands[0]
+                            .as_name()
+                            .map(|name| String::from_utf8_lossy(name).into_owned())
+                            .unwrap_or_else(|_| "(invalid)".into());
+                        malformed += usize::from(
+                            active_font == "(invalid)"
+                                || pdf_number(&operation.operands[1]).is_none(),
+                        );
+                    }
+                    "Tf" => malformed += 1,
+                    "Tj" | "TJ" | "'" | "\"" => {
+                        let (strings, bytes, unsupported) = text_operand_bytes(operation);
+                        let entry = selected_fonts.entry(active_font.clone()).or_default();
+                        entry.0 += 1;
+                        entry.1 += strings;
+                        entry.2 += bytes;
+                        malformed += usize::from(unsupported);
+                    }
+                    _ => {}
+                }
+            }
+            for (font, (show_ops, strings, code_bytes)) in selected_fonts {
+                println!(
+                    "text_font={} show_ops={} strings={} code_bytes={}",
+                    font, show_ops, strings, code_bytes
+                );
+            }
+            println!("text_malformed_operands={malformed}");
         }
     }
     Ok(())
