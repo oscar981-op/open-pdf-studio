@@ -2,7 +2,7 @@
 //! This does not render PDF text or change the normal DynLex adapter.
 #![forbid(unsafe_code)]
 
-mod quad_glyph;
+use opds_opdl_adapter::text_quad_glyph as quad_glyph;
 
 use lopdf::{content::Content, Dictionary, Document, Object, Stream};
 use std::{

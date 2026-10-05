@@ -499,6 +499,126 @@ pub fn stage(
     Ok((encoded, shift, raw))
 }
 
+/// Stage a bounded glyph whose closed contours contain only straight lines.
+/// This complements `stage` for ordinary TrueType letters without quadratic
+/// segments; it still leaves curves, open paths and large glyphs unsupported.
+pub fn stage_line_only(
+    font_data: &[u8],
+    gid: u16,
+    matrix: [f64; 6],
+) -> Result<(Vec<u8>, Point), Box<dyn Error>> {
+    let face = ttf_parser::Face::parse(font_data, 0)?;
+    let mut outline = Outline::default();
+    let font = FontRef::from_index(font_data, 0)?;
+    let glyphs = font.outline_glyphs();
+    let glyph = glyphs
+        .get(GlyphId::new(u32::from(gid)))
+        .ok_or("glyph has no embedded outline")?;
+    let instance = if glyphs.require_interpreter() {
+        HintingInstance::new(
+            &glyphs,
+            Size::new(1000.0),
+            LocationRef::default(),
+            HintingOptions {
+                engine: Engine::Interpreter,
+                target: Target::Mono,
+            },
+        )
+        .ok()
+    } else {
+        None
+    };
+    let settings = if let Some(instance) = instance.as_ref() {
+        DrawSettings::hinted(instance, false)
+    } else {
+        DrawSettings::unhinted(Size::new(1000.0), LocationRef::default())
+    };
+    glyph.draw(settings, &mut outline)?;
+    let factor = f64::from(face.units_per_em()) / 1000.0;
+    let matrix = [
+        matrix[0] * factor,
+        matrix[1] * factor,
+        matrix[2] * factor,
+        matrix[3] * factor,
+        matrix[4],
+        matrix[5],
+    ];
+    if outline.overflow
+        || !(1..=8).contains(&outline.contours.len())
+        || outline.quads != 0
+        || outline.cubics != 0
+        || outline.segments + 2 * outline.contours.len() > 256
+        || outline.contours.iter().any(|contour| {
+            !contour.closed
+                || contour.segments.len() < 2
+                || contour
+                    .segments
+                    .iter()
+                    .any(|segment| !matches!(segment, Segment::Line(_)))
+        })
+    {
+        return Err("glyph is not bounded closed line-only geometry".into());
+    }
+    let mut contours = Vec::with_capacity(outline.contours.len());
+    let mut bounds = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    for contour in outline.contours {
+        let mut points = vec![transform(contour.start, matrix)];
+        for segment in contour.segments {
+            let Segment::Line(point) = segment else {
+                return Err("line-only glyph contains a curve".into());
+            };
+            points.push(transform(point, matrix));
+        }
+        if points.last() != Some(&points[0]) {
+            points.push(points[0]);
+        }
+        if points.len() < 4 {
+            return Err("line-only contour has too few points".into());
+        }
+        for &[x, y] in &points {
+            if !x.is_finite() || !y.is_finite() {
+                return Err("line-only glyph has nonfinite coordinates".into());
+            }
+            bounds[0] = bounds[0].min(x);
+            bounds[1] = bounds[1].min(y);
+            bounds[2] = bounds[2].max(x);
+            bounds[3] = bounds[3].max(y);
+        }
+        contours.push(points);
+    }
+    if bounds[2] - bounds[0] > 240.0 || bounds[3] - bounds[1] > 176.0 {
+        return Err("line-only glyph exceeds output tile".into());
+    }
+    let shift = [
+        128.0 - (bounds[0] + bounds[2]) / 2.0,
+        96.0 - (bounds[1] + bounds[3]) / 2.0,
+    ];
+    let mut encoded = Vec::new();
+    encoded.extend_from_slice(b"OPM2");
+    for value in [1_u32, 256, 192, contours.len() as u32] {
+        encoded.extend_from_slice(&value.to_le_bytes());
+    }
+    for contour in contours {
+        encoded.extend_from_slice(&(contour.len() as u32).to_le_bytes());
+        for mut point in contour {
+            point[0] += shift[0];
+            point[1] += shift[1];
+            for coordinate in point {
+                if !(0.0..=4096.0).contains(&coordinate) {
+                    return Err("line-only point outside limit".into());
+                }
+                encoded.extend_from_slice(&coordinate.to_le_bytes());
+            }
+        }
+    }
+    Ok((encoded, shift))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

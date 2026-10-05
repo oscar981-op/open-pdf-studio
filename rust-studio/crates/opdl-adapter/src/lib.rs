@@ -6,6 +6,7 @@ pub mod geometry_v2;
 pub mod geometry_v3;
 pub mod paint_v4;
 pub mod path_v3;
+pub mod text_quad_glyph;
 
 fn load_path_probe(
     path: &std::path::Path,

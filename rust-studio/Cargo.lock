@@ -2181,6 +2181,7 @@ dependencies = [
  "opds-dynlex-backend",
  "opds-engine-probe",
  "opds-native-core",
+ "opds-opdl-adapter",
  "ttf-parser",
 ]
 

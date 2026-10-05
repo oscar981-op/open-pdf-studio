@@ -3,6 +3,8 @@
 mod annotation_layer;
 mod hakan_ui;
 mod inline_text;
+#[cfg(feature = "dynlex-experimental")]
+mod native_text_scene;
 mod pdf_save;
 mod text_layout;
 mod virtual_ipp;
@@ -654,17 +656,45 @@ impl OpenDocument {
             ..
         } = base
         {
-            opds_dynlex_backend::render_native_annotation_overlay_pixels(
-                pixels.as_ref(),
-                *width,
-                *height,
-                self.bitmap_page_points,
-                &annotations,
-                self.displayed_page,
-            )
-            .ok()
-            .flatten()
-            .map(|result| image::Handle::from_rgba(result.width, result.height, result.rgba))
+            let text: Option<Vec<u8>> = {
+                #[cfg(feature = "dynlex-experimental")]
+                {
+                    if annotations.len() == 1 && matches!(annotations[0].kind, Kind::Text { .. }) {
+                        native_text_scene::render_white_page_text_box(
+                            &self.source_bytes,
+                            self.displayed_page,
+                            pixels.as_ref(),
+                            *width,
+                            *height,
+                            self.bitmap_page_points,
+                            &annotations[0],
+                        )
+                        .ok()
+                        .flatten()
+                    } else {
+                        None
+                    }
+                }
+                #[cfg(not(feature = "dynlex-experimental"))]
+                {
+                    None
+                }
+            };
+            if let Some(rgba) = text {
+                Some(image::Handle::from_rgba(*width, *height, rgba))
+            } else {
+                opds_dynlex_backend::render_native_annotation_overlay_pixels(
+                    pixels.as_ref(),
+                    *width,
+                    *height,
+                    self.bitmap_page_points,
+                    &annotations,
+                    self.displayed_page,
+                )
+                .ok()
+                .flatten()
+                .map(|result| image::Handle::from_rgba(result.width, result.height, result.rgba))
+            }
         } else {
             None
         };
@@ -767,6 +797,38 @@ mod dynlex_annotation_overlay_tests {
         document.model.apply(Edit::Replace(moved)).unwrap();
         let second = document.dynlex_annotation_bitmap().expect("moved mark");
         assert!(first != second, "edit must invalidate the derived image");
+
+        let text = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        document.model.apply(Edit::Replace(text)).unwrap();
+        document.bitmap = Some(image::Handle::from_rgba(256, 192, vec![255; 256 * 192 * 4]));
+        document.bitmap_size = (256, 192);
+        document.bitmap_page_points = (256.0, 192.0);
+        let text_bitmap = document
+            .dynlex_annotation_bitmap()
+            .expect("bounded model Text Box should use DynLex");
+        assert_eq!(
+            document.dynlex_annotation_bitmap(),
+            Some(text_bitmap.clone())
+        );
+        let image::Handle::Rgba { pixels, .. } = text_bitmap else {
+            panic!("DynLex annotation output must be RGBA");
+        };
+        assert!(pixels.chunks_exact(4).any(|pixel| pixel != [255; 4]));
     }
 }
 

@@ -6,12 +6,13 @@ license = "GPL-3.0-only"
 publish.workspace = true
 
 [features]
-dynlex-experimental = ["opds-dynlex-backend/kernel"]
+dynlex-experimental = ["opds-dynlex-backend/kernel", "dep:opds-opdl-adapter"]
 
 [dependencies]
 iced = { version = "=0.14.0", default-features = false, features = ["wgpu", "tiny-skia", "thread-pool", "x11", "image-without-codecs", "svg", "canvas", "advanced"] }
 opds-native-core = { path = "../studio-core" }
 opds-engine-probe = { path = "../engine-probe" }
 opds-dynlex-backend = { path = "../dynlex-backend" }
+opds-opdl-adapter = { path = "../opdl-adapter", optional = true }
 lopdf = { version = "=0.34.0", default-features = false, features = ["nom_parser"] }
 ttf-parser = "=0.25.1"

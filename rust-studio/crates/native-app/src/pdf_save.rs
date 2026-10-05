@@ -1171,7 +1171,7 @@ mod tests {
                 align: TextAlign::Center,
             },
         };
-        let saved = export_annotations(&source, &[mark]).unwrap();
+        let saved = export_annotations(&source, &[mark.clone()]).unwrap();
         let flattened = flatten_native_free_text_appearance(&saved, 1).unwrap();
         if let Some(directory) = std::env::var_os("OPDS_AP_FIXTURE_DIR") {
             let directory = std::path::PathBuf::from(directory);
@@ -1183,6 +1183,46 @@ mod tests {
             .unwrap()
             .render_page(1, 1.0)
             .unwrap();
+        let base = ParsedPdf::open(Arc::new(source.clone()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let live = crate::native_text_scene::render_white_page_text_box(
+            &source,
+            0,
+            &base.rgba,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &mark,
+        )
+        .unwrap()
+        .expect("the bounded Text Box should paint with DynLex");
+        assert_eq!(live, original.rgba);
+        assert!(crate::native_text_scene::render_white_page_text_box(
+            &saved,
+            0,
+            &base.rgba,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &mark,
+        )
+        .unwrap()
+        .is_none());
+        let mut colored = base.rgba.clone();
+        colored[0] = 254;
+        assert!(crate::native_text_scene::render_white_page_text_box(
+            &source,
+            0,
+            &colored,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &mark,
+        )
+        .unwrap()
+        .is_none());
         let staged = ParsedPdf::open(Arc::new(flattened.clone()))
             .unwrap()
             .render_page(1, 1.0)
@@ -1211,6 +1251,17 @@ mod tests {
         let mut rotated = Vec::new();
         inherited_rotation.save_to(&mut rotated).unwrap();
         assert!(flatten_native_free_text_appearance(&rotated, 1).is_err());
+        assert!(crate::native_text_scene::render_white_page_text_box(
+            &rotated,
+            0,
+            &base.rgba,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &mark,
+        )
+        .unwrap()
+        .is_none());
         let mut unsupported_appearance = Document::load_mem(&saved).unwrap();
         let page_id = *unsupported_appearance.get_pages().get(&1).unwrap();
         let annotation_id = unsupported_appearance
@@ -1244,6 +1295,102 @@ mod tests {
         let mut unsupported = Vec::new();
         unsupported_appearance.save_to(&mut unsupported).unwrap();
         assert!(flatten_native_free_text_appearance(&unsupported, 1).is_err());
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn native_model_text_samples_match_printable_pdf_when_accepted() {
+        use opds_engine_probe::ParsedPdf;
+
+        let mut blank = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *blank.get_pages().get(&1).unwrap();
+        blank
+            .get_object_mut(page_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .remove(b"Annots");
+        let mut source = Vec::new();
+        blank.save_to(&mut source).unwrap();
+        let base = ParsedPdf::open(Arc::new(source.clone()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let cases = [
+            ("Hello", 16, TextAlign::Left, [0, 0, 0]),
+            ("Café Ω", 16, TextAlign::Center, [0, 80, 240]),
+            ("PDF Test", 12, TextAlign::Right, [255, 0, 0]),
+            ("ЖЖЖ", 20, TextAlign::Center, [0, 128, 0]),
+            ("123456", 24, TextAlign::Left, [75, 0, 130]),
+            ("Open", 32, TextAlign::Right, [0, 0, 0]),
+            ("μμμ", 20, TextAlign::Center, [255, 0, 0]),
+            ("www", 24, TextAlign::Left, [0, 102, 204]),
+            ("ABC", 16, TextAlign::Center, [0, 0, 0]),
+            ("MMMM", 12, TextAlign::Right, [20, 80, 160]),
+            ("iiii", 20, TextAlign::Left, [200, 20, 20]),
+            ("789", 32, TextAlign::Center, [0, 0, 0]),
+            ("ΩΣ", 24, TextAlign::Right, [30, 60, 90]),
+            ("éé", 16, TextAlign::Left, [80, 30, 140]),
+        ];
+        let mut accepted = 0;
+        let mut rejected = Vec::new();
+        for (index, (value, size, align, color_rgb)) in cases.into_iter().enumerate() {
+            let mark = Annotation {
+                id: index as u64 + 1,
+                page: 0,
+                bounds: Rect {
+                    x: 10.0,
+                    y: 28.0,
+                    width: 180.0,
+                    height: 64.0,
+                },
+                kind: Kind::Text {
+                    value: value.into(),
+                    color_rgb,
+                    font_size: size,
+                    align,
+                },
+            };
+            let saved = export_annotations(&source, &[mark.clone()]).unwrap();
+            let hayro = ParsedPdf::open(Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            if let Err(error) = crate::native_text_scene::stage_native_text_box_scene(&mark) {
+                rejected.push((value, error));
+            }
+            if let Some(dynlex) = crate::native_text_scene::render_white_page_text_box(
+                &source,
+                0,
+                &base.rgba,
+                base.width,
+                base.height,
+                (base.page_width_pt, base.page_height_pt),
+                &mark,
+            )
+            .unwrap()
+            {
+                let differences: Vec<_> = dynlex
+                    .iter()
+                    .zip(&hayro.rgba)
+                    .enumerate()
+                    .filter_map(|(at, (actual, expected))| {
+                        (actual != expected).then_some((at, *actual, *expected))
+                    })
+                    .collect();
+                assert!(
+                    differences.is_empty(),
+                    "model text differs for {value:?}: {} bytes, first {:?}",
+                    differences.len(),
+                    &differences[..differences.len().min(16)]
+                );
+                accepted += 1;
+            }
+        }
+        assert!(
+            accepted >= 8,
+            "too few text cases reached DynLex: {accepted}, rejected {rejected:?}"
+        );
     }
 
     #[test]

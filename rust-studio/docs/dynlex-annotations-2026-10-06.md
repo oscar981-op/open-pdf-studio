@@ -117,11 +117,29 @@ meegebouwd, zonder extern renderproces in deze API.
 
 Dit bewijst één geïsoleerde Unicode-tekstfixture, **niet** de gehele Text
 Box in de normale DynLex-app. De glyphkernel is nu in de backend aanwezig,
-maar de app levert nog geen live OPGS-scene aan en de uitvoer is één
-256×192-tegel op wit. Clipping, meerdere regels, andere glyphcontouren, rotatie,
-onderliggende paginakleur en editinteracties vereisen aparte pariteitstests
-en een begrensde in-process integratie. Daarom blijft Text Box in de app
-voorlopig bij de bestaande fallback.
+en de opt-in app kan nu één niet-geselecteerde native Text Box **rechtstreeks
+uit het actuele annotatiemodel** naar OPGS stagen. De begrensde route gebruikt
+dezelfde Liberation Sans-fontbytes en tekstafbreking als Save As; alleen één
+regel met 2–32 ondersteunde glyphs die zonder clipping in een 256×192-tegel
+past, gehele paginacoördinaten, 100% zoom en een volledig witte bronpagina
+zonder bestaande `/Annots` worden geaccepteerd. De Rust-route controleert
+expliciet dat de bronpagina een bij de bitmap passende MediaBox vanaf nul
+heeft en geen directe of geërfde Rotate/CropBox/UserUnit. De DynLex-kernel schrijft de glyphtegel in-process;
+de app kopieert het zichtbare deel in de witte paginabitmap en houdt de
+Iced-laag voor selectie, grepen en inline bewerking. Een 200×300-pagina met
+een gecentreerde blauwe `ΩΩΩ`-Text Box is over de **hele pagina** RGBA-
+bytegelijk aan de echte Save As-/AP-uitvoer in Hayro. De aanvullende proef
+vergelijkt veertien echte Save As-PDF's met uiteenlopende letters, Unicode,
+groottes, kleuren en uitlijningen; ieder door de begrensde route geaccepteerd
+geval is bytegelijk. Glyphs met uitsluitend rechte contouren gebruiken dezelfde
+1000-unit pure-Rust fontuitlezing als Hayro: de ruwe TrueType-coördinaten
+gaven bij `Hello` nog 33 afwijkende kleurbytes en zijn daarom niet gebruikt.
+Een gekleurde onderlaag,
+meerregelige invoer, ontbrekende glyph of een vorm buiten de tegel valt
+terug zonder gedeeltelijke DynLex-bitmap. De opgeslagen scènebytes en de
+modelscène verschillen op lage floatbits, maar hun gerenderde pixels zijn
+gelijk. Niet-ondersteunde glyphcontouren, rotatie/CropBox, clipping en gemengde lagen
+vereisen verdere pariteitstests; dit is nog geen volledige Text Box-dekking.
 
 Gerichte reproductie vanuit `rust-studio`:
 
