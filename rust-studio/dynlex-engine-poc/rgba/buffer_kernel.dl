@@ -1,7 +1,7 @@
 import renderer.dl
 
 # Trusted POC buffer entry point. The Rust caller must validate the complete
-# OPDL-v2/v3 scene and reserve 12 control bytes before the RGBA output.
+# OPDL-v2/v3/v5 scene and reserve 12 control bytes before the RGBA output.
 function render {cstring:scene} into {cstring:rgba}:
     execute:
         set mode to unsigned word at 0 in rgba
@@ -20,7 +20,7 @@ function render {cstring:scene} into {cstring:rgba}:
         set command_count to unsigned word at count_offset in scene
         set command_start to count_offset + 4
         set image_start to command_start + command_count * 24
-        if mode = 2 or version = 3:
+        if mode = 2 or version >= 3:
             discard @intrinsic("call", "libc", "memset", a pointer to a byte, pixels, 255, width * height * 4)
         else:
             set y to 0
@@ -72,7 +72,7 @@ function render {cstring:scene} into {cstring:rgba}:
                     loop while draw_x < stop_x:
                         set hit to 0
                         set effective_opacity to opacity
-                        if version = 3 and kind = 6:
+                        if version >= 3 and kind = 6:
                             set source_offset to unsigned word at (offset + 20) in scene
                             set source_row to draw_y - top
                             # DynLex 0.0.1 miscompiles draw_x - left as draw_x - draw_x.
@@ -92,6 +92,20 @@ function render {cstring:scene} into {cstring:rgba}:
                             store (source_red as a byte) into pixels at pixel_index
                             store (source_green as a byte) into pixels at (pixel_index + 1)
                             store (source_blue as a byte) into pixels at (pixel_index + 2)
+                        if version = 5 and kind = 7:
+                            set source_offset to unsigned word at (offset + 20) in scene
+                            set source_row to draw_y - top
+                            set image_left to unsigned word at (offset + 4) in scene
+                            set source_column to draw_x - image_left
+                            set source_width to right - left
+                            set source_pixel to source_row * source_width + source_column
+                            set source_index to image_start + source_offset + source_pixel * 4
+                            set source_alpha to unsigned byte at (source_index + 3) in scene
+                            if source_alpha = 255:
+                                set pixel_index to (draw_y * width + draw_x) * 4
+                                store ((unsigned byte at source_index in scene) as a byte) into pixels at pixel_index
+                                store ((unsigned byte at (source_index + 1) in scene) as a byte) into pixels at (pixel_index + 1)
+                                store ((unsigned byte at (source_index + 2) in scene) as a byte) into pixels at (pixel_index + 2)
                         if kind = 1 or kind = 3:
                             set hit to 1
                         if kind = 2:

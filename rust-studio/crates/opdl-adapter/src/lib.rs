@@ -731,6 +731,7 @@ fn image_bytes<'a>(
     placed_width: u32,
     placed_height: u32,
     allow_scaling: bool,
+    force_catmull: bool,
 ) -> Result<std::borrow::Cow<'a, [u8]>, Box<dyn Error>> {
     if name.is_empty() || name.len() > 127 {
         return Err(fail("image resource name is outside the bounded subset"));
@@ -843,7 +844,7 @@ fn image_bytes<'a>(
     }
     let target_len = placed_width as usize * placed_height as usize * 3;
     let mut output = vec![0; target_len];
-    if source_width > placed_width || source_height > placed_height {
+    if force_catmull || source_width > placed_width || source_height > placed_height {
         use pic_scale::{ImageSize, ImageStore, ImageStoreMut, ResamplingFunction, Scaler};
         let source = ImageStore::<u8, 3>::from_slice(
             &pixels,
@@ -970,6 +971,21 @@ fn image_to_display(
     crop: [u32; 4],
     turn: u32,
 ) -> Result<([u32; 4], Vec<u8>), Box<dyn Error>> {
+    image_to_display_channels(pixels, [x, y, placed_width, placed_height], crop, turn, 3)
+}
+
+fn image_to_display_channels(
+    pixels: &[u8],
+    [x, y, placed_width, placed_height]: [u32; 4],
+    crop: [u32; 4],
+    turn: u32,
+    channels: usize,
+) -> Result<([u32; 4], Vec<u8>), Box<dyn Error>> {
+    if !matches!(channels, 3 | 4)
+        || pixels.len() != placed_width as usize * placed_height as usize * channels
+    {
+        return Err(fail("invalid RGB image patch length"));
+    }
     let right = x
         .checked_add(placed_width)
         .ok_or_else(|| fail("image overflow"))?;
@@ -997,7 +1013,7 @@ fn image_to_display(
     )?;
     let output_width = (rect[2] - rect[0]) as usize;
     let output_height = (rect[3] - rect[1]) as usize;
-    let mut output = vec![0; output_width * output_height * 3];
+    let mut output = vec![0; output_width * output_height * channels];
     let source_left = visible[0] - x;
     let source_top = top - visible[3];
     for out_y in 0..output_height {
@@ -1015,12 +1031,100 @@ fn image_to_display(
             let source = ((source_top as usize + in_y) * placed_width as usize
                 + source_left as usize
                 + in_x)
-                * 3;
-            let target = (out_y * output_width + out_x) * 3;
-            output[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+                * channels;
+            let target = (out_y * output_width + out_x) * channels;
+            output[target..target + channels].copy_from_slice(&pixels[source..source + channels]);
         }
     }
     Ok((rect, output))
+}
+
+fn image_source_dimensions(
+    document: &Document,
+    resources: &lopdf::Dictionary,
+    name: &[u8],
+) -> Result<[u32; 2], Box<dyn Error>> {
+    let (_, xobjects) = document.dereference(resources.get(b"XObject")?)?;
+    let (_, object) = document.dereference(xobjects.as_dict()?.get(name)?)?;
+    let dict = &object.as_stream()?.dict;
+    Ok([
+        u32::try_from(dict.get(b"Width")?.as_i64()?)?,
+        u32::try_from(dict.get(b"Height")?.as_i64()?)?,
+    ])
+}
+
+fn fractional_image_to_display(
+    pixels: &[u8],
+    raster_size: [u32; 2],
+    placement: [f64; 4],
+    media: [u32; 4],
+    crop: [u32; 4],
+    turn: u32,
+) -> Result<([u32; 4], Vec<u8>), Box<dyn Error>> {
+    let [x, y, width, height] = placement;
+    if [x, y, width, height].iter().any(|value| !value.is_finite())
+        || x < 0.0
+        || y < 0.0
+        || width <= 0.0
+        || height <= 0.0
+        || x + width > f64::from(media[2])
+        || y + height > f64::from(media[3])
+    {
+        return Err(fail("fractional image placement outside page"));
+    }
+    let bbox = [
+        x.floor() as u32,
+        y.floor() as u32,
+        (x + width).ceil() as u32,
+        (y + height).ceil() as u32,
+    ];
+    let patch_width = bbox[2] - bbox[0];
+    let patch_height = bbox[3] - bbox[1];
+    if patch_width == 0
+        || patch_height == 0
+        || patch_width
+            .checked_mul(patch_height)
+            .is_none_or(|n| n > 6_000_000)
+        || pixels.len() != raster_size[0] as usize * raster_size[1] as usize * 3
+    {
+        return Err(fail("invalid fractional RGB patch size"));
+    }
+    // Hayro/Vello thresholds the image rectangle's 8-bit area coverage at 1.
+    // A covered pixel is fully opaque; a tiny corner under half an 8-bit step
+    // is transparent, preserving earlier layers below the image.
+    let mut patch = vec![0; patch_width as usize * patch_height as usize * 4];
+    for row in 0..patch_height as usize {
+        let page_y = f64::from(bbox[3]) - row as f64 - 0.5;
+        let pixel_bottom = f64::from(bbox[3]) - row as f64 - 1.0;
+        let overlap_y =
+            ((y + height).min(pixel_bottom + 1.0) - y.max(pixel_bottom)).clamp(0.0, 1.0);
+        let sample_y = ((y + height - page_y) * f64::from(raster_size[1]) / height)
+            .floor()
+            .clamp(0.0, f64::from(raster_size[1] - 1)) as usize;
+        for column in 0..patch_width as usize {
+            let page_x = f64::from(bbox[0]) + column as f64 + 0.5;
+            let pixel_left = f64::from(bbox[0]) + column as f64;
+            let overlap_x = ((x + width).min(pixel_left + 1.0) - x.max(pixel_left)).clamp(0.0, 1.0);
+            let sample_x = ((page_x - x) * f64::from(raster_size[0]) / width)
+                .floor()
+                .clamp(0.0, f64::from(raster_size[0] - 1)) as usize;
+            let source = (sample_y * raster_size[0] as usize + sample_x) * 3;
+            let target = (row * patch_width as usize + column) * 4;
+            patch[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+            patch[target + 3] = if overlap_x * overlap_y * 255.0 + 0.5 >= 1.0 {
+                255
+            } else {
+                0
+            };
+        }
+    }
+    image_to_display_channels(
+        &patch,
+        [bbox[0], bbox[1], patch_width, patch_height],
+        crop,
+        turn,
+        4,
+    )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1320,6 +1424,7 @@ fn page_to_opdl_bytes_internal(
     let mut pending_path: Option<PathStage> = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
     let mut ordered_image_bytes = Vec::new();
+    let mut has_fractional_image = false;
     let started = Instant::now();
     for op in &content.operations {
         match op.operator.as_str() {
@@ -1424,31 +1529,73 @@ fn page_to_opdl_bytes_internal(
                 let [name] = op.operands.as_slice() else {
                     return Err(fail("Do requires one name"));
                 };
-                let [x, y, placed_width, placed_height] = if ordered_images {
-                    ctm.pixel_rect([0.0, 0.0, 1.0, 1.0], coordinate_limit)?
-                } else {
-                    image_placement.ok_or_else(|| fail("image placement is missing"))?
-                };
-                if placed_width == 0
-                    || placed_height == 0
-                    || x.checked_add(placed_width)
-                        .is_none_or(|right| right > media[2])
-                    || y.checked_add(placed_height)
-                        .is_none_or(|top| top > media[3])
-                {
-                    return Err(fail("RGB image placement is outside the page"));
-                }
-                let pixels = image_bytes(
-                    &document,
-                    resources,
-                    name.as_name()?,
-                    placed_width,
-                    placed_height,
-                    ordered_images,
-                )?;
                 if ordered_images {
-                    let (rect, display_pixels) =
-                        image_to_display(&pixels, [x, y, placed_width, placed_height], crop, turn)?;
+                    if clip.is_some() {
+                        return Err(fail("clipped image requires image coverage masking"));
+                    }
+                    let name = name.as_name()?;
+                    let (kind, rect, display_pixels) =
+                        if let Ok([x, y, placed_width, placed_height]) =
+                            ctm.pixel_rect([0.0, 0.0, 1.0, 1.0], coordinate_limit)
+                        {
+                            if x.checked_add(placed_width)
+                                .is_none_or(|right| right > media[2])
+                                || y.checked_add(placed_height)
+                                    .is_none_or(|top| top > media[3])
+                            {
+                                return Err(fail("RGB image placement is outside the page"));
+                            }
+                            let pixels = image_bytes(
+                                &document,
+                                resources,
+                                name,
+                                placed_width,
+                                placed_height,
+                                true,
+                                false,
+                            )?;
+                            let (rect, display_pixels) = image_to_display(
+                                &pixels,
+                                [x, y, placed_width, placed_height],
+                                crop,
+                                turn,
+                            )?;
+                            (6, rect, display_pixels)
+                        } else {
+                            let [source_width, source_height] =
+                                image_source_dimensions(&document, resources, name)?;
+                            let needs_resize = ctm.sx < f64::from(source_width)
+                                || ctm.sy < f64::from(source_height);
+                            let raster_width = if needs_resize {
+                                ctm.sx.ceil() as u32
+                            } else {
+                                source_width
+                            };
+                            let raster_height = if needs_resize {
+                                ctm.sy.ceil() as u32
+                            } else {
+                                source_height
+                            };
+                            let pixels = image_bytes(
+                                &document,
+                                resources,
+                                name,
+                                raster_width,
+                                raster_height,
+                                true,
+                                needs_resize,
+                            )?;
+                            let (rect, display_pixels) = fractional_image_to_display(
+                                &pixels,
+                                [raster_width, raster_height],
+                                [ctm.tx, ctm.ty, ctm.sx, ctm.sy],
+                                media,
+                                crop,
+                                turn,
+                            )?;
+                            has_fractional_image = true;
+                            (7, rect, display_pixels)
+                        };
                     if ordered_image_bytes
                         .len()
                         .saturating_add(display_pixels.len())
@@ -1457,29 +1604,42 @@ fn page_to_opdl_bytes_internal(
                         return Err(fail("ordered image data exceeds scene byte limit"));
                     }
                     let offset = u32::try_from(ordered_image_bytes.len())?;
-                    commands.push((6, rect, offset.to_le_bytes()));
+                    commands.push((kind, rect, offset.to_le_bytes()));
                     if commands.len() > MAX_COMMANDS {
                         return Err(fail("too many commands"));
                     }
                     ordered_image_bytes.extend_from_slice(&display_pixels);
-                } else if image_count == 0
-                    && [x, y, placed_width, placed_height] == [0, 0, width, height]
-                {
-                    image = Some(pixels);
                 } else {
-                    let mut page_rgb = image
-                        .take()
-                        .map(std::borrow::Cow::into_owned)
-                        .unwrap_or_else(|| vec![255_u8; width as usize * height as usize * 3]);
-                    let row_bytes = placed_width as usize * 3;
-                    let top = height - y - placed_height;
-                    for row in 0..placed_height as usize {
-                        let source = row * row_bytes;
-                        let target = ((top as usize + row) * width as usize + x as usize) * 3;
-                        page_rgb[target..target + row_bytes]
-                            .copy_from_slice(&pixels[source..source + row_bytes]);
+                    let [x, y, placed_width, placed_height] =
+                        image_placement.ok_or_else(|| fail("image placement is missing"))?;
+                    let pixels = image_bytes(
+                        &document,
+                        resources,
+                        name.as_name()?,
+                        placed_width,
+                        placed_height,
+                        false,
+                        false,
+                    )?;
+                    if image_count == 0
+                        && [x, y, placed_width, placed_height] == [0, 0, width, height]
+                    {
+                        image = Some(pixels);
+                    } else {
+                        let mut page_rgb = image
+                            .take()
+                            .map(std::borrow::Cow::into_owned)
+                            .unwrap_or_else(|| vec![255_u8; width as usize * height as usize * 3]);
+                        let row_bytes = placed_width as usize * 3;
+                        let top = height - y - placed_height;
+                        for row in 0..placed_height as usize {
+                            let source = row * row_bytes;
+                            let target = ((top as usize + row) * width as usize + x as usize) * 3;
+                            page_rgb[target..target + row_bytes]
+                                .copy_from_slice(&pixels[source..source + row_bytes]);
+                        }
+                        image = Some(std::borrow::Cow::Owned(page_rgb));
                     }
-                    image = Some(std::borrow::Cow::Owned(page_rgb));
                 }
                 image_count += 1;
                 image_drawn = true;
@@ -1727,7 +1887,15 @@ fn page_to_opdl_bytes_internal(
         Vec::with_capacity(40 + base_image.len() + commands.len() * 24 + ordered_image_bytes.len());
     output.extend_from_slice(b"OPDL");
     for value in [
-        if ordered_images { 3 } else { 2 },
+        if ordered_images {
+            if has_fractional_image {
+                5
+            } else {
+                3
+            }
+        } else {
+            2
+        },
         width,
         height,
         0,

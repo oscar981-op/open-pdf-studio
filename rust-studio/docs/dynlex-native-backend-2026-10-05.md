@@ -113,7 +113,8 @@ als FlateDecode, worden
 in de native backend op 256×192 pixel voor pixel met Hayro vergeleken.
 Vier extra PDF's plaatsen een 64×48-beeld op (31,27) binnen die pagina:
 raster/hybride, raw/Flate, telkens RGBA-bytegelijk aan Hayro. Een plaatsing
-buiten de pagina of op een fractionele positie valt terug op Hayro.
+buiten de pagina valt terug op Hayro; fractionele asgerichte plaatsing is
+inmiddels als afzonderlijke OPDL-v5-route getest, zie hieronder.
 Vier andere PDF's overlappen een tweede
 72×56-beeld met het eerste, weer in raster/hybride en raw/Flate, telkens
 RGBA-bytegelijk aan Hayro. Twee extra PDF's plaatsen de eerste of tweede
@@ -165,10 +166,50 @@ fills; kleur, lijnkleur, lijnbreedtestatus en clip worden bij `Q` hersteld.
 Vier aanvullende PDF-fixtures met een globale `0.1 0 0 0.1 0 0 cm`, lokale
 beeldmatrix, vectoroverlay en herstel van matrix/kleur zijn bytegelijk aan
 Hayro. Een scheve of omgekeerde matrix, plaatsing buiten de paginalimiet en
-een subpixel-plaatsing worden geweigerd. Dit is nog geen algemene affiene
-beeldrasterisatie: de echte combinatie-PDF gebruikt onder andere effectieve
-breedtes van circa 922,44 px en fractionele posities; ook na deze stap valt
-die complete pagina op Hayro terug.
+een niet-ondersteunde CTM worden geweigerd. Dit is nog geen algemene affiene
+beeldrasterisatie: ook na deze stap valt de complete echte combinatie-PDF op
+Hayro terug.
+
+Fractionele asgerichte beeldplaatsing heeft nu een afzonderlijke geordende
+OPDL-v5-scene. Rust bereidt het RGB-beeld voor met dezelfde begrensde
+Catmull–Rom-verkleining of dichtstbijzijnde-bronpixelvergroting als de
+pixeluitgelijnde route. Voor de fractionele rand maakt Rust een RGBA-patch:
+de alfawaarde is uitsluitend 0 of 255 volgens de door Hayro/Vello gebruikte
+1/255-dekkingsdrempel. DynLex tekent opdracht `kind=7` alleen waar de
+gevalideerde alfawaarde 255 is. De Rust-FFI-grens controleert versie 5,
+opdrachtsoort, afbeeldingsgrenzen, aaneengesloten byte-offsets, exacte
+RGB(A)-lengtes en uitsluitend binaire alpha vóór de kernel. De bestaande
+experimentele OPDL-v4-strokelijst heeft een ander contract en blijft
+ongewijzigd. Volledige PDF-transparantie of een `/SMask` is hiermee niet
+ondersteund.
+
+Elf gecontroleerde PDF's testen vergroting, verkleining, gemengde schaal,
+laagvolgorde, RGB- en RGBA-opdrachten in één scene en `/Rotate 0/90/180/270`
+met verschoven CropBox. Een synthetische 3843×68-Predictor-15-beeldstrook op
+een A2-achtige pagina gebruikt geometrie van de echte combinatie-PDF; de
+DynLex-uitvoer is op deze fixtures bytegelijk aan Hayro. Een deterministische
+differentiële proef vergelijkt daarnaast 200 fractionele plaatsingen van een
+4×4-kleurenraster op 256×192: 200/200 volledig RGBA-gelijk. Herhaal met:
+
+```sh
+python3 dynlex-engine-poc/rgba/fractional_image_verify.py \
+  --probe target/release/backend_probe --cases 200 --seed 20261005
+```
+
+Een actief clipvak, `/Interpolate true`, scheve of omgekeerde beeldmatrix en
+andere onbewezen PDF-states blijven op Hayro terugvallen. De echte
+combinatie-PDF bevat bovendien duizenden curven, clippaden en Indexed-
+kleurenbeelden; deze proef bewijst geen volledige objectdekking.
+
+Op de gecontroleerde fractionele 3843×68-strook (15 afwisselende warme
+procesparen) waren DynLex/Hayro mediane wandtijd 58,99/79,20 ms en mediane
+piek-RSS 20.100/23.232 KiB; DynLex won 15/15 paren. De volledige
+8.022.576-byte RGBA-uitvoer was in ieder paar bytegelijk. De benchmark meet
+PDF-parsing, beeldvoorbereiding, processtart, renderen en raw-bestandsschrijven
+met warme OS-cache. Ruwe samples staan in
+`dynlex-engine-poc/rgba/native-fractional-strip-bench-2026-10-05.json`.
+Dit is geen meting van de volledige echte combinatie-PDF of van andere
+PDF-objecten.
 
 De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
 `rust-studio`:

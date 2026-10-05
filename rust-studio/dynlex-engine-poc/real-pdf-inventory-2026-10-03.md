@@ -28,11 +28,13 @@ cargo run --release -p opds-opdl-adapter --bin inspect_pdf -- \
 vond 38 image-XObjects: 36 DeviceRGB8/FlateDecode-stroken met PNG-predictor
 15 (meestal 3843×68, laatste 3843×25), plus twee Indexed/DeviceRGB-beelden.
 De content begint met `0.1 0 0 0.1 0 0 cm`; daarop volgen fractionele
-beeldtransformaties. De native DynLex-route ondersteunt nu Predictor 15 voor
-een beperkte RGB8-subset en kan geneste positieve asgerichte CTM's
-samenstellen wanneer beeldhoeken exact op pixelgrenzen liggen. De echte
-stroken hebben fractionele hoeken; ook curven, clippaden en Indexed-kleuren
-zijn nog niet ondersteund. Reproduceer de metadata met
+beeldtransformaties. De native DynLex-route ondersteunt Predictor 15 voor
+een beperkte RGB8-subset, geneste positieve asgerichte CTM's en inmiddels
+fractionele beeldhoeken met een per-pixel binair dekkingsmasker. Een
+gecontroleerde 3843×68-strook met op deze PDF gebaseerde geometrie is
+pixelgelijk aan Hayro; de oorspronkelijke pagina is daarmee nog niet
+ondersteund: duizenden curven, clippaden en Indexed-kleuren ontbreken.
+Reproduceer de metadata met
 `inspect_pdf --image-ops` en bekijk de eerste beeldopdracht met
 `inspect_pdf --around 4855` op dit bestand. De naam alleen bewijst geen
 precieze raster-/vectorverdeling.

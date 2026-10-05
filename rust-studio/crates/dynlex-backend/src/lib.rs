@@ -291,15 +291,15 @@ fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
     Ok((scene, width, height))
 }
 
-/// OPDL-v3 stores images after the fixed-width command table; kind 6 carries a
-/// byte offset into that trailing RGB blob. Offsets must be contiguous, so the
+/// OPDL-v3/v4 stores images after the fixed-width command table; kinds 6/7 carry
+/// byte offsets into the trailing RGB/binary-alpha blobs. Offsets are contiguous, so the
 /// DynLex kernel cannot read unvalidated gaps, aliases or truncated images.
 #[cfg(feature = "kernel")]
 fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
     if scene.len() < 40
         || scene.len() > 3_538_984
         || scene.get(..4) != Some(b"OPDL")
-        || word(&scene, 4)? != 3
+        || !matches!(word(&scene, 4)?, 3 | 5)
         || word(&scene, 32)? != 0
     {
         return Err("invalid ordered OPDL header".into());
@@ -323,6 +323,7 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
         return Err("invalid ordered OPDL page".into());
     }
     let count = usize::try_from(word(&scene, 36)?).map_err(|e| e.to_string())?;
+    let version = word(&scene, 4)?;
     let image_start = count
         .checked_mul(24)
         .and_then(|n| 40_usize.checked_add(n))
@@ -352,17 +353,36 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
                     return Err("invalid ordered vector command".into());
                 }
             }
-            6 => {
+            6 | 7 => {
+                if kind == 7 && version != 5 {
+                    return Err("binary-alpha image requires ordered OPDL-v5".into());
+                }
                 images += 1;
                 let offset = usize::try_from(word(&scene, at + 20)?).map_err(|e| e.to_string())?;
                 if images > 256 || offset != image_bytes {
                     return Err("invalid ordered image offset or count".into());
                 }
-                image_bytes = (rect[2] - rect[0])
+                let length = (rect[2] - rect[0])
                     .checked_mul(rect[3] - rect[1])
-                    .and_then(|n| n.checked_mul(3))
+                    .and_then(|n| n.checked_mul(if kind == 7 { 4 } else { 3 }))
                     .and_then(|n| usize::try_from(n).ok())
-                    .and_then(|n| image_bytes.checked_add(n))
+                    .ok_or("ordered image size overflow")?;
+                let start = image_start
+                    .checked_add(offset)
+                    .ok_or("ordered image size overflow")?;
+                let end = start
+                    .checked_add(length)
+                    .ok_or("ordered image size overflow")?;
+                let bytes = scene.get(start..end).ok_or("truncated ordered image")?;
+                if kind == 7
+                    && bytes
+                        .chunks_exact(4)
+                        .any(|pixel| !matches!(pixel[3], 0 | 255))
+                {
+                    return Err("unsupported ordered image alpha".into());
+                }
+                image_bytes = image_bytes
+                    .checked_add(length)
                     .ok_or("ordered image size overflow")?;
             }
             _ => return Err("unsupported ordered command".into()),
@@ -712,11 +732,80 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
-    fn unproven_composed_ctms_fall_back() {
+    fn fractional_axis_images_match_hayro() {
+        for (name, bytes) in [
+            (
+                "upscale grid",
+                include_bytes!("../tests/fixtures/fractional-grid-up.pdf").as_slice(),
+            ),
+            (
+                "downscale grid",
+                include_bytes!("../tests/fixtures/fractional-grid-down.pdf").as_slice(),
+            ),
+            (
+                "prior vector",
+                include_bytes!("../tests/fixtures/fractional-over-blue.pdf").as_slice(),
+            ),
+            (
+                "real-style predictor strip",
+                include_bytes!("../tests/fixtures/fractional-real-style-strip.pdf").as_slice(),
+            ),
+            (
+                "crop 0",
+                include_bytes!("../tests/fixtures/fractional-crop-rotate-0.pdf").as_slice(),
+            ),
+            (
+                "crop 90",
+                include_bytes!("../tests/fixtures/fractional-crop-rotate-90.pdf").as_slice(),
+            ),
+            (
+                "crop 180",
+                include_bytes!("../tests/fixtures/fractional-crop-rotate-180.pdf").as_slice(),
+            ),
+            (
+                "crop 270",
+                include_bytes!("../tests/fixtures/fractional-crop-rotate-270.pdf").as_slice(),
+            ),
+            (
+                "mixed scale",
+                include_bytes!("../tests/fixtures/fractional-mixed-scale.pdf").as_slice(),
+            ),
+            (
+                "layer order",
+                include_bytes!("../tests/fixtures/fractional-layered.pdf").as_slice(),
+            ),
+            (
+                "mixed image records",
+                include_bytes!("../tests/fixtures/fractional-mixed-image-records.pdf").as_slice(),
+            ),
+        ] {
+            let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+            let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(rendered.used, Backend::Dynlex, "{name}");
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            assert_eq!(rendered.raster.rgba, expected.rgba, "{name}");
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn unproven_fractional_image_states_fall_back() {
+        for bytes in [
+            include_bytes!("../tests/fixtures/fractional-clipped-unsupported.pdf").as_slice(),
+            include_bytes!("../tests/fixtures/fractional-interpolate-unsupported.pdf").as_slice(),
+        ] {
+            assert!(page_to_opdl_ordered_bytes(bytes).is_err());
+            assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn unsupported_composed_ctms_fall_back() {
         let original = include_bytes!("../tests/fixtures/global-ctm-raster.pdf");
         for (old, new) in [
             (b"0.1 0 0 0.1".as_slice(), b"0.1 1 0 0.1".as_slice()),
-            (b"300 200 cm".as_slice(), b"301 200 cm".as_slice()),
+            (b"0.1 0 0 0.1".as_slice(), b"0.0 0 0 0.1".as_slice()),
             (b"0.1 0 0 0.1".as_slice(), b"9.9 0 0 0.1".as_slice()),
         ] {
             let mut bytes = original.to_vec();
@@ -847,6 +936,26 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
+    fn binary_alpha_scene_boundary_rejects_corruption() {
+        let bytes = include_bytes!("../tests/fixtures/fractional-grid-up.pdf");
+        let scene = page_to_opdl_ordered_bytes(bytes).unwrap();
+        assert_eq!(word(&scene, 4).unwrap(), 5);
+        assert_eq!(word(&scene, 40).unwrap(), 7);
+        assert!(validated_ordered_scene(scene.clone()).is_ok());
+        let mut wrong_version = scene.clone();
+        wrong_version[4..8].copy_from_slice(&3_u32.to_le_bytes());
+        assert!(validated_ordered_scene(wrong_version).is_err());
+        let mut invalid_alpha = scene.clone();
+        let image_start = 40 + word(&scene, 36).unwrap() as usize * 24;
+        invalid_alpha[image_start + 3] = 128;
+        assert!(validated_ordered_scene(invalid_alpha).is_err());
+        let mut truncated = scene;
+        truncated.pop();
+        assert!(validated_ordered_scene(truncated).is_err());
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
     fn inherited_rotation_works_and_unsupported_image_states_fall_back() {
         let rotated = include_bytes!("../tests/fixtures/full-page-inherited-rotate.pdf").to_vec();
         assert!(try_render(&rotated, 1, 1.0).unwrap().is_some());
@@ -866,6 +975,9 @@ mod tests {
         let outside = include_bytes!("../tests/fixtures/placed-raster-outside.pdf");
         assert!(try_render(outside, 1, 1.0).unwrap().is_none());
         let fractional = include_bytes!("../tests/fixtures/placed-raster-fractional.pdf");
-        assert!(try_render(fractional, 1, 1.0).unwrap().is_none());
+        let pdf = ParsedPdf::open(Arc::new(fractional.to_vec())).unwrap();
+        let result = render_with_report(&pdf, fractional, 1, 1.0, Backend::Dynlex).unwrap();
+        assert_eq!(result.used, Backend::Dynlex);
+        assert_eq!(result.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
     }
 }

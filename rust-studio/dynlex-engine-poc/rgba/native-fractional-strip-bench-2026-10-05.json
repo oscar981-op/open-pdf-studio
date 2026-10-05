@@ -1,0 +1,204 @@
+{
+  "pdf": "crates/dynlex-backend/tests/fixtures/fractional-real-style-strip.pdf",
+  "probe": "target/release/backend_probe",
+  "runs": 15,
+  "cache": "warm process and OS cache; cache was not cleared",
+  "includes": "PDF parse, render, raw RGBA file write and process startup",
+  "samples": {
+    "dynlex": [
+      {
+        "wall_ms": 58.546174,
+        "peak_rss_kib": 20128,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 57.471296,
+        "peak_rss_kib": 20124,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 60.81381,
+        "peak_rss_kib": 20156,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 57.927573,
+        "peak_rss_kib": 20084,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 60.82681,
+        "peak_rss_kib": 20100,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 61.876247,
+        "peak_rss_kib": 20096,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 63.007215,
+        "peak_rss_kib": 20060,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 79.386649,
+        "peak_rss_kib": 19956,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 58.238899,
+        "peak_rss_kib": 20088,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 59.990147,
+        "peak_rss_kib": 20100,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 58.99474,
+        "peak_rss_kib": 20160,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 57.75877,
+        "peak_rss_kib": 20100,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 59.021381,
+        "peak_rss_kib": 20072,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 58.261029,
+        "peak_rss_kib": 20068,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 57.969614,
+        "peak_rss_kib": 20124,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      }
+    ],
+    "hayro": [
+      {
+        "wall_ms": 85.545648,
+        "peak_rss_kib": 23460,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 79.910147,
+        "peak_rss_kib": 23256,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 79.526682,
+        "peak_rss_kib": 23448,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 75.798241,
+        "peak_rss_kib": 23228,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 79.478981,
+        "peak_rss_kib": 23112,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 75.759131,
+        "peak_rss_kib": 23520,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 79.202756,
+        "peak_rss_kib": 23184,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 81.060486,
+        "peak_rss_kib": 23228,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 72.919735,
+        "peak_rss_kib": 23292,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 77.398857,
+        "peak_rss_kib": 23356,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 74.709903,
+        "peak_rss_kib": 23232,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 77.843614,
+        "peak_rss_kib": 23140,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 91.87409,
+        "peak_rss_kib": 23224,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 84.722735,
+        "peak_rss_kib": 23452,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      },
+      {
+        "wall_ms": 76.540534,
+        "peak_rss_kib": 23224,
+        "sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c",
+        "bytes": 8022576
+      }
+    ]
+  },
+  "median_wall_ms": {
+    "dynlex": 58.99474,
+    "hayro": 79.202756
+  },
+  "median_peak_rss_kib": {
+    "dynlex": 20100,
+    "hayro": 23232
+  },
+  "median_paired_dynlex_minus_hayro_ms": -18.570919999999994,
+  "dynlex_wins": 15,
+  "rgba_sha256": "f1b42e0200f16c6d09a45b40eb4f527b0cddd909e6c0c848e69cd32fdc867a5c"
+}
