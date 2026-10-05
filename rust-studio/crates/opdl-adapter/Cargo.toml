@@ -9,3 +9,4 @@ publish.workspace = true
 lopdf = { version = "=0.34.0", default-features = false, features = ["nom_parser"] }
 miniz_oxide = "=0.8.9"
 pic-scale = { version = "=0.7.12", default-features = false, features = ["neon", "rdm", "sse", "avx"] }
+ttf-parser = "=0.25.1"

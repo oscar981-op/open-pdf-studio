@@ -2191,6 +2191,7 @@ dependencies = [
  "lopdf",
  "miniz_oxide 0.8.9",
  "pic-scale",
+ "ttf-parser",
 ]
 
 [[package]]
