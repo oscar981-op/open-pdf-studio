@@ -2,7 +2,7 @@
 //! This does not render PDF text or change the normal DynLex adapter.
 #![forbid(unsafe_code)]
 
-use lopdf::{content::Content, Dictionary, Document, Object};
+use lopdf::{content::Content, Dictionary, Document, Object, Stream};
 use std::{
     collections::BTreeMap,
     env,
@@ -98,6 +98,7 @@ struct Font {
     units_per_em: u16,
     widths: Vec<f64>,
     bytes: usize,
+    data: Vec<u8>,
 }
 
 fn cid(value: &Object) -> Result<usize, Box<dyn Error>> {
@@ -220,7 +221,106 @@ fn load_font(document: &Document, font: &Dictionary) -> Result<Font, Box<dyn Err
         units_per_em: face.units_per_em(),
         widths: widths(document, descendant)?,
         bytes: bytes.len(),
+        data: bytes,
     })
+}
+
+#[derive(Default)]
+struct OutlineInventory {
+    moves: usize,
+    lines: usize,
+    quads: usize,
+    cubics: usize,
+    closes: usize,
+    points: Vec<[f64; 2]>,
+}
+
+impl ttf_parser::OutlineBuilder for OutlineInventory {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.moves += 1;
+        self.points.push([f64::from(x), f64::from(y)]);
+    }
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.lines += 1;
+        self.points.push([f64::from(x), f64::from(y)]);
+    }
+    fn quad_to(&mut self, _x1: f32, _y1: f32, _x: f32, _y: f32) {
+        self.quads += 1;
+    }
+    fn curve_to(&mut self, _x1: f32, _y1: f32, _x2: f32, _y2: f32, _x: f32, _y: f32) {
+        self.cubics += 1;
+    }
+    fn close(&mut self) {
+        self.closes += 1;
+    }
+}
+
+// OPLN is a local 256x192 experiment, not a PDF page or a production glyph scene.
+fn simple_glyph_opln(
+    font: &Font,
+    record: &GlyphRecord,
+) -> Result<(Vec<u8>, [f64; 2]), Box<dyn Error>> {
+    let face = ttf_parser::Face::parse(&font.data, 0)?;
+    let mut outline = OutlineInventory::default();
+    face.outline_glyph(ttf_parser::GlyphId(record.gid), &mut outline)
+        .ok_or_else(|| fail("glyph has no outline"))?;
+    if outline.moves != 1
+        || outline.closes != 1
+        || outline.quads != 0
+        || outline.cubics != 0
+        || !(3..=4096).contains(&outline.lines)
+        || outline.points.len() != outline.lines + 1
+    {
+        return Err(fail("glyph is not one bounded line-only contour").into());
+    }
+    let [a, b, c, d, e, f] = record.transform;
+    let mut points: Vec<[f64; 2]> = outline
+        .points
+        .iter()
+        .map(|[x, y]| [a * x + c * y + e, b * x + d * y + f])
+        .collect();
+    let (min_x, max_x) = points
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+            (lo.min(p[0]), hi.max(p[0]))
+        });
+    let (min_y, max_y) = points
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+            (lo.min(p[1]), hi.max(p[1]))
+        });
+    if max_x - min_x > 240.0 || max_y - min_y > 176.0 {
+        return Err(fail("glyph exceeds experimental tile").into());
+    }
+    let dx = 128.0 - (min_x + max_x) / 2.0;
+    let dy = 96.0 - (min_y + max_y) / 2.0;
+    for point in &mut points {
+        point[0] += dx;
+        point[1] += dy;
+    }
+    points.push(points[0]);
+    if points
+        .iter()
+        .flatten()
+        .any(|v| !v.is_finite() || v.abs() > 4096.0)
+    {
+        return Err(fail("glyph point outside OPLN limit").into());
+    }
+    let mut encoded = Vec::with_capacity(20 + points.len() * 16);
+    encoded.extend_from_slice(b"OPLN");
+    for value in [1_u32, 256, 192, u32::try_from(points.len())?] {
+        encoded.extend_from_slice(&value.to_le_bytes());
+    }
+    for point in points {
+        for value in point {
+            encoded.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+    println!(
+        "outline gid={} line_segments={} tile_shift={dx:.6},{dy:.6}",
+        record.gid, outline.lines
+    );
+    Ok((encoded, [dx, dy]))
 }
 
 struct GlyphRecord {
@@ -309,7 +409,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
     let input = args
         .next()
-        .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr] | --validate INPUT.tgr")?;
+        .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr] | --validate INPUT.tgr | --outline INPUT.pdf PAGE RECORD_INDEX OUTPUT.opln")?;
     if input == "--validate" {
         let path = args.next().ok_or("--validate requires a file")?;
         if args.next().is_some() {
@@ -322,17 +422,42 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("TGR1 page={page} glyphs={count}");
         return Ok(());
     }
+    let outline_mode = input == "--outline" || input == "--isolate";
+    let isolate_mode = input == "--isolate";
+    let input = if outline_mode {
+        args.next().ok_or("--outline requires PDF")?
+    } else {
+        input
+    };
     let page_number = args
         .next()
         .ok_or("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr]")?
         .to_string_lossy()
         .parse::<u32>()?;
+    let outline_index = if outline_mode {
+        let index = args.next().ok_or("--outline requires record index")?;
+        Some(if index == "auto" {
+            usize::MAX
+        } else {
+            index.to_string_lossy().parse::<usize>()?
+        })
+    } else {
+        None
+    };
     let output = args.next();
+    let pdf_output = if isolate_mode {
+        Some(args.next().ok_or("--isolate requires output PDF path")?)
+    } else {
+        None
+    };
+    if outline_mode && output.is_none() {
+        return Err("--outline requires output OPLN path".into());
+    }
     if args.next().is_some() {
         return Err("usage: stage_type0_text INPUT.pdf PAGE [OUTPUT.tgr]".into());
     }
     let input = read_bounded(Path::new(&input), MAX_PDF_BYTES)?;
-    let document = Document::load_mem(&input)?;
+    let mut document = Document::load_mem(&input)?;
     let page_id = *document
         .get_pages()
         .get(&page_number)
@@ -517,6 +642,49 @@ fn main() -> Result<(), Box<dyn Error>> {
     if let Some(output) = output {
         if skipped != 0 {
             return Err(fail("cannot export a partial glyph run").into());
+        }
+        if let Some(index) = outline_index {
+            let candidates: Box<dyn Iterator<Item = usize>> = if index == usize::MAX {
+                Box::new(0..records.len())
+            } else {
+                Box::new(std::iter::once(index))
+            };
+            let mut selected = None;
+            for candidate in candidates {
+                let record = records
+                    .get(candidate)
+                    .ok_or_else(|| fail("glyph record index outside run"))?;
+                let font = fonts
+                    .get(&record.font)
+                    .ok_or_else(|| fail("glyph font unavailable"))?;
+                if let Ok((opln, shift)) = simple_glyph_opln(font, record) {
+                    selected = Some((candidate, opln, shift));
+                    break;
+                }
+            }
+            let (index, opln, shift) =
+                selected.ok_or_else(|| fail("no line-only glyph contour in run"))?;
+            std::fs::write(output, opln)?;
+            println!("selected_record={index}");
+            if let Some(pdf_output) = pdf_output {
+                let record = &records[index];
+                let font = &fonts[&record.font];
+                let [a, b, c, d, e, f] = record.transform;
+                let content = format!(
+                    "q 0 g BT /{} {} Tf {:.12} {:.12} {:.12} {:.12} {:.12} {:.12} Tm <{:04X}> Tj ET Q\n",
+                    String::from_utf8_lossy(&record.font), font.units_per_em,
+                    a, -b, c, -d, e + shift[0], 192.0 - f - shift[1], record.cid
+                );
+                let stream_id =
+                    document.add_object(Stream::new(Dictionary::new(), content.into_bytes()));
+                let page = document.get_object_mut(page_id)?.as_dict_mut()?;
+                page.set("Contents", stream_id);
+                page.set("MediaBox", vec![0.into(), 0.into(), 256.into(), 192.into()]);
+                page.set("CropBox", vec![0.into(), 0.into(), 256.into(), 192.into()]);
+                page.set("Rotate", 0);
+                document.save(pdf_output)?;
+            }
+            return Ok(());
         }
         let encoded = encode_records(page_number, &records)?;
         std::fs::write(output, &encoded)?;
