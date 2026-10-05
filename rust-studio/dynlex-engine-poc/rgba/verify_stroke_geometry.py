@@ -87,6 +87,39 @@ def main():
                     for x in range(l,r):pix[4*(y*width+x):4*(y*width+x)+4]=bytes(ink)+b'\xff'
             if out.read_bytes()!=reference.read_bytes() or out.read_bytes()!=pix:raise RuntimeError(name+' pixels differ')
             report['cases'][name]={'pixels':[width,height],'rgba_bytes_exact':len(pix)}
+        for name,mw,mh,crop,turn in [
+            ('rgb-normal',192,256,(0,0,192,256),0),
+            ('rgb-rot90',192,256,(0,0,192,256),90),
+            ('rgb-crop270',220,280,(20,30,170,230),270),
+            ('rgb-a1-90',1684,2384,(0,0,1684,2384),90),
+        ]:
+            width,height=display_size(crop,turn)
+            fill=(25,20,95,60) if name!='rgb-a1-90' else (100,80,400,280)
+            line=(30,45,110,46) if name!='rgb-a1-90' else (120,220,490,221)
+            fx,fy,fw,fh=pdf_rect(crop,turn,fill)
+            lx,ly,lw,lh=pdf_rect(crop,turn,line)
+            if lh==1:
+                stroke=f'{lx} {ly+0.5} m\n{lx+lw} {ly+0.5} l\n'
+            else:
+                stroke=f'{lx+0.5} {ly} m\n{lx+0.5} {ly+lh} l\n'
+            content=(f'0.5 0.25 0.75 rg\n{fx} {fy} {fw} {fh} re\nf\n'
+                     f'0.2 0.6 0.8 RG\n1 w\n{stroke}S\n').encode()
+            pdf=root/f'{name}.pdf';opgm=root/f'{name}.opgm';opdl=root/f'{name}.opdl'
+            pdf.write_bytes(pdf_with_stream(content,mw,mh,f'/Rotate {turn} /CropBox [{" ".join(map(str,crop))}]'.encode()))
+            run_checked([EXPORTER,pdf,opgm]);run_checked([GEOMETRY,opgm,opdl])
+            expected_records=[(1,fill,(128,64,191)),(3,line,(51,153,204))]
+            expected_geom=b'OPGM'+struct.pack('<9I',3,mw,mh,*crop,turn,2)+b''.join(
+                struct.pack('<5I4B',kind,*rect,*ink,255) for kind,rect,ink in expected_records)
+            if opgm.read_bytes()!=expected_geom:raise RuntimeError(name+' RGB geometry differs')
+            out=root/f'{name}.rgba';reference=root/f'{name}-hayro.rgba'
+            run_checked([KERNEL,'2',opdl,out,'--experimental-large']);run_checked([HAYRO,pdf,'1',reference])
+            pix=bytearray(b'\xff\xff\xff\xff'*(width*height))
+            for _,rect,ink in expected_records:
+                l,t,r,b=rect
+                for y in range(t,b):
+                    for x in range(l,r):pix[4*(y*width+x):4*(y*width+x)+4]=bytes(ink)+b'\xff'
+            if out.read_bytes()!=reference.read_bytes() or out.read_bytes()!=pix:raise RuntimeError(name+' RGB pixels differ')
+            report['cases'][name]={'pixels':[width,height],'rgba_bytes_exact':len(pix)}
         bad=[b'1 0 0 RG\n2 w\n10 20.5 m\n50 20.5 l\nS\n',
              b'1 0 0 RG\n1 w\n10 20 m\n50 20 l\nS\n',
              b'1 0 0 RG\n1 w\n10 20.5 m\n50 20.5 l\n',
@@ -97,7 +130,9 @@ def main():
              b'q\nq\nq\n1 0 0 rg\n20 20 30 30 re\nf\nQ\nQ\nQ\n',
              b'10 10 30 30 re\nW*\nn\n1 0 0 rg\n20 20 30 30 re\nf\n',
              b'10 10 30 30 re\nW\n1 0 0 rg\n20 20 30 30 re\nf\n',
-             b'10 10 30 30 re\nW\nn\n10 10 20 20 re\nW\n']
+             b'10 10 30 30 re\nW\nn\n10 10 20 20 re\nW\n',
+             b'-0.1 0 0 rg\n20 20 30 30 re\nf\n',
+             b'0 1.1 0 RG\n1 w\n10 20.5 m\n50 20.5 l\nS\n']
         for index,stream in enumerate(bad):
             pdf=root/f'bad{index}.pdf';out=root/f'bad{index}.opgm'
             pdf.write_bytes(pdf_with_stream(stream,192,256,b'/Rotate 90'))

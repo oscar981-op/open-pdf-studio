@@ -30,7 +30,10 @@ de vastgelegde renderer; oude asynchrone resultaten worden na wisselen geweigerd
 De huidige OPGM-v3-adapter kan
 uitsluitend één pagina op schaal 1,0 verwerken, met 1–64 dekkende
 pixeluitgelijnde rechthoekfills/1px asgerichte strokes, beperkte q/Q,
-gehele translatie en rechthoekige clips. Bij elke niet-ondersteunde PDF,
+gehele translatie, rechthoekige clips en DeviceRGB-kleuren met kanaalwaarden
+van 0 tot 1. De RGB-waarden worden naar 8-bit afgerond; transparantie,
+andere kleurruimtes en willekeurige paden zijn nog niet ondersteund.
+Bij elke niet-ondersteunde PDF,
 pagina of schaal rendert Hayro. Dit voorkomt dat een nog onvolledige
 DynLex-kernel PDF-inhoud stil weglaat. Er is nog geen
 PDFium-backend in de Rust-app en geen
@@ -56,4 +59,8 @@ Met de statusregel is in het 1200×832-venster ook gecontroleerd dat
 direct bij openen dezelfde fallback toont.
 `rgba/verify_stroke_geometry.py` vergeleek dertien gecontroleerde PDF's,
 inclusief rotatie/CropBox/A1, byte voor byte met Hayro en de onafhankelijke
-referentie. Deze tests bewijzen slechts de beschreven deelset.
+referentie. Vier extra PDF's met fractionele RGB-fill en -stroke zijn op
+normale, 90°-, 270°/CropBox- en A1/90°-pagina's eveneens bytegelijk;
+waarden buiten 0–1 worden afgewezen. De native backendtest controleert
+dat zo'n PDF daadwerkelijk via DynLex gaat. Deze tests bewijzen slechts
+de beschreven deelset.

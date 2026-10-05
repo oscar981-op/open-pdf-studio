@@ -193,9 +193,6 @@ fn validated_scene(geometry: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
             || rect[2] > width
             || rect[3] > height
             || (kind == 3 && rect[2] - rect[0] != 1 && rect[3] - rect[1] != 1)
-            || !geometry[at + 20..at + 23]
-                .iter()
-                .all(|&n| n == 0 || n == 255)
             || geometry[at + 23] != 255
         {
             return Err("invalid OPGM-v3 command".into());
@@ -243,5 +240,16 @@ mod tests {
         let hayro = pdf.render_page(1, 1.0).unwrap();
         assert_eq!(direct.rgba, routed.rgba);
         assert_eq!(routed.rgba, hayro.rgba);
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn fractional_device_rgb_uses_dynlex_and_matches_hayro() {
+        let bytes = include_bytes!("../tests/fixtures/fractional-rgb-fill-stroke.pdf").to_vec();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let result = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert_eq!(result.used, Backend::Dynlex);
+        let hayro = pdf.render_page(1, 1.0).unwrap();
+        assert_eq!(result.raster.rgba, hayro.rgba);
     }
 }

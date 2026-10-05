@@ -109,7 +109,7 @@ fn convert_layers(bytes: &[u8], version: u32) -> Result<(Vec<u8>, u32), Box<dyn 
             || rect[0]>=rect[2] || rect[1]>=rect[3]
             || rect[2]>width || rect[3]>height
             || (word(bytes,at) == 3 && rect[2]-rect[0] != 1 && rect[3]-rect[1] != 1)
-            || !bytes[at+20..at+23].iter().all(|v| *v==0 || *v==255)
+            || (version == 2 && !bytes[at+20..at+23].iter().all(|v| *v==0 || *v==255))
             || bytes[at+23] != 255
         { return Err("invalid OPGM-v2 rectangle command".into()); }
     }

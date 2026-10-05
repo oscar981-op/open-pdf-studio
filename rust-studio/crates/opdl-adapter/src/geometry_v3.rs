@@ -82,7 +82,7 @@ pub fn page_to_opgm_v3_bytes(source: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
                 {
                     return Err(fail("incomplete fill"));
                 }
-                let ink = binary_ink(operands::<3>(&ops[i].operands)?)?;
+                let ink = opaque_rgb_ink(operands::<3>(&ops[i].operands)?)?;
                 let [x, y, w, h] = operands::<4>(&ops[i + 1].operands)?;
                 let rect = rectangle_to_display(
                     page.crop,
@@ -104,7 +104,7 @@ pub fn page_to_opgm_v3_bytes(source: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
                 {
                     return Err(fail("incomplete stroke"));
                 }
-                let ink = binary_ink(operands::<3>(&ops[i].operands)?)?;
+                let ink = opaque_rgb_ink(operands::<3>(&ops[i].operands)?)?;
                 if operands::<1>(&ops[i + 1].operands)? != [1.0] {
                     return Err(fail("only 1pt stroke"));
                 }
@@ -191,14 +191,33 @@ fn translated(value: f64, offset: i32) -> Result<u32, Box<dyn Error>> {
     integer(value + f64::from(offset))
 }
 
-fn binary_ink(rgb: [f64; 3]) -> Result<[u8; 4], Box<dyn Error>> {
+fn opaque_rgb_ink(rgb: [f64; 3]) -> Result<[u8; 4], Box<dyn Error>> {
     let mut ink = [0, 0, 0, 255];
     for (dst, src) in ink.iter_mut().take(3).zip(rgb) {
-        *dst = match src {
-            0.0 => 0,
-            1.0 => 255,
-            _ => return Err(fail("only binary RGB ink")),
-        };
+        if !src.is_finite() || !(0.0..=1.0).contains(&src) {
+            return Err(fail("RGB component outside 0..1"));
+        }
+        *dst = (src * 255.0).round() as u8;
     }
     Ok(ink)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::opaque_rgb_ink;
+
+    #[test]
+    fn device_rgb_matches_rounded_eight_bit_ink() {
+        assert_eq!(
+            opaque_rgb_ink([0.5, 0.25, 0.75]).unwrap(),
+            [128, 64, 191, 255]
+        );
+        assert_eq!(
+            opaque_rgb_ink([0.2, 0.6, 0.8]).unwrap(),
+            [51, 153, 204, 255]
+        );
+        for invalid in [-0.01, 1.01, f64::NAN, f64::INFINITY] {
+            assert!(opaque_rgb_ink([invalid, 0.0, 0.0]).is_err());
+        }
+    }
 }

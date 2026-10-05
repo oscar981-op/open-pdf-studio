@@ -3,7 +3,9 @@
 De aparte PDF→OPGM-v3-route accepteert één pagina met geërfde
 MediaBox/CropBox/Rotate, lege resources en maximaal 64 opdrachten in
 PDF-laagvolgorde. Elke opdracht is precies `rg re f` of
-`RG 1 w m l S`. RGB-kanalen zijn uitsluitend 0 of 1. Een stroke moet
+`RG 1 w m l S`. Dekkende DeviceRGB-kanalen van 0 tot 1 worden naar
+8-bit afgerond; niet-eindige waarden en waarden buiten dat bereik worden
+geweigerd. Een stroke moet
 dekkend, 1 pt breed, horizontaal of verticaal en pixeluitgelijnd zijn;
 beide eindpunten vallen op gehele coördinaten langs de lijn en op
 halfpixelcoördinaten erdwars. De volledige strook moet binnen de
@@ -22,14 +24,17 @@ OPGM-v3 hergebruikt de begrensde v2-header (40 bytes) en records van
 24 bytes. `kind=1` is gevulde rechthoek; `kind=3` is één 1px-strook.
 De Rust-probe valideert alle lengtes, afmetingen, kleuren en strookdikte
 alvorens deze records in volgorde aan de bestaande OPDL-v2-DynLex-kernel
-te geven. De normale PDF-adapter en app gebruiken deze route niet.
+te geven. De optionele native DynLex-backend gebruikt deze route op
+100% zoom; de gewone PDF-adapter blijft ongewijzigd.
 
 `rgba/verify_stroke_geometry.py` genereert dertien echte PDF's met
 overlappende vormen op 0/90/180/270°, een verschoven CropBox en een
 A1-achtige pagina, geneste translatie, clipdoorsnede en herstel na `Q`. De
 PDF→OPGM→DynLex-uitvoer is 50.065.344 RGBA-bytes
 exact gelijk aan Hayro en een onafhankelijke rechthoek-/strookreferentie.
-Elf niet-ondersteunde PDF-states en vier corrupte OPGM-v3-records
+Vier extra RGB-PDF's op normale, geroteerde/gecropte en A1-pagina's zijn
+ook bytegelijk; dertien niet-ondersteunde PDF-states en vier corrupte
+OPGM-v3-records
 worden zonder uitvoer geweigerd. Dit bewijst geen algemene padpariteit
 of snelheid op echte technische tekeningen.
 
