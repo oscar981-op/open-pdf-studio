@@ -243,8 +243,10 @@ om en snijdt daarna de RGB- of binaire-RGBA-patch uit, vóór de DynLex-ABI.
 Opeenvolgende clipvakken worden doorsneden; `q/Q` bewaart en herstelt hun
 toestand. Vijf gecontroleerde PDF's met fractionele beeldranden, vectorlaag
 onder het beeld, dubbele clip, `q/Q` en 90°/CropBox zijn RGBA-bytegelijk
-aan Hayro. Een volledig weggeclipt beeld valt voorlopig op Hayro terug;
-niet-rechthoekige clipvormen zijn nog niet bewezen.
+aan Hayro. Een volledig weggeclipt beeld levert nu een lege geordende actie op;
+een daarna zichtbaar beeld behoudt zijn laagvolgorde. Drie fixtures voor lege
+aligned/fractionele clips en herstel via `Q` zijn pixelgelijk aan Hayro.
+Niet-rechthoekige clipvormen zijn nog niet bewezen.
 `dynlex-engine-poc/rgba/clipped_image_fixture.py` maakt de fixtures.
 
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht

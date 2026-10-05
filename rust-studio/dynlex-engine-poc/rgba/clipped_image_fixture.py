@@ -71,6 +71,11 @@ def main() -> None:
         image_placement=(20, 20, 80, 60)))
     output.joinpath("clipped-fully-outside.pdf").write_bytes(build_pdf(
         "raster", pre_content=b"100 100 20 20 re\nW\nn\n", **common))
+    output.joinpath("clipped-fully-outside-then-visible.pdf").write_bytes(build_pdf(
+        "raster", pre_content=b"q\n100 100 20 20 re\nW\nn\n",
+        extra_content=b"Q\nq\n20 0 0 16 100 90 cm\n/Im0 Do\nQ\n", **common))
+    output.joinpath("clipped-subpixel-fully-outside.pdf").write_bytes(build_pdf(
+        "raster", pre_content=blue + b"100.25 100.5 20.5 20.25 re\nW\nn\n", **common))
     output.joinpath("clipped-nonrect-unsupported.pdf").write_bytes(build_pdf(
         "raster", pre_content=b"30 25 m\n75 25 l\n52 60 l\nh\nW\nn\n", **common))
 

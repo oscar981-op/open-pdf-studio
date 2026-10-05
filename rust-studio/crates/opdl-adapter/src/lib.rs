@@ -1083,11 +1083,12 @@ fn clip_display_image(
     pixels: Vec<u8>,
     clip: [u32; 4],
     channels: usize,
-) -> Result<([u32; 4], Vec<u8>), Box<dyn Error>> {
-    let visible = intersect_rect(rect, Some(clip))
-        .ok_or_else(|| fail("image is wholly outside its rectangular clip"))?;
+) -> Result<Option<([u32; 4], Vec<u8>)>, Box<dyn Error>> {
+    let Some(visible) = intersect_rect(rect, Some(clip)) else {
+        return Ok(None);
+    };
     if visible == rect {
-        return Ok((rect, pixels));
+        return Ok(Some((rect, pixels)));
     }
     let source_width = (rect[2] - rect[0]) as usize;
     let target_width = (visible[2] - visible[0]) as usize;
@@ -1099,7 +1100,7 @@ fn clip_display_image(
             ((y - rect[1]) as usize * source_width + (visible[0] - rect[0]) as usize) * channels;
         output.extend_from_slice(&pixels[from..from + row_bytes]);
     }
-    Ok((visible, output))
+    Ok(Some((visible, output)))
 }
 
 fn fractional_clip_to_display(
@@ -1157,14 +1158,16 @@ fn mask_fractional_image_clip(
     pixels: Vec<u8>,
     clip: [f64; 4],
     channels: usize,
-) -> Result<([u32; 4], Vec<u8>), Box<dyn Error>> {
+) -> Result<Option<([u32; 4], Vec<u8>)>, Box<dyn Error>> {
     let bounds = [
         (clip[0].floor() as u32).max(rect[0]),
         (clip[1].floor() as u32).max(rect[1]),
         (clip[2].ceil() as u32).min(rect[2]),
         (clip[3].ceil() as u32).min(rect[3]),
     ];
-    let (rect, pixels) = clip_display_image(rect, pixels, bounds, channels)?;
+    let Some((rect, pixels)) = clip_display_image(rect, pixels, bounds, channels)? else {
+        return Ok(None);
+    };
     let mut output = vec![0; (rect[2] - rect[0]) as usize * (rect[3] - rect[1]) as usize * 4];
     for y in rect[1]..rect[3] {
         let coverage_y =
@@ -1197,7 +1200,7 @@ fn mask_fractional_image_clip(
             };
         }
     }
-    Ok((rect, output))
+    Ok(Some((rect, output)))
 }
 
 fn image_source_dimensions(
@@ -1762,7 +1765,7 @@ fn page_to_opdl_bytes_internal(
                             has_fractional_image = true;
                             (7, rect, display_pixels)
                         };
-                    let (rect, display_pixels) = if let Some(clip) = clip {
+                    let clipped = if let Some(clip) = clip {
                         clip_display_image(
                             rect,
                             display_pixels,
@@ -1770,33 +1773,39 @@ fn page_to_opdl_bytes_internal(
                             if kind == 7 { 4 } else { 3 },
                         )?
                     } else {
-                        (rect, display_pixels)
+                        Some((rect, display_pixels))
                     };
-                    let (kind, rect, display_pixels) = if let Some(clip) = fractional_clip {
-                        let (rect, pixels) = mask_fractional_image_clip(
-                            rect,
-                            display_pixels,
-                            clip,
-                            if kind == 7 { 4 } else { 3 },
-                        )?;
-                        has_fractional_clip_image = true;
-                        (8, rect, pixels)
-                    } else {
-                        (kind, rect, display_pixels)
-                    };
-                    if ordered_image_bytes
-                        .len()
-                        .saturating_add(display_pixels.len())
-                        > MAX_ORDERED_SCENE_BYTES
-                    {
-                        return Err(fail("ordered image data exceeds scene byte limit"));
+                    if let Some((rect, display_pixels)) = clipped {
+                        let clipped = if let Some(clip) = fractional_clip {
+                            mask_fractional_image_clip(
+                                rect,
+                                display_pixels,
+                                clip,
+                                if kind == 7 { 4 } else { 3 },
+                            )?
+                            .map(|(rect, pixels)| (8, rect, pixels))
+                        } else {
+                            Some((kind, rect, display_pixels))
+                        };
+                        if let Some((kind, rect, display_pixels)) = clipped {
+                            if kind == 8 {
+                                has_fractional_clip_image = true;
+                            }
+                            if ordered_image_bytes
+                                .len()
+                                .saturating_add(display_pixels.len())
+                                > MAX_ORDERED_SCENE_BYTES
+                            {
+                                return Err(fail("ordered image data exceeds scene byte limit"));
+                            }
+                            let offset = u32::try_from(ordered_image_bytes.len())?;
+                            commands.push((kind, rect, offset.to_le_bytes()));
+                            if commands.len() > MAX_COMMANDS {
+                                return Err(fail("too many commands"));
+                            }
+                            ordered_image_bytes.extend_from_slice(&display_pixels);
+                        }
                     }
-                    let offset = u32::try_from(ordered_image_bytes.len())?;
-                    commands.push((kind, rect, offset.to_le_bytes()));
-                    if commands.len() > MAX_COMMANDS {
-                        return Err(fail("too many commands"));
-                    }
-                    ordered_image_bytes.extend_from_slice(&display_pixels);
                 } else {
                     let [x, y, placed_width, placed_height] =
                         image_placement.ok_or_else(|| fail("image placement is missing"))?;

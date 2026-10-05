@@ -388,7 +388,9 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
             _ => return Err("unsupported ordered command".into()),
         }
     }
-    if images == 0 || image_start.checked_add(image_bytes) != Some(scene.len()) {
+    // A valid PDF may issue an image Do whose active clip excludes every
+    // pixel. Its ordered scene then has no image payload (and may be blank).
+    if image_start.checked_add(image_bytes) != Some(scene.len()) {
         return Err("invalid ordered image tail".into());
     }
     Ok((scene, width, height))
@@ -945,13 +947,40 @@ mod tests {
     #[test]
     fn unsupported_image_clips_fall_back() {
         for bytes in [
-            include_bytes!("../tests/fixtures/clipped-fully-outside.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-nonrect-unsupported.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-subpixel-unsupported-fill.pdf").as_slice(),
             include_bytes!("../tests/fixtures/clipped-subpixel-ambiguous.pdf").as_slice(),
         ] {
             assert!(page_to_opdl_ordered_bytes(bytes).is_err());
             assert!(try_render(bytes, 1, 1.0).unwrap().is_none());
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn fully_clipped_images_are_ordered_noops() {
+        for (name, bytes) in [
+            (
+                "aligned",
+                include_bytes!("../tests/fixtures/clipped-fully-outside.pdf").as_slice(),
+            ),
+            (
+                "fractional",
+                include_bytes!("../tests/fixtures/clipped-subpixel-fully-outside.pdf").as_slice(),
+            ),
+            (
+                "later visible image",
+                include_bytes!("../tests/fixtures/clipped-fully-outside-then-visible.pdf")
+                    .as_slice(),
+            ),
+        ] {
+            let scene = page_to_opdl_ordered_bytes(bytes);
+            assert!(scene.is_ok(), "{name}: {:?}", scene.err());
+            let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+            let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(rendered.used, Backend::Dynlex, "{name}");
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            assert_eq!(rendered.raster.rgba, expected.rgba, "{name}");
         }
     }
 
