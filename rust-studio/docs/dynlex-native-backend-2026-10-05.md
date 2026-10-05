@@ -23,6 +23,10 @@ miniaturencaches leeg en negeert oudere asynchrone renderresultaten.
 DynLex is alleen klikbaar in een build met `dynlex-experimental`.
 De actieve knop toont de voorkeursbackend; bij een niet-ondersteunde
 pagina gebruikt de router Hayro zonder de selectie te veranderen.
+De statusregel toont de renderer van het daadwerkelijk getoonde paginabeeld:
+`Renderer: DynLex`, `Renderer: Hayro` of
+`Renderer: Hayro (DynLex fallback)`. Een pagina uit de bitmapcache behoudt
+de vastgelegde renderer; oude asynchrone resultaten worden na wisselen geweigerd.
 De huidige OPGM-v3-adapter kan
 uitsluitend één pagina op schaal 1,0 verwerken, met 1–64 dekkende
 pixeluitgelijnde rechthoekfills/1px asgerichte strokes, beperkte q/Q,
@@ -46,6 +50,10 @@ aan Hayro; een tekst-PDF volgt de fallback en blijft identiek aan Hayro.
 In het draaiende 1200×832-venster zijn beide Settings-knoppen geklikt;
 na wisselen rendert de pagina opnieuw. Zoom In bij DynLex-selectie
 ging van 100% naar 125% en werd via de Hayro-fallback getoond.
+Met de statusregel is in het 1200×832-venster ook gecontroleerd dat
+`simple-fill-stroke.pdf` op 100% `Renderer: DynLex` toont, op 125%
+`Renderer: Hayro (DynLex fallback)`, en dat `tekstrotatie-extern.pdf`
+direct bij openen dezelfde fallback toont.
 `rgba/verify_stroke_geometry.py` vergeleek dertien gecontroleerde PDF's,
 inclusief rotatie/CropBox/A1, byte voor byte met Hayro en de onafhankelijke
 referentie. Deze tests bewijzen slechts de beschreven deelset.

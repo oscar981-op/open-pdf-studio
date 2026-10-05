@@ -16,6 +16,12 @@ impl Default for Backend {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct RenderOutcome {
+    pub raster: Raster,
+    pub used: Backend,
+}
+
 /// Keep Hayro operational for every page/zoom outside the verified DynLex subset.
 pub fn render_with_fallback(
     pdf: &ParsedPdf,
@@ -24,23 +30,39 @@ pub fn render_with_fallback(
     scale: f32,
     backend: Backend,
 ) -> Result<Raster, RenderError> {
+    Ok(render_with_report(pdf, source, page, scale, backend)?.raster)
+}
+
+pub fn render_with_report(
+    pdf: &ParsedPdf,
+    source: &[u8],
+    page: usize,
+    scale: f32,
+    backend: Backend,
+) -> Result<RenderOutcome, RenderError> {
     if backend == Backend::Dynlex {
         let started = std::time::Instant::now();
         if let Ok(Some(bitmap)) = try_render(source, page, scale) {
             let (page_width_pt, page_height_pt) = pdf.page_dimensions(page)?;
-            return Ok(Raster {
-                width: bitmap.width,
-                height: bitmap.height,
-                rgba: bitmap.rgba,
-                page_width_pt,
-                page_height_pt,
-                total_pages: pdf.page_count(),
-                parse_ms: 0,
-                render_ms: started.elapsed().as_millis(),
+            return Ok(RenderOutcome {
+                used: Backend::Dynlex,
+                raster: Raster {
+                    width: bitmap.width,
+                    height: bitmap.height,
+                    rgba: bitmap.rgba,
+                    page_width_pt,
+                    page_height_pt,
+                    total_pages: pdf.page_count(),
+                    parse_ms: 0,
+                    render_ms: started.elapsed().as_millis(),
+                },
             });
         }
     }
-    pdf.render_page(page, scale)
+    Ok(RenderOutcome {
+        used: Backend::Hayro,
+        raster: pdf.render_page(page, scale)?,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -204,6 +226,8 @@ mod tests {
             include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec();
         let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
         let a = render_with_fallback(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        let report = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert_eq!(report.used, Backend::Hayro);
         let b = pdf.render_page(1, 1.0).unwrap();
         assert_eq!((a.width, a.height, a.rgba), (b.width, b.height, b.rgba));
     }
@@ -214,6 +238,8 @@ mod tests {
         let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
         let direct = try_render(&bytes, 1, 1.0).unwrap().unwrap();
         let routed = render_with_fallback(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        let report = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert_eq!(report.used, Backend::Dynlex);
         let hayro = pdf.render_page(1, 1.0).unwrap();
         assert_eq!(direct.rgba, routed.rgba);
         assert_eq!(routed.rgba, hayro.rgba);

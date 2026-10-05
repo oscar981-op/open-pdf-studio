@@ -8,7 +8,7 @@ mod text_layout;
 mod virtual_ipp;
 use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};
-use opds_dynlex_backend::Backend;
+use opds_dynlex_backend::{Backend, RenderOutcome};
 use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::{
     Annotation, DocumentModel, Edit, Kind, Rect, TextAlign, DEFAULT_TEXT_FONT_SIZE, TEXT_FONT_SIZES,
@@ -25,8 +25,8 @@ fn render_page_selected(
     page: usize,
     scale: f32,
     backend: Backend,
-) -> Result<Raster, String> {
-    opds_dynlex_backend::render_with_fallback(pdf, source, page, scale, backend)
+) -> Result<RenderOutcome, String> {
+    opds_dynlex_backend::render_with_report(pdf, source, page, scale, backend)
         .map_err(|error| error.to_string())
 }
 
@@ -555,6 +555,7 @@ mod unsaved_annotation_tests {
                 bitmap_size: (0, 0),
                 bitmap_page_points: (0.0, 0.0),
                 bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
                 displayed_page: 0,
                 selected_annotation: None,
                 page_cache: VecDeque::new(),
@@ -591,6 +592,7 @@ struct OpenDocument {
     bitmap_size: (u32, u32),
     bitmap_page_points: (f32, f32),
     bitmap_scale: f32,
+    bitmap_backend: Backend,
     displayed_page: usize,
     selected_annotation: Option<u64>,
     page_cache: VecDeque<CachedPage>,
@@ -607,6 +609,7 @@ struct CachedPage {
     bitmap: image::Handle,
     bitmap_size: (u32, u32),
     page_points: (f32, f32),
+    backend: Backend,
 }
 
 impl OpenDocument {
@@ -614,7 +617,9 @@ impl OpenDocument {
         annotations_changed(&self.model, &self.last_saved_annotations)
     }
 
-    fn cache_bitmap(&mut self, page: usize, scale: f32, raster: Raster) {
+    fn cache_bitmap(&mut self, page: usize, scale: f32, outcome: RenderOutcome) {
+        let raster = outcome.raster;
+        self.bitmap_backend = outcome.used;
         self.bitmap_size = (raster.width, raster.height);
         self.bitmap_page_points = (raster.page_width_pt, raster.page_height_pt);
         self.bitmap_scale = scale;
@@ -634,6 +639,7 @@ impl OpenDocument {
             bitmap,
             bitmap_size: self.bitmap_size,
             page_points: self.bitmap_page_points,
+            backend: outcome.used,
         });
         while self.page_cache.iter().map(|item| item.bytes).sum::<usize>() > MAX_PAGE_CACHE_BYTES {
             self.page_cache.pop_front();
@@ -714,7 +720,7 @@ enum Message {
     Open,
     Loaded(
         u64,
-        Result<(String, Arc<Vec<u8>>, Arc<ParsedPdf>, f32, Raster), String>,
+        Result<(String, Arc<Vec<u8>>, Arc<ParsedPdf>, f32, RenderOutcome), String>,
     ),
     Zoom(f64),
     WheelZoom {
@@ -724,7 +730,7 @@ enum Message {
     PageScrolled(scrollable::Viewport),
     ThumbnailsScrolled(scrollable::Viewport),
     GoToPage(usize),
-    Rendered(u64, RenderTicket, Result<Raster, String>),
+    Rendered(u64, RenderTicket, Result<RenderOutcome, String>),
     ThumbnailRendered(u64, u64, usize, Result<Raster, String>),
     SelectBackend(Backend),
     SelectRibbon(RibbonTab),
@@ -1577,8 +1583,9 @@ impl App {
                         let (page_width, _) =
                             pdf.page_dimensions(1).map_err(|error| error.to_string())?;
                         let initial_scale = (550.0 / page_width).clamp(0.1, 1.0);
-                        let raster = render_page_selected(&pdf, &bytes, 1, initial_scale, backend)?;
-                        Ok((path, bytes, pdf, initial_scale, raster))
+                        let outcome =
+                            render_page_selected(&pdf, &bytes, 1, initial_scale, backend)?;
+                        Ok((path, bytes, pdf, initial_scale, outcome))
                     },
                     move |result| Message::Loaded(token, result),
                 );
@@ -1589,7 +1596,8 @@ impl App {
                 }
                 self.busy = false;
                 match result {
-                    Ok((path, source_bytes, pdf, initial_scale, raster)) => {
+                    Ok((path, source_bytes, pdf, initial_scale, outcome)) => {
+                        let raster = &outcome.raster;
                         let Ok(mut model) =
                             DocumentModel::new(DocumentId(token), raster.total_pages)
                         else {
@@ -1612,6 +1620,7 @@ impl App {
                             bitmap_size: (0, 0),
                             bitmap_page_points: (0.0, 0.0),
                             bitmap_scale: initial_scale,
+                            bitmap_backend: outcome.used,
                             displayed_page: 0,
                             selected_annotation: None,
                             page_cache: VecDeque::new(),
@@ -1620,7 +1629,7 @@ impl App {
                             thumbnail_failed: HashSet::new(),
                             thumbnail_focus: 0,
                         };
-                        document.cache_bitmap(0, initial_scale, raster);
+                        document.cache_bitmap(0, initial_scale, outcome);
                         self.document = Some(document);
                         self.page_scroll_offset = scrollable::AbsoluteOffset {
                             x: HORIZONTAL_PAN_MARGIN,
@@ -1738,12 +1747,13 @@ impl App {
                 }
                 self.busy = false;
                 match result {
-                    Ok(raster) => {
+                    Ok(outcome) => {
+                        let raster = &outcome.raster;
                         let (width, height) = (raster.width, raster.height);
                         let view = document.model.view();
                         let page = view.page();
                         let scale = view.viewport().scale() as f32;
-                        document.cache_bitmap(page, scale, raster);
+                        document.cache_bitmap(page, scale, outcome);
                         self.message = format!("{}×{} px", width, height);
                         if let Some(offset) = self.pending_zoom_offset.take() {
                             self.page_scroll_offset = offset;
@@ -1824,6 +1834,7 @@ impl App {
                 let (width, height) = pdf.page_dimensions(page + 1).map_err(|e| e.to_string())?;
                 let scale = thumbnail_scale(width, height)?;
                 render_page_selected(&pdf, &source, page + 1, scale, backend)
+                    .map(|outcome| outcome.raster)
             },
             move |result| Message::ThumbnailRendered(token, generation, page, result),
         )
@@ -1846,6 +1857,7 @@ impl App {
             document.bitmap_size = cached.bitmap_size;
             document.bitmap_page_points = cached.page_points;
             document.bitmap_scale = scale;
+            document.bitmap_backend = cached.backend;
             document.displayed_page = cached.page;
             self.busy = false;
             self.message = format!("Page {page} • {:.0}% (cached)", scale * 100.0);

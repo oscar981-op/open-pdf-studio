@@ -1363,9 +1363,21 @@ pub fn view(app: &App) -> Element<'_, Message> {
         }
         workspace = workspace.push(container(properties).width(230).height(Fill).style(surface));
     }
+    let renderer_label = app
+        .document
+        .as_ref()
+        .map(|document| match (app.backend, document.bitmap_backend) {
+            (_, opds_dynlex_backend::Backend::Dynlex) => "Renderer: DynLex",
+            (opds_dynlex_backend::Backend::Dynlex, opds_dynlex_backend::Backend::Hayro) => {
+                "Renderer: Hayro (DynLex fallback)"
+            }
+            _ => "Renderer: Hayro",
+        })
+        .unwrap_or("");
     let status = container(
         row![
             text(&app.message).size(11),
+            text(renderer_label).size(11),
             quick_access(
                 icon_asset!("ui/undo.svg"),
                 "Undo",
