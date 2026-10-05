@@ -378,6 +378,39 @@ echte corpuspad nog geweigerd en veilig door Hayro getekend. Dit is dus geen
 bewijs van volledige even-odd-clippariteit; onzekere randdekking, complexe
 vectorinhoud, tekst en curven blijven fallback.
 
+Een aparte numerieke proef (`rgba/real_clip_338_diag.py`) lokaliseert het
+verschil. `lopdf` bewaart decimale PDF-operanden als `f32`; Hayro leest voor
+dit pad de oorspronkelijke decimale waarde met hogere precisie en zet pas de
+uiteindelijke schermpunten om naar `f32`. Op de geïsoleerde PDF levert de
+analytische proef met volledige `f64`-coördinaten 14 afwijkende pixels op,
+met al bij inlezen vernauwde coördinaten 8, en met precieze PDF-getallen plus
+`f32`-schermpunten 0. De laatste variant geeft ook op 90°/CropBox 0
+afwijkende pixels. Herhaal vanuit `rust-studio` na de backend-probebuild:
+
+```sh
+python3 dynlex-engine-poc/rgba/real_clip_338_diag.py \
+  --pdf crates/dynlex-backend/tests/fixtures/clipped-real-shape-338.pdf \
+  --probe target/release/backend_probe --mode f64-input-f32-display --expect-mismatches 0
+python3 dynlex-engine-poc/rgba/real_clip_338_diag.py \
+  --pdf crates/dynlex-backend/tests/fixtures/clipped-real-shape-338-rotate-crop.pdf \
+  --probe target/release/backend_probe --mode f64-input-f32-display \
+  --rotate-crop --expect-mismatches 0
+```
+
+De experimentele adapter bewaart daarom voor een strikt canonieke
+één-operator-per-regel-contentstream de originele `m`, `l` en `cm`-getallen
+als `f64`, na afstemming met de door `lopdf` geparseerde operatoren. Andere
+syntaxis blijft op het bestaande beperkte decodepad. De PDF→scherm-punten
+worden vóór oppervlakte-integratie naar `f32` gekwantiseerd; de adapter
+valideert de eenvoudige contouren en nesting daarna opnieuw om een door
+afronding gewijzigde topologie veilig af te wijzen. De conservatieve
+grens rond halve 8-bit-dekking blijft verplicht: zonder deze grens weken twee
+van 400 willekeurige een-gat-PDF's bij seed `394727` af, ondanks precieze
+coördinaten. Met de grens waren alle 4.800 gevallen uit de zes meercontour-
+layouts en drie extra reeksen van elk 1.000 enkelcontourgevallen bij
+geaccepteerde DynLex-uitvoer bytegelijk aan Hayro. De echte operator 338
+raakt nog steeds de onzekere grens en blijft fallback.
+
 Fractionele rechthoekranden krijgen een aparte geordende OPDL-v6-opdracht
 (`kind=8`) met RGBA-patch en een 8-bit-dekkingswaarde per pixel. De
 pure-Rust-adapter berekent de overlap van het pixelvak met het via

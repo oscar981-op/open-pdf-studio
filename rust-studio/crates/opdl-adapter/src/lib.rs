@@ -324,6 +324,59 @@ fn decode_canonical_content(bytes: &[u8]) -> Option<Content> {
     (content.encode().ok()?.as_slice() == bytes).then_some(content)
 }
 
+// lopdf stores Real operands as f32. Keep the original f64 lexemes for a
+// narrow one-operation-per-line stream, but only after checking every decoded
+// operation and each selected numeric operand against lopdf's interpretation.
+// All other PDF syntax retains the existing conservative f32/fallback route.
+fn precise_canonical_path_numbers(
+    bytes: &[u8],
+    operations: &[Operation],
+) -> Option<Vec<Option<Vec<f64>>>> {
+    if bytes.is_empty() || bytes.len() > 2_000_000 || operations.len() > 65_536 {
+        return None;
+    }
+    let bytes = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+    let lines = bytes.split(|byte| *byte == b'\n').collect::<Vec<_>>();
+    if lines.len() != operations.len() {
+        return None;
+    }
+    lines
+        .into_iter()
+        .zip(operations)
+        .map(|(line, operation)| {
+            let words = line.split(|byte| *byte == b' ').collect::<Vec<_>>();
+            if words.is_empty()
+                || words.iter().any(|word| word.is_empty() || !word.is_ascii())
+                || *words.last()? != operation.operator.as_bytes()
+                || words.len() != operation.operands.len() + 1
+            {
+                return None;
+            }
+            if !matches!(operation.operator.as_str(), "m" | "l" | "cm") {
+                return Some(None);
+            }
+            let numbers = words[..words.len() - 1]
+                .iter()
+                .zip(&operation.operands)
+                .map(|(word, object)| {
+                    let token = std::str::from_utf8(word).ok()?;
+                    let value = token.parse::<f64>().ok()?;
+                    if !value.is_finite() {
+                        return None;
+                    }
+                    let same = match object {
+                        Object::Integer(integer) => token.parse::<i64>().ok()? == *integer,
+                        Object::Real(real) => token.parse::<f32>().ok()? == *real,
+                        _ => false,
+                    };
+                    same.then_some(value)
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(Some(numbers))
+        })
+        .collect()
+}
+
 // This adapter cannot interpret compound PDF operands. Reject them before the
 // general parser, which may otherwise ignore an unfinished trailing object.
 fn has_compound_operand(bytes: &[u8]) -> bool {
@@ -411,6 +464,28 @@ mod fast_decode_tests {
     }
 
     #[test]
+    fn precise_path_lexemes_preserve_pdf_decimal_values() {
+        let bytes = b"q\n0.1 0 0 0.1 0 0 cm\n11942.2 657.602 m\n11942.2 619.199 l\nh\nW*\nn\nQ\n";
+        let decoded = Content::decode(bytes).unwrap();
+        let precise = precise_canonical_path_numbers(bytes, &decoded.operations).unwrap();
+        assert_eq!(precise.len(), decoded.operations.len());
+        assert_eq!(precise[1].as_ref().unwrap()[0], 0.1_f64);
+        assert_eq!(precise[2].as_ref().unwrap(), &[11942.2, 657.602]);
+        assert_ne!(
+            precise[2].as_ref().unwrap()[0],
+            number(&decoded.operations[2].operands[0]).unwrap()
+        );
+        for malformed in [
+            b"q\n0.1 0 0 0.1 0 0 cm\n11942.2 657.602 m\n% comment\n11942.2 619.199 l\nh\nW*\nn\nQ\n".as_slice(),
+            b"q 0.1 0 0 0.1 0 0 cm\n11942.2 657.602 m\n11942.2 619.199 l\nh\nW*\nn\nQ\n".as_slice(),
+            b"q\n0.1 0 0 0.1 0 0 cm\n11942.2 657.602 m\n11942.2 619.199 l\nh\nW*\nn\nQ\nextra\n".as_slice(),
+            b"q\n0.1 0 0 0.1 0 0 cm\n11942.3 657.602 m\n11942.2 619.199 l\nh\nW*\nn\nQ\n".as_slice(),
+        ] {
+            assert!(precise_canonical_path_numbers(malformed, &decoded.operations).is_none());
+        }
+    }
+
+    #[test]
     fn compound_syntax_is_detected_outside_comments() {
         assert!(has_compound_operand(b"[1 2 re\n"));
         assert!(has_compound_operand(b"(text) Tj\n"));
@@ -452,6 +527,24 @@ fn operands<const N: usize>(items: &[Object]) -> Result<[f64; N], Box<dyn Error>
         *target = number(item)?;
     }
     Ok(result)
+}
+
+fn precise_or_decoded<const N: usize>(
+    operation: &Operation,
+    index: usize,
+    precise: &Option<Vec<Option<Vec<f64>>>>,
+) -> Result<[f64; N], Box<dyn Error>> {
+    if let Some(values) = precise
+        .as_ref()
+        .and_then(|all| all.get(index))
+        .and_then(Option::as_ref)
+    {
+        return values
+            .as_slice()
+            .try_into()
+            .map_err(|_| fail("precise PDF operand count mismatch"));
+    }
+    operands(&operation.operands)
 }
 
 fn intersect_rect(rect: [u32; 4], clip: Option<[u32; 4]>) -> Option<[u32; 4]> {
@@ -1489,15 +1582,58 @@ fn polygon_to_display(
             {
                 return Err(fail("polygon clip vertex is outside MediaBox"));
             }
-            Ok(match turn {
+            let display = match turn {
                 0 => [x - f64::from(crop[0]), f64::from(crop[3]) - y],
                 90 => [y - f64::from(crop[1]), x - f64::from(crop[0])],
                 180 => [f64::from(crop[2]) - x, y - f64::from(crop[1])],
                 270 => [f64::from(crop[3]) - y, f64::from(crop[2]) - x],
                 _ => return Err(fail("unsupported polygon clip rotation")),
-            })
+            };
+            Ok([f64::from(display[0] as f32), f64::from(display[1] as f32)])
         })
         .collect()
+}
+
+fn validated_display_polygon(
+    polygon: PolygonImageClip,
+    media: [u32; 4],
+    crop: [u32; 4],
+    turn: u32,
+) -> Result<PolygonImageClip, Box<dyn Error>> {
+    let expected_signs = polygon.contours.iter().map(|c| c.sign).collect::<Vec<_>>();
+    let paths = polygon
+        .contours
+        .iter()
+        .map(|contour| {
+            let points = polygon_to_display(&contour.points, media, crop, turn)?;
+            let mut path = PathStage::start(points[0]);
+            for point in &points[1..] {
+                path.line_to(*point)?;
+            }
+            path.close()?;
+            Ok(path)
+        })
+        .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
+    let displayed = if paths.len() == 1 {
+        PolygonImageClip {
+            contours: vec![SignedClipContour {
+                points: paths[0].bounded_simple_clip()?,
+                sign: 1.0,
+            }],
+        }
+    } else {
+        multi_even_odd_clip(paths)?
+    };
+    if displayed
+        .contours
+        .iter()
+        .map(|c| c.sign)
+        .collect::<Vec<_>>()
+        != expected_signs
+    {
+        return Err(fail("polygon topology changes at display precision"));
+    }
+    Ok(displayed)
 }
 
 #[derive(Clone)]
@@ -1697,6 +1833,8 @@ fn polygon_pixel_coverage(
     // Hayro computes the edge area with f32 path coordinates. When the
     // analytic f64 result is near a byte-rounding boundary, its rasterizer
     // can round in either direction. Leave those pages to the fallback.
+    // Even with precise PDF numbers, Vello's f32 edge accumulation can differ
+    // from this analytic f64 integral near a half-byte threshold.
     if (scaled.fract() - 0.5).abs() < 0.002 {
         return Err(fail("ambiguous polygon edge coverage"));
     }
@@ -2127,6 +2265,7 @@ fn page_to_opdl_bytes_internal(
     } else {
         Content::decode(&content_bytes)?
     };
+    let precise_path_numbers = precise_canonical_path_numbers(&content_bytes, &content.operations);
     timings.operator_decode_ms = started.elapsed().as_secs_f64() * 1000.0;
     timings.page_decode_ms = timings.content_ms + timings.operator_decode_ms;
     let mut depth = 0_u8;
@@ -2159,7 +2298,7 @@ fn page_to_opdl_bytes_internal(
     let mut has_fractional_image = false;
     let mut has_fractional_clip_image = false;
     let started = Instant::now();
-    for op in &content.operations {
+    for (op_index, op) in content.operations.iter().enumerate() {
         if !closed_clip_contours.is_empty()
             && !matches!(op.operator.as_str(), "m" | "l" | "h" | "W*")
         {
@@ -2215,7 +2354,11 @@ fn page_to_opdl_bytes_internal(
                 && !pending_clip
                 && pending_path.is_none() =>
             {
-                ctm = ctm.concat(operands::<6>(&op.operands)?)?;
+                ctm = ctm.concat(precise_or_decoded::<6>(
+                    op,
+                    op_index,
+                    &precise_path_numbers,
+                )?)?;
             }
             "cm" if depth == 1
                 && !ordered_images
@@ -2538,18 +2681,7 @@ fn page_to_opdl_bytes_internal(
             }
             "n" if !image_matrix && op.operands.is_empty() && pending_clip => {
                 if let Some(polygon) = pending_polygon_clip.take() {
-                    polygon_clip = Some(PolygonImageClip {
-                        contours: polygon
-                            .contours
-                            .into_iter()
-                            .map(|contour| {
-                                Ok(SignedClipContour {
-                                    points: polygon_to_display(&contour.points, media, crop, turn)?,
-                                    sign: contour.sign,
-                                })
-                            })
-                            .collect::<Result<Vec<_>, Box<dyn Error>>>()?,
-                    });
+                    polygon_clip = Some(validated_display_polygon(polygon, media, crop, turn)?);
                 } else if let Some(fractional) = pending_fractional_rect.take() {
                     pending_rect
                         .take()
@@ -2624,7 +2756,11 @@ fn page_to_opdl_bytes_internal(
                     }
                     closed_clip_contours.push(previous);
                 }
-                let [x, y] = operands::<2>(&op.operands)?;
+                let [x, y] = if ordered_images {
+                    precise_or_decoded::<2>(op, op_index, &precise_path_numbers)?
+                } else {
+                    operands::<2>(&op.operands)?
+                };
                 let point = if ordered_images {
                     ctm.point([x, y])
                 } else {
@@ -2634,7 +2770,11 @@ fn page_to_opdl_bytes_internal(
                 pending_path = Some(PathStage::start(point));
             }
             "l" if !image_matrix && pending_rect.is_none() => {
-                let [x, y] = operands::<2>(&op.operands)?;
+                let [x, y] = if ordered_images {
+                    precise_or_decoded::<2>(op, op_index, &precise_path_numbers)?
+                } else {
+                    operands::<2>(&op.operands)?
+                };
                 let end = if ordered_images {
                     ctm.point([x, y])
                 } else {
