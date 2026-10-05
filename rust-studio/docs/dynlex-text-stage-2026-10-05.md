@@ -233,3 +233,55 @@ python3 dynlex-engine-poc/rgba/bench_glyph_multi_bbox.py \
   --scene /tmp/opds-glyph-26.opm --scene /tmp/opds-glyph-264.opm \
   --rounds 30 --repeats 100
 ```
+
+## Afzonderlijke f32-stripkernel voor rechte glyphpaden
+
+`glyph_strip_scalar.rs` en `glyph_strip_kernel.dl` rekenen dezelfde
+4×4-tegelwinding met f32-waarden en fused multiply-add. De wiskunde is
+afgeleid uit de Apache-2.0/MIT-gelicentieerde `vello_common` 0.0.8-bron;
+beide proeven gebruiken **geen Vello-runtime**. DynLex 0.0.1 ondersteunt
+`a 32 bit float`, maar zijn `!=`-vergelijking is ordered en vangt NaN niet:
+de kernel behandelt die situatie expliciet met de false-tak van `=`.
+Rust valideert OPM2 voordat de begrensde C-ABI wordt aangeroepen. Deze
+route is uitsluitend experimenteel en nog niet verbonden met de app.
+
+De DynLex-stripkernel is op de twee echte CID-glyphs, losse/geneste
+contouren, acht contouren, volle pagina met gat, 90°-vorm én de schuine
+ruit met gat telkens **49.152/49.152 bytes** gelijk aan Hayro. De vorige
+area-kernel had op die ruit 72 afwijkende randpixels. Een deterministische
+proef met 200 plus 500 willekeurige ruiten met gaten gaf 666/700 volledige
+Hayro-pariteit. De overige 34 scènes hadden samen 68 pixels met één byte
+verschil; iedere afwijking is met exacte rationale clipping geverifieerd als
+een halve 8-bit-stap. De volledige buffers van de zelfstandige Rust- en
+DynLex-stripproef waren op alle 700 scènes onderling bytegelijk. Ruwe
+gevallen staan in `rgba/glyph-strip-dynlex-random-{2026-10-05,500-2026-10-05}.json`.
+Dit is vooruitgang voor rechte outline-segmenten, geen bewijs voor algemene
+glyphs, curves, tekstlagen of alle PDF-randen. De normale app blijft tekst
+aan Hayro geven totdat ook de resterende halve-stapgevallen en PDF-
+compositing veilig zijn.
+
+Dertig afwisselend gepaarde warme processen met honderd kernelcalls per
+proces op de twee echte glyphs gaven vorige area-/nieuwe stripkernel
+**0,552/0,314 ms** en **0,554/0,341 ms per call**; strip won 30/30 paren
+bij beide. Dit sluit PDF-parsing, Rust-validatie, compositing en processtart
+uit. De ruwe samples staan in `rgba/glyph-strip-bench-2026-10-05.json`.
+Reproduceren vanuit `rust-studio`:
+
+```sh
+python3 dynlex-engine-poc/rgba/build_glyph_strip.py \
+  --compiler ~/.cache/opds-toolchains/dynlex-0.0.1/dynlex/bin/dynlex \
+  --opt ~/.cache/opds-toolchains/llvm-20/root/usr/bin/opt-20 \
+  --llc ~/.cache/opds-toolchains/llvm-20/root/usr/bin/llc-20 \
+  --output-dir /tmp/opds-glyph-strip-build
+rustc --edition=2024 -O dynlex-engine-poc/rgba/glyph_strip_native_probe.rs \
+  -L native=/tmp/opds-glyph-strip-build \
+  -L native=/tmp/opds-curve-pixel-build \
+  -o /tmp/opds-glyph-strip-native-probe
+python3 dynlex-engine-poc/rgba/verify_glyph_multi_geometry.py \
+  --probe /tmp/opds-glyph-strip-native-probe \
+  --hayro target/release/opds-engine-probe --expect-diagonal-exact
+python3 dynlex-engine-poc/rgba/verify_glyph_strip_random.py \
+  --probe /tmp/opds-glyph-strip-native-probe \
+  --compare-probe /tmp/opds-glyph-strip-scalar \
+  --hayro target/release/opds-engine-probe --cases 500 --seed 20261006
+```

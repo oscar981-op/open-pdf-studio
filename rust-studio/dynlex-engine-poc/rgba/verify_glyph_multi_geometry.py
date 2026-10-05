@@ -48,6 +48,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--probe", type=Path, required=True)
     parser.add_argument("--hayro", type=Path, required=True)
+    parser.add_argument("--expect-diagonal-exact", action="store_true",
+                        help="require zero mismatches for an experimental f32 strip candidate")
     args = parser.parse_args()
     outer = [(100, 75), (156, 75), (156, 117), (100, 117)]
     hole = [(110, 84), (110, 108), (146, 108), (146, 84)]
@@ -84,6 +86,11 @@ def main():
             mismatch = [(i % 256, i // 256, ink, rgba[i*4]) for i, ink in enumerate(coverage)
                         if rgba[i*4:i*4+4] != bytes((255-ink, 255-ink, 255-ink, 255))]
             if name == "diagonal_hole":
+                if args.expect_diagonal_exact:
+                    if mismatch:
+                        raise AssertionError(f"diagonal AA: {len(mismatch)} mismatches; first={mismatch[:8]}")
+                    print(f"{name}: 49,152 exact pixels; {sum(v!=0 for v in coverage)} ink pixels")
+                    continue
                 if not mismatch:
                     raise AssertionError("expected diagonal AA diagnostic changed; revalidate")
                 max_delta = max(abs(ink-(255-red)) for _,_,ink,red in mismatch)

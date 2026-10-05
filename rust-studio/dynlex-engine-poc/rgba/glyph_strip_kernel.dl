@@ -1,0 +1,161 @@
+import renderer.dl
+
+# Experimental scalar f32 tile-strip winding for a Rust-validated OPM2 scene.
+# The equations follow independently inspected Apache-2.0/MIT vello_common
+# 0.0.8 strip.rs. This function has no PDF parser or production app routing.
+function strip raster {cstring:scene} into {cstring:output}:
+    execute:
+        set contours to unsigned word at 16 in scene
+        set winding_bytes to allocate 16 bytes
+        set location_bytes to allocate 64 bytes
+        set acc_bytes to allocate 16 bytes
+        set winding to winding_bytes as a pointer to a 32 bit float
+        set location to location_bytes as a pointer to a 32 bit float
+        set acc to acc_bytes as a pointer to a 32 bit float
+        set ty to 0
+        loop while ty < 48:
+            set row to 0
+            loop while row < 4:
+                store (0.0 as a 32 bit float) into winding at row
+                set row to row + 1
+            set tx to 0
+            loop while tx < 64:
+                set tile_origin_x to (tx * 4) as a 32 bit float
+                set top to (ty * 4) as a 32 bit float
+                set col to 0
+                loop while col < 4:
+                    set row to 0
+                    loop while row < 4:
+                        store (item row of winding) into location at (col * 4 + row)
+                        set row to row + 1
+                    set col to col + 1
+                set offset to 24
+                set contour_index to 0
+                loop while contour_index < contours:
+                    set count to unsigned word at offset in scene
+                    set start to offset + 8
+                    set points to (scene + start) as a pointer to a float
+                    set point_index to 0
+                    loop while point_index < count - 1:
+                        set x0 to (item (point_index * 2) of points) as a 32 bit float
+                        set y0 to (item (point_index * 2 + 1) of points) as a 32 bit float
+                        set x1 to (item ((point_index + 1) * 2) of points) as a 32 bit float
+                        set y1 to (item ((point_index + 1) * 2 + 1) of points) as a 32 bit float
+                        set active to 1
+                        if y0 = y1:
+                            set active to 0
+                        set max_x to x0
+                        set min_x to x1
+                        if x1 > x0:
+                            set max_x to x1
+                            set min_x to x0
+                        set max_y to y0
+                        set min_y to y1
+                        if y1 > y0:
+                            set max_y to y1
+                            set min_y to y0
+                        if max_x < tile_origin_x:
+                            set active to 0
+                        if min_x > tile_origin_x + (4 as a 32 bit float):
+                            set active to 0
+                        if max_y < top:
+                            set active to 0
+                        if min_y > top + (4 as a 32 bit float):
+                            set active to 0
+                        if active = 1:
+                            set p0x to x0 - tile_origin_x
+                            set p0y to y0 - top
+                            set p1x to x1 - tile_origin_x
+                            set p1y to y1 - top
+                            set sign to (-1.0 as a 32 bit float)
+                            if p0y > p1y:
+                                set sign to 1.0 as a 32 bit float
+                            set line_top_y to p0y
+                            set line_top_x to p0x
+                            set line_bottom_y to p1y
+                            set line_bottom_x to p1x
+                            if p0y > p1y:
+                                set line_top_y to p1y
+                                set line_top_x to p1x
+                                set line_bottom_y to p0y
+                                set line_bottom_x to p0x
+                            set y_slope to (line_bottom_y - line_top_y) / (line_bottom_x - line_top_x)
+                            set x_slope to (1.0 as a 32 bit float) / y_slope
+                            set base to @intrinsic("call", "libm", "fmaf", a 32 bit float, line_top_y, (0.0 as a 32 bit float) - x_slope, line_top_x)
+                            set row to 0
+                            loop while row < 4:
+                                store (0.0 as a 32 bit float) into acc at row
+                                set row to row + 1
+                            set col to 0
+                            loop while col < 4:
+                                set row to 0
+                                loop while row < 4:
+                                    set ymin to line_top_y
+                                    if (row as a 32 bit float) > ymin:
+                                        set ymin to row as a 32 bit float
+                                    set ymax to line_bottom_y
+                                    if ((row + 1) as a 32 bit float) < ymax:
+                                        set ymax to (row + 1) as a 32 bit float
+                                    set left_y to @intrinsic("call", "libm", "fmaf", a 32 bit float, (col as a 32 bit float) - line_top_x, y_slope, line_top_y)
+                                    set right_y to @intrinsic("call", "libm", "fmaf", a 32 bit float, ((col + 1) as a 32 bit float) - line_top_x, y_slope, line_top_y)
+                                    # DynLex 0.0.1 emits ordered != for f32;
+                                    # NaN must be caught by the false = branch.
+                                    if left_y = left_y:
+                                        if left_y < ymin:
+                                            set left_y to ymin
+                                    else:
+                                        set left_y to ymin
+                                    if left_y > ymax:
+                                        set left_y to ymax
+                                    if right_y = right_y:
+                                        if right_y < ymin:
+                                            set right_y to ymin
+                                    else:
+                                        set right_y to ymin
+                                    if right_y > ymax:
+                                        set right_y to ymax
+                                    set left_yx to @intrinsic("call", "libm", "fmaf", a 32 bit float, left_y, x_slope, base)
+                                    set right_yx to @intrinsic("call", "libm", "fmaf", a 32 bit float, right_y, x_slope, base)
+                                    set h to right_y - left_y
+                                    if h < (0.0 as a 32 bit float):
+                                        set h to (0.0 as a 32 bit float) - h
+                                    set trap to @intrinsic("call", "libm", "fmaf", a 32 bit float, right_yx + left_yx, (-0.5 as a 32 bit float), (col + 1) as a 32 bit float)
+                                    set area to h * trap
+                                    set contribution to @intrinsic("call", "libm", "fmaf", a 32 bit float, area, sign, item row of acc)
+                                    set cell to col * 4 + row
+                                    store ((item cell of location) + contribution) into location at cell
+                                    set next_acc to @intrinsic("call", "libm", "fmaf", a 32 bit float, h, sign, item row of acc)
+                                    store next_acc into acc at row
+                                    set row to row + 1
+                                set col to col + 1
+                            set row to 0
+                            loop while row < 4:
+                                store ((item row of winding) + (item row of acc)) into winding at row
+                                set row to row + 1
+                        set point_index to point_index + 1
+                    set offset to start + count * 16
+                    set contour_index to contour_index + 1
+                set col to 0
+                loop while col < 4:
+                    set row to 0
+                    loop while row < 4:
+                        set coverage to item (col * 4 + row) of location
+                        if coverage < (0.0 as a 32 bit float):
+                            set coverage to (0.0 as a 32 bit float) - coverage
+                        set alpha to @intrinsic("call", "libm", "fmaf", a 32 bit float, coverage, (255.0 as a 32 bit float), (0.5 as a 32 bit float))
+                        if alpha > (255.0 as a 32 bit float):
+                            set alpha to 255.0 as a 32 bit float
+                        store ((alpha as an integer) as a byte) into output at ((ty * 4 + row) * 256 + tx * 4 + col)
+                        set row to row + 1
+                    set col to col + 1
+                set tx to tx + 1
+            set ty to ty + 1
+        @intrinsic("call", "libc", "free", void, winding_bytes)
+        @intrinsic("call", "libc", "free", void, location_bytes)
+        @intrinsic("call", "libc", "free", void, acc_bytes)
+        return 0
+
+set dummy_scene to allocate 24 bytes
+set dummy_output to allocate 49152 bytes
+set dummy_status to strip raster dummy_scene into dummy_output
+print dummy_status as a line

@@ -28,7 +28,7 @@ fn segments_touch(a: [f64; 2], b: [f64; 2], c: [f64; 2], d: [f64; 2]) -> bool {
         && (cd_a.abs() <= eps || cd_b.abs() <= eps || cd_a.signum() != cd_b.signum())
 }
 
-fn validate_topology(contours: &[Vec<[f64; 2]>]) -> Result<(), Box<dyn Error>> {
+pub fn validate_topology(contours: &[Vec<[f64; 2]>]) -> Result<(), Box<dyn Error>> {
     for (ci, contour) in contours.iter().enumerate() {
         if signed_area(contour).abs() <= 1e-9 {
             return Err("zero-area contour".into());
