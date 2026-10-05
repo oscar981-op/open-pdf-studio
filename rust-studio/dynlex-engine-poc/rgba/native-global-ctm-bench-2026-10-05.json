@@ -1,0 +1,204 @@
+{
+  "pdf": "crates/dynlex-backend/tests/fixtures/global-ctm-hybrid.pdf",
+  "probe": "target/release/backend_probe",
+  "runs": 15,
+  "cache": "warm process and OS cache; cache was not cleared",
+  "includes": "PDF parse, render, raw RGBA file write and process startup",
+  "samples": {
+    "dynlex": [
+      {
+        "wall_ms": 5.873551,
+        "peak_rss_kib": 4464,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.310987,
+        "peak_rss_kib": 4508,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.302837,
+        "peak_rss_kib": 4492,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 5.470114,
+        "peak_rss_kib": 4476,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.314177,
+        "peak_rss_kib": 4576,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.583572,
+        "peak_rss_kib": 4512,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.087964,
+        "peak_rss_kib": 4552,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.721724,
+        "peak_rss_kib": 4432,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 5.901591,
+        "peak_rss_kib": 4460,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.46784,
+        "peak_rss_kib": 4440,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 7.187711,
+        "peak_rss_kib": 4480,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.078094,
+        "peak_rss_kib": 4492,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.241196,
+        "peak_rss_kib": 4484,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.947377,
+        "peak_rss_kib": 4408,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.067483,
+        "peak_rss_kib": 4448,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      }
+    ],
+    "hayro": [
+      {
+        "wall_ms": 7.307072,
+        "peak_rss_kib": 6500,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 7.228101,
+        "peak_rss_kib": 6248,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.760484,
+        "peak_rss_kib": 6448,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 7.245402,
+        "peak_rss_kib": 6508,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 8.201216,
+        "peak_rss_kib": 6308,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 7.005038,
+        "peak_rss_kib": 6592,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 10.556912,
+        "peak_rss_kib": 6432,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 7.372274,
+        "peak_rss_kib": 6512,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 7.205481,
+        "peak_rss_kib": 6412,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 8.295328,
+        "peak_rss_kib": 6384,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.870696,
+        "peak_rss_kib": 6384,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 7.027178,
+        "peak_rss_kib": 6484,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.51652,
+        "peak_rss_kib": 6476,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 6.938607,
+        "peak_rss_kib": 6384,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      },
+      {
+        "wall_ms": 7.10827,
+        "peak_rss_kib": 6364,
+        "sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d",
+        "bytes": 196608
+      }
+    ]
+  },
+  "median_wall_ms": {
+    "dynlex": 6.302837,
+    "hayro": 7.205481
+  },
+  "median_peak_rss_kib": {
+    "dynlex": 4480,
+    "hayro": 6432
+  },
+  "median_paired_dynlex_minus_hayro_ms": -0.949084,
+  "dynlex_wins": 13,
+  "rgba_sha256": "62f40d3af777b25466be6ae300e672d97fcd85a373e5c2dba5cf78647588d74d"
+}

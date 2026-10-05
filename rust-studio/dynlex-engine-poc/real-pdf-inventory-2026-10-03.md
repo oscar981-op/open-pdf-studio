@@ -29,9 +29,12 @@ vond 38 image-XObjects: 36 DeviceRGB8/FlateDecode-stroken met PNG-predictor
 15 (meestal 3843×68, laatste 3843×25), plus twee Indexed/DeviceRGB-beelden.
 De content begint met `0.1 0 0 0.1 0 0 cm`; daarop volgen fractionele
 beeldtransformaties. De native DynLex-route ondersteunt nu Predictor 15 voor
-een beperkte RGB8-subset, maar niet de gecombineerde CTM, alle curven,
-clippaden of Indexed-kleuren van deze echte pagina. Reproduceer de metadata
-met `inspect_pdf --image-ops` op dit bestand. De naam alleen bewijst geen
+een beperkte RGB8-subset en kan geneste positieve asgerichte CTM's
+samenstellen wanneer beeldhoeken exact op pixelgrenzen liggen. De echte
+stroken hebben fractionele hoeken; ook curven, clippaden en Indexed-kleuren
+zijn nog niet ondersteund. Reproduceer de metadata met
+`inspect_pdf --image-ops` en bekijk de eerste beeldopdracht met
+`inspect_pdf --around 4855` op dit bestand. De naam alleen bewijst geen
 precieze raster-/vectorverdeling.
 
 Deze aantallen geven prioriteit aan een schaalbare pad-display-list met

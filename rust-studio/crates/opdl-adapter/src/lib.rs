@@ -1023,6 +1023,108 @@ fn image_to_display(
     Ok((rect, output))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct AxisCtm {
+    sx: f64,
+    sy: f64,
+    tx: f64,
+    ty: f64,
+}
+
+impl AxisCtm {
+    const IDENTITY: Self = Self {
+        sx: 1.0,
+        sy: 1.0,
+        tx: 0.0,
+        ty: 0.0,
+    };
+
+    fn concat(self, [a, b, c, d, e, f]: [f64; 6]) -> Result<Self, Box<dyn Error>> {
+        if [a, b, c, d, e, f].iter().any(|value| !value.is_finite())
+            || b != 0.0
+            || c != 0.0
+            || a <= 0.0
+            || d <= 0.0
+        {
+            return Err(fail("only positive axis-aligned PDF CTMs are supported"));
+        }
+        let result = Self {
+            sx: self.sx * a,
+            sy: self.sy * d,
+            tx: self.sx.mul_add(e, self.tx),
+            ty: self.sy.mul_add(f, self.ty),
+        };
+        if !(0.000_001..=4096.0).contains(&result.sx)
+            || !(0.000_001..=4096.0).contains(&result.sy)
+            || !result.tx.is_finite()
+            || !result.ty.is_finite()
+            || result.tx.abs() > 1_000_000.0
+            || result.ty.abs() > 1_000_000.0
+        {
+            return Err(fail("PDF CTM exceeds bounded axis-aligned range"));
+        }
+        Ok(result)
+    }
+
+    fn point(self, [x, y]: [f64; 2]) -> [f64; 2] {
+        [self.sx.mul_add(x, self.tx), self.sy.mul_add(y, self.ty)]
+    }
+
+    fn pixel_rect(self, [x, y, w, h]: [f64; 4], limit: u32) -> Result<[u32; 4], Box<dyn Error>> {
+        if w <= 0.0 || h <= 0.0 {
+            return Err(fail("nonpositive transformed rectangle"));
+        }
+        let [x, y] = self.point([x, y]);
+        let rect = [
+            pixel_aligned_u32(x, limit)?,
+            pixel_aligned_u32(y, limit)?,
+            pixel_aligned_u32(w * self.sx, limit)?,
+            pixel_aligned_u32(h * self.sy, limit)?,
+        ];
+        if rect[2] == 0 || rect[3] == 0 {
+            return Err(fail("subpixel rectangle needs coverage rendering"));
+        }
+        Ok(rect)
+    }
+}
+
+fn pixel_aligned_u32(value: f64, limit: u32) -> Result<u32, Box<dyn Error>> {
+    if !value.is_finite() || value < 0.0 || value > f64::from(limit) {
+        return Err(fail("PDF CTM coordinate is outside page bounds"));
+    }
+    let rounded = value.round();
+    if (value - rounded).abs() > 0.000_1 {
+        return Err(fail("subpixel PDF CTM placement needs coverage rendering"));
+    }
+    Ok(rounded as u32)
+}
+
+#[cfg(test)]
+mod axis_ctm_tests {
+    use super::AxisCtm;
+
+    #[test]
+    fn composes_pdf_scale_and_local_image_matrix() {
+        let global = AxisCtm::IDENTITY
+            .concat([0.1, 0.0, 0.0, 0.1, 0.0, 0.0])
+            .unwrap();
+        let image = global
+            .concat([800.0, 0.0, 0.0, 600.0, 300.0, 200.0])
+            .unwrap();
+        assert_eq!(
+            image.pixel_rect([0.0, 0.0, 1.0, 1.0], 4096).unwrap(),
+            [30, 20, 80, 60]
+        );
+        assert!(global
+            .concat([800.0, 1.0, 0.0, 600.0, 300.0, 200.0])
+            .is_err());
+        assert!(global
+            .concat([-800.0, 0.0, 0.0, 600.0, 300.0, 200.0])
+            .is_err());
+        assert!(global.pixel_rect([0.0, 0.0, 0.1, 10.0], 4096).is_err());
+    }
+}
+
 fn visible_rect_to_display(
     crop: [u32; 4],
     turn: u32,
@@ -1204,6 +1306,9 @@ fn page_to_opdl_bytes_internal(
     let mut image_drawn = false;
     let mut image_count = 0_usize;
     let mut translation: Option<[f64; 2]> = None;
+    let mut ctm = AxisCtm::IDENTITY;
+    let mut saved_ctms = Vec::new();
+    let mut saved_styles = Vec::new();
     let mut image = None;
     let mut color = [0_u8; 3];
     let mut stroke_color = [0_u8; 3];
@@ -1219,7 +1324,7 @@ fn page_to_opdl_bytes_internal(
     for op in &content.operations {
         match op.operator.as_str() {
             "q" if op.operands.is_empty()
-                && depth < 2
+                && depth < if ordered_images { 16 } else { 2 }
                 && !image_matrix
                 && translation.is_none()
                 && pending_rect.is_none()
@@ -1227,6 +1332,8 @@ fn page_to_opdl_bytes_internal(
                 && pending_path.is_none() =>
             {
                 saved_clips.push(clip);
+                saved_ctms.push(ctm);
+                saved_styles.push((color, stroke_color, one_pixel_stroke));
                 depth += 1;
             }
             "Q" if op.operands.is_empty()
@@ -1234,18 +1341,33 @@ fn page_to_opdl_bytes_internal(
                 && pending_rect.is_none()
                 && !pending_clip
                 && pending_path.is_none()
-                && (!image_matrix || image_drawn) =>
+                && (ordered_images || !image_matrix || image_drawn) =>
             {
                 clip = saved_clips
                     .pop()
                     .ok_or_else(|| fail("restore without save"))?;
                 depth -= 1;
+                ctm = saved_ctms
+                    .pop()
+                    .ok_or_else(|| fail("CTM restore without save"))?;
+                (color, stroke_color, one_pixel_stroke) = saved_styles
+                    .pop()
+                    .ok_or_else(|| fail("style restore without save"))?;
                 translation = None;
                 image_matrix = false;
                 image_placement = None;
                 image_drawn = false;
             }
+            "cm" if ordered_images
+                && depth > 0
+                && pending_rect.is_none()
+                && !pending_clip
+                && pending_path.is_none() =>
+            {
+                ctm = ctm.concat(operands::<6>(&op.operands)?)?;
+            }
             "cm" if depth == 1
+                && !ordered_images
                 && !image_matrix
                 && translation.is_none()
                 && pending_path.is_none() =>
@@ -1290,8 +1412,8 @@ fn page_to_opdl_bytes_internal(
                     ));
                 }
             }
-            "Do" if depth == 1
-                && image_matrix
+            "Do" if depth > 0
+                && (ordered_images || depth == 1 && image_matrix)
                 && image_count
                     < if ordered_images {
                         MAX_ORDERED_IMAGES
@@ -1302,8 +1424,20 @@ fn page_to_opdl_bytes_internal(
                 let [name] = op.operands.as_slice() else {
                     return Err(fail("Do requires one name"));
                 };
-                let [x, y, placed_width, placed_height] =
-                    image_placement.ok_or_else(|| fail("image placement is missing"))?;
+                let [x, y, placed_width, placed_height] = if ordered_images {
+                    ctm.pixel_rect([0.0, 0.0, 1.0, 1.0], coordinate_limit)?
+                } else {
+                    image_placement.ok_or_else(|| fail("image placement is missing"))?
+                };
+                if placed_width == 0
+                    || placed_height == 0
+                    || x.checked_add(placed_width)
+                        .is_none_or(|right| right > media[2])
+                    || y.checked_add(placed_height)
+                        .is_none_or(|top| top > media[3])
+                {
+                    return Err(fail("RGB image placement is outside the page"));
+                }
                 let pixels = image_bytes(
                     &document,
                     resources,
@@ -1350,7 +1484,10 @@ fn page_to_opdl_bytes_internal(
                 image_count += 1;
                 image_drawn = true;
             }
-            "rg" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
+            "rg" if (ordered_images || depth == 0)
+                && pending_rect.is_none()
+                && pending_path.is_none() =>
+            {
                 let rgb = operands::<3>(&op.operands)?;
                 for (target, channel) in color.iter_mut().zip(rgb) {
                     if !channel.is_finite() || !(0.0..=1.0).contains(&channel) {
@@ -1361,13 +1498,17 @@ fn page_to_opdl_bytes_internal(
             }
             "re" if !image_matrix && pending_rect.is_none() && pending_path.is_none() => {
                 let [x, y, w, h] = operands::<4>(&op.operands)?;
-                let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
-                let [x, y, w, h] = [
-                    exact_u32(x + tx)?,
-                    exact_u32(y + ty)?,
-                    exact_u32(w)?,
-                    exact_u32(h)?,
-                ];
+                let [x, y, w, h] = if ordered_images {
+                    ctm.pixel_rect([x, y, w, h], coordinate_limit)?
+                } else {
+                    let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
+                    [
+                        exact_u32(x + tx)?,
+                        exact_u32(y + ty)?,
+                        exact_u32(w)?,
+                        exact_u32(h)?,
+                    ]
+                };
                 if x + w > media[2] || y + h > media[3] {
                     return Err(fail("rectangle outside page"));
                 }
@@ -1398,14 +1539,20 @@ fn page_to_opdl_bytes_internal(
                     return Err(fail("too many commands"));
                 }
             }
-            "w" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
+            "w" if (ordered_images || depth == 0)
+                && pending_rect.is_none()
+                && pending_path.is_none() =>
+            {
                 let [weight] = operands::<1>(&op.operands)?;
                 if weight != 1.0 {
                     return Err(fail("only one-pixel butt-cap strokes are supported"));
                 }
                 one_pixel_stroke = true;
             }
-            "RG" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
+            "RG" if (ordered_images || depth == 0)
+                && pending_rect.is_none()
+                && pending_path.is_none() =>
+            {
                 let rgb = operands::<3>(&op.operands)?;
                 for (target, channel) in stroke_color.iter_mut().zip(rgb) {
                     if !channel.is_finite() || !(0.0..=1.0).contains(&channel) {
@@ -1416,13 +1563,22 @@ fn page_to_opdl_bytes_internal(
             }
             "m" if !image_matrix && pending_rect.is_none() && pending_path.is_none() => {
                 let [x, y] = operands::<2>(&op.operands)?;
-                let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
-                pending_path = Some(PathStage::start([x + tx, y + ty]));
+                let point = if ordered_images {
+                    ctm.point([x, y])
+                } else {
+                    let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
+                    [x + tx, y + ty]
+                };
+                pending_path = Some(PathStage::start(point));
             }
             "l" if !image_matrix && pending_rect.is_none() => {
                 let [x, y] = operands::<2>(&op.operands)?;
-                let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
-                let end = [x + tx, y + ty];
+                let end = if ordered_images {
+                    ctm.point([x, y])
+                } else {
+                    let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
+                    [x + tx, y + ty]
+                };
                 pending_path
                     .as_mut()
                     .ok_or_else(|| fail("line without move"))?
@@ -1430,14 +1586,25 @@ fn page_to_opdl_bytes_internal(
             }
             "c" if !image_matrix && pending_rect.is_none() => {
                 let [x1, y1, x2, y2, x3, y3] = operands::<6>(&op.operands)?;
-                let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
-                let curve = [[x1 + tx, y1 + ty], [x2 + tx, y2 + ty], [x3 + tx, y3 + ty]];
+                let curve = if ordered_images {
+                    [
+                        ctm.point([x1, y1]),
+                        ctm.point([x2, y2]),
+                        ctm.point([x3, y3]),
+                    ]
+                } else {
+                    let [tx, ty] = translation.unwrap_or([0.0, 0.0]);
+                    [[x1 + tx, y1 + ty], [x2 + tx, y2 + ty], [x3 + tx, y3 + ty]]
+                };
                 pending_path
                     .as_mut()
                     .ok_or_else(|| fail("cubic without move"))?
                     .cubic_to(curve)?;
             }
             "S" if !image_matrix && op.operands.is_empty() && one_pixel_stroke => {
+                if ordered_images && (ctm.sx != 1.0 || ctm.sy != 1.0) {
+                    return Err(fail("scaled stroke width is outside the proven subset"));
+                }
                 let path = pending_path
                     .take()
                     .ok_or_else(|| fail("stroke without move"))?;
@@ -1547,6 +1714,8 @@ fn page_to_opdl_bytes_internal(
         || image_matrix
         || translation.is_some()
         || !saved_clips.is_empty()
+        || !saved_ctms.is_empty()
+        || !saved_styles.is_empty()
     {
         return Err(fail("incomplete fixture content stream"));
     }

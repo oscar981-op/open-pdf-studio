@@ -683,6 +683,55 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
+    fn composed_axis_ctm_and_graphics_restore_match_hayro() {
+        for (name, bytes) in [
+            (
+                "global raster",
+                include_bytes!("../tests/fixtures/global-ctm-raster.pdf").as_slice(),
+            ),
+            (
+                "global hybrid",
+                include_bytes!("../tests/fixtures/global-ctm-hybrid.pdf").as_slice(),
+            ),
+            (
+                "restored matrix",
+                include_bytes!("../tests/fixtures/global-ctm-restore.pdf").as_slice(),
+            ),
+            (
+                "restored color",
+                include_bytes!("../tests/fixtures/global-ctm-style-restore.pdf").as_slice(),
+            ),
+        ] {
+            let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+            let rendered = render_with_report(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(rendered.used, Backend::Dynlex, "{name}");
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            assert_eq!(rendered.raster.rgba, expected.rgba, "{name}");
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn unproven_composed_ctms_fall_back() {
+        let original = include_bytes!("../tests/fixtures/global-ctm-raster.pdf");
+        for (old, new) in [
+            (b"0.1 0 0 0.1".as_slice(), b"0.1 1 0 0.1".as_slice()),
+            (b"300 200 cm".as_slice(), b"301 200 cm".as_slice()),
+            (b"0.1 0 0 0.1".as_slice(), b"9.9 0 0 0.1".as_slice()),
+        ] {
+            let mut bytes = original.to_vec();
+            let at = bytes
+                .windows(old.len())
+                .position(|window| window == old)
+                .unwrap();
+            bytes[at..at + old.len()].copy_from_slice(new);
+            assert!(page_to_opdl_ordered_bytes(&bytes).is_err());
+            assert!(try_render(&bytes, 1, 1.0).unwrap().is_none());
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
     fn invalid_png_predictor_parameters_fall_back() {
         let original = include_bytes!("../tests/fixtures/predictor-raster.pdf");
         for (old, new) in [

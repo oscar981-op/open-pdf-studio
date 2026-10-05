@@ -158,6 +158,18 @@ echte combinatie-PDF dichterbij, maar die gebruikt ook fractionele/globale
 CTM-transformaties, duizenden Bézier-curven, clipping en Indexed-kleurbeelden;
 de volledige pagina valt nog terecht terug op Hayro.
 
+De geordende route kan nu positieve asgerichte PDF-matrices door geneste
+`q`/`Q`-grafische toestanden samenstellen en herstellen (maximaal zestien
+niveaus). Dezelfde toestand transformeert beeldplaatsingen en rechthoekige
+fills; kleur, lijnkleur, lijnbreedtestatus en clip worden bij `Q` hersteld.
+Vier aanvullende PDF-fixtures met een globale `0.1 0 0 0.1 0 0 cm`, lokale
+beeldmatrix, vectoroverlay en herstel van matrix/kleur zijn bytegelijk aan
+Hayro. Een scheve of omgekeerde matrix, plaatsing buiten de paginalimiet en
+een subpixel-plaatsing worden geweigerd. Dit is nog geen algemene affiene
+beeldrasterisatie: de echte combinatie-PDF gebruikt onder andere effectieve
+breedtes van circa 922,44 px en fractionele posities; ook na deze stap valt
+die complete pagina op Hayro terug.
+
 De 12-image-fixture is ook met een gepaarde procesbenchmark gemeten. Vanaf
 `rust-studio`:
 
@@ -203,3 +215,10 @@ RGBA-bytes hadden per run dezelfde SHA-256. Ruwe samples staan in
 `dynlex-engine-poc/rgba/native-predictor-strip-bench-2026-10-05.json`.
 Dit is een synthetische pagina met één geschaalde strook en vectoroverlay;
 de echte combinatie-PDF en algemene PDF-objecten zijn hiermee niet gemeten.
+
+De kleine 256×192-fixture met samengestelde CTM, beeld en vectorfill is
+eveneens met 15 afwisselend gepaarde warme procesruns gemeten: DynLex/Hayro
+6,30/7,21 ms mediaan en 4.480/6.432 KiB piek-RSS; DynLex won 13 van 15
+paren. Alle 196.608 RGBA-bytes waren gelijk. Ruwe samples staan in
+`dynlex-engine-poc/rgba/native-global-ctm-bench-2026-10-05.json`.
+Processtart en warme OS-cache maken dit geen algemene snelheidsclaim.

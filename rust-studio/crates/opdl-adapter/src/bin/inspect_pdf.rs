@@ -37,6 +37,7 @@ fn describe_bounded(document: &Document, object: &Object, depth: usize) -> Strin
     match object {
         Object::Name(name) => String::from_utf8_lossy(name).into_owned(),
         Object::Integer(value) => value.to_string(),
+        Object::Real(value) => value.to_string(),
         Object::Array(items) => {
             let parts = items
                 .iter()
@@ -70,11 +71,13 @@ fn describe_bounded(document: &Document, object: &Object, depth: usize) -> Strin
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args_os().skip(1);
-    let input = args
-        .next()
-        .ok_or("usage: inspect_pdf INPUT.pdf [--page N] [--image-ops]")?;
+    let input = args.next().ok_or(
+        "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--head N] [--around INDEX]",
+    )?;
     let mut selected = None;
     let mut image_ops = false;
+    let mut head = 0_usize;
+    let mut around = None;
     while let Some(arg) = args.next() {
         match arg.to_str() {
             Some("--page") if selected.is_none() => {
@@ -86,7 +89,28 @@ fn main() -> Result<(), Box<dyn Error>> {
                 );
             }
             Some("--image-ops") if !image_ops => image_ops = true,
-            _ => return Err("usage: inspect_pdf INPUT.pdf [--page N] [--image-ops]".into()),
+            Some("--head") if head == 0 => {
+                head = args
+                    .next()
+                    .ok_or("--head requires a number")?
+                    .to_string_lossy()
+                    .parse()?;
+                if head > 128 {
+                    return Err("--head is limited to 128 operators".into());
+                }
+            }
+            Some("--around") if around.is_none() => {
+                around = Some(
+                    args.next()
+                        .ok_or("--around requires an index")?
+                        .to_string_lossy()
+                        .parse::<usize>()?,
+                );
+            }
+            _ => return Err(
+                "usage: inspect_pdf INPUT.pdf [--page N] [--image-ops] [--head N] [--around INDEX]"
+                    .into(),
+            ),
         }
     }
     let document = Document::load(Path::new(&input))?;
@@ -131,6 +155,27 @@ fn main() -> Result<(), Box<dyn Error>> {
             "page={number} media={media:?} rotate={rotate} stream_bytes={} operators={} top={leaders}",
             stream.len(), content.operations.len()
         );
+        for (index, operation) in content.operations.iter().take(head).enumerate() {
+            let operands = operation
+                .operands
+                .iter()
+                .map(|value| describe(&document, value))
+                .collect::<Vec<_>>();
+            println!("op={index} {} {}", operands.join(" "), operation.operator);
+        }
+        if let Some(center) = around {
+            for index in
+                center.saturating_sub(8)..center.saturating_add(9).min(content.operations.len())
+            {
+                let operation = &content.operations[index];
+                let operands = operation
+                    .operands
+                    .iter()
+                    .map(|value| describe(&document, value))
+                    .collect::<Vec<_>>();
+                println!("op={index} {} {}", operands.join(" "), operation.operator);
+            }
+        }
         if image_ops {
             let (resources, _) = document.get_page_resources(id)?;
             if let Some(resources) = resources {
