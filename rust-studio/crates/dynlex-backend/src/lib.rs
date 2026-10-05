@@ -2,7 +2,9 @@
 //! Unsupported PDFs return None so the host can keep its existing renderer.
 use opds_engine_probe::{ParsedPdf, Raster, RenderError};
 #[cfg(feature = "kernel")]
-use opds_opdl_adapter::{geometry_v3::page_to_opgm_v3_bytes, page_to_opdl_bytes};
+use opds_opdl_adapter::{
+    geometry_v3::page_to_opgm_v3_bytes, page_to_opdl_bytes, page_to_opdl_ordered_bytes,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
@@ -100,13 +102,17 @@ pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap
         let (scene, width, height) = if let Ok(geometry) = page_to_opgm_v3_bytes(bytes) {
             validated_scene(&geometry)?
         } else {
-            let scene = match page_to_opdl_bytes(bytes) {
-                Ok(scene) => scene,
-                Err(_) => return Ok(None),
+            let old = page_to_opdl_bytes(bytes)
+                .ok()
+                .and_then(|scene| validated_rgb_scene(scene).ok());
+            let ordered = || {
+                page_to_opdl_ordered_bytes(bytes)
+                    .ok()
+                    .and_then(|scene| validated_ordered_scene(scene).ok())
             };
-            match validated_rgb_scene(scene) {
-                Ok(validated) => validated,
-                Err(_) => return Ok(None),
+            match old.or_else(ordered) {
+                Some(validated) => validated,
+                None => return Ok(None),
             }
         };
         let mode = if word(&scene, 32)? == 0 { 2 } else { 3 };
@@ -215,8 +221,8 @@ fn validated_scene(geometry: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     Ok((scene, width, height))
 }
 
-/// The older PDF adapter supports only one unfiltered, full-page RGB8 XObject
-/// before its vector commands. Revalidate its bytes before crossing the ABI.
+/// The v2 adapter flattens up to two RGB8 XObjects before vector commands.
+/// Revalidate its bytes before crossing the ABI.
 #[cfg(feature = "kernel")]
 fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
     if scene.len() < 40
@@ -281,6 +287,86 @@ fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
         {
             return Err("invalid RGB OPDL command".into());
         }
+    }
+    Ok((scene, width, height))
+}
+
+/// OPDL-v3 stores images after the fixed-width command table; kind 6 carries a
+/// byte offset into that trailing RGB blob. Offsets must be contiguous, so the
+/// DynLex kernel cannot read unvalidated gaps, aliases or truncated images.
+#[cfg(feature = "kernel")]
+fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
+    if scene.len() < 40
+        || scene.len() > 3_538_984
+        || scene.get(..4) != Some(b"OPDL")
+        || word(&scene, 4)? != 3
+        || word(&scene, 32)? != 0
+    {
+        return Err("invalid ordered OPDL header".into());
+    }
+    let width = word(&scene, 8)?;
+    let height = word(&scene, 12)?;
+    if width == 0
+        || height == 0
+        || width > 1024
+        || height > 1024
+        || [
+            word(&scene, 16)?,
+            word(&scene, 20)?,
+            word(&scene, 24)?,
+            word(&scene, 28)?,
+        ] != [0, 0, width, height]
+    {
+        return Err("invalid ordered OPDL page".into());
+    }
+    let count = usize::try_from(word(&scene, 36)?).map_err(|e| e.to_string())?;
+    let image_start = count
+        .checked_mul(24)
+        .and_then(|n| 40_usize.checked_add(n))
+        .ok_or("ordered command overflow")?;
+    if count > 16_384 || image_start > scene.len() {
+        return Err("invalid ordered OPDL command table".into());
+    }
+    let mut image_bytes = 0_usize;
+    let mut images = 0_u8;
+    for index in 0..count {
+        let at = 40 + index * 24;
+        let kind = word(&scene, at)?;
+        let rect = [
+            word(&scene, at + 4)?,
+            word(&scene, at + 8)?,
+            word(&scene, at + 12)?,
+            word(&scene, at + 16)?,
+        ];
+        if rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height {
+            return Err("invalid ordered command bounds".into());
+        }
+        match kind {
+            1 | 3 => {
+                if scene[at + 23] != 255
+                    || (kind == 3 && rect[2] - rect[0] != 1 && rect[3] - rect[1] != 1)
+                {
+                    return Err("invalid ordered vector command".into());
+                }
+            }
+            6 => {
+                images += 1;
+                let offset = usize::try_from(word(&scene, at + 20)?).map_err(|e| e.to_string())?;
+                if images > 2 || offset != image_bytes {
+                    return Err("invalid ordered image offset or count".into());
+                }
+                image_bytes = (rect[2] - rect[0])
+                    .checked_mul(rect[3] - rect[1])
+                    .and_then(|n| n.checked_mul(3))
+                    .and_then(|n| usize::try_from(n).ok())
+                    .and_then(|n| image_bytes.checked_add(n))
+                    .ok_or("ordered image size overflow")?;
+            }
+            _ => return Err("unsupported ordered command".into()),
+        }
+    }
+    if images == 0 || image_start.checked_add(image_bytes) != Some(scene.len()) {
+        return Err("invalid ordered image tail".into());
     }
     Ok((scene, width, height))
 }
@@ -399,6 +485,40 @@ mod tests {
 
     #[cfg(feature = "kernel")]
     #[test]
+    fn ordered_images_after_vector_content_match_hayro() {
+        for (name, bytes) in [
+            (
+                "one-after-vector",
+                include_bytes!("../tests/fixtures/placed-raster-after-vector.pdf").as_slice(),
+            ),
+            (
+                "second-after-vector",
+                include_bytes!("../tests/fixtures/two-images-wrong-order.pdf").as_slice(),
+            ),
+        ] {
+            let bytes = bytes.to_vec();
+            let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let result = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(result.used, Backend::Dynlex);
+            let hayro = pdf.render_page(1, 1.0).unwrap();
+            let mismatch = result
+                .raster
+                .rgba
+                .iter()
+                .zip(&hayro.rgba)
+                .position(|(a, b)| a != b);
+            assert_eq!(
+                mismatch,
+                None,
+                "{name} first differing RGBA byte; got {:?}, expected {:?}",
+                mismatch.map(|i| result.raster.rgba[i]),
+                mismatch.map(|i| hayro.rgba[i])
+            );
+        }
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
     fn rgb_scene_boundary_rejects_corruption() {
         let bytes = include_bytes!("../tests/fixtures/full-page-hybrid.pdf");
         let scene = page_to_opdl_bytes(bytes).unwrap();
@@ -417,6 +537,33 @@ mod tests {
         let image_len = usize::try_from(word(&bad_kind, 32).unwrap()).unwrap();
         bad_kind[40 + image_len..44 + image_len].copy_from_slice(&9_u32.to_le_bytes());
         assert!(validated_rgb_scene(bad_kind).is_err());
+    }
+
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn ordered_scene_boundary_rejects_corruption() {
+        let bytes = include_bytes!("../tests/fixtures/two-images-wrong-order.pdf");
+        let scene = page_to_opdl_ordered_bytes(bytes).unwrap();
+        assert!(validated_ordered_scene(scene.clone()).is_ok());
+        let mut truncated = scene.clone();
+        truncated.pop();
+        assert!(validated_ordered_scene(truncated).is_err());
+        let mut appended = scene.clone();
+        appended.push(0);
+        assert!(validated_ordered_scene(appended).is_err());
+        let mut bad_kind = scene.clone();
+        bad_kind[40..44].copy_from_slice(&99_u32.to_le_bytes());
+        assert!(validated_ordered_scene(bad_kind).is_err());
+        let mut bad_offset = scene.clone();
+        let image_command = (0..word(&scene, 36).unwrap() as usize)
+            .map(|i| 40 + i * 24)
+            .find(|at| word(&scene, *at).unwrap() == 6)
+            .unwrap();
+        bad_offset[image_command + 20..image_command + 24].copy_from_slice(&1_u32.to_le_bytes());
+        assert!(validated_ordered_scene(bad_offset).is_err());
+        let mut bad_bounds = scene;
+        bad_bounds[image_command + 12..image_command + 16].copy_from_slice(&2048_u32.to_le_bytes());
+        assert!(validated_ordered_scene(bad_bounds).is_err());
     }
 
     #[cfg(feature = "kernel")]
@@ -441,10 +588,6 @@ mod tests {
         assert!(try_render(outside, 1, 1.0).unwrap().is_none());
         let fractional = include_bytes!("../tests/fixtures/placed-raster-fractional.pdf");
         assert!(try_render(fractional, 1, 1.0).unwrap().is_none());
-        let wrong_order = include_bytes!("../tests/fixtures/placed-raster-after-vector.pdf");
-        assert!(try_render(wrong_order, 1, 1.0).unwrap().is_none());
-        let second_after_vector = include_bytes!("../tests/fixtures/two-images-wrong-order.pdf");
-        assert!(try_render(second_after_vector, 1, 1.0).unwrap().is_none());
         let third_image = include_bytes!("../tests/fixtures/three-images-unsupported.pdf");
         assert!(try_render(third_image, 1, 1.0).unwrap().is_none());
     }

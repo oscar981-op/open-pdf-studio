@@ -42,10 +42,15 @@ Een afbeelding mag de hele pagina vullen of een kleiner pixeluitgelijnd
 rechthoekig deel zonder resampling; de bronpixels moeten exact overeenkomen
 met de positieve gehele breedte en hoogte in de PDF-plaatsingsmatrix.
 Buiten de afbeeldingen is de pagina wit. Overlap volgt de PDF-tekenvolgorde.
-Daarna zijn bewezen rechthoekfills en 1px-strokes toegestaan; een afbeelding
-ná vectorinhoud wordt geweigerd.
-Rust valideert de complete OPDL-scene opnieuw
-voor de DynLex-ABI; alleen dan draait de hybride kernelmodus. FlateDecode
+Bewezen rechthoekfills en 1px-strokes zijn toegestaan. Als een afbeelding ná
+vectorinhoud komt, gebruikt de native route een nieuwe experimentele
+OPDL-v3-scene met geordende 24-byte opdrachten en een aansluitende RGB-blob.
+Een afbeeldingsopdracht (kind 6) verwijst met een gecontroleerde byte-offset
+naar zijn pixeldata. De Rust-grens eist aaneengesloten offsets, exacte
+record- en beeldlengtes, maximaal twee afbeeldingen en maximaal 3.538.984
+scenebytes voordat DynLex wordt aangeroepen. OPDL-v1/v2 blijven ongewijzigd.
+Rust valideert de complete OPDL-scene opnieuw voor de DynLex-ABI; alleen dan
+draait de hybride v2-modus of de geordende v3-modus. FlateDecode
 wordt met een harde limiet van exact de verwachte RGB-bytelengte uitgepakt.
 De begrensde decompressor is de pure-Rust `miniz_oxide`-bibliotheek.
 Onbekende afbeeldingsdictionarysleutels, waaronder `/DecodeParms` en
@@ -91,10 +96,13 @@ als FlateDecode, worden
 in de native backend op 256×192 pixel voor pixel met Hayro vergeleken.
 Vier extra PDF's plaatsen een 64×48-beeld op (31,27) binnen die pagina:
 raster/hybride, raw/Flate, telkens RGBA-bytegelijk aan Hayro. Een plaatsing
-buiten de pagina, een fractionele positie en beeldinhoud na vectorinhoud
-vallen aantoonbaar terug op Hayro. Vier andere PDF's overlappen een tweede
+buiten de pagina of op een fractionele positie valt terug op Hayro.
+Vier andere PDF's overlappen een tweede
 72×56-beeld met het eerste, weer in raster/hybride en raw/Flate, telkens
-RGBA-bytegelijk aan Hayro; een tweede beeld ná vectorinhoud wordt geweigerd.
+RGBA-bytegelijk aan Hayro. Twee extra PDF's plaatsen de eerste of tweede
+afbeelding ná vectorinhoud en zijn pixelgelijk aan Hayro via OPDL-v3.
+Afgekorte of extra beeldbytes, ongeldige offsets, opdrachtsoorten en grenzen
+worden aan de Rust-FFI-grens geweigerd.
 Rotatie, shear, geschaalde bronpixels, drie of meer afbeeldingen en andere
 filters zijn nog niet bewezen.
 Een pagina met geërfde `/Rotate 90` volgt aantoonbaar de Hayro-fallback;

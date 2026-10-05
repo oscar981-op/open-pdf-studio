@@ -1,7 +1,7 @@
 import renderer.dl
 
 # Trusted POC buffer entry point. The Rust caller must validate the complete
-# OPDL-v2 scene and reserve 12 control bytes before the RGBA output.
+# OPDL-v2/v3 scene and reserve 12 control bytes before the RGBA output.
 function render {cstring:scene} into {cstring:rgba}:
     execute:
         set mode to unsigned word at 0 in rgba
@@ -19,7 +19,8 @@ function render {cstring:scene} into {cstring:rgba}:
         set count_offset to 36 + image_length
         set command_count to unsigned word at count_offset in scene
         set command_start to count_offset + 4
-        if mode = 2:
+        set image_start to command_start + command_count * 24
+        if mode = 2 or version = 3:
             discard @intrinsic("call", "libc", "memset", a pointer to a byte, pixels, 255, width * height * 4)
         else:
             set y to 0
@@ -71,6 +72,26 @@ function render {cstring:scene} into {cstring:rgba}:
                     loop while draw_x < stop_x:
                         set hit to 0
                         set effective_opacity to opacity
+                        if version = 3 and kind = 6:
+                            set source_offset to unsigned word at (offset + 20) in scene
+                            set source_row to draw_y - top
+                            # DynLex 0.0.1 miscompiles draw_x - left as draw_x - draw_x.
+                            # Reloading under a distinct name preserves the correct index.
+                            set image_left to unsigned word at (offset + 4) in scene
+                            set source_column to draw_x - image_left
+                            set source_width to right - left
+                            set row_start to source_row * source_width
+                            set source_pixel to row_start + source_column
+                            set source_byte_offset to source_pixel * 3
+                            set image_payload_start to image_start + source_offset
+                            set source_index to image_payload_start + source_byte_offset
+                            set pixel_index to (draw_y * width + draw_x) * 4
+                            set source_red to unsigned byte at source_index in scene
+                            set source_green to unsigned byte at (source_index + 1) in scene
+                            set source_blue to unsigned byte at (source_index + 2) in scene
+                            store (source_red as a byte) into pixels at pixel_index
+                            store (source_green as a byte) into pixels at (pixel_index + 1)
+                            store (source_blue as a byte) into pixels at (pixel_index + 2)
                         if kind = 1 or kind = 3:
                             set hit to 1
                         if kind = 2:

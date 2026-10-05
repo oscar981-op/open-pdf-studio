@@ -799,8 +799,21 @@ pub fn page_to_opdl_bytes(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
     Ok(page_to_opdl_bytes_with_timings(bytes)?.0)
 }
 
+/// Experimental ordered image/vector scene. The native caller validates the
+/// complete byte stream before passing it to the DynLex ABI.
+pub fn page_to_opdl_ordered_bytes(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
+    Ok(page_to_opdl_bytes_internal(bytes, true)?.0)
+}
+
 fn page_to_opdl_bytes_with_timings(
     bytes: &[u8],
+) -> Result<(Vec<u8>, AdapterTimings), Box<dyn Error>> {
+    page_to_opdl_bytes_internal(bytes, false)
+}
+
+fn page_to_opdl_bytes_internal(
+    bytes: &[u8],
+    ordered_images: bool,
 ) -> Result<(Vec<u8>, AdapterTimings), Box<dyn Error>> {
     let mut timings = AdapterTimings::default();
     if bytes.len() > 16_000_000 {
@@ -874,6 +887,7 @@ fn page_to_opdl_bytes_with_timings(
     let mut depth = 0_u8;
     let mut image_matrix = false;
     let mut image_placement: Option<[u32; 4]> = None;
+    let mut image_drawn = false;
     let mut image_count = 0_u8;
     let mut translation: Option<[f64; 2]> = None;
     let mut image = None;
@@ -886,6 +900,7 @@ fn page_to_opdl_bytes_with_timings(
     let mut saved_clips: Vec<Option<[u32; 4]>> = Vec::new();
     let mut pending_path: Option<PathStage> = None;
     let mut commands: Vec<(u32, [u32; 4], [u8; 4])> = Vec::new();
+    let mut ordered_image_bytes = Vec::new();
     let started = Instant::now();
     for op in &content.operations {
         match op.operator.as_str() {
@@ -905,7 +920,7 @@ fn page_to_opdl_bytes_with_timings(
                 && pending_rect.is_none()
                 && !pending_clip
                 && pending_path.is_none()
-                && (!image_matrix || image.is_some()) =>
+                && (!image_matrix || image_drawn) =>
             {
                 clip = saved_clips
                     .pop()
@@ -914,6 +929,7 @@ fn page_to_opdl_bytes_with_timings(
                 translation = None;
                 image_matrix = false;
                 image_placement = None;
+                image_drawn = false;
             }
             "cm" if depth == 1
                 && !image_matrix
@@ -925,7 +941,7 @@ fn page_to_opdl_bytes_with_timings(
                     && c == 0.0
                     && !(a == 1.0 && d == 1.0)
                     && image_count < 2
-                    && commands.is_empty()
+                    && (ordered_images || commands.is_empty())
                     && clip.is_none()
                 {
                     let [placed_width, placed_height, x, y] =
@@ -940,6 +956,7 @@ fn page_to_opdl_bytes_with_timings(
                     }
                     image_matrix = true;
                     image_placement = Some([x, y, placed_width, placed_height]);
+                    image_drawn = false;
                 } else if [a, b, c, d] == [1.0, 0.0, 0.0, 1.0]
                     && e.fract() == 0.0
                     && f.fract() == 0.0
@@ -966,7 +983,20 @@ fn page_to_opdl_bytes_with_timings(
                     placed_width,
                     placed_height,
                 )?;
-                if image_count == 0 && [x, y, placed_width, placed_height] == [0, 0, width, height]
+                if ordered_images {
+                    let offset = u32::try_from(ordered_image_bytes.len())?;
+                    let top = height - y - placed_height;
+                    commands.push((
+                        6,
+                        [x, top, x + placed_width, top + placed_height],
+                        offset.to_le_bytes(),
+                    ));
+                    if commands.len() > MAX_COMMANDS {
+                        return Err(fail("too many commands"));
+                    }
+                    ordered_image_bytes.extend_from_slice(&pixels);
+                } else if image_count == 0
+                    && [x, y, placed_width, placed_height] == [0, 0, width, height]
                 {
                     image = Some(pixels);
                 } else {
@@ -985,6 +1015,7 @@ fn page_to_opdl_bytes_with_timings(
                     image = Some(std::borrow::Cow::Owned(page_rgb));
                 }
                 image_count += 1;
+                image_drawn = true;
             }
             "rg" if depth == 0 && pending_rect.is_none() && pending_path.is_none() => {
                 let rgb = operands::<3>(&op.operands)?;
@@ -1169,12 +1200,23 @@ fn page_to_opdl_bytes_with_timings(
     timings.operators_ms = started.elapsed().as_secs_f64() * 1000.0;
     let started = Instant::now();
     let image = image.unwrap_or(std::borrow::Cow::Borrowed(&[]));
-    let mut output = Vec::with_capacity(40 + image.len() + commands.len() * 24);
+    let base_image: &[u8] = if ordered_images { &[] } else { &image };
+    let mut output =
+        Vec::with_capacity(40 + base_image.len() + commands.len() * 24 + ordered_image_bytes.len());
     output.extend_from_slice(b"OPDL");
-    for value in [2, width, height, 0, 0, width, height, image.len() as u32] {
+    for value in [
+        if ordered_images { 3 } else { 2 },
+        width,
+        height,
+        0,
+        0,
+        width,
+        height,
+        base_image.len() as u32,
+    ] {
         output.extend_from_slice(&value.to_le_bytes());
     }
-    output.extend_from_slice(&image);
+    output.extend_from_slice(base_image);
     output.extend_from_slice(&(commands.len() as u32).to_le_bytes());
     for (kind, rect, rgba) in commands {
         output.extend_from_slice(&kind.to_le_bytes());
@@ -1183,6 +1225,7 @@ fn page_to_opdl_bytes_with_timings(
         }
         output.extend_from_slice(&rgba);
     }
+    output.extend_from_slice(&ordered_image_bytes);
     timings.encode_ms = started.elapsed().as_secs_f64() * 1000.0;
     Ok((output, timings))
 }
