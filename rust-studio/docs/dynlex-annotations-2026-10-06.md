@@ -512,3 +512,16 @@ beide tekenvolgordes en 0/90/180/270° zijn volledig RGBA-bytegelijk aan
 Hayro. Zestien extra PDF's controleren randen van 2×2 tot 38×28 pt op
 dezelfde rotaties en een gekleurde onderlaag. Dit blijft een exacte 2pt-
 rechthoekdeelset, geen algemene PDF-stroker of volledige annotatielaag.
+
+**Begrensde Form-grafische toestand.** De parser bewaart nu afzonderlijke
+DeviceRGB-vul- en lijnkleur en een expliciete 2pt-lijndikte, en herstelt die
+over maximaal vier `q/Q`-niveaus. Meerdere `re`-paden mogen dezelfde staat
+hergebruiken. `B` schildert eerst de vulling en dan de rand; voor een enkel
+rechthoekpad zijn ook `F`, `f*`, `s`, `B*`, `b` en `b*` pixelgewijs bewezen.
+Acht PDF-uitvoeren met staat-hergebruik, genest herstel en gecombineerd
+schilderen plus 24 uitvoeringen van de equivalente rechthoekoperators zijn
+op 0/90/180/270° volledig RGBA-bytegelijk aan Hayro. De inhoud blijft
+maximaal 128 operators, 32 tekenopdrachten en 4096 Form-bytes; ontbrekende
+kleur, een onafgemaakt pad, verkeerde nesting of onbekende operator laat de
+hele pagina op Hayro terugvallen. Clipping, transparantie, afbeeldingen,
+tekst en algemene vectorpaden in een Form zijn nog niet ondersteund.

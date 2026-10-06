@@ -316,9 +316,9 @@ fn parse_shape_annotation(
     Some(mark)
 }
 
-/// A bounded Form appearance with explicitly colored, opaque DeviceRGB
-/// rectangle fills and 2pt outlines. The paint order, rather than `/Subtype`,
-/// determines the visible pixels. Other Form operators remain on Hayro.
+/// A bounded Form appearance with opaque DeviceRGB rectangle fills and 2pt
+/// outlines. The paint order, rather than `/Subtype`, determines the pixels.
+/// Other Form operators remain on Hayro.
 fn parse_opaque_rect_form(
     doc: &Document,
     annotation: &Dictionary,
@@ -382,10 +382,9 @@ fn parse_opaque_rect_form(
         return None;
     }
     // lopdf's content decoder can accept an incomplete trailing operand.
-    // Require an exact lexical shape before lopdf decoding; its decoder may
-    // otherwise ignore trailing operands. Each record is either `rg re f` or
-    // `RG 2 w re S`, with every paint parameter explicit. This also excludes
-    // comments, strings and compound operands before the DynLex ABI.
+    // lopdf may ignore trailing operands. Require an exact flat numeric
+    // token stream before interpreting its operations; comments, strings,
+    // compound operands and unknown graphics operators stay on Hayro.
     let tokens: Vec<_> = form
         .content
         .split(|byte| byte.is_ascii_whitespace())
@@ -400,83 +399,44 @@ fn parse_opaque_rect_form(
                 .iter()
                 .all(|byte| byte.is_ascii_digit() || matches!(byte, b'.' | b'-' | b'+'))
     };
-    let mut kinds = Vec::new();
-    let mut token_index = 1;
-    while token_index < tokens.len() - 1 {
-        let rest = &tokens[token_index..tokens.len() - 1];
-        let stroke = rest.get(3) == Some(&&b"RG"[..]);
-        let width = if stroke { 12 } else { 10 };
-        let Some(record) = rest.get(..width) else {
-            return None;
-        };
-        let valid = if stroke {
-            record[3] == b"RG"
-                && record[5] == b"w"
-                && record[10] == b"re"
-                && record[11] == b"S"
-                && [0, 1, 2, 4, 6, 7, 8, 9]
-                    .into_iter()
-                    .all(|index| numeric(record[index]))
-        } else {
-            record[3] == b"rg"
-                && record[8] == b"re"
-                && record[9] == b"f"
-                && [0, 1, 2, 4, 5, 6, 7]
-                    .into_iter()
-                    .all(|index| numeric(record[index]))
-        };
-        if !valid {
-            return None;
-        }
-        kinds.push(stroke);
-        if kinds.len() > 32 {
-            return None;
-        }
-        token_index += width;
-    }
-    if kinds.is_empty() {
-        return None;
-    }
     let operations = Content::decode(&form.content).ok()?.operations;
-    if operations.len()
-        != 2 + kinds
-            .iter()
-            .map(|stroke| if *stroke { 4 } else { 3 })
-            .sum::<usize>()
-        || operations.first()?.operator != "q"
-        || operations.last()?.operator != "Q"
-        || !operations.first()?.operands.is_empty()
-        || !operations.last()?.operands.is_empty()
-    {
+    if operations.len() < 5 || operations.len() > 128 {
         return None;
     }
-    let mut commands = Vec::with_capacity(kinds.len());
-    let mut op_index = 1;
-    for stroke in kinds {
-        let color = &operations[op_index];
-        let (path, paint) = if stroke {
-            let width = &operations[op_index + 1];
-            if width.operator != "w"
-                || width.operands.len() != 1
-                || width.operands.first().and_then(number) != Some(2.0)
-            {
-                return None;
-            }
-            (&operations[op_index + 2], &operations[op_index + 3])
-        } else {
-            (&operations[op_index + 1], &operations[op_index + 2])
+    let mut token_index = 0;
+    for operation in &operations {
+        let numeric_count = match operation.operator.as_str() {
+            "q" | "Q" | "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" => 0,
+            "w" => 1,
+            "rg" | "RG" => 3,
+            "re" => 4,
+            _ => return None,
         };
-        if color.operator != if stroke { "RG" } else { "rg" }
-            || path.operator != "re"
-            || paint.operator != if stroke { "S" } else { "f" }
-            || color.operands.len() != 3
-            || path.operands.len() != 4
-            || !paint.operands.is_empty()
+        let Some(record) = tokens.get(token_index..token_index + numeric_count + 1) else {
+            return None;
+        };
+        if operation.operands.len() != numeric_count
+            || !record[..numeric_count].iter().all(|token| numeric(token))
+            || record[numeric_count] != operation.operator.as_bytes()
         {
             return None;
         }
-        let channels = color
-            .operands
+        token_index += numeric_count + 1;
+    }
+    if token_index != tokens.len()
+        || operations.first()?.operator != "q"
+        || operations.last()?.operator != "Q"
+    {
+        return None;
+    }
+    #[derive(Clone, Copy, Default)]
+    struct FormState {
+        fill: Option<[u8; 3]>,
+        stroke: Option<[u8; 3]>,
+        line_width: Option<f64>,
+    }
+    let parse_color = |values: &[Object]| -> Option<[u8; 3]> {
+        values
             .iter()
             .map(|value| {
                 let value = number(value)?;
@@ -487,14 +447,13 @@ fn parse_opaque_rect_form(
                     && (value - printed).abs() <= 0.000_001)
                     .then_some(channel as u8)
             })
-            .collect::<Option<Vec<_>>>()?;
-        let [x, y, width, height] = path
-            .operands
-            .iter()
-            .map(number)
             .collect::<Option<Vec<_>>>()?
             .try_into()
-            .ok()?;
+            .ok()
+    };
+    let mut commands = Vec::new();
+    let mut push_rect = |path: [f64; 4], stroke: bool, color: [u8; 3]| -> Option<()> {
+        let [x, y, width, height] = path;
         let inset = if stroke { 1.0 } else { 0.0 };
         if [x, y, width, height]
             .iter()
@@ -505,6 +464,7 @@ fn parse_opaque_rect_form(
             || height < if stroke { 2.0 } else { 1.0 }
             || x + width + inset > rect[2] - rect[0]
             || y + height + inset > rect[3] - rect[1]
+            || commands.len() >= 32
         {
             return None;
         }
@@ -519,11 +479,86 @@ fn parse_opaque_rect_form(
         commands.push(ImportedCommand {
             kind: if stroke { 2 } else { 1 },
             rect: bounds,
-            tail: [channels[0], channels[1], channels[2], 255],
+            tail: [color[0], color[1], color[2], 255],
         });
-        op_index += if stroke { 4 } else { 3 };
+        Some(())
+    };
+    let mut state = FormState::default();
+    let mut stack = Vec::new();
+    let mut pending_path = None;
+    for (index, operation) in operations.iter().enumerate() {
+        match operation.operator.as_str() {
+            "q" => {
+                if pending_path.is_some() || stack.len() >= 4 {
+                    return None;
+                }
+                stack.push(state);
+            }
+            "Q" => {
+                if pending_path.is_some() || (stack.len() == 1 && index + 1 != operations.len()) {
+                    return None;
+                }
+                state = stack.pop()?;
+            }
+            "rg" | "RG" => {
+                if stack.is_empty() || pending_path.is_some() {
+                    return None;
+                }
+                let color = parse_color(&operation.operands)?;
+                if operation.operator == "rg" {
+                    state.fill = Some(color);
+                } else {
+                    state.stroke = Some(color);
+                }
+            }
+            "w" => {
+                if stack.is_empty()
+                    || pending_path.is_some()
+                    || operation.operands.first().and_then(number) != Some(2.0)
+                {
+                    return None;
+                }
+                state.line_width = Some(2.0);
+            }
+            "re" => {
+                if stack.is_empty() || pending_path.is_some() {
+                    return None;
+                }
+                pending_path = Some(
+                    operation
+                        .operands
+                        .iter()
+                        .map(number)
+                        .collect::<Option<Vec<_>>>()?
+                        .try_into()
+                        .ok()?,
+                );
+            }
+            "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" => {
+                if stack.is_empty() {
+                    return None;
+                }
+                let path = pending_path.take()?;
+                if matches!(
+                    operation.operator.as_str(),
+                    "f" | "F" | "f*" | "B" | "B*" | "b" | "b*"
+                ) {
+                    push_rect(path, false, state.fill?)?;
+                }
+                if matches!(
+                    operation.operator.as_str(),
+                    "S" | "s" | "B" | "B*" | "b" | "b*"
+                ) {
+                    if state.line_width != Some(2.0) {
+                        return None;
+                    }
+                    push_rect(path, true, state.stroke?)?;
+                }
+            }
+            _ => return None,
+        }
     }
-    Some(commands)
+    (stack.is_empty() && pending_path.is_none() && !commands.is_empty()).then_some(commands)
 }
 
 /// Return a DynLex-composited page only for one exact, opaque 2pt Square Form
@@ -1339,6 +1374,104 @@ mod missing_appearance_tests {
     }
 
     #[test]
+    fn form_graphics_state_reuse_nested_restore_and_combined_paint_match_hayro() {
+        for rotation in [0, 90, 180, 270] {
+            for content in [
+                &b"q 0 1 0 rg 1 0 0 RG 2 w 0 0 40 30 re f 2 2 36 26 re S 6 6 8 8 re B Q"[..],
+                &b"q 1 0 0 rg 0 1 0 RG 2 w 0 0 40 30 re f q 0 0 1 rg 4 4 16 10 re f Q 6 6 20 14 re B Q"[..],
+            ] {
+                let bytes = opaque_stamp_fixture(rotation, false);
+                let mut doc = Document::load_mem(&bytes).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let annotation_id = doc
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()[0]
+                    .as_reference()
+                    .unwrap();
+                let form_id = doc
+                    .get_dictionary(annotation_id)
+                    .unwrap()
+                    .get(b"AP")
+                    .unwrap()
+                    .as_dict()
+                    .unwrap()
+                    .get(b"N")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                let form = doc
+                    .get_object_mut(form_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap();
+                form.content = content.to_vec();
+                form.dict.set("Length", form.content.len() as i64);
+                let mut source = Vec::new();
+                doc.save_to(&mut source).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(actual.imported_annotations_dynlex, "{rotation}");
+                assert_eq!(actual.raster.rgba, expected.rgba, "{rotation}");
+            }
+        }
+    }
+
+    #[test]
+    fn closed_rectangle_and_even_odd_paint_operators_match_hayro() {
+        for rotation in [0, 90, 180, 270] {
+            for operator in ["F", "f*", "s", "B*", "b", "b*"] {
+                let content = match operator {
+                    "F" | "f*" => format!("q 1 0 0 rg 0 0 40 30 re {operator} Q"),
+                    "s" => format!("q 0 1 0 RG 2 w 1 1 38 28 re {operator} Q"),
+                    _ => format!("q 1 0 0 rg 0 1 0 RG 2 w 1 1 38 28 re {operator} Q"),
+                };
+                let bytes = opaque_stamp_fixture(rotation, false);
+                let mut doc = Document::load_mem(&bytes).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let annotation_id = doc
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()[0]
+                    .as_reference()
+                    .unwrap();
+                let form_id = doc
+                    .get_dictionary(annotation_id)
+                    .unwrap()
+                    .get(b"AP")
+                    .unwrap()
+                    .as_dict()
+                    .unwrap()
+                    .get(b"N")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                let form = doc
+                    .get_object_mut(form_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap();
+                form.content = content.into_bytes();
+                form.dict.set("Length", form.content.len() as i64);
+                let mut source = Vec::new();
+                doc.save_to(&mut source).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(actual.imported_annotations_dynlex, "{operator} {rotation}");
+                assert_eq!(actual.raster.rgba, expected.rgba, "{operator} {rotation}");
+            }
+        }
+    }
+
+    #[test]
     fn bounded_rectangle_strokes_match_hayro_at_multiple_sizes() {
         for rotation in [0, 90, 180, 270] {
             for path in ["1 1 2 2", "1 1 3 4", "10 7 12 10", "1 1 38 28"] {
@@ -1601,6 +1734,10 @@ mod missing_appearance_tests {
             b"q 1 0 0 RG 2 w 0 1 38 28 re S Q".to_vec(),
             b"q 1 0 0 RG 2 w 1 1 0 28 re S Q".to_vec(),
             b"q 1 0 0 RG 2 w 1 1 38 28 re S Q 99".to_vec(),
+            b"q 1 0 0 rg 0 0 40 30 re B Q".to_vec(),
+            b"q 1 0 0 rg 0 0 40 30 re Q".to_vec(),
+            b"q q 1 0 0 rg 0 0 40 30 re f Q".to_vec(),
+            b"q 1 0 0 rg 0 0 40 30 re f 1 0 0 1 0 0 cm Q".to_vec(),
         ] {
             let form = doc
                 .get_object_mut(form_id)
