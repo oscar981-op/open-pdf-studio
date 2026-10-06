@@ -157,23 +157,30 @@ ondergrond valt terug op Iced.
 Een experimentele route gebruikt nu Hayro's **transparante paginabitmap**
 als invoer voor een tweede modus van de DynLex OPGC-kernel. DynLex werkt
 premultiplied RGB en alpha per glyph in tekenvolgorde bij; pas daarna wordt
-de witte viewerachtergrond toegevoegd. Rust vergelijkt eerst de transparante
-bron over wit bytegewijs met de getoonde bronbitmap. Zo kan een verkeerd of
-verouderd renderresultaat niet als ondergrond dienen. De route accepteert
+de witte viewerachtergrond toegevoegd. Bij een afzonderlijke bronlaagtaak
+vergelijkt Rust de transparante bron over wit bytegewijs met de getoonde
+bronbitmap, zodat een verkeerd of verouderd resultaat niet als ondergrond
+dient. De route accepteert
 alleen één kleine ongefilterde contentstream, lege resources, maximaal 64
 eenvoudige kleur-, rechthoek-, lijn- en fill/stroke-operators, geen bestaande
 `/Annots`, 100% weergave en een pagina van maximaal 256 px breed. Eén
 broncontentlaag wordt per pagina/bitmap gecacht en blijft bij
 annotatiebewerkingen herbruikbaar. Lege en volledig dekkende bronnen blijven
 op hun snellere eerder bewezen paden; andere graphics-state, fonts,
-XObjects, clips en filters blijven fallback. De eerste cachemiss start nu een
-afzonderlijke asynchrone render-taak; totdat die klaar is blijft de Iced-laag
-zichtbaar. De taak draagt documenttoken, backendgeneratie, renderticket en
-basisbitmap mee. Verouderde resultaten worden geweigerd, terwijl een geldig
-resultaat de annotatiecache ververst. De in-flight-status wordt bij een nieuwe
-bitmap of backendwissel gewist. Dit voorkomt de eerdere extra Hayro-render
-op de UI-thread, maar de bron wordt nog wel een tweede keer gerenderd. Het
-is dus **geen volledig DynLex-PDF-pad en geen prestatieclaim**.
+XObjects, clips en filters blijven fallback. Bestaat een Text Box al bij een
+nieuwe paginarender, dan levert één asynchrone transparante Hayro-render zowel
+de premultiplied bronlaag als de zichtbare pagina: Rust legt de witte
+papierachtergrond pas na het renderen onder de bronlaag. Dit is op de
+gecontroleerde gemengde vector-PDF bytegelijk aan de afzonderlijke witte
+Hayro-render en aan de opgeslagen Text Box-appearance. De paginacache bewaart
+beide lagen onder dezelfde geheugenlimiet. Wordt een Text Box pas ná de
+zichtbare paginarender toegevoegd, dan start een afzonderlijke asynchrone
+bronlaagtaak; totdat die klaar is blijft de Iced-laag zichtbaar. De taak
+draagt documenttoken, backendgeneratie, renderticket en basisbitmap mee.
+Verouderde resultaten worden geweigerd en de in-flight-status wordt bij een
+nieuwe bitmap of backendwissel gewist. De bron wordt in dit latere geval nog
+een tweede keer gerenderd. Dit is **geen volledig DynLex-PDF-pad en geen
+algemene prestatieclaim**.
 
 Echte Save As-/AP-vergelijkingen zijn bytegelijk voor een gedeeltelijk
 gekleurde rechthoek, een rechthoek die de glyphs kruist, twee overlappende
@@ -187,11 +194,10 @@ Text Box, blauwe Square en gele Highlight is over de hele pagina bytegelijk
 aan Hayro na Save As. Wanneer hun annotatievakken elkaar overlappen,
 blijft de Iced-laag actief; die compositieregel is nog niet
 bewezen. De annotaties moeten ook ieder afzonderlijk binnen hun bestaande
-bewezen rendergrenzen vallen.
-Voor grotere en complexere pagina's moet deze laag uiteindelijk samen met
-het normale paginarenderresultaat worden opgebouwd om de tweede Hayro-render
-ook in de achtergrond te vermijden. Volledige Text Box- en annotatiedekking
-zijn nog niet bewezen.
+bewezen rendergrenzen vallen. Voor grotere en complexere pagina's en
+achteraf toegevoegde Text Boxes zijn bredere bronlaagstaging en
+cache-integratie nodig. Volledige Text Box- en annotatiedekking zijn nog
+niet bewezen.
 
 Gerichte reproductie vanuit `rust-studio`:
 

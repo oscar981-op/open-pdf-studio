@@ -1603,6 +1603,10 @@ mod tests {
         let parsed = ParsedPdf::open(Arc::new(source_bytes.clone())).unwrap();
         let base = parsed.render_page(1, 1.0).unwrap();
         let content = parsed.render_page_content_layer(1, 1.0).unwrap();
+        let (single_pass, single_pass_content) =
+            crate::render_page_with_content_layer(&parsed, 1, 1.0).unwrap();
+        assert_eq!(single_pass.raster.rgba, base.rgba);
+        assert_eq!(single_pass_content.rgba, content.rgba);
         assert_eq!((base.width, base.height), (200, 160));
         let mark = Annotation {
             id: 146,

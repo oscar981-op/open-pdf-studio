@@ -33,6 +33,37 @@ fn render_page_selected(
         .map_err(|error| error.to_string())
 }
 
+#[cfg(feature = "dynlex-experimental")]
+/// Only call after `eligible_mixed_page` has proved that the source uses
+/// normal opaque paints without resources, groups, or imported annotations.
+/// The visible page is reconstructed from Hayro's premultiplied content.
+fn render_page_with_content_layer(
+    pdf: &ParsedPdf,
+    page: usize,
+    scale: f32,
+) -> Result<(RenderOutcome, Raster), String> {
+    let layer = pdf
+        .render_page_content_layer(page, scale)
+        .map_err(|error| error.to_string())?;
+    let composition_started = std::time::Instant::now();
+    let mut visible = layer.clone();
+    for pixel in visible.rgba.chunks_exact_mut(4) {
+        let paper = 255 - pixel[3];
+        for channel in &mut pixel[..3] {
+            *channel = channel.saturating_add(paper);
+        }
+        pixel[3] = 255;
+    }
+    visible.render_ms += composition_started.elapsed().as_millis();
+    Ok((
+        RenderOutcome {
+            raster: visible,
+            used: Backend::Hayro,
+        },
+        layer,
+    ))
+}
+
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_THUMBNAILS: usize = 12;
 const THUMBNAIL_ROW_STEP: f32 = 213.0;
@@ -649,7 +680,7 @@ struct AnnotationOverlayCache {
 struct ContentLayerCache {
     base: image::Handle,
     page: usize,
-    rgba: Vec<u8>,
+    rgba: Arc<Vec<u8>>,
 }
 
 struct CachedPage {
@@ -660,6 +691,8 @@ struct CachedPage {
     bitmap_size: (u32, u32),
     page_points: (f32, f32),
     backend: Backend,
+    #[cfg(feature = "dynlex-experimental")]
+    content_layer: Option<Arc<Vec<u8>>>,
 }
 
 impl OpenDocument {
@@ -793,20 +826,41 @@ impl OpenDocument {
         bitmap
     }
 
-    fn cache_bitmap(&mut self, page: usize, scale: f32, outcome: RenderOutcome) {
+    fn cache_bitmap(
+        &mut self,
+        page: usize,
+        scale: f32,
+        outcome: RenderOutcome,
+        #[cfg(feature = "dynlex-experimental")] content_layer: Option<Raster>,
+    ) {
         let raster = outcome.raster;
         #[cfg(feature = "dynlex-experimental")]
         {
             self.content_layer_in_flight = None;
+            self.content_layer_cache.borrow_mut().take();
         }
         self.bitmap_backend = outcome.used;
         self.bitmap_size = (raster.width, raster.height);
         self.bitmap_page_points = (raster.page_width_pt, raster.page_height_pt);
         self.bitmap_scale = scale;
         self.displayed_page = page;
-        let bytes = raster.rgba.len();
+        let bitmap_bytes = raster.rgba.len();
         let bitmap = image::Handle::from_rgba(raster.width, raster.height, raster.rgba);
         self.bitmap = Some(bitmap.clone());
+        #[cfg(feature = "dynlex-experimental")]
+        let content_layer = content_layer.map(|layer| {
+            let rgba = Arc::new(layer.rgba);
+            *self.content_layer_cache.borrow_mut() = Some(ContentLayerCache {
+                base: bitmap.clone(),
+                page,
+                rgba: Arc::clone(&rgba),
+            });
+            rgba
+        });
+        #[cfg(feature = "dynlex-experimental")]
+        let bytes = bitmap_bytes + content_layer.as_ref().map_or(0, |rgba| rgba.len());
+        #[cfg(not(feature = "dynlex-experimental"))]
+        let bytes = bitmap_bytes;
         if bytes > MAX_PAGE_CACHE_BYTES {
             return;
         }
@@ -820,6 +874,8 @@ impl OpenDocument {
             bitmap_size: self.bitmap_size,
             page_points: self.bitmap_page_points,
             backend: outcome.used,
+            #[cfg(feature = "dynlex-experimental")]
+            content_layer,
         });
         while self.page_cache.iter().map(|item| item.bytes).sum::<usize>() > MAX_PAGE_CACHE_BYTES {
             self.page_cache.pop_front();
@@ -830,6 +886,89 @@ impl OpenDocument {
 #[cfg(all(test, feature = "dynlex-experimental"))]
 mod dynlex_annotation_overlay_tests {
     use super::*;
+
+    #[test]
+    fn one_transparent_render_recovers_visible_page_and_text_overlay() {
+        let source =
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec();
+        let pdf = Arc::new(ParsedPdf::open(Arc::new(source.clone())).unwrap());
+        let reference = pdf.render_page(1, 1.0).unwrap();
+        assert!(native_text_scene::eligible_mixed_page(&source, 0, 256, 192));
+        let (outcome, layer) = render_page_with_content_layer(&pdf, 1, 1.0).unwrap();
+        assert_eq!(outcome.raster.rgba, reference.rgba);
+        assert!(layer.rgba.chunks_exact(4).any(|pixel| pixel[3] < 255));
+        let text = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 105.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        let mut model = DocumentModel::new(DocumentId(99), 1).unwrap();
+        model.apply(Edit::Add(text.clone())).unwrap();
+        let mut document = OpenDocument {
+            path: "fixture.pdf".into(),
+            source_bytes: Arc::new(source),
+            pdf,
+            model,
+            last_saved_annotations: Vec::new(),
+            bitmap: None,
+            annotation_overlay_cache: RefCell::new(None),
+            content_layer_cache: RefCell::new(None),
+            content_layer_in_flight: None,
+            bitmap_size: (0, 0),
+            bitmap_page_points: (0.0, 0.0),
+            bitmap_scale: 1.0,
+            bitmap_backend: Backend::Hayro,
+            displayed_page: 0,
+            selected_annotation: None,
+            page_cache: VecDeque::new(),
+            thumbnails: VecDeque::new(),
+            thumbnail_in_flight: None,
+            thumbnail_failed: HashSet::new(),
+            thumbnail_focus: 0,
+        };
+        document.cache_bitmap(0, 1.0, outcome, Some(layer));
+        assert!(document.page_cache[0].content_layer.is_some());
+        let combined = document.dynlex_annotation_bitmap().unwrap();
+        let saved = pdf_save::export_annotations(&document.source_bytes, &[text]).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = combined else {
+            panic!("DynLex result must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+        let layer = Arc::clone(&document.content_layer_cache.borrow().as_ref().unwrap().rgba);
+        document.content_layer_cache.borrow_mut().take();
+        let mut app = App {
+            backend: Backend::Dynlex,
+            document: Some(document),
+            ..Default::default()
+        };
+        let _ = app.render_current_page();
+        assert!(Arc::ptr_eq(
+            &layer,
+            &app.document
+                .as_ref()
+                .unwrap()
+                .content_layer_cache
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .rgba,
+        ));
+    }
 
     #[test]
     fn overlay_cache_tracks_edits_and_page_bitmap() {
@@ -883,6 +1022,7 @@ mod dynlex_annotation_overlay_tests {
                 raster,
                 used: Backend::Hayro,
             },
+            None,
         );
         let first = document.dynlex_annotation_bitmap().expect("bounded mark");
         assert!(document.dynlex_annotation_bitmap() == Some(first.clone()));
@@ -930,6 +1070,7 @@ mod dynlex_annotation_overlay_tests {
                 raster: actual_base,
                 used: Backend::Hayro,
             },
+            None,
         );
         assert!(document.dynlex_annotation_bitmap().is_none());
         let ticket = document.model.view().ticket();
@@ -1181,7 +1322,11 @@ enum Message {
     PageScrolled(scrollable::Viewport),
     ThumbnailsScrolled(scrollable::Viewport),
     GoToPage(usize),
-    Rendered(u64, RenderTicket, Result<RenderOutcome, String>),
+    Rendered(
+        u64,
+        RenderTicket,
+        Result<(RenderOutcome, Option<Raster>), String>,
+    ),
     #[cfg(feature = "dynlex-experimental")]
     ContentLayerRendered(
         u64,
@@ -2108,7 +2253,13 @@ impl App {
                             thumbnail_failed: HashSet::new(),
                             thumbnail_focus: 0,
                         };
-                        document.cache_bitmap(0, initial_scale, outcome);
+                        document.cache_bitmap(
+                            0,
+                            initial_scale,
+                            outcome,
+                            #[cfg(feature = "dynlex-experimental")]
+                            None,
+                        );
                         self.document = Some(document);
                         self.page_scroll_offset = scrollable::AbsoluteOffset {
                             x: HORIZONTAL_PAN_MARGIN,
@@ -2235,8 +2386,27 @@ impl App {
                         *document.content_layer_cache.borrow_mut() = Some(ContentLayerCache {
                             base,
                             page: document.displayed_page,
-                            rgba: layer.rgba,
+                            rgba: Arc::new(layer.rgba),
                         });
+                        if let Some(cached) = document.page_cache.iter_mut().find(|cached| {
+                            cached.page == document.displayed_page
+                                && cached.scale_bits == document.bitmap_scale.to_bits()
+                        }) {
+                            let layer = Arc::clone(
+                                &document.content_layer_cache.borrow().as_ref().unwrap().rgba,
+                            );
+                            cached.bytes += layer.len();
+                            cached.content_layer = Some(layer);
+                        }
+                        while document
+                            .page_cache
+                            .iter()
+                            .map(|item| item.bytes)
+                            .sum::<usize>()
+                            > MAX_PAGE_CACHE_BYTES
+                        {
+                            document.page_cache.pop_front();
+                        }
                         document.annotation_overlay_cache.borrow_mut().take();
                     }
                 }
@@ -2254,13 +2424,19 @@ impl App {
                 }
                 self.busy = false;
                 match result {
-                    Ok(outcome) => {
+                    Ok((outcome, _content_layer)) => {
                         let raster = &outcome.raster;
                         let (width, height) = (raster.width, raster.height);
                         let view = document.model.view();
                         let page = view.page();
                         let scale = view.viewport().scale() as f32;
-                        document.cache_bitmap(page, scale, outcome);
+                        document.cache_bitmap(
+                            page,
+                            scale,
+                            outcome,
+                            #[cfg(feature = "dynlex-experimental")]
+                            _content_layer,
+                        );
                         self.message = format!("{}×{} px", width, height);
                         if let Some(offset) = self.pending_zoom_offset.take() {
                             self.page_scroll_offset = offset;
@@ -2437,6 +2613,12 @@ impl App {
             #[cfg(feature = "dynlex-experimental")]
             {
                 document.content_layer_in_flight = None;
+                *document.content_layer_cache.borrow_mut() =
+                    cached.content_layer.as_ref().map(|rgba| ContentLayerCache {
+                        base: cached.bitmap.clone(),
+                        page: cached.page,
+                        rgba: Arc::clone(rgba),
+                    });
             }
             self.busy = false;
             self.message = format!("Page {page} • {:.0}% (cached)", scale * 100.0);
@@ -2446,10 +2628,47 @@ impl App {
         let source = Arc::clone(&document.source_bytes);
         let generation = self.backend_generation;
         let backend = self.backend;
+        #[cfg(feature = "dynlex-experimental")]
+        let wants_content_layer = backend == Backend::Dynlex
+            && scale == 1.0
+            && single_disjoint_text(
+                &document
+                    .model
+                    .items()
+                    .filter(|item| item.page + 1 == page)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+            .is_some();
         self.busy = true;
         self.message = format!("Rendering page {page} at {:.0}%…", scale * 100.0);
         Task::perform(
-            async move { render_page_selected(&pdf, &source, page, scale, backend) },
+            async move {
+                #[cfg(feature = "dynlex-experimental")]
+                if wants_content_layer {
+                    if let Ok((width, height)) = pdf.page_dimensions(page) {
+                        if width.fract() == 0.0
+                            && height.fract() == 0.0
+                            && width > 0.0
+                            && width <= 256.0
+                            && height > 0.0
+                            && height <= 4096.0
+                            && native_text_scene::eligible_mixed_page(
+                                &source,
+                                page - 1,
+                                width as u32,
+                                height as u32,
+                            )
+                        {
+                            let (outcome, layer) =
+                                render_page_with_content_layer(&pdf, page, scale)?;
+                            return Ok((outcome, Some(layer)));
+                        }
+                    }
+                }
+                render_page_selected(&pdf, &source, page, scale, backend)
+                    .map(|outcome| (outcome, None))
+            },
             move |result| Message::Rendered(generation, ticket, result),
         )
     }
