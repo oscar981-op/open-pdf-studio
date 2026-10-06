@@ -11,7 +11,7 @@ use crate::{
         render_validated_polygon_over_premultiplied_at_origin_owned, validate_polygon_outline,
     },
     imported_text::{stage_saved_native_freetext, StagedImportedText},
-    Bitmap,
+    paint_rgb_appearance, Bitmap,
 };
 use lopdf::{content::Content, Dictionary, Document, Object, ObjectId};
 use opds_engine_probe::{ParsedPdf, Raster};
@@ -977,6 +977,183 @@ fn parse_bounded_opaque_form(
     (stack.is_empty() && pending_path.is_none() && !appearances.is_empty()).then_some(appearances)
 }
 
+struct StagedImage {
+    rect: [u32; 4],
+    rgb: Vec<u8>,
+}
+
+/// One unmasked, opaque RGB8 XObject filling an annotation Form. Reject all
+/// other image dictionaries and Form graphics states before touching the page.
+fn parse_bounded_image_form(
+    doc: &Document,
+    annotation: &Dictionary,
+    crop: [f64; 4],
+    rotation: u16,
+) -> Option<StagedImage> {
+    if annotation.get(b"F").ok().and_then(number) != Some(4.0)
+        || annotation.has(b"OC")
+        || annotation.has(b"AS")
+    {
+        return None;
+    }
+    let rect = four(annotation.get(b"Rect").ok()?)?;
+    let bounds = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])?;
+    let pdf_width = rect[2] - rect[0];
+    let pdf_height = rect[3] - rect[1];
+    if pdf_width <= 0.0
+        || pdf_height <= 0.0
+        || pdf_width.fract() != 0.0
+        || pdf_height.fract() != 0.0
+        || pdf_width * pdf_height > 65_536.0
+    {
+        return None;
+    }
+    let ap = annotation.get(b"AP").ok()?.as_dict().ok()?;
+    if ap.len() != 1 {
+        return None;
+    }
+    let (_, normal) = doc.dereference(ap.get(b"N").ok()?).ok()?;
+    let form = normal.as_stream().ok()?;
+    if !name_is(&form.dict, b"Type", b"XObject")
+        || !name_is(&form.dict, b"Subtype", b"Form")
+        || form.dict.has(b"Filter")
+        || form.dict.has(b"DecodeParms")
+        || form.dict.has(b"Group")
+        || form.dict.get(b"BBox").ok().and_then(four) != Some([0.0, 0.0, pdf_width, pdf_height])
+        || form.dict.get(b"Matrix").ok().is_some_and(|value| {
+            value
+                .as_array()
+                .ok()
+                .and_then(|array| array.iter().map(number).collect::<Option<Vec<_>>>())
+                != Some(vec![1.0, 0.0, 0.0, 1.0, 0.0, 0.0])
+        })
+        || form.dict.iter().any(|(key, _)| {
+            !matches!(
+                key.as_slice(),
+                b"Type" | b"Subtype" | b"BBox" | b"Length" | b"Resources" | b"Matrix" | b"FormType"
+            )
+        })
+        || form
+            .dict
+            .get(b"FormType")
+            .ok()
+            .is_some_and(|v| number(v) != Some(1.0))
+        || form.content.len() > 256
+    {
+        return None;
+    }
+    let resources = form.dict.get(b"Resources").ok()?.as_dict().ok()?;
+    if resources.len() != 1 {
+        return None;
+    }
+    let xobjects = resources.get(b"XObject").ok()?.as_dict().ok()?;
+    if xobjects.len() != 1 {
+        return None;
+    }
+    let (name, reference) = xobjects.iter().next()?;
+    if name.is_empty() || name.len() > 32 || !name.iter().all(u8::is_ascii_alphanumeric) {
+        return None;
+    }
+    let (_, object) = doc.dereference(reference).ok()?;
+    let image = object.as_stream().ok()?;
+    if image.dict.iter().any(|(key, _)| {
+        !matches!(
+            key.as_slice(),
+            b"Type"
+                | b"Subtype"
+                | b"Width"
+                | b"Height"
+                | b"ColorSpace"
+                | b"BitsPerComponent"
+                | b"Length"
+                | b"Filter"
+                | b"Interpolate"
+        )
+    }) || !name_is(&image.dict, b"Type", b"XObject")
+        || !name_is(&image.dict, b"Subtype", b"Image")
+        || !name_is(&image.dict, b"ColorSpace", b"DeviceRGB")
+        || image.dict.get(b"BitsPerComponent").ok().and_then(number) != Some(8.0)
+        || image.dict.get(b"Width").ok().and_then(number) != Some(pdf_width)
+        || image.dict.get(b"Height").ok().and_then(number) != Some(pdf_height)
+        || image
+            .dict
+            .get(b"Interpolate")
+            .ok()
+            .is_some_and(|value| value.as_bool().ok() != Some(false))
+        || image.content.len() > 1_000_000
+    {
+        return None;
+    }
+    let decoded_len = pdf_width as usize * pdf_height as usize * 3;
+    let pixels = match image.dict.get(b"Filter") {
+        Ok(value) if value.as_name().ok() == Some(b"FlateDecode") => {
+            miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(&image.content, decoded_len)
+                .ok()?
+        }
+        Ok(_) => return None,
+        Err(_) => image.content.clone(),
+    };
+    if pixels.len() != decoded_len {
+        return None;
+    }
+    let tokens: Vec<_> = form
+        .content
+        .split(|byte| byte.is_ascii_whitespace())
+        .filter(|token| !token.is_empty())
+        .collect();
+    if tokens.len() != 11
+        || tokens[0] != b"q"
+        || tokens[7] != b"cm"
+        || tokens[9] != b"Do"
+        || tokens[10] != b"Q"
+        || tokens[8] != [b"/".as_slice(), name.as_slice()].concat()
+    {
+        return None;
+    }
+    let values = tokens[1..7]
+        .iter()
+        .map(|token| {
+            std::str::from_utf8(token)
+                .ok()
+                .and_then(|text| text.parse::<f64>().ok())
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if values != [pdf_width, 0.0, 0.0, pdf_height, 0.0, 0.0]
+        || tokens[1..7].iter().any(|token| {
+            token.is_empty()
+                || !token
+                    .iter()
+                    .all(|byte| byte.is_ascii_digit() || *byte == b'.')
+        })
+    {
+        return None;
+    }
+    let (source_width, source_height) = (pdf_width as usize, pdf_height as usize);
+    let (output_width, output_height) = (
+        (bounds[2] - bounds[0]) as usize,
+        (bounds[3] - bounds[1]) as usize,
+    );
+    let mut rgb = vec![0; decoded_len];
+    for y in 0..source_height {
+        for x in 0..source_width {
+            let (out_x, out_y) = match rotation {
+                0 => (x, y),
+                90 => (source_height - 1 - y, x),
+                180 => (source_width - 1 - x, source_height - 1 - y),
+                270 => (y, source_width - 1 - x),
+                _ => return None,
+            };
+            let source = (y * source_width + x) * 3;
+            let target = (out_y * output_width + out_x) * 3;
+            rgb[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+        }
+    }
+    if output_width * output_height != source_width * source_height {
+        return None;
+    }
+    Some(StagedImage { rect: bounds, rgb })
+}
+
 /// Return a DynLex-composited page only for one exact, opaque 2pt Square Form
 /// on a quarter-turned, integral page. Any uncertainty stays on Hayro.
 pub fn render_single_square_appearance_direct(
@@ -1355,6 +1532,7 @@ enum ImportedAppearance {
     Shapes(Vec<ImportedCommand>),
     Polygon(StagedPolygon),
     Text(StagedImportedText),
+    Image(StagedImage),
 }
 
 fn flush_shapes(layer: &mut Raster, commands: &mut Vec<ImportedCommand>) -> Result<bool, String> {
@@ -1406,6 +1584,8 @@ pub fn render_imported_shape_appearances_for_app(
     }
     let mut appearances = Vec::new();
     let mut fallback_rectangles = Vec::new();
+    let mut image_count = 0_usize;
+    let mut image_bytes = 0_usize;
     for (index, annotation) in annotations.iter().enumerate() {
         if annotation.has(b"AP") {
             if let Some(mark) = parse_shape_annotation(
@@ -1424,6 +1604,13 @@ pub fn render_imported_shape_appearances_for_app(
                 parse_bounded_opaque_form(&doc, annotation, crop, rotation)
             {
                 appearances.extend(commands);
+            } else if let Some(image) = parse_bounded_image_form(&doc, annotation, crop, rotation) {
+                image_count += 1;
+                image_bytes += image.rgb.len();
+                if image_count > 8 || image_bytes > 1_000_000 {
+                    return Ok(None);
+                }
+                appearances.push(ImportedAppearance::Image(image));
             } else if let Some(text) = stage_saved_native_freetext(&doc, annotation, crop, rotation)
             {
                 appearances.push(ImportedAppearance::Text(text));
@@ -1494,6 +1681,23 @@ pub fn render_imported_shape_appearances_for_app(
                     )?
                     .rgba;
                 }
+            }
+            ImportedAppearance::Image(image) => {
+                if !flush_shapes(&mut layer, &mut pending_shapes)? {
+                    return Ok(None);
+                }
+                add_white_paper(&mut layer.rgba);
+                let Some(painted) = paint_rgb_appearance(
+                    std::mem::take(&mut layer.rgba),
+                    layer.width,
+                    layer.height,
+                    image.rect,
+                    &image.rgb,
+                )?
+                else {
+                    return Ok(None);
+                };
+                layer.rgba = painted;
             }
         }
     }
@@ -1642,6 +1846,142 @@ mod missing_appearance_tests {
         let mut bytes = Vec::new();
         doc.save_to(&mut bytes).unwrap();
         bytes
+    }
+
+    fn image_stamp_fixture(
+        rotation: i64,
+        compressed: bool,
+        unsupported_image_key: bool,
+        image_first: bool,
+    ) -> Vec<u8> {
+        let mut doc = Document::with_version("1.4");
+        let pages_id = doc.new_object_id();
+        let content_id = doc.add_object(Stream::new(
+            Dictionary::new(),
+            b"0 0 1 rg 40 60 160 240 re f".to_vec(),
+        ));
+        let mut pixels = Vec::with_capacity(40 * 30 * 3);
+        for y in 0..30 {
+            for x in 0..40 {
+                pixels.extend_from_slice(if x < 20 && y < 15 {
+                    &[255, 0, 0]
+                } else if x >= 20 && y < 15 {
+                    &[0, 255, 0]
+                } else if x < 20 {
+                    &[255, 255, 0]
+                } else {
+                    &[0, 255, 255]
+                });
+            }
+        }
+        let mut image_dict = dictionary! {
+            "Type" => "XObject", "Subtype" => "Image", "Width" => 40,
+            "Height" => 30, "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8,
+        };
+        if unsupported_image_key {
+            image_dict.set("Interpolate", true);
+        } else if compressed {
+            image_dict.set("Interpolate", false);
+        }
+        if compressed {
+            image_dict.set("Filter", "FlateDecode");
+            pixels = miniz_oxide::deflate::compress_to_vec_zlib(&pixels, 6);
+        }
+        let image_id = doc.add_object(Stream::new(image_dict, pixels));
+        let form_id = doc.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Form",
+                "BBox" => vec![0.into(), 0.into(), 40.into(), 30.into()],
+                "Resources" => dictionary! { "XObject" => dictionary! { "Im0" => image_id } },
+            },
+            b"q 40 0 0 30 0 0 cm /Im0 Do Q".to_vec(),
+        ));
+        let stamp_id = doc.add_object(dictionary! {
+            "Type" => "Annot", "Subtype" => "Stamp", "F" => 4,
+            "Rect" => vec![70.into(), 90.into(), 110.into(), 120.into()],
+            "AP" => dictionary! { "N" => form_id },
+        });
+        let square_form = doc.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Form",
+                "BBox" => vec![0.into(), 0.into(), 40.into(), 30.into()],
+            },
+            b"q 0 1 0 RG 2 w 1 1 38 28 re S Q".to_vec(),
+        ));
+        let square_id = doc.add_object(dictionary! {
+            "Type" => "Annot", "Subtype" => "Square", "F" => 4,
+            "Rect" => vec![80.into(), 100.into(), 120.into(), 130.into()],
+            "C" => vec![0.into(), 1.into(), 0.into()],
+            "AP" => dictionary! { "N" => square_form },
+        });
+        let annotations = if image_first {
+            vec![Object::Reference(stamp_id), Object::Reference(square_id)]
+        } else {
+            vec![Object::Reference(square_id), Object::Reference(stamp_id)]
+        };
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
+            "Annots" => annotations,
+            "MediaBox" => vec![20.into(),30.into(),220.into(),330.into()],
+            "CropBox" => vec![40.into(),60.into(),200.into(),300.into()],
+            "Rotate" => rotation,
+        });
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages", "Kids" => vec![Object::Reference(page_id)], "Count" => 1,
+            }),
+        );
+        let catalog_id = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn image_stamp_preserves_rgb_pixels_rotation_and_annotation_order() {
+        for rotation in [0, 90, 180, 270] {
+            for compressed in [false, true] {
+                for image_first in [false, true] {
+                    let bytes = image_stamp_fixture(rotation, compressed, false, image_first);
+                    if rotation == 90 && compressed && image_first {
+                        if let Ok(path) = std::env::var("OPDS_IMAGE_AP_TEST_PDF") {
+                            std::fs::write(path, &bytes).unwrap();
+                        }
+                    }
+                    let doc = Document::load_mem(&bytes).unwrap();
+                    let page = *doc.get_pages().get(&1).unwrap();
+                    let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+                    let image_index = if image_first { 0 } else { 1 };
+                    assert!(parse_bounded_image_form(
+                        &doc,
+                        doc.get_page_annotations(page).unwrap()[image_index],
+                        crop,
+                        turn
+                    )
+                    .is_some());
+                    let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                    let expected = pdf.render_page(1, 1.0).unwrap();
+                    let selected =
+                        render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert!(selected.imported_annotations_dynlex, "rotation={rotation}");
+                    assert_eq!(
+                        selected.raster.rgba, expected.rgba,
+                        "rotation={rotation} image_first={image_first}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unsupported_image_appearance_falls_back_without_partial_paint() {
+        let bytes = image_stamp_fixture(90, false, true, true);
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert!(!selected.imported_annotations_dynlex);
+        assert_eq!(selected.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
     }
 
     #[test]

@@ -455,6 +455,75 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
     Ok((scene, width, height))
 }
 
+/// Paint one already validated opaque RGB8 appearance over an opaque page.
+/// Both the paper/background and the image are composed by the DynLex ordered
+/// image kernel; Rust only serializes and validates the bounded scene.
+#[cfg(feature = "kernel")]
+fn paint_rgb_appearance(
+    base: Vec<u8>,
+    width: u32,
+    height: u32,
+    rect: [u32; 4],
+    image: &[u8],
+) -> Result<Option<Vec<u8>>, String> {
+    let pixels = usize::try_from(width)
+        .ok()
+        .and_then(|w| usize::try_from(height).ok().and_then(|h| w.checked_mul(h)))
+        .ok_or("appearance page size overflow")?;
+    if pixels > 1_000_000 || base.len() != pixels * 4 || base.chunks_exact(4).any(|p| p[3] != 255) {
+        return Ok(None);
+    }
+    let image_pixels = usize::try_from(rect[2].checked_sub(rect[0]).ok_or("invalid image width")?)
+        .ok()
+        .and_then(|w| {
+            usize::try_from(rect[3].checked_sub(rect[1])?)
+                .ok()
+                .and_then(|h| w.checked_mul(h))
+        })
+        .ok_or("appearance image size overflow")?;
+    if image_pixels == 0 || image_pixels > 65_536 || image.len() != image_pixels * 3 {
+        return Ok(None);
+    }
+    let mut rgb = Vec::with_capacity(pixels * 3 + image.len());
+    for pixel in base.chunks_exact(4) {
+        rgb.extend_from_slice(&pixel[..3]);
+    }
+    let mut scene = Vec::with_capacity(40 + 48 + rgb.len() + image.len());
+    scene.extend_from_slice(b"OPDL");
+    for value in [3, width, height, 0, 0, width, height, 0, 2] {
+        scene.extend_from_slice(&value.to_le_bytes());
+    }
+    for (bounds, offset) in [([0, 0, width, height], 0), (rect, rgb.len() as u32)] {
+        scene.extend_from_slice(&6_u32.to_le_bytes());
+        for value in bounds {
+            scene.extend_from_slice(&value.to_le_bytes());
+        }
+        scene.extend_from_slice(&offset.to_le_bytes());
+    }
+    scene.append(&mut rgb);
+    scene.extend_from_slice(image);
+    let (scene, actual_width, actual_height) = validated_ordered_scene(scene)?;
+    if actual_width != width || actual_height != height {
+        return Err("appearance scene dimensions changed".into());
+    }
+    let mut output = vec![0_u8; 12 + pixels * 4];
+    // SAFETY: validated_ordered_scene checks every byte span and command;
+    // output reserves the ABI header and the exact RGBA payload.
+    let status = unsafe {
+        opds_render_buffer(
+            scene.as_ptr(),
+            i32::try_from(scene.len()).map_err(|_| "appearance scene too large")?,
+            output.as_mut_ptr(),
+            i32::try_from(output.len()).map_err(|_| "appearance bitmap too large")?,
+            3,
+        )
+    };
+    if status != 0 {
+        return Err(format!("DynLex appearance image status {status}"));
+    }
+    Ok(Some(output.split_off(12)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

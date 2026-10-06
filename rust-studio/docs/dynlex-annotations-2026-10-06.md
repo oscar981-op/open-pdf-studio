@@ -641,3 +641,26 @@ onbewezen randafronding blijven Hayro-fallback. Dit is een volgende stap
 richting een volledige annotatielaag, geen algemene Form-renderer.
 De conservatieve randcontrole slaat pixels buiten de afzonderlijke
 contourgrenzen over; daarvoor is nog geen gepaarde prestatiewinst gemeten.
+
+**Begrensde afbeeldingsappearance.** Een geïmporteerde `/AP/N`-Form met
+precies één dekkende DeviceRGB8-afbeelding kan nu eveneens door DynLex
+worden gecomponeerd. De Form moet exact `q width 0 0 height 0 0 cm /Im Do Q`
+bevatten; BBox en annotatie-Rect zijn gelijk, de Matrix is identiteit en
+afbeelding en plaatsing hebben dezelfde gehele pixelafmetingen. Een ongefilterde
+stream of één FlateDecode-filter is toegestaan, met een harde grens van
+65.536 gedecodeerde beeldpixels en één miljoen paginapixels. Rust valideert
+de volledige Form, resources, streamlengte en het geordende OPDL-beeldscene
+vóór de DynLex-ABI. De bestaande paginalaag, de afbeelding en eerdere of
+latere vectorannotaties worden in PDF-volgorde gecomponeerd. Zestien
+gecontroleerde PDF-uitvoeren (beide filters × 0/90/180/270° × beide
+annotatievolgordes, met verschoven CropBox en overlappende vectorrand) zijn
+volledig RGBA-bytegelijk aan Hayro. De afwezige en expliciet `false`
+`/Interpolate`-toestand zijn getest. Een afwijkende afbeeldingsdictionary,
+zoals `/Interpolate true`, laat de hele pagina
+zonder gedeeltelijk schilderen op Hayro terugvallen. De route is ook in het
+echte 1200×832-appvenster gecontroleerd: op 100% meldt de status
+`PDF: Hayro · Imported: DynLex`; Ctrl+scroll naar 132% gebruikt de bestaande
+Hayro-fallback. Er is nog geen ondersteuning voor afbeeldingsmaskers,
+transparantie, andere kleurruimtes, filters, beeldtransformaties of algemene
+graphics in hetzelfde Form. Dit is geen volledige PDF-annotatieondersteuning
+en er is geen prestatievoordeel aangetoond.
