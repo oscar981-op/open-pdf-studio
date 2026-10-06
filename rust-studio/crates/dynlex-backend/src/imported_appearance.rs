@@ -323,6 +323,7 @@ struct StagedPolygon {
     outline: Vec<u8>,
     color: [u8; 3],
     clip: [u32; 4],
+    paint_clip: Option<[u32; 4]>,
     origin: [u32; 2],
 }
 
@@ -540,6 +541,7 @@ fn stage_form_polygon(
     rect: [f64; 4],
     crop: [f64; 4],
     rotation: u16,
+    active_clip: Option<[u32; 4]>,
 ) -> Option<StagedPolygon> {
     if !(1..=8).contains(&contours.len()) {
         return None;
@@ -571,8 +573,12 @@ fn stage_form_polygon(
     {
         return None;
     }
-    let clip = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])?;
-    if clip[2] > 4096 || clip[3] > 4096 {
+    let form_bounds = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])?;
+    let paint_clip = match active_clip {
+        Some(active) => pixel_rect_intersection(form_bounds, active)?,
+        None => form_bounds,
+    };
+    if form_bounds[2] > 4096 || form_bounds[3] > 4096 {
         return None;
     }
     let mapped: Vec<Vec<_>> = contours
@@ -588,10 +594,10 @@ fn stage_form_polygon(
     let top = mapped.iter().flatten().map(|p| p[1]).reduce(f64::min)?;
     let right = mapped.iter().flatten().map(|p| p[0]).reduce(f64::max)?;
     let bottom = mapped.iter().flatten().map(|p| p[1]).reduce(f64::max)?;
-    if left < f64::from(clip[0])
-        || top < f64::from(clip[1])
-        || right > f64::from(clip[2])
-        || bottom > f64::from(clip[3])
+    if left < f64::from(form_bounds[0])
+        || top < f64::from(form_bounds[1])
+        || right > f64::from(form_bounds[2])
+        || bottom > f64::from(form_bounds[3])
         || right <= left
         || bottom <= top
     {
@@ -634,7 +640,8 @@ fn stage_form_polygon(
     validate_polygon_outline(&outline).then_some(StagedPolygon {
         outline,
         color,
-        clip,
+        clip: form_bounds,
+        paint_clip: (paint_clip != form_bounds).then_some(paint_clip),
         origin,
     })
 }
@@ -1082,9 +1089,7 @@ fn parse_bounded_opaque_form(
                         }
                     }
                     FormPath::Polygon { contours, .. } => {
-                        if state.clip.is_some()
-                            || !matches!(operation.operator.as_str(), "f" | "F" | "f*")
-                        {
+                        if !matches!(operation.operator.as_str(), "f" | "F" | "f*") {
                             return None;
                         }
                         appearances.push(ImportedAppearance::Polygon(stage_form_polygon(
@@ -1094,6 +1099,7 @@ fn parse_bounded_opaque_form(
                             rect,
                             crop,
                             rotation,
+                            state.clip,
                         )?));
                     }
                 }
@@ -1877,7 +1883,47 @@ pub fn render_imported_shape_appearances_for_app(
                     return Ok(None);
                 }
                 let base = std::mem::take(&mut layer.rgba);
-                layer.rgba = render_validated_polygon_over_premultiplied_at_origin_owned(
+                // The area kernel validates that its whole outline stays in
+                // the Form BBox. A narrower integral PDF clip may cross the
+                // outline: retain only the affected 256x192 tile, paint with
+                // the proven Form bound, then restore the tile outside the
+                // active clip. This keeps the prior image/vector layers exact.
+                let saved_tile = if polygon.paint_clip.is_some() {
+                    let Some(right) = polygon.origin[0].checked_add(256) else {
+                        return Ok(None);
+                    };
+                    let Some(bottom) = polygon.origin[1].checked_add(192) else {
+                        return Ok(None);
+                    };
+                    let bounds = [
+                        polygon.origin[0],
+                        polygon.origin[1],
+                        right.min(layer.width),
+                        bottom.min(layer.height),
+                    ];
+                    if bounds[0] >= bounds[2]
+                        || bounds[1] >= bounds[3]
+                        || (layer.width as usize)
+                            .checked_mul(layer.height as usize)
+                            .and_then(|pixels| pixels.checked_mul(4))
+                            != Some(base.len())
+                    {
+                        return Ok(None);
+                    }
+                    let mut saved = Vec::with_capacity(
+                        (bounds[2] - bounds[0]) as usize * (bounds[3] - bounds[1]) as usize * 4,
+                    );
+                    for y in bounds[1]..bounds[3] {
+                        let start = (y as usize * layer.width as usize + bounds[0] as usize) * 4;
+                        saved.extend_from_slice(
+                            &base[start..start + (bounds[2] - bounds[0]) as usize * 4],
+                        );
+                    }
+                    Some((bounds, saved))
+                } else {
+                    None
+                };
+                let mut painted = render_validated_polygon_over_premultiplied_at_origin_owned(
                     &polygon.outline,
                     polygon.color,
                     base,
@@ -1887,6 +1933,22 @@ pub fn render_imported_shape_appearances_for_app(
                     polygon.origin,
                 )?
                 .rgba;
+                if let (Some(clip), Some((bounds, saved))) = (polygon.paint_clip, saved_tile) {
+                    let tile_width = (bounds[2] - bounds[0]) as usize;
+                    for y in bounds[1]..bounds[3] {
+                        for x in bounds[0]..bounds[2] {
+                            if x >= clip[0] && x < clip[2] && y >= clip[1] && y < clip[3] {
+                                continue;
+                            }
+                            let source = ((y - bounds[1]) as usize * tile_width
+                                + (x - bounds[0]) as usize)
+                                * 4;
+                            let target = (y as usize * layer.width as usize + x as usize) * 4;
+                            painted[target..target + 4].copy_from_slice(&saved[source..source + 4]);
+                        }
+                    }
+                }
+                layer.rgba = painted;
             }
             ImportedAppearance::Text(text) => {
                 if !flush_shapes(&mut layer, &mut pending_shapes)?
@@ -2570,6 +2632,145 @@ mod missing_appearance_tests {
                 "rotation={rotation}"
             );
         }
+    }
+
+    #[test]
+    fn clipped_multi_contour_fill_keeps_image_and_stroke_order() {
+        for rotation in [0, 90, 180, 270] {
+            for compressed in [false, true] {
+                let original = clipped_mixed_form_fixture(rotation, compressed, true);
+                let mut doc = Document::load_mem(&original).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let annotation_id = doc
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()[0]
+                    .as_reference()
+                    .unwrap();
+                let form_id = doc
+                    .get_dictionary(annotation_id)
+                    .unwrap()
+                    .get(b"AP")
+                    .unwrap()
+                    .as_dict()
+                    .unwrap()
+                    .get(b"N")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                let form = doc
+                    .get_object_mut(form_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap();
+                let content = String::from_utf8(form.content.clone()).unwrap();
+                let content = content.replace(
+                    "1 0 0 rg 5 5 15 10 re f",
+                    "1 0 0 rg 3 3 m 37 3 l 37 27 l 3 27 l h \
+                     12 9 m 28 9 l 28 21 l 12 21 l h f*",
+                );
+                form.content = content.into_bytes();
+                form.dict.set("Length", form.content.len() as i64);
+                let mut bytes = Vec::new();
+                doc.save_to(&mut bytes).unwrap();
+                if rotation == 90 && compressed {
+                    if let Ok(path) = std::env::var("OPDS_CLIPPED_POLYGON_AP_TEST_PDF") {
+                        std::fs::write(path, &bytes).unwrap();
+                    }
+                }
+                let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+                assert!(
+                    parse_bounded_opaque_form(
+                        &doc,
+                        doc.get_page_annotations(page_id).unwrap()[0],
+                        crop,
+                        turn,
+                    )
+                    .is_some(),
+                    "stage rotation={rotation}, compressed={compressed}"
+                );
+                let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(
+                    selected.imported_annotations_dynlex,
+                    "rotation={rotation}, compressed={compressed}"
+                );
+                assert_eq!(
+                    selected.raster.rgba,
+                    pdf.render_page(1, 1.0).unwrap().rgba,
+                    "rotation={rotation}, compressed={compressed}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn clipped_diagonal_forms_match_hayro_or_fall_back() {
+        let mut accepted = 0;
+        for index in 0..64 {
+            let rotation = [0, 90, 180, 270][index % 4];
+            let original = clipped_mixed_form_fixture(rotation, index % 2 == 0, true);
+            let mut doc = Document::load_mem(&original).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let annotation_id = doc
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Annots")
+                .unwrap()
+                .as_array()
+                .unwrap()[0]
+                .as_reference()
+                .unwrap();
+            let form_id = doc
+                .get_dictionary(annotation_id)
+                .unwrap()
+                .get(b"AP")
+                .unwrap()
+                .as_dict()
+                .unwrap()
+                .get(b"N")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let form = doc
+                .get_object_mut(form_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap();
+            let content = String::from_utf8(form.content.clone()).unwrap();
+            let x0 = 2.0 + (index % 5) as f64 * 0.25;
+            let y0 = 2.0 + (index % 7) as f64 * 0.25;
+            let x1 = 32.0 + (index % 4) as f64 * 0.25;
+            let y1 = 3.0 + (index % 3) as f64 * 0.25;
+            let x2 = 17.0 + (index % 9) as f64 * 0.25;
+            let y2 = 26.0 - (index % 6) as f64 * 0.25;
+            form.content = content
+                .replace(
+                    "1 0 0 rg 5 5 15 10 re f",
+                    &format!("1 0 0 rg {x0} {y0} m {x1} {y1} l {x2} {y2} l h f"),
+                )
+                .into_bytes();
+            form.dict.set("Length", form.content.len() as i64);
+            let mut bytes = Vec::new();
+            doc.save_to(&mut bytes).unwrap();
+            let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            accepted += usize::from(selected.imported_annotations_dynlex);
+            assert_eq!(
+                selected.raster.rgba,
+                pdf.render_page(1, 1.0).unwrap().rgba,
+                "triangle {index}, accepted={}",
+                selected.imported_annotations_dynlex
+            );
+        }
+        assert!(
+            accepted >= 20,
+            "only {accepted}/64 clipped polygons accepted"
+        );
+        eprintln!("accepted clipped polygons: {accepted}/64");
     }
 
     #[test]

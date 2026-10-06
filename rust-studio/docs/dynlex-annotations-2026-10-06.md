@@ -711,3 +711,18 @@ de zichtbare pagina pixelgelijk; de status meldde `PDF: Hayro · Imported:
 DynLex`. Zoom In naar 125% schakelde correct over naar de Hayro-fallback.
 Subpixelclips, algemene clip-paden,
 transparantie en tekst in dezelfde Form zijn nog niet bewezen.
+
+**Meercontourvulling onder Form-clip en tussen beelden.** Een gevalideerd
+`m/l/h f`- of `f*`-pad kan nu in dezelfde geordende Form staan als RGB8-beelden
+en rechthoekvullingen. De OPM2-kernel berekent zijn gebruikelijke volledige,
+maximaal 256×192-pixeltegel binnen de Form-BBox. Rust bewaart maximaal die ene
+tegel uit de vorige paginalaag en herstelt na het schilderen pixels buiten
+het gehele rechthoekige clipvak. Zo blijft de oppervlaktevalidatie van de
+kernel intact en de onderliggende beeld-/vectorvolgorde behouden. Acht
+PDF-fixtures met een `f*`-gat tussen twee beelden, een laatste stroke na
+`Q`, beide beeldfilters en vier paginarotaties/CropBox zijn volledig
+RGBA-bytegelijk aan Hayro. Een deterministische reeks van 64 diagonale
+`f`-driehoeken accepteerde 30 pixelgelijke DynLex-uitvoeren; 34 onzekere
+randdekkingen vielen veilig op Hayro terug. Dit is een beperkte
+pixeluitgelijnde clip, geen algemene clipping van transparante of gekromde
+paden. De extra tegelkopie is nog niet op tijd/RSS geprofileerd.
