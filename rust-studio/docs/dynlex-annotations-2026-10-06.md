@@ -643,7 +643,7 @@ De conservatieve randcontrole slaat pixels buiten de afzonderlijke
 contourgrenzen over; daarvoor is nog geen gepaarde prestatiewinst gemeten.
 
 **Begrensde afbeeldingsappearance.** Een geïmporteerde `/AP/N`-Form met
-precies één dekkende DeviceRGB8-afbeelding kan nu eveneens door DynLex
+een dekkende DeviceRGB8-afbeelding kan nu eveneens door DynLex
 worden gecomponeerd. De Form moet exact `q width 0 0 height 0 0 cm /Im Do Q`
 bevatten; BBox en annotatie-Rect zijn gelijk, de Matrix is identiteit en
 afbeelding en plaatsing hebben dezelfde gehele pixelafmetingen. Een ongefilterde
@@ -661,6 +661,22 @@ zonder gedeeltelijk schilderen op Hayro terugvallen. De route is ook in het
 echte 1200×832-appvenster gecontroleerd: op 100% meldt de status
 `PDF: Hayro · Imported: DynLex`; Ctrl+scroll naar 132% gebruikt de bestaande
 Hayro-fallback. Er is nog geen ondersteuning voor afbeeldingsmaskers,
-transparantie, andere kleurruimtes, filters, beeldtransformaties of algemene
+transparantie, andere kleurruimtes, filters buiten FlateDecode, beeldtransformaties of algemene
 graphics in hetzelfde Form. Dit is geen volledige PDF-annotatieondersteuning
 en er is geen prestatievoordeel aangetoond.
+
+**Meerdere beelden in één Form.** De beeldstaging accepteert nu maximaal acht
+geordende `q cm /Im Do Q`-groepen in dezelfde `/AP/N`-Form, met eigen gehele
+positie en afmeting binnen de Form-BBox. De beeldbronnen mogen verschillen;
+de pixelbuffer is per beeld maximaal 65.536 pixels en in totaal maximaal
+één miljoen RGB-bytes. De afgebeelde bronnen plus de reeds ondoorzichtige
+paginalaag worden in één gevalideerde OPDL-v3-scene door DynLex gecomponeerd,
+in plaats van een volledige pagina per beeld opnieuw te kopiëren. Zestien
+PDF-proeven (ongefilterd/FlateDecode × vier paginarotaties × beide interne
+overlapvolgordes) zijn inclusief een latere vectorannotatie volledig
+RGBA-bytegelijk aan Hayro. Ontbrekende resource, beeld buiten de Form-BBox,
+extra grafische operator en onafgemaakte `q/Q` worden vóór schilderen
+afgewezen; een geldige PDF met extra kleurstaat viel via de app volledig op
+Hayro terug. De Form is nog beperkt tot zulke losse beeldgroepen: een
+willekeurig gemengd pad van beelden, tekst, clipping en vectorobjecten in
+één `/AP` is niet ondersteund.

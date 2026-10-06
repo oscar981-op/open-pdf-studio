@@ -11,7 +11,7 @@ use crate::{
         render_validated_polygon_over_premultiplied_at_origin_owned, validate_polygon_outline,
     },
     imported_text::{stage_saved_native_freetext, StagedImportedText},
-    paint_rgb_appearance, Bitmap,
+    paint_rgb_appearances, Bitmap,
 };
 use lopdf::{content::Content, Dictionary, Document, Object, ObjectId};
 use opds_engine_probe::{ParsedPdf, Raster};
@@ -982,14 +982,67 @@ struct StagedImage {
     rgb: Vec<u8>,
 }
 
-/// One unmasked, opaque RGB8 XObject filling an annotation Form. Reject all
-/// other image dictionaries and Form graphics states before touching the page.
+fn decode_form_rgb_image(
+    doc: &Document,
+    xobjects: &Dictionary,
+    name: &[u8],
+    width: usize,
+    height: usize,
+) -> Option<Vec<u8>> {
+    if name.is_empty() || name.len() > 32 || !name.iter().all(u8::is_ascii_alphanumeric) {
+        return None;
+    }
+    let (_, object) = doc.dereference(xobjects.get(name).ok()?).ok()?;
+    let image = object.as_stream().ok()?;
+    if image.dict.iter().any(|(key, _)| {
+        !matches!(
+            key.as_slice(),
+            b"Type"
+                | b"Subtype"
+                | b"Width"
+                | b"Height"
+                | b"ColorSpace"
+                | b"BitsPerComponent"
+                | b"Length"
+                | b"Filter"
+                | b"Interpolate"
+        )
+    }) || !name_is(&image.dict, b"Type", b"XObject")
+        || !name_is(&image.dict, b"Subtype", b"Image")
+        || !name_is(&image.dict, b"ColorSpace", b"DeviceRGB")
+        || image.dict.get(b"BitsPerComponent").ok().and_then(number) != Some(8.0)
+        || image.dict.get(b"Width").ok().and_then(number) != Some(width as f64)
+        || image.dict.get(b"Height").ok().and_then(number) != Some(height as f64)
+        || image
+            .dict
+            .get(b"Interpolate")
+            .ok()
+            .is_some_and(|value| value.as_bool().ok() != Some(false))
+        || image.content.len() > 1_000_000
+    {
+        return None;
+    }
+    let decoded_len = width * height * 3;
+    let pixels = match image.dict.get(b"Filter") {
+        Ok(value) if value.as_name().ok() == Some(b"FlateDecode") => {
+            miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(&image.content, decoded_len)
+                .ok()?
+        }
+        Ok(_) => return None,
+        Err(_) => image.content.clone(),
+    };
+    (pixels.len() == decoded_len).then_some(pixels)
+}
+
+/// A bounded ordered sequence of opaque RGB8 XObjects in an annotation Form.
+/// Each image has its own axis-aligned, integral placement; unknown graphics
+/// operators or states reject the whole Form before any page paint begins.
 fn parse_bounded_image_form(
     doc: &Document,
     annotation: &Dictionary,
     crop: [f64; 4],
     rotation: u16,
-) -> Option<StagedImage> {
+) -> Option<Vec<StagedImage>> {
     if annotation.get(b"F").ok().and_then(number) != Some(4.0)
         || annotation.has(b"OC")
         || annotation.has(b"AS")
@@ -997,14 +1050,14 @@ fn parse_bounded_image_form(
         return None;
     }
     let rect = four(annotation.get(b"Rect").ok()?)?;
-    let bounds = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])?;
+    pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])?;
     let pdf_width = rect[2] - rect[0];
     let pdf_height = rect[3] - rect[1];
     if pdf_width <= 0.0
         || pdf_height <= 0.0
         || pdf_width.fract() != 0.0
         || pdf_height.fract() != 0.0
-        || pdf_width * pdf_height > 65_536.0
+        || pdf_width * pdf_height > 1_000_000.0
     {
         return None;
     }
@@ -1038,7 +1091,7 @@ fn parse_bounded_image_form(
             .get(b"FormType")
             .ok()
             .is_some_and(|v| number(v) != Some(1.0))
-        || form.content.len() > 256
+        || form.content.len() > 1024
     {
         return None;
     }
@@ -1047,53 +1100,7 @@ fn parse_bounded_image_form(
         return None;
     }
     let xobjects = resources.get(b"XObject").ok()?.as_dict().ok()?;
-    if xobjects.len() != 1 {
-        return None;
-    }
-    let (name, reference) = xobjects.iter().next()?;
-    if name.is_empty() || name.len() > 32 || !name.iter().all(u8::is_ascii_alphanumeric) {
-        return None;
-    }
-    let (_, object) = doc.dereference(reference).ok()?;
-    let image = object.as_stream().ok()?;
-    if image.dict.iter().any(|(key, _)| {
-        !matches!(
-            key.as_slice(),
-            b"Type"
-                | b"Subtype"
-                | b"Width"
-                | b"Height"
-                | b"ColorSpace"
-                | b"BitsPerComponent"
-                | b"Length"
-                | b"Filter"
-                | b"Interpolate"
-        )
-    }) || !name_is(&image.dict, b"Type", b"XObject")
-        || !name_is(&image.dict, b"Subtype", b"Image")
-        || !name_is(&image.dict, b"ColorSpace", b"DeviceRGB")
-        || image.dict.get(b"BitsPerComponent").ok().and_then(number) != Some(8.0)
-        || image.dict.get(b"Width").ok().and_then(number) != Some(pdf_width)
-        || image.dict.get(b"Height").ok().and_then(number) != Some(pdf_height)
-        || image
-            .dict
-            .get(b"Interpolate")
-            .ok()
-            .is_some_and(|value| value.as_bool().ok() != Some(false))
-        || image.content.len() > 1_000_000
-    {
-        return None;
-    }
-    let decoded_len = pdf_width as usize * pdf_height as usize * 3;
-    let pixels = match image.dict.get(b"Filter") {
-        Ok(value) if value.as_name().ok() == Some(b"FlateDecode") => {
-            miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(&image.content, decoded_len)
-                .ok()?
-        }
-        Ok(_) => return None,
-        Err(_) => image.content.clone(),
-    };
-    if pixels.len() != decoded_len {
+    if !(1..=8).contains(&xobjects.len()) {
         return None;
     }
     let tokens: Vec<_> = form
@@ -1101,57 +1108,91 @@ fn parse_bounded_image_form(
         .split(|byte| byte.is_ascii_whitespace())
         .filter(|token| !token.is_empty())
         .collect();
-    if tokens.len() != 11
-        || tokens[0] != b"q"
-        || tokens[7] != b"cm"
-        || tokens[9] != b"Do"
-        || tokens[10] != b"Q"
-        || tokens[8] != [b"/".as_slice(), name.as_slice()].concat()
-    {
+    if tokens.is_empty() || tokens.len() % 11 != 0 || tokens.len() / 11 > 8 {
         return None;
     }
-    let values = tokens[1..7]
-        .iter()
-        .map(|token| {
-            std::str::from_utf8(token)
-                .ok()
-                .and_then(|text| text.parse::<f64>().ok())
-        })
-        .collect::<Option<Vec<_>>>()?;
-    if values != [pdf_width, 0.0, 0.0, pdf_height, 0.0, 0.0]
-        || tokens[1..7].iter().any(|token| {
-            token.is_empty()
-                || !token
-                    .iter()
-                    .all(|byte| byte.is_ascii_digit() || *byte == b'.')
-        })
-    {
-        return None;
-    }
-    let (source_width, source_height) = (pdf_width as usize, pdf_height as usize);
-    let (output_width, output_height) = (
-        (bounds[2] - bounds[0]) as usize,
-        (bounds[3] - bounds[1]) as usize,
-    );
-    let mut rgb = vec![0; decoded_len];
-    for y in 0..source_height {
-        for x in 0..source_width {
-            let (out_x, out_y) = match rotation {
-                0 => (x, y),
-                90 => (source_height - 1 - y, x),
-                180 => (source_width - 1 - x, source_height - 1 - y),
-                270 => (y, source_width - 1 - x),
-                _ => return None,
-            };
-            let source = (y * source_width + x) * 3;
-            let target = (out_y * output_width + out_x) * 3;
-            rgb[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+    let mut images = Vec::with_capacity(tokens.len() / 11);
+    let mut used_names = std::collections::HashSet::new();
+    let mut total_bytes = 0_usize;
+    for record in tokens.chunks_exact(11) {
+        if record[0] != b"q"
+            || record[7] != b"cm"
+            || record[9] != b"Do"
+            || record[10] != b"Q"
+            || !record[8].starts_with(b"/")
+        {
+            return None;
         }
+        let name = &record[8][1..];
+        let values = record[1..7]
+            .iter()
+            .map(|token| {
+                if token.is_empty()
+                    || !token
+                        .iter()
+                        .all(|byte| byte.is_ascii_digit() || *byte == b'.')
+                {
+                    return None;
+                }
+                std::str::from_utf8(token)
+                    .ok()
+                    .and_then(|text| text.parse::<f64>().ok())
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let [w, b, c, h, tx, ty] = values.as_slice() else {
+            return None;
+        };
+        if *b != 0.0
+            || *c != 0.0
+            || *w < 1.0
+            || *h < 1.0
+            || [w, h, tx, ty]
+                .iter()
+                .any(|v| !v.is_finite() || v.fract() != 0.0)
+            || tx + w > pdf_width
+            || ty + h > pdf_height
+            || w * h > 65_536.0
+        {
+            return None;
+        }
+        let (source_width, source_height) = (*w as usize, *h as usize);
+        let pixels = decode_form_rgb_image(doc, xobjects, name, source_width, source_height)?;
+        total_bytes += pixels.len();
+        if total_bytes > 1_000_000 {
+            return None;
+        }
+        used_names.insert(name);
+        let bounds = pixel_box(
+            crop,
+            rotation,
+            &[
+                [rect[0] + tx, rect[1] + ty],
+                [rect[0] + tx + w, rect[1] + ty + h],
+            ],
+        )?;
+        let output_width = (bounds[2] - bounds[0]) as usize;
+        let output_height = (bounds[3] - bounds[1]) as usize;
+        if output_width * output_height != source_width * source_height {
+            return None;
+        }
+        let mut rgb = vec![0; pixels.len()];
+        for y in 0..source_height {
+            for x in 0..source_width {
+                let (out_x, out_y) = match rotation {
+                    0 => (x, y),
+                    90 => (source_height - 1 - y, x),
+                    180 => (source_width - 1 - x, source_height - 1 - y),
+                    270 => (y, source_width - 1 - x),
+                    _ => return None,
+                };
+                let source = (y * source_width + x) * 3;
+                let target = (out_y * output_width + out_x) * 3;
+                rgb[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+            }
+        }
+        images.push(StagedImage { rect: bounds, rgb });
     }
-    if output_width * output_height != source_width * source_height {
-        return None;
-    }
-    Some(StagedImage { rect: bounds, rgb })
+    (used_names.len() == xobjects.len()).then_some(images)
 }
 
 /// Return a DynLex-composited page only for one exact, opaque 2pt Square Form
@@ -1532,7 +1573,7 @@ enum ImportedAppearance {
     Shapes(Vec<ImportedCommand>),
     Polygon(StagedPolygon),
     Text(StagedImportedText),
-    Image(StagedImage),
+    Images(Vec<StagedImage>),
 }
 
 fn flush_shapes(layer: &mut Raster, commands: &mut Vec<ImportedCommand>) -> Result<bool, String> {
@@ -1604,13 +1645,14 @@ pub fn render_imported_shape_appearances_for_app(
                 parse_bounded_opaque_form(&doc, annotation, crop, rotation)
             {
                 appearances.extend(commands);
-            } else if let Some(image) = parse_bounded_image_form(&doc, annotation, crop, rotation) {
-                image_count += 1;
-                image_bytes += image.rgb.len();
+            } else if let Some(images) = parse_bounded_image_form(&doc, annotation, crop, rotation)
+            {
+                image_count += images.len();
+                image_bytes += images.iter().map(|image| image.rgb.len()).sum::<usize>();
                 if image_count > 8 || image_bytes > 1_000_000 {
                     return Ok(None);
                 }
-                appearances.push(ImportedAppearance::Image(image));
+                appearances.push(ImportedAppearance::Images(images));
             } else if let Some(text) = stage_saved_native_freetext(&doc, annotation, crop, rotation)
             {
                 appearances.push(ImportedAppearance::Text(text));
@@ -1682,17 +1724,20 @@ pub fn render_imported_shape_appearances_for_app(
                     .rgba;
                 }
             }
-            ImportedAppearance::Image(image) => {
+            ImportedAppearance::Images(images) => {
                 if !flush_shapes(&mut layer, &mut pending_shapes)? {
                     return Ok(None);
                 }
                 add_white_paper(&mut layer.rgba);
-                let Some(painted) = paint_rgb_appearance(
+                let image_refs: Vec<_> = images
+                    .iter()
+                    .map(|image| (image.rect, image.rgb.as_slice()))
+                    .collect();
+                let Some(painted) = paint_rgb_appearances(
                     std::mem::take(&mut layer.rgba),
                     layer.width,
                     layer.height,
-                    image.rect,
-                    &image.rgb,
+                    &image_refs,
                 )?
                 else {
                     return Ok(None);
@@ -1971,6 +2016,190 @@ mod missing_appearance_tests {
                         "rotation={rotation} image_first={image_first}"
                     );
                 }
+            }
+        }
+    }
+
+    fn layered_image_stamp_fixture(rotation: i64, compressed: bool, small_first: bool) -> Vec<u8> {
+        let bytes = image_stamp_fixture(rotation, compressed, false, true);
+        let mut doc = Document::load_mem(&bytes).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let annotation_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = doc
+            .get_dictionary(annotation_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let first_image_id = doc
+            .get_object(form_id)
+            .unwrap()
+            .as_stream()
+            .unwrap()
+            .dict
+            .get(b"Resources")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"XObject")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"Im0")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let second_image_id = doc.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Image", "Width" => 20,
+                "Height" => 15, "ColorSpace" => "DeviceRGB", "BitsPerComponent" => 8,
+            },
+            [70, 40, 230].repeat(20 * 15),
+        ));
+        let form = doc
+            .get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        form.dict.set(
+            "Resources",
+            dictionary! {
+                "XObject" => dictionary! { "Im0" => first_image_id, "Im1" => second_image_id }
+            },
+        );
+        let large = b"q 40 0 0 30 0 0 cm /Im0 Do Q".as_slice();
+        let small = b"q 20 0 0 15 10 8 cm /Im1 Do Q".as_slice();
+        form.content = if small_first {
+            [small, b" ", large].concat()
+        } else {
+            [large, b" ", small].concat()
+        };
+        form.dict.set("Length", form.content.len() as i64);
+        let mut result = Vec::new();
+        doc.save_to(&mut result).unwrap();
+        result
+    }
+
+    #[test]
+    fn two_images_inside_one_form_preserve_overlap_and_rotation() {
+        for rotation in [0, 90, 180, 270] {
+            for compressed in [false, true] {
+                for small_first in [false, true] {
+                    let bytes = layered_image_stamp_fixture(rotation, compressed, small_first);
+                    if rotation == 90 && compressed && !small_first {
+                        if let Ok(path) = std::env::var("OPDS_LAYERED_IMAGE_AP_TEST_PDF") {
+                            std::fs::write(path, &bytes).unwrap();
+                        }
+                    }
+                    let doc = Document::load_mem(&bytes).unwrap();
+                    let page_id = *doc.get_pages().get(&1).unwrap();
+                    let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+                    assert_eq!(
+                        parse_bounded_image_form(
+                            &doc,
+                            doc.get_page_annotations(page_id).unwrap()[0],
+                            crop,
+                            turn,
+                        )
+                        .unwrap()
+                        .len(),
+                        2
+                    );
+                    let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                    let selected =
+                        render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert!(selected.imported_annotations_dynlex);
+                    assert_eq!(
+                        selected.raster.rgba,
+                        pdf.render_page(1, 1.0).unwrap().rgba,
+                        "rotation={rotation}, compressed={compressed}, small_first={small_first}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn layered_image_form_rejects_unproven_graphics_before_painting() {
+        let original = layered_image_stamp_fixture(90, true, false);
+        for (name, content) in [
+            (
+                "missing resource",
+                b"q 40 0 0 30 0 0 cm /Im0 Do Q q 20 0 0 15 10 8 cm /Ghost Do Q".as_slice(),
+            ),
+            (
+                "outside bbox",
+                b"q 40 0 0 30 0 0 cm /Im0 Do Q q 20 0 0 15 30 20 cm /Im1 Do Q".as_slice(),
+            ),
+            (
+                "extra color state",
+                b"q 40 0 0 30 0 0 cm /Im0 Do Q 1 0 0 rg q 20 0 0 15 10 8 cm /Im1 Do Q".as_slice(),
+            ),
+            (
+                "incomplete group",
+                b"q 40 0 0 30 0 0 cm /Im0 Do Q q 20 0 0 15 10 8 cm /Im1 Do".as_slice(),
+            ),
+        ] {
+            let mut doc = Document::load_mem(&original).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let annotation_id = doc
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Annots")
+                .unwrap()
+                .as_array()
+                .unwrap()[0]
+                .as_reference()
+                .unwrap();
+            let form_id = doc
+                .get_dictionary(annotation_id)
+                .unwrap()
+                .get(b"AP")
+                .unwrap()
+                .as_dict()
+                .unwrap()
+                .get(b"N")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let form = doc
+                .get_object_mut(form_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap();
+            form.content = content.to_vec();
+            form.dict.set("Length", content.len() as i64);
+            let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+            assert!(
+                parse_bounded_image_form(
+                    &doc,
+                    doc.get_page_annotations(page_id).unwrap()[0],
+                    crop,
+                    turn
+                )
+                .is_none(),
+                "{name}"
+            );
+            if name == "extra color state" {
+                let mut bytes = Vec::new();
+                doc.save_to(&mut bytes).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(!selected.imported_annotations_dynlex);
+                assert_eq!(selected.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
             }
         }
     }
