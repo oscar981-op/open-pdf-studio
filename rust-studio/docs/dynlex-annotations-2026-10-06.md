@@ -161,6 +161,26 @@ gewist en dit is geen algemene prestatiewaarde. Reproduceren met
 fixture ontstaat uit de app-test met `OPDS_IMPORTED_AP_FIXTURE_DIR`. Andere
 schalen en niet-bewezen `/AP`-vormen blijven veilig Hayro.
 
+De opt-in router kan nu ook **geïmporteerde Square en Highlight zonder `/AP`**
+als een geordende OPAN-lijst tekenen. Dit volgt de bestaande
+`engine-probe`-previewfallback: een Square wordt als dekkende rand met
+expliciete 1–20px breedte getekend, een rechthoekige Highlight als dekkende
+vulling. Het zijn previewpixels; Save As en Print blijven de oorspronkelijke
+annotatiedictionaries behouden. Rust valideert de zichtbare CropBox,
+kwartslagrotatie, gehele rechthoek- en quadcoördinaten, kleuren en
+annotatievolgorde voordat de DynLex-ABI wordt aangeroepen. Twaalf echte
+PDF-fixtures (vier rotaties × drie lijnbreedtes) met overlappende Square en
+Highlight op een blauwe paginabron zijn over de volledige pagina bytegelijk
+aan de bestaande Hayro-preview. Een schuine quad, gemengde `/AP`- en
+`/AP`-loze reeks, fractionele plaatsing en andere annotatietypen vallen nog
+terug. De statusregel zegt nu `Imported: DynLex`, ongeacht of de geïmporteerde
+vorm een `/AP` heeft. Dit is geen volledige PDF-annotatie-interpretatie en
+bewijst geen snelheidswinst. Op de 90°/CropBox-fixture met 3px-Square waren
+30 gepaarde warme procesruns inclusief dezelfde `/usr/bin/time`-wrapper
+bytegelijk: geselecteerde route/Hayro 7,257/6,823 ms mediaan, gepaard
+verschil +0,395 ms, geselecteerde route 10/30 keer sneller. Mediane piek-RSS
+was 6.500/6.140 KiB. De OS-cache is niet gewist; het is één kleine fixture.
+
 ## Geïsoleerde native Text Box-appearance
 
 `flatten_native_free_text_appearance` is nu een **read-only onderzoeksbrug**

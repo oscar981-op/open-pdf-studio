@@ -30,6 +30,71 @@ fn command(scene: &mut Vec<u8>, kind: u32, rect: [u32; 4], tail: [u8; 4]) {
     scene.extend_from_slice(&tail);
 }
 
+/// Opaque pixel rectangles for imported annotations without `/AP`. The
+/// caller stages these in `/Annots` order from a single validated page.
+/// This reuses OPAN's fill command rather than emulating annotation pixels
+/// in Rust. Unknown geometry must be rejected before calling this function.
+#[cfg(feature = "kernel")]
+pub(crate) fn paint_opaque_imported_rectangles(
+    layer_rgba: &[u8],
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    rectangles: &[([u32; 4], [u8; 3])],
+) -> Result<Option<Bitmap>, String> {
+    if width == 0
+        || height == 0
+        || width > 4096
+        || height > 4096
+        || u64::from(width) * u64::from(height) > 6_000_000
+        || page_points != (width as f32, height as f32)
+        || layer_rgba.len() != width as usize * height as usize * 4
+        || layer_rgba
+            .chunks_exact(4)
+            .any(|pixel| pixel[..3].iter().any(|channel| *channel > pixel[3]))
+        || rectangles.is_empty()
+        || rectangles.len() > 256
+        || rectangles.iter().any(|(rect, _)| {
+            rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height
+        })
+    {
+        return Ok(None);
+    }
+    let mut scene = Vec::with_capacity(20 + rectangles.len() * 24);
+    scene.extend_from_slice(b"OPAN");
+    for value in [2, width, height, rectangles.len() as u32] {
+        scene.extend_from_slice(&value.to_le_bytes());
+    }
+    for &(rect, color) in rectangles {
+        command(&mut scene, 1, rect, [color[0], color[1], color[2], 255]);
+    }
+    let mut output = layer_rgba.to_vec();
+    // SAFETY: Rust has checked the scene length, all rectangles, page size,
+    // source premultiplication and output size before calling the C ABI.
+    let status = unsafe {
+        super::opds_paint_annotations(
+            scene.as_ptr(),
+            i32::try_from(scene.len()).map_err(|_| "annotation scene too large")?,
+            output.as_mut_ptr(),
+            i32::try_from(output.len()).map_err(|_| "annotation bitmap too large")?,
+        )
+    };
+    if status != 0 {
+        return Err(format!("DynLex annotation kernel status {status}"));
+    }
+    if output
+        .chunks_exact(4)
+        .any(|pixel| pixel[..3].iter().any(|channel| *channel > pixel[3]))
+    {
+        return Err("DynLex imported annotation output is not premultiplied RGBA".into());
+    }
+    Ok(Some(Bitmap {
+        width,
+        height,
+        rgba: output,
+    }))
+}
+
 /// Return `None` rather than partially painting a document when any native
 /// annotation is outside the verified 1px/page-point Square subset.
 pub fn render_native_annotation_overlay(

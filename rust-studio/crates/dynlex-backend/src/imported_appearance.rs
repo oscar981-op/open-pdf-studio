@@ -2,7 +2,11 @@
 //! Hayro still renders the page body and is an independent whole-page oracle.
 //! This read-only probe is not the general imported annotation renderer.
 use crate::{
-    annotation_overlay::render_native_annotation_overlay_pixels_over_premultiplied, Bitmap,
+    annotation_overlay::{
+        paint_opaque_imported_rectangles,
+        render_native_annotation_overlay_pixels_over_premultiplied,
+    },
+    Bitmap,
 };
 use lopdf::{content::Content, Dictionary, Document, Object, ObjectId};
 use opds_engine_probe::{ParsedPdf, Raster};
@@ -369,13 +373,300 @@ fn paint_staged_shapes(
         return Ok(None);
     };
     layer.rgba = painted.rgba;
-    for pixel in layer.rgba.chunks_exact_mut(4) {
+    add_white_paper(&mut layer.rgba);
+    layer.render_ms += started.elapsed().as_millis();
+    Ok(Some(layer))
+}
+
+fn add_white_paper(rgba: &mut [u8]) {
+    for pixel in rgba.chunks_exact_mut(4) {
         let paper = 255 - pixel[3];
         for channel in &mut pixel[..3] {
             *channel = channel.saturating_add(paper);
         }
         pixel[3] = 255;
     }
+}
+
+fn page_geometry(doc: &Document, page_number: usize) -> Option<(ObjectId, [f64; 4], u16)> {
+    let page_number_u32 = u32::try_from(page_number).ok()?;
+    let page_id = *doc.get_pages().get(&page_number_u32)?;
+    let page = doc.get_dictionary(page_id).ok()?;
+    if page.has(b"Group") || !matches!(inherited(doc, page_id, b"UserUnit"), Ok(None)) {
+        return None;
+    }
+    let media = four(inherited(doc, page_id, b"MediaBox").ok()??)?;
+    let crop = match inherited(doc, page_id, b"CropBox").ok()? {
+        Some(value) => four(value)?,
+        None => media,
+    };
+    let rotation = match inherited(doc, page_id, b"Rotate").ok()? {
+        Some(value) => {
+            let value = number(value)?;
+            if !value.is_finite() || value.fract() != 0.0 {
+                return None;
+            }
+            value.rem_euclid(360.0) as u16
+        }
+        None => 0,
+    };
+    if !matches!(rotation, 0 | 90 | 180 | 270) {
+        return None;
+    }
+    let [x0, y0, x1, y1] = crop;
+    let (width, height) = (x1 - x0, y1 - y0);
+    if !media.iter().chain(crop.iter()).all(|v| v.is_finite())
+        || media[0] > x0
+        || media[1] > y0
+        || x1 > media[2]
+        || y1 > media[3]
+        || width <= 0.0
+        || height <= 0.0
+        || width > 4096.0
+        || height > 4096.0
+        || crop.iter().any(|v| v.fract() != 0.0)
+        || width * height > 6_000_000.0
+    {
+        return None;
+    }
+    Some((page_id, crop, rotation))
+}
+
+fn fallback_color(annotation: &Dictionary, default: [u8; 3]) -> Option<[u8; 3]> {
+    let Ok(value) = annotation.get(b"C") else {
+        return Some(default);
+    };
+    let [r, g, b] = value.as_array().ok()?.as_slice() else {
+        return None;
+    };
+    [r, g, b]
+        .map(|channel| {
+            let value = number(channel)?;
+            (value.is_finite() && (0.0..=1.0).contains(&value))
+                .then_some((value * 255.0).round() as u8)
+        })
+        .into_iter()
+        .collect::<Option<Vec<_>>>()?
+        .try_into()
+        .ok()
+}
+
+fn pixel_box(crop: [f64; 4], rotation: u16, points: &[[f64; 2]]) -> Option<[u32; 4]> {
+    let mapped: Vec<_> = points
+        .iter()
+        .map(|point| display_point(crop, rotation, point[0], point[1]))
+        .collect();
+    let min_x = mapped.iter().map(|p| p[0]).reduce(f64::min)?;
+    let max_x = mapped.iter().map(|p| p[0]).reduce(f64::max)?;
+    let min_y = mapped.iter().map(|p| p[1]).reduce(f64::min)?;
+    let max_y = mapped.iter().map(|p| p[1]).reduce(f64::max)?;
+    let (width, height) = if matches!(rotation, 90 | 270) {
+        (crop[3] - crop[1], crop[2] - crop[0])
+    } else {
+        (crop[2] - crop[0], crop[3] - crop[1])
+    };
+    if min_x < 0.0
+        || min_y < 0.0
+        || max_x > width
+        || max_y > height
+        || min_x >= max_x
+        || min_y >= max_y
+        || [min_x, min_y, max_x, max_y]
+            .iter()
+            .any(|value| !value.is_finite() || value.fract() != 0.0)
+    {
+        return None;
+    }
+    Some([min_x as u32, min_y as u32, max_x as u32, max_y as u32])
+}
+
+fn fallback_stroke_width(annotation: &Dictionary) -> Option<u32> {
+    let width = annotation
+        .get(b"BS")
+        .ok()
+        .and_then(|value| value.as_dict().ok())
+        .and_then(|dict| dict.get(b"W").ok())
+        .and_then(number)
+        .or_else(|| {
+            annotation
+                .get(b"Border")
+                .ok()?
+                .as_array()
+                .ok()?
+                .get(2)
+                .and_then(number)
+        })
+        .unwrap_or(1.0);
+    (width.is_finite() && (1.0..=20.0).contains(&width) && width.fract() == 0.0)
+        .then_some(width as u32)
+}
+
+fn stage_missing_shape_appearances(
+    source: &[u8],
+    page_number: usize,
+) -> Result<Option<Vec<([u32; 4], [u8; 3])>>, String> {
+    if source.len() > 2_000_000 || page_number == 0 {
+        return Ok(None);
+    }
+    let doc = Document::load_mem(source).map_err(|e| e.to_string())?;
+    if doc.is_encrypted() {
+        return Ok(None);
+    }
+    let Some((page_id, crop, rotation)) = page_geometry(&doc, page_number) else {
+        return Ok(None);
+    };
+    let annotations = doc
+        .get_page_annotations(page_id)
+        .map_err(|e| e.to_string())?;
+    if annotations.is_empty() || annotations.len() > 64 {
+        return Ok(None);
+    }
+    let mut painted = Vec::new();
+    for annotation in annotations {
+        if annotation.has(b"AP") {
+            return Ok(None);
+        }
+        let flags = annotation.get(b"F").ok().and_then(number).unwrap_or(0.0);
+        if !flags.is_finite() || flags.fract() != 0.0 || flags < 0.0 || flags > i32::MAX as f64 {
+            return Ok(None);
+        }
+        if (flags as i32) & (1 | 2 | 32) != 0 {
+            continue;
+        }
+        let Some(rect) = annotation.get(b"Rect").ok().and_then(four) else {
+            return Ok(None);
+        };
+        if rect[0] >= rect[2] || rect[1] >= rect[3] {
+            return Ok(None);
+        }
+        let Some(box_) = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])
+        else {
+            return Ok(None);
+        };
+        if name_is(annotation, b"Subtype", b"Square") {
+            let Some(stroke) = fallback_stroke_width(annotation) else {
+                return Ok(None);
+            };
+            let Some(color) = fallback_color(annotation, [0, 0, 0]) else {
+                return Ok(None);
+            };
+            let [x0, y0, x1, y1] = box_;
+            for bounds in [
+                [x0, y0, x1, (y0 + stroke).min(y1)],
+                [x0, y1.saturating_sub(stroke).max(y0), x1, y1],
+                [x0, y0, (x0 + stroke).min(x1), y1],
+                [x1.saturating_sub(stroke).max(x0), y0, x1, y1],
+            ] {
+                painted.push((bounds, color));
+            }
+        } else if name_is(annotation, b"Subtype", b"Highlight") {
+            let Some(color) = fallback_color(annotation, [255, 255, 0]) else {
+                return Ok(None);
+            };
+            let quad = match annotation.get(b"QuadPoints") {
+                Ok(value) => {
+                    let Ok(values) = value.as_array() else {
+                        return Ok(None);
+                    };
+                    if values.len() != 8 {
+                        return Ok(None);
+                    }
+                    let Some(points) = values
+                        .iter()
+                        .map(number)
+                        .collect::<Option<Vec<_>>>()
+                        .and_then(|v| {
+                            (v.iter().all(|n| n.is_finite())).then_some([
+                                [v[0], v[1]],
+                                [v[2], v[3]],
+                                [v[6], v[7]],
+                                [v[4], v[5]],
+                            ])
+                        })
+                    else {
+                        return Ok(None);
+                    };
+                    points
+                }
+                Err(_) => [
+                    [rect[0], rect[3]],
+                    [rect[2], rect[3]],
+                    [rect[2], rect[1]],
+                    [rect[0], rect[1]],
+                ],
+            };
+            let Some(quad_box) = pixel_box(crop, rotation, &quad) else {
+                return Ok(None);
+            };
+            let [qx0, qy0, qx1, qy1] = quad_box;
+            let corners = [[qx0, qy0], [qx1, qy0], [qx1, qy1], [qx0, qy1]];
+            let transformed: Vec<_> = quad
+                .iter()
+                .map(|p| display_point(crop, rotation, p[0], p[1]))
+                .collect();
+            if transformed.iter().any(|p| {
+                !corners
+                    .iter()
+                    .any(|corner| p[0] == f64::from(corner[0]) && p[1] == f64::from(corner[1]))
+            }) || corners.iter().any(|corner| {
+                transformed
+                    .iter()
+                    .filter(|p| p[0] == f64::from(corner[0]) && p[1] == f64::from(corner[1]))
+                    .count()
+                    != 1
+            }) || {
+                let crosses: Vec<_> = (0..4)
+                    .map(|i| {
+                        let a = transformed[i];
+                        let b = transformed[(i + 1) % 4];
+                        let c = transformed[(i + 2) % 4];
+                        (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+                    })
+                    .collect();
+                crosses
+                    .iter()
+                    .any(|cross| *cross == 0.0 || cross.signum() != crosses[0].signum())
+            } || qx0 < box_[0]
+                || qy0 < box_[1]
+                || qx1 > box_[2]
+                || qy1 > box_[3]
+            {
+                return Ok(None);
+            }
+            painted.push((quad_box, color));
+        } else {
+            return Ok(None);
+        }
+    }
+    Ok((!painted.is_empty() && painted.len() <= 256).then_some(painted))
+}
+
+/// Preview-only imported Square/Highlight annotations without `/AP`. The
+/// constrained OPAN fill list reproduces the existing Hayro-preview fallback.
+pub fn render_missing_shape_appearances_for_app(
+    pdf: &ParsedPdf,
+    source: &[u8],
+    page_number: usize,
+) -> Result<Option<Raster>, String> {
+    let Some(rectangles) = stage_missing_shape_appearances(source, page_number)? else {
+        return Ok(None);
+    };
+    let mut layer = pdf
+        .render_page_content_without_annotations(page_number, 1.0)
+        .map_err(|e| e.to_string())?;
+    let started = std::time::Instant::now();
+    let Some(painted) = paint_opaque_imported_rectangles(
+        &layer.rgba,
+        layer.width,
+        layer.height,
+        (layer.page_width_pt, layer.page_height_pt),
+        &rectangles,
+    )?
+    else {
+        return Ok(None);
+    };
+    layer.rgba = painted.rgba;
+    add_white_paper(&mut layer.rgba);
     layer.render_ms += started.elapsed().as_millis();
     Ok(Some(layer))
 }
@@ -393,60 +684,9 @@ fn stage_shape_appearances(
     if doc.is_encrypted() {
         return Ok(None);
     }
-    let Ok(page_number_u32) = u32::try_from(page_number) else {
+    let Some((page_id, crop, rotation)) = page_geometry(&doc, page_number) else {
         return Ok(None);
     };
-    let page_id = *doc
-        .get_pages()
-        .get(&page_number_u32)
-        .ok_or("page missing")?;
-    let page = doc.get_dictionary(page_id).map_err(|e| e.to_string())?;
-    if page.has(b"Group") || !matches!(inherited(&doc, page_id, b"UserUnit"), Ok(None)) {
-        return Ok(None);
-    }
-    let Ok(Some(media)) = inherited(&doc, page_id, b"MediaBox") else {
-        return Ok(None);
-    };
-    let Some(media) = four(media) else {
-        return Ok(None);
-    };
-    let crop = match inherited(&doc, page_id, b"CropBox") {
-        Ok(Some(value)) => match four(value) {
-            Some(box_) => box_,
-            None => return Ok(None),
-        },
-        Ok(None) => media,
-        Err(()) => return Ok(None),
-    };
-    let rotation = match inherited(&doc, page_id, b"Rotate") {
-        Ok(Some(value)) => match number(value) {
-            Some(value) if value.fract() == 0.0 && value.is_finite() => {
-                value.rem_euclid(360.0) as u16
-            }
-            _ => return Ok(None),
-        },
-        Ok(None) => 0,
-        Err(()) => return Ok(None),
-    };
-    if !matches!(rotation, 0 | 90 | 180 | 270) {
-        return Ok(None);
-    }
-    let [x0, y0, x1, y1] = crop;
-    let (width, height) = (x1 - x0, y1 - y0);
-    if !media.iter().chain(crop.iter()).all(|v| v.is_finite())
-        || media[0] > x0
-        || media[1] > y0
-        || x1 > media[2]
-        || y1 > media[3]
-        || width <= 0.0
-        || height <= 0.0
-        || width > 4096.0
-        || height > 4096.0
-        || crop.iter().any(|v| v.fract() != 0.0)
-        || width * height > 6_000_000.0
-    {
-        return Ok(None);
-    }
     let annotations = doc
         .get_page_annotations(page_id)
         .map_err(|e| e.to_string())?;
@@ -506,4 +746,127 @@ fn render_shape_appearances_inner(
             height: actual.height,
             rgba: actual.rgba,
         }))
+}
+
+#[cfg(test)]
+mod missing_appearance_tests {
+    use super::*;
+    use crate::{render_with_report, Backend};
+    use lopdf::{dictionary, Stream};
+
+    fn fixture(rotation: i64, stroke: i64, slanted_quad: bool) -> Vec<u8> {
+        let mut doc = Document::with_version("1.4");
+        let pages_id = doc.new_object_id();
+        let content_id = doc.add_object(Stream::new(
+            Dictionary::new(),
+            b"0 0 1 rg 40 60 160 240 re f".to_vec(),
+        ));
+        let square_id = doc.add_object(dictionary! {
+            "Type" => "Annot", "Subtype" => "Square", "F" => 4,
+            "Rect" => vec![60.into(),80.into(),120.into(),140.into()],
+            "C" => vec![0.into(),1.into(),0.into()],
+            "BS" => dictionary! { "W" => stroke },
+        });
+        let highlight_id = doc.add_object(dictionary! {
+            "Type" => "Annot", "Subtype" => "Highlight", "F" => 4,
+            "Rect" => vec![90.into(),100.into(),150.into(),125.into()],
+            "QuadPoints" => vec![
+                90.into(),125.into(),150.into(),125.into(),
+                (if slanted_quad { 91 } else { 90 }).into(),100.into(),150.into(),100.into(),
+            ],
+            "C" => vec![1.into(),1.into(),0.into()],
+        });
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
+            "Annots" => vec![Object::Reference(square_id), Object::Reference(highlight_id)],
+            "MediaBox" => vec![20.into(),30.into(),220.into(),330.into()],
+            "CropBox" => vec![40.into(),60.into(),200.into(),300.into()],
+            "Rotate" => rotation,
+        });
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages", "Kids" => vec![Object::Reference(page_id)], "Count" => 1,
+            }),
+        );
+        let catalog_id = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn missing_ap_square_and_highlight_match_preview_on_rotated_crop() {
+        for rotation in [0, 90, 180, 270] {
+            for stroke in [1, 3, 20] {
+                let bytes = fixture(rotation, stroke, false);
+                if rotation == 90 && stroke == 3 {
+                    if let Ok(directory) = std::env::var("OPDS_MISSING_AP_FIXTURE_DIR") {
+                        std::fs::create_dir_all(&directory).unwrap();
+                        std::fs::write(
+                            std::path::Path::new(&directory).join("missing-square-highlight.pdf"),
+                            &bytes,
+                        )
+                        .unwrap();
+                    }
+                }
+                let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                assert_eq!(selected.used, Backend::Hayro);
+                assert!(selected.imported_annotations_dynlex);
+                assert_eq!(
+                    selected.raster.rgba, expected.rgba,
+                    "rotation={rotation}, stroke={stroke}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn slanted_missing_ap_highlight_falls_back_without_partial_paint() {
+        let bytes = fixture(90, 3, true);
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let expected = pdf.render_page(1, 1.0).unwrap();
+        let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert!(!selected.imported_annotations_dynlex);
+        assert_eq!(selected.raster.rgba, expected.rgba);
+    }
+
+    #[test]
+    fn missing_ap_defaults_and_hidden_flags_keep_preview_semantics() {
+        let mut doc = Document::load_mem(&fixture(270, 1, false)).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let ids: Vec<_> = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry.as_reference().unwrap())
+            .collect();
+        doc.get_dictionary_mut(ids[0]).unwrap().remove(b"C");
+        let highlight = doc.get_dictionary_mut(ids[1]).unwrap();
+        highlight.remove(b"C");
+        highlight.remove(b"QuadPoints");
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let expected = pdf.render_page(1, 1.0).unwrap();
+        let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert!(selected.imported_annotations_dynlex);
+        assert_eq!(selected.raster.rgba, expected.rgba);
+
+        doc.get_dictionary_mut(ids[0]).unwrap().set("F", 2);
+        bytes.clear();
+        doc.save_to(&mut bytes).unwrap();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let expected = pdf.render_page(1, 1.0).unwrap();
+        let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert!(selected.imported_annotations_dynlex);
+        assert_eq!(selected.raster.rgba, expected.rgba);
+    }
 }

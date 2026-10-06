@@ -1389,11 +1389,11 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 .any(|item| item.page == document.displayed_page);
             if document.imported_annotations_dynlex {
                 if dynlex_annotations {
-                    "PDF: Hayro · Imported AP: DynLex · Native: DynLex"
+                    "PDF: Hayro · Imported: DynLex · Native: DynLex"
                 } else if has_annotations {
-                    "PDF: Hayro · Imported AP: DynLex · Native: Iced"
+                    "PDF: Hayro · Imported: DynLex · Native: Iced"
                 } else {
-                    "PDF: Hayro · Imported AP: DynLex"
+                    "PDF: Hayro · Imported: DynLex"
                 }
             } else {
                 match (document.bitmap_backend, has_annotations, dynlex_annotations) {
