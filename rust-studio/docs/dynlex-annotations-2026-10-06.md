@@ -542,9 +542,28 @@ geaccepteerde gevallen volledig bytegelijk aan Hayro; op een kwartpixelgrid
 waren 234 van 256 geaccepteerde gevallen volledig bytegelijk. De andere
 gevallen vielen terug. Gerichte proeven bevestigen ook laagvolgorde,
 expliciete/impliciete sluiting, rotaties en foutafwijzing van o.a.
-zelfkruising, onvolledige/multi-contourpaden, curveoperatoren, stroke,
+zelfkruising, onvolledige paden, curveoperatoren, stroke,
 punten buiten de Form en coördinaten buiten het kwartpixelgrid. Dit is een
 nauwe deelset en geen volledige vector- of annotatielaag. Een onafhankelijke
 implementatie van Hayro/Vello's f32-randdekking blijft nodig om de
 conservatieve terugval te verkleinen; deze route heeft nog geen
 prestatievoordeel aangetoond.
+
+**Twee Form-contouren.** Dezelfde versieerbare OPM2-kernel accepteert nu
+maximaal twee eenvoudige, niet-rakende `m/l/h`-contouren met samen maximaal
+128 hoekpunten in één `f`- of `f*`-opdracht. De parser bewaart expliciete
+contourgrenzen en valideert topologie vóór vereenvoudiging. Losse vlakken
+worden met dezelfde winding getekend; een binnencontour met tegengestelde
+winding maakt onder `f` een gat. `f*` maakt onafhankelijk van de
+contourrichting een gat. Een binnencontour met gelijke winding onder `f`
+heeft geen zichtbare rand en wordt pas na topologievalidatie verwijderd.
+Gerichte PDF-proeven voor losse vlakken, omgekeerde contourrichting en
+-volgorde, gaten met beide vulregels en een gekleurde onderlaag zijn op
+0/90/180/270° met verschoven CropBox volledig RGBA-bytegelijk aan Hayro.
+Een 2384×1684 zichtbare 90°-pagina rendert hetzelfde Form-gat via één
+begrensde tegel eveneens bytegelijk.
+Van 96 gevarieerde driehoekige gaten waren 88 geaccepteerde gevallen
+bytegelijk; acht onzekere gevallen vielen volledig terug. Drie contouren,
+elkaar kruisende of rakende contouren, curven, polygonale strokes en
+onbewezen randafronding blijven Hayro-fallback. Dit is een volgende stap
+richting een volledige annotatielaag, geen algemene Form-renderer.

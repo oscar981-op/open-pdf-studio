@@ -367,31 +367,61 @@ fn clip_polygon_axis(
 /// The DynLex kernel rounds exact polygon area to a byte; Hayro/Vello uses
 /// f32 edge strips. Near a half-byte threshold the two can choose opposite
 /// bytes. Reject such paths before any appearance in the page is painted.
-fn unambiguous_polygon_coverage(points: &[[f64; 2]], bounds: [u32; 4]) -> bool {
+fn signed_polygon_area(points: &[[f64; 2]]) -> f64 {
+    points
+        .iter()
+        .zip(points.iter().cycle().skip(1))
+        .take(points.len())
+        .map(|(a, b)| a[0] * b[1] - b[0] * a[1])
+        .sum::<f64>()
+        * 0.5
+}
+
+fn point_inside_polygon(point: [f64; 2], polygon: &[[f64; 2]]) -> bool {
+    let mut inside = false;
+    for (a, b) in polygon
+        .iter()
+        .zip(polygon.iter().cycle().skip(1))
+        .take(polygon.len())
+    {
+        if (a[1] > point[1]) != (b[1] > point[1])
+            && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]
+        {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+fn unambiguous_polygon_coverage(
+    contours: &[Vec<[f64; 2]>],
+    nested_outer: Option<usize>,
+    bounds: [u32; 4],
+) -> bool {
     for y in bounds[1]..bounds[3] {
         for x in bounds[0]..bounds[2] {
-            let mut clipped = points.to_vec();
-            for (axis, boundary, greater) in [
-                (0, f64::from(x), true),
-                (0, f64::from(x + 1), false),
-                (1, f64::from(y), true),
-                (1, f64::from(y + 1), false),
-            ] {
-                clipped = clip_polygon_axis(&clipped, axis, boundary, greater);
-                if clipped.is_empty() {
-                    break;
+            let mut area = 0.0;
+            for (index, points) in contours.iter().enumerate() {
+                let mut clipped = points.to_vec();
+                for (axis, boundary, greater) in [
+                    (0, f64::from(x), true),
+                    (0, f64::from(x + 1), false),
+                    (1, f64::from(y), true),
+                    (1, f64::from(y + 1), false),
+                ] {
+                    clipped = clip_polygon_axis(&clipped, axis, boundary, greater);
+                    if clipped.is_empty() {
+                        break;
+                    }
                 }
+                let contribution = signed_polygon_area(&clipped).abs();
+                area += if nested_outer.is_some_and(|outer| index != outer) {
+                    -contribution
+                } else {
+                    contribution
+                };
             }
-            if clipped.is_empty() {
-                continue;
-            }
-            let mut signed = 0.0;
-            for index in 0..clipped.len() {
-                let a = clipped[index];
-                let b = clipped[(index + 1) % clipped.len()];
-                signed += a[0] * b[1] - b[0] * a[1];
-            }
-            let scaled = (signed.abs() * 0.5).min(1.0) * 255.0;
+            let scaled = area.clamp(0.0, 1.0) * 255.0;
             if (scaled.fract() - 0.5).abs() < 0.002 {
                 return false;
             }
@@ -400,19 +430,54 @@ fn unambiguous_polygon_coverage(points: &[[f64; 2]], bounds: [u32; 4]) -> bool {
     true
 }
 
-/// Stage one closed, line-only Form path for the existing validated DynLex
+fn encode_opm_contours(contours: &[Vec<[f64; 2]>]) -> Vec<u8> {
+    let mut outline = Vec::with_capacity(
+        24 + (contours.iter().map(Vec::len).sum::<usize>() + contours.len()) * 16,
+    );
+    outline.extend_from_slice(b"OPM2");
+    for word in [1_u32, 256, 192, contours.len() as u32] {
+        outline.extend_from_slice(&word.to_le_bytes());
+    }
+    for points in contours {
+        outline.extend_from_slice(&((points.len() + 1) as u32).to_le_bytes());
+        for point in points.iter().chain(points.first()) {
+            outline.extend_from_slice(&point[0].to_le_bytes());
+            outline.extend_from_slice(&point[1].to_le_bytes());
+        }
+    }
+    outline
+}
+
+/// Stage one or two closed, line-only Form contours for the validated DynLex
 /// area kernel. The tile may start anywhere on a larger page; the Form box
 /// remains its appearance clip. All points are on a quarter-pixel grid and
 /// fully inside it.
 fn stage_form_polygon(
-    points: &[[f64; 2]],
+    contours: &[Vec<[f64; 2]>],
+    even_odd: bool,
     color: [u8; 3],
     rect: [f64; 4],
     crop: [f64; 4],
     rotation: u16,
 ) -> Option<StagedPolygon> {
-    if !(3..=64).contains(&points.len())
-        || points.iter().any(|point| {
+    if !(1..=2).contains(&contours.len()) {
+        return None;
+    }
+    let contours: Vec<Vec<[f64; 2]>> = contours
+        .iter()
+        .map(|points| {
+            let mut points = points.clone();
+            if points.len() > 3 && points.first() == points.last() {
+                points.pop();
+            }
+            points
+        })
+        .collect();
+    if contours
+        .iter()
+        .any(|points| !(3..=64).contains(&points.len()))
+        || contours.iter().map(Vec::len).sum::<usize>() > 128
+        || contours.iter().flatten().any(|point| {
             !point[0].is_finite()
                 || !point[1].is_finite()
                 || (point[0] * 4.0).fract() != 0.0
@@ -429,14 +494,19 @@ fn stage_form_polygon(
     if clip[2] > 4096 || clip[3] > 4096 {
         return None;
     }
-    let mapped: Vec<_> = points
+    let mapped: Vec<Vec<_>> = contours
         .iter()
-        .map(|point| display_point(crop, rotation, rect[0] + point[0], rect[1] + point[1]))
+        .map(|points| {
+            points
+                .iter()
+                .map(|point| display_point(crop, rotation, rect[0] + point[0], rect[1] + point[1]))
+                .collect()
+        })
         .collect();
-    let left = mapped.iter().map(|p| p[0]).reduce(f64::min)?;
-    let top = mapped.iter().map(|p| p[1]).reduce(f64::min)?;
-    let right = mapped.iter().map(|p| p[0]).reduce(f64::max)?;
-    let bottom = mapped.iter().map(|p| p[1]).reduce(f64::max)?;
+    let left = mapped.iter().flatten().map(|p| p[0]).reduce(f64::min)?;
+    let top = mapped.iter().flatten().map(|p| p[1]).reduce(f64::min)?;
+    let right = mapped.iter().flatten().map(|p| p[0]).reduce(f64::max)?;
+    let bottom = mapped.iter().flatten().map(|p| p[1]).reduce(f64::max)?;
     if left < f64::from(clip[0])
         || top < f64::from(clip[1])
         || right > f64::from(clip[2])
@@ -450,17 +520,75 @@ fn stage_form_polygon(
     if right - f64::from(origin[0]) > 256.0 || bottom - f64::from(origin[1]) > 192.0 {
         return None;
     }
-    let local: Vec<_> = mapped
+    let mut local: Vec<Vec<[f64; 2]>> = mapped
         .iter()
-        .map(|point| {
-            [
-                point[0] - f64::from(origin[0]),
-                point[1] - f64::from(origin[1]),
-            ]
+        .map(|points| {
+            points
+                .iter()
+                .map(|point| {
+                    [
+                        point[0] - f64::from(origin[0]),
+                        point[1] - f64::from(origin[1]),
+                    ]
+                })
+                .collect()
         })
         .collect();
+    if !validate_polygon_outline(&encode_opm_contours(&local)) {
+        return None;
+    }
+    // With two contours, crossing/touching and self-intersection are rejected
+    // by OPM2 validation above. A vertex-in-contour test then distinguishes
+    // disjoint regions from a strictly nested hole.
+    let mut nested_outer = if local.len() == 2 {
+        let first_inside_second = point_inside_polygon(local[0][0], &local[1]);
+        let second_inside_first = point_inside_polygon(local[1][0], &local[0]);
+        if first_inside_second && second_inside_first {
+            return None;
+        }
+        if first_inside_second {
+            Some(1)
+        } else if second_inside_first {
+            Some(0)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let first_sign = signed_polygon_area(&local[0]).signum();
+    if first_sign == 0.0
+        || local
+            .iter()
+            .skip(1)
+            .any(|path| signed_polygon_area(path) == 0.0)
+    {
+        return None;
+    }
+    if local.len() == 2 {
+        let outer = nested_outer.unwrap_or(0);
+        let inner = 1 - outer;
+        let same_orientation = signed_polygon_area(&local[outer]).signum()
+            == signed_polygon_area(&local[inner]).signum();
+        if nested_outer.is_some() && !even_odd && same_orientation {
+            // A same-winding nested contour has no visible boundary under
+            // PDF nonzero fill. Removing it avoids double coverage in OPM2.
+            local.remove(inner);
+            nested_outer = None;
+        } else {
+            let should_reverse = if nested_outer.is_some() {
+                same_orientation
+            } else {
+                !same_orientation
+            };
+            if should_reverse {
+                local[inner].reverse();
+            }
+        }
+    }
     if !unambiguous_polygon_coverage(
         &local,
+        nested_outer,
         [
             0,
             0,
@@ -470,15 +598,7 @@ fn stage_form_polygon(
     ) {
         return None;
     }
-    let mut outline = Vec::with_capacity(24 + (points.len() + 1) * 16);
-    outline.extend_from_slice(b"OPM2");
-    for word in [1_u32, 256, 192, 1, (points.len() + 1) as u32] {
-        outline.extend_from_slice(&word.to_le_bytes());
-    }
-    for point in local.iter().chain(local.first()) {
-        outline.extend_from_slice(&point[0].to_le_bytes());
-        outline.extend_from_slice(&point[1].to_le_bytes());
-    }
+    let outline = encode_opm_contours(&local);
     validate_polygon_outline(&outline).then_some(StagedPolygon {
         outline,
         color,
@@ -609,7 +729,10 @@ fn parse_opaque_rect_form(
     }
     enum FormPath {
         Rect([f64; 4]),
-        Polygon { points: Vec<[f64; 2]>, closed: bool },
+        Polygon {
+            contours: Vec<Vec<[f64; 2]>>,
+            closed: bool,
+        },
     }
     let parse_color = |values: &[Object]| -> Option<[u8; 3]> {
         values
@@ -709,7 +832,7 @@ fn parse_opaque_rect_form(
                 ));
             }
             "m" => {
-                if stack.is_empty() || pending_path.is_some() {
+                if stack.is_empty() {
                     return None;
                 }
                 let point = operation
@@ -719,19 +842,31 @@ fn parse_opaque_rect_form(
                     .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .ok()?;
-                pending_path = Some(FormPath::Polygon {
-                    points: vec![point],
-                    closed: false,
-                });
+                match &mut pending_path {
+                    None => {
+                        pending_path = Some(FormPath::Polygon {
+                            contours: vec![vec![point]],
+                            closed: false,
+                        });
+                    }
+                    Some(FormPath::Polygon { contours, closed })
+                        if contours.len() == 1 && contours[0].len() >= 3 =>
+                    {
+                        contours.push(vec![point]);
+                        *closed = false;
+                    }
+                    _ => return None,
+                }
             }
             "l" => {
                 let Some(FormPath::Polygon {
-                    points,
+                    contours,
                     closed: false,
                 }) = &mut pending_path
                 else {
                     return None;
                 };
+                let points = contours.last_mut()?;
                 if points.len() >= 64 {
                     return None;
                 }
@@ -785,12 +920,13 @@ fn parse_opaque_rect_form(
                             )?]));
                         }
                     }
-                    FormPath::Polygon { points, .. } => {
+                    FormPath::Polygon { contours, .. } => {
                         if !matches!(operation.operator.as_str(), "f" | "F" | "f*") {
                             return None;
                         }
                         appearances.push(ImportedAppearance::Polygon(stage_form_polygon(
-                            &points,
+                            &contours,
+                            operation.operator == "f*",
                             state.fill?,
                             rect,
                             crop,
@@ -1844,6 +1980,171 @@ mod missing_appearance_tests {
     }
 
     #[test]
+    fn imported_form_two_contours_match_hayro_on_rotated_colored_page() {
+        let paths = [
+            "3 3 m 14 3 l 14 13 l 3 13 l h 22 15 m 36 15 l 36 26 l 22 26 l h f",
+            "3 3 m 14 3 l 14 13 l 3 13 l h 22 15 m 22 26 l 36 26 l 36 15 l h f",
+            "3 3 m 37 3 l 37 27 l 3 27 l h 12 9 m 28 9 l 28 21 l 12 21 l h f*",
+            "12 9 m 28 9 l 28 21 l 12 21 l h 3 3 m 37 3 l 37 27 l 3 27 l h f*",
+            "3 3 m 37 3 l 37 27 l 3 27 l h 12 9 m 12 21 l 28 21 l 28 9 l h f",
+            "3 3 m 37 3 l 37 27 l 3 27 l h 12 9 m 28 9 l 28 21 l 12 21 l h f",
+        ];
+        for rotation in [0, 90, 180, 270] {
+            for path in paths {
+                let bytes = opaque_stamp_fixture(rotation, false);
+                let mut doc = Document::load_mem(&bytes).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let annotation_id = doc
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()[0]
+                    .as_reference()
+                    .unwrap();
+                let form_id = doc
+                    .get_dictionary(annotation_id)
+                    .unwrap()
+                    .get(b"AP")
+                    .unwrap()
+                    .as_dict()
+                    .unwrap()
+                    .get(b"N")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                let form = doc
+                    .get_object_mut(form_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap();
+                form.content = format!("q 1 0 0 rg {path} Q").into_bytes();
+                form.dict.set("Length", form.content.len() as i64);
+                let mut source = Vec::new();
+                doc.save_to(&mut source).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(actual.imported_annotations_dynlex, "{rotation} {path}");
+                assert_eq!(actual.raster.rgba, expected.rgba, "{rotation} {path}");
+            }
+        }
+    }
+
+    #[test]
+    fn bounded_even_odd_holes_are_pixel_exact_when_accepted() {
+        let mut accepted = 0;
+        for index in 0_u32..96 {
+            let x0 = f64::from(5 + index * 7 % 18) + 0.25;
+            let y0 = f64::from(5 + index * 11 % 12) + 0.25;
+            let x1 = f64::from(6 + (index * 13 + 5) % 28) + 0.5;
+            let y1 = f64::from(5 + (index * 17 + 3) % 18);
+            let x2 = f64::from(5 + (index * 19 + 7) % 28) + 0.75;
+            let y2 = f64::from(5 + (index * 23 + 9) % 18) + 0.5;
+            let bytes = opaque_stamp_fixture(if index % 4 == 0 { 90 } else { 0 }, false);
+            let mut doc = Document::load_mem(&bytes).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let annotation_id = doc
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Annots")
+                .unwrap()
+                .as_array()
+                .unwrap()[0]
+                .as_reference()
+                .unwrap();
+            let form_id = doc
+                .get_dictionary(annotation_id)
+                .unwrap()
+                .get(b"AP")
+                .unwrap()
+                .as_dict()
+                .unwrap()
+                .get(b"N")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let form = doc
+                .get_object_mut(form_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap();
+            form.content = format!(
+                "q 0.906 0.298 0.235 rg 3 3 m 37 3 l 37 27 l 3 27 l h {x0} {y0} m {x1} {y1} l {x2} {y2} l h f* Q",
+            )
+            .into_bytes();
+            form.dict.set("Length", form.content.len() as i64);
+            let mut source = Vec::new();
+            doc.save_to(&mut source).unwrap();
+            let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+            if actual.imported_annotations_dynlex {
+                accepted += 1;
+            }
+            assert_eq!(actual.raster.rgba, expected.rgba, "hole {index}");
+        }
+        assert!(
+            accepted >= 80,
+            "too many safe hole fallbacks: {accepted}/96"
+        );
+        eprintln!("accepted even-odd holes: {accepted}/96");
+    }
+
+    #[test]
+    fn imported_form_hole_on_large_rotated_page_uses_bounded_tile() {
+        let bytes = opaque_stamp_fixture(90, false);
+        let mut doc = Document::load_mem(&bytes).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let annotation_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        doc.get_dictionary_mut(page_id).unwrap().set(
+            "MediaBox",
+            vec![20.into(), 30.into(), 1724.into(), 2454.into()],
+        );
+        doc.get_dictionary_mut(page_id).unwrap().set(
+            "CropBox",
+            vec![40.into(), 60.into(), 1724.into(), 2444.into()],
+        );
+        let form_id = doc
+            .get_dictionary(annotation_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let form = doc
+            .get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        form.content =
+            b"q 1 0 0 rg 3 3 m 37 3 l 37 27 l 3 27 l h 12 9 m 28 9 l 28 21 l 12 21 l h f* Q"
+                .to_vec();
+        form.dict.set("Length", form.content.len() as i64);
+        let mut source = Vec::new();
+        doc.save_to(&mut source).unwrap();
+        let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+        let expected = pdf.render_page(1, 1.0).unwrap();
+        assert_eq!((expected.width, expected.height), (2384, 1684));
+        let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+        assert!(actual.imported_annotations_dynlex);
+        assert_eq!(actual.raster.rgba, expected.rgba);
+    }
+
+    #[test]
     fn bounded_imported_triangles_are_pixel_exact_when_accepted() {
         let mut accepted = [0; 2];
         for quarter in [false, true] {
@@ -1943,6 +2244,8 @@ mod missing_appearance_tests {
             "q 1 0 0 rg 2 2 m 20 20 l 2 20 l 20 2 l h f Q",
             "q 1 0 0 rg 2 2 m 20 20 l 2 20 l 20 2 l c f Q",
             "q 1 0 0 rg 2 2 m 20 2 l 20 20 l h 1 1 m 2 1 l 2 2 l h f Q",
+            "q 1 0 0 rg 3 3 m 10 3 l 10 10 l h 12 12 m 19 12 l 19 19 l h 22 21 m 29 21 l 29 27 l h f* Q",
+            "q 1 0 0 rg 3 3 m 24 3 l 24 24 l 3 24 l h 16 8 m 36 8 l 36 27 l 16 27 l h f* Q",
             "q 1 0 0 rg 2 2 m 20 2 l 20 20 l h 3 3 l f Q",
             "q 1 0 0 rg 2.125 2 m 20 2 l 20 20 l h f Q",
             "q 1 0 0 rg 2 2 m 42 2 l 20 20 l h f Q",
