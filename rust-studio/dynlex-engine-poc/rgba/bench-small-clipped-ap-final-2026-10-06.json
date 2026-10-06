@@ -1,0 +1,204 @@
+{
+  "pdf": "/tmp/opds-clipped-polygon-ap.pdf",
+  "probe": "target/release/backend_probe",
+  "runs": 15,
+  "cache": "warm process and OS cache; cache was not cleared",
+  "includes": "PDF parse, render, raw RGBA file write and process startup",
+  "samples": {
+    "selected": [
+      {
+        "wall_ms": 6.854349,
+        "peak_rss_kib": 6948,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.991428,
+        "peak_rss_kib": 6828,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 9.018556,
+        "peak_rss_kib": 7104,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 6.870609,
+        "peak_rss_kib": 7052,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 8.429635,
+        "peak_rss_kib": 6944,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 9.224009,
+        "peak_rss_kib": 7076,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 8.219182,
+        "peak_rss_kib": 7000,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 9.538464,
+        "peak_rss_kib": 7268,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 8.009868,
+        "peak_rss_kib": 6892,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.577841,
+        "peak_rss_kib": 7000,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.501039,
+        "peak_rss_kib": 7212,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.131733,
+        "peak_rss_kib": 6908,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 8.236202,
+        "peak_rss_kib": 7020,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 8.870393,
+        "peak_rss_kib": 7212,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.047961,
+        "peak_rss_kib": 7204,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      }
+    ],
+    "hayro": [
+      {
+        "wall_ms": 9.29149,
+        "peak_rss_kib": 6504,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 8.985465,
+        "peak_rss_kib": 6544,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 6.188007,
+        "peak_rss_kib": 6552,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 8.242912,
+        "peak_rss_kib": 6556,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.882956,
+        "peak_rss_kib": 6568,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 6.95801,
+        "peak_rss_kib": 6588,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 6.829868,
+        "peak_rss_kib": 6376,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 6.806508,
+        "peak_rss_kib": 6500,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 8.413745,
+        "peak_rss_kib": 6532,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.491549,
+        "peak_rss_kib": 6548,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.56212,
+        "peak_rss_kib": 6376,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 6.681105,
+        "peak_rss_kib": 6540,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 7.871946,
+        "peak_rss_kib": 6504,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 6.94086,
+        "peak_rss_kib": 6568,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      },
+      {
+        "wall_ms": 6.91863,
+        "peak_rss_kib": 6504,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600
+      }
+    ]
+  },
+  "median_wall_ms": {
+    "selected": 8.009868,
+    "hayro": 7.491549
+  },
+  "median_peak_rss_kib": {
+    "selected": 7020,
+    "hayro": 6540
+  },
+  "median_paired_selected_minus_hayro_ms": 0.36425600000000014,
+  "selected_wins": 5,
+  "rgba_sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d"
+}

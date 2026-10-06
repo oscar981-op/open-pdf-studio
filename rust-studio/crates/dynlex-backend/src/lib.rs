@@ -460,7 +460,7 @@ fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String
 /// image kernel; Rust only serializes and validates the bounded scene.
 #[cfg(feature = "kernel")]
 fn paint_rgb_appearances(
-    base: Vec<u8>,
+    mut base: Vec<u8>,
     width: u32,
     height: u32,
     images: &[([u32; 4], &[u8])],
@@ -469,7 +469,7 @@ fn paint_rgb_appearances(
         .ok()
         .and_then(|w| usize::try_from(height).ok().and_then(|h| w.checked_mul(h)))
         .ok_or("appearance page size overflow")?;
-    if pixels > 1_000_000 || base.len() != pixels * 4 || base.chunks_exact(4).any(|p| p[3] != 255) {
+    if width > 4096 || height > 4096 || pixels > 6_000_000 || base.len() != pixels * 4 {
         return Ok(None);
     }
     if images.is_empty() || images.len() > 8 {
@@ -486,7 +486,12 @@ fn paint_rgb_appearances(
                         .and_then(|h| w.checked_mul(h))
                 })
                 .ok_or("appearance image size overflow")?;
-        if image_pixels == 0 || image_pixels > 65_536 || image.len() != image_pixels * 3 {
+        if image_pixels == 0
+            || image_pixels > 65_536
+            || image.len() != image_pixels * 3
+            || rect[2] > width
+            || rect[3] > height
+        {
             return Ok(None);
         }
         total_image_bytes += image.len();
@@ -494,70 +499,148 @@ fn paint_rgb_appearances(
     if total_image_bytes > 1_000_000 {
         return Ok(None);
     }
-    let mut rgb = Vec::with_capacity(pixels * 3 + total_image_bytes);
-    for pixel in base.chunks_exact(4) {
-        rgb.extend_from_slice(&pixel[..3]);
-    }
-    let mut scene =
-        Vec::with_capacity(40 + (images.len() + 1) * 24 + rgb.len() + total_image_bytes);
-    scene.extend_from_slice(b"OPDL");
-    for value in [
-        3,
-        width,
-        height,
-        0,
-        0,
-        width,
-        height,
-        0,
-        images.len() as u32 + 1,
-    ] {
-        scene.extend_from_slice(&value.to_le_bytes());
-    }
-    let mut commands = Vec::with_capacity(images.len() + 1);
-    commands.push(([0, 0, width, height], 0));
-    let mut offset = rgb.len() as u32;
-    for (bounds, image) in images {
-        commands.push((*bounds, offset));
-        offset += image.len() as u32;
-    }
-    for (bounds, offset) in commands {
-        scene.extend_from_slice(&6_u32.to_le_bytes());
-        for value in bounds {
+    // Keep each OPDL RGB scene below its validated 3.5 MiB input bound.
+    // Images are grouped in PDF order while their union fits a 700k-pixel
+    // tile; a distant image starts the next tile and reads the updated page.
+    let mut start = 0;
+    while start < images.len() {
+        let mut bounds = images[start].0;
+        let mut end = start + 1;
+        while end < images.len() {
+            let next = images[end].0;
+            let union = [
+                bounds[0].min(next[0]),
+                bounds[1].min(next[1]),
+                bounds[2].max(next[2]),
+                bounds[3].max(next[3]),
+            ];
+            let union_pixels = u64::from(union[2] - union[0]) * u64::from(union[3] - union[1]);
+            if union_pixels > 700_000 {
+                break;
+            }
+            bounds = union;
+            end += 1;
+        }
+        let tile_width = (bounds[2] - bounds[0]) as usize;
+        let tile_height = (bounds[3] - bounds[1]) as usize;
+        let tile_pixels = tile_width * tile_height;
+        let image_bytes = images[start..end]
+            .iter()
+            .map(|(_, image)| image.len())
+            .sum::<usize>();
+        let mut rgb = Vec::with_capacity(tile_pixels * 3);
+        for y in bounds[1]..bounds[3] {
+            let row = (y as usize * width as usize + bounds[0] as usize) * 4;
+            for pixel in base[row..row + tile_width * 4].chunks_exact(4) {
+                if pixel[3] != 255 {
+                    return Ok(None);
+                }
+                rgb.extend_from_slice(&pixel[..3]);
+            }
+        }
+        let mut scene = Vec::with_capacity(40 + (end - start + 1) * 24 + rgb.len() + image_bytes);
+        scene.extend_from_slice(b"OPDL");
+        for value in [
+            3,
+            tile_width as u32,
+            tile_height as u32,
+            0,
+            0,
+            tile_width as u32,
+            tile_height as u32,
+            0,
+            (end - start + 1) as u32,
+        ] {
             scene.extend_from_slice(&value.to_le_bytes());
         }
-        scene.extend_from_slice(&offset.to_le_bytes());
+        let mut offset = rgb.len() as u32;
+        // The first command lays down the current page tile. The remaining
+        // commands carry image offsets contiguous after that RGB payload.
+        scene.extend_from_slice(&6_u32.to_le_bytes());
+        for value in [0, 0, tile_width as u32, tile_height as u32, 0] {
+            scene.extend_from_slice(&value.to_le_bytes());
+        }
+        for (rect, image) in &images[start..end] {
+            scene.extend_from_slice(&6_u32.to_le_bytes());
+            for value in [
+                rect[0] - bounds[0],
+                rect[1] - bounds[1],
+                rect[2] - bounds[0],
+                rect[3] - bounds[1],
+                offset,
+            ] {
+                scene.extend_from_slice(&value.to_le_bytes());
+            }
+            offset += image.len() as u32;
+        }
+        scene.append(&mut rgb);
+        for (_, image) in &images[start..end] {
+            scene.extend_from_slice(image);
+        }
+        let (scene, actual_width, actual_height) = validated_ordered_scene(scene)?;
+        if actual_width != tile_width as u32 || actual_height != tile_height as u32 {
+            return Err("appearance tile dimensions changed".into());
+        }
+        let mut output = vec![0_u8; 12 + tile_pixels * 4];
+        // SAFETY: validated_ordered_scene checks every byte span and command;
+        // output reserves the ABI header and exact RGBA tile payload.
+        let status = unsafe {
+            opds_render_buffer(
+                scene.as_ptr(),
+                i32::try_from(scene.len()).map_err(|_| "appearance scene too large")?,
+                output.as_mut_ptr(),
+                i32::try_from(output.len()).map_err(|_| "appearance bitmap too large")?,
+                3,
+            )
+        };
+        if status != 0 {
+            return Err(format!("DynLex appearance image status {status}"));
+        }
+        for (tile_y, y) in (bounds[1]..bounds[3]).enumerate() {
+            let destination = (y as usize * width as usize + bounds[0] as usize) * 4;
+            let source = 12 + tile_y * tile_width * 4;
+            base[destination..destination + tile_width * 4]
+                .copy_from_slice(&output[source..source + tile_width * 4]);
+        }
+        start = end;
     }
-    scene.append(&mut rgb);
-    for (_, image) in images {
-        scene.extend_from_slice(image);
-    }
-    let (scene, actual_width, actual_height) = validated_ordered_scene(scene)?;
-    if actual_width != width || actual_height != height {
-        return Err("appearance scene dimensions changed".into());
-    }
-    let mut output = vec![0_u8; 12 + pixels * 4];
-    // SAFETY: validated_ordered_scene checks every byte span and command;
-    // output reserves the ABI header and the exact RGBA payload.
-    let status = unsafe {
-        opds_render_buffer(
-            scene.as_ptr(),
-            i32::try_from(scene.len()).map_err(|_| "appearance scene too large")?,
-            output.as_mut_ptr(),
-            i32::try_from(output.len()).map_err(|_| "appearance bitmap too large")?,
-            3,
-        )
-    };
-    if status != 0 {
-        return Err(format!("DynLex appearance image status {status}"));
-    }
-    Ok(Some(output.split_off(12)))
+    Ok(Some(base))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn distant_imported_rgb_images_use_ordered_tiles_on_large_page() {
+        let (width, height) = (1200_u32, 1000_u32);
+        let mut base = vec![0_u8; width as usize * height as usize * 4];
+        for pixel in base.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&[20, 30, 40, 255]);
+        }
+        let red = vec![255, 0, 0].repeat(4);
+        let blue = vec![0, 0, 255].repeat(4);
+        let images = [
+            ([5, 5, 7, 7], red.as_slice()),
+            ([1100, 900, 1102, 902], blue.as_slice()),
+        ];
+        let result = paint_rgb_appearances(base.clone(), width, height, &images)
+            .unwrap()
+            .unwrap();
+        for (bounds, color) in [
+            ([5, 5, 7, 7], [255, 0, 0, 255]),
+            ([1100, 900, 1102, 902], [0, 0, 255, 255]),
+        ] {
+            for y in bounds[1]..bounds[3] {
+                for x in bounds[0]..bounds[2] {
+                    let at = (y * width + x) as usize * 4;
+                    base[at..at + 4].copy_from_slice(&color);
+                }
+            }
+        }
+        assert_eq!(result, base);
+    }
     #[test]
     fn unsupported_requests_fall_back() {
         assert!(try_render(b"", 2, 1.0).unwrap().is_none());

@@ -703,7 +703,7 @@ snijdt de RGB8-beeldrijen en gevulde rechthoeken op dezelfde clipgrenzen af;
 doorsneden. Zestien PDF-fixtures (beide vulregels × ongefilterd/FlateDecode ×
 0/90/180/270° met CropBox) met twee beelden, een tussengelegen vulling en
 een stroke na `Q` zijn volledig RGBA-bytegelijk aan Hayro. Een onafgemaakte
-clip, leeg clipvak, gedeeltelijk geclipte stroke of geclipte polygon blijft
+clip, leeg clipvak of gedeeltelijk geclipte stroke blijft
 een veilige volledige Hayro-fallback. Vier aanvullende fixtures met twee
 geneste clipvakken en `q/Q`-herstel zijn eveneens bytegelijk op alle
 kwartslagen. In het 1200×832-appvenster waren Hayro en DynLex op 100% in
@@ -714,15 +714,17 @@ transparantie en tekst in dezelfde Form zijn nog niet bewezen.
 
 **Meercontourvulling onder Form-clip en tussen beelden.** Een gevalideerd
 `m/l/h f`- of `f*`-pad kan nu in dezelfde geordende Form staan als RGB8-beelden
-en rechthoekvullingen. De OPM2-kernel berekent zijn gebruikelijke volledige,
-maximaal 256×192-pixeltegel binnen de Form-BBox. Rust bewaart maximaal die ene
-tegel uit de vorige paginalaag en herstelt na het schilderen pixels buiten
-het gehele rechthoekige clipvak. Zo blijft de oppervlaktevalidatie van de
-kernel intact en de onderliggende beeld-/vectorvolgorde behouden. Acht
+en rechthoekvullingen. De OPM2-kernel berekent zijn gebruikelijke maximaal
+256×192-pixeltegel binnen de Form-BBox. Rust geeft alleen die tegel door en
+schrijft na het schilderen uitsluitend pixels binnen het actieve rechthoekige
+clipvak terug. Zo blijft de oppervlaktevalidatie van de kernel intact en de
+onderliggende beeld-/vectorvolgorde behouden. Acht
 PDF-fixtures met een `f*`-gat tussen twee beelden, een laatste stroke na
 `Q`, beide beeldfilters en vier paginarotaties/CropBox zijn volledig
 RGBA-bytegelijk aan Hayro. Een deterministische reeks van 64 diagonale
 `f`-driehoeken accepteerde 30 pixelgelijke DynLex-uitvoeren; 34 onzekere
 randdekkingen vielen veilig op Hayro terug. Dit is een beperkte
 pixeluitgelijnde clip, geen algemene clipping van transparante of gekromde
-paden. De extra tegelkopie is nog niet op tijd/RSS geprofileerd.
+paden. De paginagrote beeld- en vormpasses zijn later door begrensde tegels
+vervangen; [de prestatiemeting](dynlex-imported-ap-performance-2026-10-06.md)
+geeft de grenzen van die verbetering aan.

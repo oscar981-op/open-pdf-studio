@@ -1,0 +1,204 @@
+{
+  "pdf": "/tmp/opds-large-clipped-ap.pdf",
+  "probe": "target/release/backend_probe",
+  "runs": 15,
+  "cache": "warm process and OS cache; cache was not cleared",
+  "includes": "PDF parse, render, raw RGBA file write and process startup",
+  "samples": {
+    "selected": [
+      {
+        "wall_ms": 125.408045,
+        "peak_rss_kib": 39504,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 116.705725,
+        "peak_rss_kib": 39336,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 110.371855,
+        "peak_rss_kib": 39444,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 114.68863,
+        "peak_rss_kib": 39416,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 137.007165,
+        "peak_rss_kib": 39472,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 111.195319,
+        "peak_rss_kib": 39396,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 111.104358,
+        "peak_rss_kib": 39560,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 108.959781,
+        "peak_rss_kib": 39460,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 108.561763,
+        "peak_rss_kib": 39244,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 104.926891,
+        "peak_rss_kib": 39460,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 114.10936,
+        "peak_rss_kib": 39340,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 119.013863,
+        "peak_rss_kib": 39376,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 115.160928,
+        "peak_rss_kib": 39384,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 128.06473,
+        "peak_rss_kib": 39460,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 106.918146,
+        "peak_rss_kib": 39468,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      }
+    ],
+    "hayro": [
+      {
+        "wall_ms": 94.715045,
+        "peak_rss_kib": 38896,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 121.931685,
+        "peak_rss_kib": 38860,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 99.562679,
+        "peak_rss_kib": 38924,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 100.404583,
+        "peak_rss_kib": 38860,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 97.92135,
+        "peak_rss_kib": 38864,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 100.728579,
+        "peak_rss_kib": 38800,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 93.474593,
+        "peak_rss_kib": 38864,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 96.373873,
+        "peak_rss_kib": 38744,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 95.668691,
+        "peak_rss_kib": 38900,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 100.499784,
+        "peak_rss_kib": 38928,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 118.552357,
+        "peak_rss_kib": 38800,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 96.627198,
+        "peak_rss_kib": 38888,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 93.035286,
+        "peak_rss_kib": 38892,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 98.343898,
+        "peak_rss_kib": 38796,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      },
+      {
+        "wall_ms": 94.97464,
+        "peak_rss_kib": 38800,
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951",
+        "bytes": 16058624
+      }
+    ]
+  },
+  "median_wall_ms": {
+    "selected": 114.10936,
+    "hayro": 97.92135
+  },
+  "median_peak_rss_kib": {
+    "selected": 39444,
+    "hayro": 38864
+  },
+  "median_paired_selected_minus_hayro_ms": 12.893072000000004,
+  "selected_wins": 2,
+  "rgba_sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+}

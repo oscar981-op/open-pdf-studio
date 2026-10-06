@@ -104,19 +104,103 @@ pub(crate) fn paint_imported_commands(
     page_points: (f32, f32),
     commands: &[ImportedCommand],
 ) -> Result<Option<Bitmap>, String> {
+    if layer_rgba
+        .chunks_exact(4)
+        .any(|pixel| pixel[..3].iter().any(|channel| *channel > pixel[3]))
+    {
+        return Ok(None);
+    }
     paint_imported_commands_owned(layer_rgba.to_vec(), width, height, page_points, commands)
 }
 
-/// Reuse the caller's page allocation across ordered shape/text batches.
+/// Reuse the caller's validated premultiplied page allocation across ordered
+/// shape/text batches. The imported-Form caller starts with Hayro's page and
+/// every subsequent DynLex operation preserves premultiplication.
 #[cfg(feature = "kernel")]
 pub(crate) fn paint_imported_commands_owned(
-    output: Vec<u8>,
+    mut output: Vec<u8>,
     width: u32,
     height: u32,
     page_points: (f32, f32),
     commands: &[ImportedCommand],
 ) -> Result<Option<Bitmap>, String> {
-    paint_commands_owned(output, width, height, page_points, commands, PaintMode::Pdf)
+    if width == 0
+        || height == 0
+        || width > 4096
+        || height > 4096
+        || u64::from(width) * u64::from(height) > 6_000_000
+        || page_points != (width as f32, height as f32)
+        || output.len() != width as usize * height as usize * 4
+        || commands.is_empty()
+    {
+        return Ok(None);
+    }
+    let mut union = [u32::MAX, u32::MAX, 0, 0];
+    for entry in commands {
+        union[0] = union[0].min(entry.rect[0]);
+        union[1] = union[1].min(entry.rect[1]);
+        union[2] = union[2].max(entry.rect[2]);
+        union[3] = union[3].max(entry.rect[3]);
+    }
+    if union[0] >= union[2] || union[1] >= union[3] {
+        return Ok(None);
+    }
+    // Keep OPAN's 4x4 coverage grid at the same global origin. The narrow
+    // tile avoids repeatedly scanning and painting an entire A1 page for a
+    // small annotation between other ordered appearance layers.
+    let bounds = [
+        union[0] / 4 * 4,
+        union[1] / 4 * 4,
+        union[2].div_ceil(4).saturating_mul(4).min(width),
+        union[3].div_ceil(4).saturating_mul(4).min(height),
+    ];
+    let tile_pixels = u64::from(bounds[2].saturating_sub(bounds[0]))
+        * u64::from(bounds[3].saturating_sub(bounds[1]));
+    if tile_pixels == 0 || tile_pixels > 700_000 {
+        return paint_commands_owned(output, width, height, page_points, commands, PaintMode::Pdf);
+    }
+    let tile_width = (bounds[2] - bounds[0]) as usize;
+    let tile_height = (bounds[3] - bounds[1]) as usize;
+    let mut tile = Vec::with_capacity(tile_width * tile_height * 4);
+    for y in bounds[1]..bounds[3] {
+        let start = (y as usize * width as usize + bounds[0] as usize) * 4;
+        tile.extend_from_slice(&output[start..start + tile_width * 4]);
+    }
+    let translated: Vec<_> = commands
+        .iter()
+        .map(|entry| ImportedCommand {
+            kind: entry.kind,
+            rect: [
+                entry.rect[0].saturating_sub(bounds[0]),
+                entry.rect[1].saturating_sub(bounds[1]),
+                entry.rect[2].saturating_sub(bounds[0]),
+                entry.rect[3].saturating_sub(bounds[1]),
+            ],
+            tail: entry.tail,
+        })
+        .collect();
+    let Some(painted) = paint_commands_owned(
+        tile,
+        tile_width as u32,
+        tile_height as u32,
+        (tile_width as f32, tile_height as f32),
+        &translated,
+        PaintMode::Pdf,
+    )?
+    else {
+        return Ok(None);
+    };
+    for (tile_y, y) in (bounds[1]..bounds[3]).enumerate() {
+        let destination = (y as usize * width as usize + bounds[0] as usize) * 4;
+        let source = tile_y * tile_width * 4;
+        output[destination..destination + tile_width * 4]
+            .copy_from_slice(&painted.rgba[source..source + tile_width * 4]);
+    }
+    Ok(Some(Bitmap {
+        width,
+        height,
+        rgba: output,
+    }))
 }
 
 #[cfg(feature = "kernel")]
