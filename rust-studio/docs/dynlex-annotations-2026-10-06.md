@@ -388,9 +388,14 @@ Er wordt geen tijdelijke afgevlakte PDF geschreven. Zestien opgeslagen
 FreeText-pagina's met Unicode, spaties, meerdere regels en links/midden/rechts
 op gewone, 0/90/180/270°-gecropte en een A1-achtige pagina zijn volledig
 RGBA-bytegelijk aan Hayro. Een onbekende annotatie-state of extra Form-operator
-valt terug zonder gedeeltelijke DynLex-tekening. De route is nog begrensd tot
-één tile van 256×192 en maximaal 32 zichtbare glyphs **per FreeText**, en
-het exacte ingebedde font.
+valt terug zonder gedeeltelijke DynLex-tekening. De route verdeelt een
+opgeslagen FreeText nu in maximaal zestien geordende 256×192-glyphtegels,
+met maximaal 32 glyphs per tegel en 128 per annotatie. Alle glyphs en tegels
+worden vóór het tekenen gevalideerd; het exacte ingebedde font blijft vereist.
+Acht extra volledige PDF-proeven met een brede run en een hoge negenregelige
+Text Box, op gewone en 90°/CropBox-pagina's, zijn RGBA-bytegelijk aan Hayro.
+Daarbij zijn beide laagvolgordes met een Square over de brede tekst getest.
+Twee gevallen met 150 zichtbare glyphs vallen volledig op Hayro terug.
 
 De geïmporteerde annotatieroute parseert de PDF nu eenmaal, stageert alle
 ondersteunde `/AP`-Forms vóór het tekenen en verwerkt FreeText, Square,
@@ -402,7 +407,8 @@ Save As-/PDF-mengproeven met twee overlappende teksten, kruisende vormen,
 Stamp, een ontbrekende Square-`/AP`, 90°/CropBox en gekleurde onderlaag zijn
 volledig RGBA-bytegelijk aan Hayro. Onbekende annotatie-inhoud laat de hele
 pagina veilig op Hayro terugvallen. Algemene tekstfonts, grotere of gesplitste
-geïmporteerde glyphruns en overige `/AP`-inhoud zijn nog niet ondersteund.
+geïmporteerde glyphruns boven deze grenzen en overige `/AP`-inhoud zijn nog
+niet ondersteund.
 
 Een kleine diagnostische, afwisselend gepaarde releaseproef op de gemengde
 90°/CropBox-pagina met twee FreeText-Forms en twee vormen gaf bij twintig

@@ -101,14 +101,52 @@ fn embedded_native_font(doc: &Document, resources: &Dictionary) -> Option<HashMa
 }
 
 pub(crate) struct StagedImportedText {
-    pub scene: Vec<u8>,
+    pub tiles: Vec<(Vec<u8>, [u32; 2])>,
     pub clip: [u32; 4],
-    pub origin: [u32; 2],
     pub page_size: [u32; 2],
 }
 
+struct ImportedGlyph {
+    opm: Vec<u8>,
+    shift: [f64; 2],
+    bounds: [f64; 4],
+    gid: u16,
+    color: [u8; 3],
+}
+
+fn encode_tile(glyphs: &[ImportedGlyph], origin: [u32; 2]) -> Option<Vec<u8>> {
+    if glyphs.is_empty() || glyphs.len() > 32 {
+        return None;
+    }
+    let mut records = Vec::new();
+    for glyph in glyphs {
+        let mut opm = glyph.opm.clone();
+        text_quad_glyph::rebase_screen_f32(&mut opm, glyph.shift, origin).ok()?;
+        let mut font_name = [0_u8; 32];
+        font_name[..5].copy_from_slice(b"OPDS0");
+        records.extend_from_slice(&font_name);
+        records.extend_from_slice(&glyph.gid.to_le_bytes());
+        records.extend_from_slice(&glyph.gid.to_le_bytes());
+        records.extend_from_slice(&glyph.color);
+        records.push(0);
+        records.extend_from_slice(&u32::try_from(opm.len()).ok()?.to_le_bytes());
+        records.extend_from_slice(&opm);
+        if records.len() + 20 > 140_000 {
+            return None;
+        }
+    }
+    let mut scene = Vec::with_capacity(20 + records.len());
+    scene.extend_from_slice(b"OPGS");
+    for word in [1_u32, 256, 192, glyphs.len() as u32] {
+        scene.extend_from_slice(&word.to_le_bytes());
+    }
+    scene.extend_from_slice(&records);
+    Some(scene)
+}
+
 /// Stage one selected annotation using the caller's parsed PDF and validated
-/// page geometry. All glyphs must fit a single 256×192 tile; no partial paint.
+/// page geometry. Every glyph must fit one of at most sixteen 256×192 tiles;
+/// all tiles are validated before the caller paints any of them.
 pub(crate) fn stage_saved_native_freetext(
     doc: &Document,
     annotation: &Dictionary,
@@ -168,10 +206,9 @@ pub(crate) fn stage_saved_native_freetext(
         p0[1].max(p1[1]) as u32,
     ];
     let appearance_size = [f64::from(clip[2] - clip[0]), f64::from(clip[3] - clip[1])];
-    if appearance_size[0] > 256.0 || appearance_size[1] > 192.0 {
+    if appearance_size[0] > 4096.0 || appearance_size[1] > 4096.0 {
         return None;
     }
-    let origin = [clip[0], clip[1]];
     let ap = annotation.get(b"AP").ok()?.as_dict().ok()?;
     if ap.len() != 1 {
         return None;
@@ -189,7 +226,7 @@ pub(crate) fn stage_saved_native_freetext(
         || form.dict.has(b"Filter")
         || form.dict.has(b"Matrix")
         || form.dict.has(b"Group")
-        || form.content.len() > 4096
+        || form.content.len() > 20_000
         || quad(form.dict.get(b"BBox").ok()?)? != [0.0, 0.0, x1 - x0, y1 - y0]
     {
         return None;
@@ -238,7 +275,7 @@ pub(crate) fn stage_saved_native_freetext(
         }
         &operations[2..operations.len() - 1]
     };
-    if inner.len() < 11 || inner.len() > 73 {
+    if inner.len() < 11 || inner.len() > 267 {
         return None;
     }
     let head = &inner[..7];
@@ -283,8 +320,7 @@ pub(crate) fn stage_saved_native_freetext(
     if text.len() % 2 != 0 {
         return None;
     }
-    let mut records = Vec::new();
-    let mut painted = 0;
+    let mut glyphs = Vec::new();
     for pair in text.chunks_exact(2) {
         if pair[0].operator != "Tm"
             || pair[1].operator != "Tj"
@@ -302,7 +338,7 @@ pub(crate) fn stage_saved_native_freetext(
             return None;
         }
         let encoded = pair[1].operands[0].as_str().ok()?;
-        if encoded.len() % 2 != 0 || encoded.len() > 128 {
+        if encoded.len() % 2 != 0 || encoded.len() > 512 {
             return None;
         }
         let mut advance = 0.0;
@@ -317,7 +353,7 @@ pub(crate) fn stage_saved_native_freetext(
             // text cursor but contributes no shape to OPGS.
             if gid != 3 {
                 let transform = [size / 2048.0, 0.0, 0.0, -size / 2048.0, screen_x, screen_y];
-                let (mut opm, shift) =
+                let (opm, shift) =
                     text_quad_glyph::stage(FONT_BYTES, gid, transform, Source::SkrifaAtThousand)
                         .map(|(opm, shift, _)| (opm, shift))
                         .or_else(|_| text_quad_glyph::stage_line_only(FONT_BYTES, gid, transform))
@@ -330,37 +366,70 @@ pub(crate) fn stage_saved_native_freetext(
                 {
                     return None;
                 }
-                text_quad_glyph::rebase_screen_f32(&mut opm, shift, origin).ok()?;
-                let mut font_name = [0_u8; 32];
-                font_name[..5].copy_from_slice(b"OPDS0");
-                records.extend_from_slice(&font_name);
-                records.extend_from_slice(&gid.to_le_bytes());
-                records.extend_from_slice(&gid.to_le_bytes());
-                records.extend_from_slice(&color);
-                records.push(0);
-                records.extend_from_slice(&u32::try_from(opm.len()).ok()?.to_le_bytes());
-                records.extend_from_slice(&opm);
-                painted += 1;
-                if painted > 32 || records.len() > 140_000 {
+                glyphs.push(ImportedGlyph {
+                    opm,
+                    shift,
+                    bounds: bounds.map(|value| f64::from(value as f32)),
+                    gid,
+                    color: [color[0], color[1], color[2]],
+                });
+                if glyphs.len() > 128 {
                     return None;
                 }
             }
             advance += widths.get(&gid).copied().unwrap_or(1000.0) * size / 1000.0;
         }
     }
-    if painted == 0 {
+    if glyphs.is_empty() {
         return None;
     }
-    let mut scene = Vec::with_capacity(20 + records.len());
-    scene.extend_from_slice(b"OPGS");
-    for word in [1_u32, 256, 192, painted] {
-        scene.extend_from_slice(&word.to_le_bytes());
+    let mut tiles = Vec::new();
+    let mut start = 0;
+    while start < glyphs.len() {
+        let mut end = start;
+        let mut bounds = [
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ];
+        while end < glyphs.len() && end - start < 32 {
+            let glyph = &glyphs[end];
+            let next = [
+                bounds[0].min(glyph.bounds[0]),
+                bounds[1].min(glyph.bounds[1]),
+                bounds[2].max(glyph.bounds[2]),
+                bounds[3].max(glyph.bounds[3]),
+            ];
+            let ox = next[0].floor();
+            let oy = next[1].floor();
+            if !ox.is_finite()
+                || !oy.is_finite()
+                || ox < 0.0
+                || oy < 0.0
+                || ox > f64::from(u32::MAX)
+                || oy > f64::from(u32::MAX)
+                || next[2] > ox + 256.0
+                || next[3] > oy + 192.0
+            {
+                if end == start {
+                    return None;
+                }
+                break;
+            }
+            bounds = next;
+            end += 1;
+        }
+        if tiles.len() == 16 {
+            return None;
+        }
+        let origin = [bounds[0].floor() as u32, bounds[1].floor() as u32];
+        tiles.push((encode_tile(&glyphs[start..end], origin)?, origin));
+        start = end;
     }
-    scene.extend_from_slice(&records);
     Some(StagedImportedText {
-        scene,
+        tiles,
         clip,
-        origin,
         page_size,
     })
 }

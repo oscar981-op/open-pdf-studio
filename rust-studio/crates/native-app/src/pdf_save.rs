@@ -1145,6 +1145,118 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn reimported_large_text_box_uses_ordered_dynlex_tiles() {
+        use opds_dynlex_backend::{render_with_report, Backend};
+        use opds_engine_probe::ParsedPdf;
+
+        for rotation in [0, 90] {
+            let mut doc = Document::with_version("1.4");
+            let pages = doc.new_object_id();
+            let content = doc.add_object(Stream::new(Dictionary::new(), Vec::new()));
+            let page = doc.add_object(dictionary! {
+                "Type" => "Page", "Parent" => pages, "Contents" => content,
+                "MediaBox" => vec![0.into(),0.into(),640.into(),880.into()],
+                "CropBox" => vec![20.into(),30.into(),620.into(),880.into()],
+                "Rotate" => rotation,
+            });
+            doc.objects.insert(
+                pages,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1,
+                }),
+            );
+            let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+            doc.trailer.set("Root", Object::Reference(catalog));
+            let mut source = Vec::new();
+            doc.save_to(&mut source).unwrap();
+
+            for (value, width, height) in [
+                ("Hello Ω ".repeat(9), 500.0, 100.0),
+                ("Hello Ω\n".repeat(9), 130.0, 300.0),
+            ] {
+                let mark = Annotation {
+                    id: 700,
+                    page: 0,
+                    bounds: Rect {
+                        x: 45.0,
+                        y: 70.0,
+                        width,
+                        height,
+                    },
+                    kind: Kind::Text {
+                        value,
+                        color_rgb: [0, 80, 240],
+                        font_size: 20,
+                        align: TextAlign::Left,
+                    },
+                };
+                let saved = export_annotations(&source, &[mark.clone()]).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(saved.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &saved, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(
+                    actual.imported_annotations_dynlex,
+                    "rotation={rotation} width={width}"
+                );
+                assert_eq!(
+                    actual.raster.rgba, expected.rgba,
+                    "rotation={rotation} width={width}"
+                );
+                if width == 500.0 {
+                    let square = Annotation {
+                        id: 702,
+                        page: 0,
+                        bounds: Rect {
+                            x: 70.0,
+                            y: 80.0,
+                            width: 42.0,
+                            height: 32.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [231, 76, 60],
+                        },
+                    };
+                    for marks in [
+                        vec![square.clone(), mark.clone()],
+                        vec![mark.clone(), square.clone()],
+                    ] {
+                        let saved = export_annotations(&source, &marks).unwrap();
+                        let pdf = ParsedPdf::open(Arc::new(saved.clone())).unwrap();
+                        let expected = pdf.render_page(1, 1.0).unwrap();
+                        let actual =
+                            render_with_report(&pdf, &saved, 1, 1.0, Backend::Dynlex).unwrap();
+                        assert!(actual.imported_annotations_dynlex);
+                        assert_eq!(actual.raster.rgba, expected.rgba);
+                    }
+                }
+            }
+            let too_many = Annotation {
+                id: 701,
+                page: 0,
+                bounds: Rect {
+                    x: 45.0,
+                    y: 70.0,
+                    width: 500.0,
+                    height: 300.0,
+                },
+                kind: Kind::Text {
+                    value: "W".repeat(150),
+                    color_rgb: [0, 80, 240],
+                    font_size: 20,
+                    align: TextAlign::Left,
+                },
+            };
+            let saved = export_annotations(&source, &[too_many]).unwrap();
+            let pdf = ParsedPdf::open(Arc::new(saved.clone())).unwrap();
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            let actual = render_with_report(&pdf, &saved, 1, 1.0, Backend::Dynlex).unwrap();
+            assert!(!actual.imported_annotations_dynlex);
+            assert_eq!(actual.raster.rgba, expected.rgba);
+        }
+    }
+
     fn source_pdf() -> Vec<u8> {
         let mut doc = Document::with_version("1.4");
         let pages_id = doc.new_object_id();

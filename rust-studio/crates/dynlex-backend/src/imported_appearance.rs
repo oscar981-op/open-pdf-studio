@@ -895,16 +895,18 @@ pub fn render_imported_shape_appearances_for_app(
                 {
                     return Ok(None);
                 }
-                let base = std::mem::take(&mut layer.rgba);
-                layer.rgba = render_validated_glyph_scene_over_premultiplied_at_origin_owned(
-                    &text.scene,
-                    base,
-                    layer.width,
-                    layer.height,
-                    text.clip,
-                    text.origin,
-                )?
-                .rgba;
+                for (scene, origin) in text.tiles {
+                    let base = std::mem::take(&mut layer.rgba);
+                    layer.rgba = render_validated_glyph_scene_over_premultiplied_at_origin_owned(
+                        &scene,
+                        base,
+                        layer.width,
+                        layer.height,
+                        text.clip,
+                        origin,
+                    )?
+                    .rgba;
+                }
             }
         }
     }
