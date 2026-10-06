@@ -159,14 +159,21 @@ fn annotations_changed(model: &DocumentModel, saved: &[Annotation]) -> bool {
 }
 
 #[cfg(feature = "dynlex-experimental")]
-fn single_disjoint_text(annotations: &[Annotation]) -> Option<&Annotation> {
+fn single_text_index(annotations: &[Annotation]) -> Option<(usize, &Annotation)> {
     let mut texts = annotations
         .iter()
-        .filter(|item| matches!(item.kind, Kind::Text { .. }));
+        .enumerate()
+        .filter(|(_, item)| matches!(item.kind, Kind::Text { .. }));
     let text = texts.next()?;
     if texts.next().is_some() {
         return None;
     }
+    Some(text)
+}
+
+#[cfg(feature = "dynlex-experimental")]
+fn single_disjoint_text(annotations: &[Annotation]) -> Option<&Annotation> {
+    let (_, text) = single_text_index(annotations)?;
     for item in annotations.iter().filter(|item| item.id != text.id) {
         if !(item.bounds.x + item.bounds.width <= text.bounds.x
             || text.bounds.x + text.bounds.width <= item.bounds.x
@@ -810,7 +817,13 @@ impl OpenDocument {
                                 .map(|result| result.rgba)
                         })
                     } else {
-                        None
+                        self.render_ordered_opaque_text_annotations(
+                            base,
+                            pixels.as_ref(),
+                            *width,
+                            *height,
+                            &annotations,
+                        )
                     }
                 }
                 #[cfg(not(feature = "dynlex-experimental"))]
@@ -838,6 +851,74 @@ impl OpenDocument {
             bitmap: bitmap.clone(),
         });
         bitmap
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    fn render_ordered_opaque_text_annotations(
+        &self,
+        base: &image::Handle,
+        base_rgba: &[u8],
+        width: u32,
+        height: u32,
+        annotations: &[Annotation],
+    ) -> Option<Vec<u8>> {
+        let (text_index, text) = single_text_index(annotations)?;
+        if self.bitmap_page_points != (width as f32, height as f32)
+            || !native_text_scene::eligible_opaque_page(
+                &self.source_bytes,
+                self.displayed_page,
+                width,
+                height,
+            )
+        {
+            return None;
+        }
+        let scene = native_text_scene::stage_native_text_box_scene(text).ok()?;
+        let clip = [
+            text.bounds.x as u32,
+            text.bounds.y as u32,
+            (text.bounds.x + text.bounds.width) as u32,
+            (text.bounds.y + text.bounds.height) as u32,
+        ];
+        let paint_shapes = |current: &[u8], shapes: &[Annotation]| -> Option<Vec<u8>> {
+            if shapes.is_empty() {
+                return Some(current.to_vec());
+            }
+            let content_cache = self.content_layer_cache.borrow();
+            let layer = content_cache
+                .as_ref()
+                .filter(|cached| cached.base == *base && cached.page == self.displayed_page);
+            let painted = if let Some(layer) = layer {
+                opds_dynlex_backend::render_native_annotation_overlay_pixels_on_opaque_source(
+                    current,
+                    base_rgba,
+                    &layer.rgba,
+                    width,
+                    height,
+                    self.bitmap_page_points,
+                    shapes,
+                    self.displayed_page,
+                )
+            } else {
+                opds_dynlex_backend::render_native_annotation_overlay_pixels(
+                    current,
+                    width,
+                    height,
+                    self.bitmap_page_points,
+                    shapes,
+                    self.displayed_page,
+                )
+            };
+            painted.ok().flatten().map(|bitmap| bitmap.rgba)
+        };
+        let (before, text_and_after) = annotations.split_at(text_index);
+        let current = paint_shapes(base_rgba, before)?;
+        let current = opds_dynlex_backend::render_validated_glyph_scene_over_opaque(
+            &scene, &current, width, height, clip,
+        )
+        .ok()?
+        .rgba;
+        paint_shapes(&current, &text_and_after[1..])
     }
 
     fn cache_bitmap(
@@ -1028,13 +1109,82 @@ mod dynlex_annotation_overlay_tests {
         let overlapped = document
             .dynlex_annotation_bitmap()
             .expect("cached source proof also covers overlapping shapes");
-        let saved = pdf_save::export_annotations(&document.source_bytes, &[mark, square]).unwrap();
+        let saved =
+            pdf_save::export_annotations(&document.source_bytes, &[mark.clone(), square.clone()])
+                .unwrap();
         let expected = ParsedPdf::open(Arc::new(saved))
             .unwrap()
             .render_page(1, 1.0)
             .unwrap();
         let image::Handle::Rgba { pixels, .. } = overlapped else {
             panic!("DynLex overlap output must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+
+        let text = Annotation {
+            id: 3,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        document.model.apply(Edit::Add(text.clone())).unwrap();
+        let ordered = document
+            .dynlex_annotation_bitmap()
+            .expect("Text Box after overlapping shapes should use ordered DynLex paint");
+        let saved = pdf_save::export_annotations(
+            &document.source_bytes,
+            &[mark.clone(), square.clone(), text.clone()],
+        )
+        .unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = ordered else {
+            panic!("DynLex ordered Text Box output must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+
+        let mut text_first = text;
+        text_first.id = 1;
+        let mut highlight_after = mark;
+        highlight_after.id = 2;
+        let mut square_after = square;
+        square_after.id = 3;
+        let mut reordered = DocumentModel::new(DocumentId(74), 1).unwrap();
+        for item in [
+            text_first.clone(),
+            highlight_after.clone(),
+            square_after.clone(),
+        ] {
+            reordered.apply(Edit::Add(item)).unwrap();
+        }
+        document.model = reordered;
+        document.annotation_overlay_cache.borrow_mut().take();
+        let ordered = document
+            .dynlex_annotation_bitmap()
+            .expect("overlapping Text Box before shapes should use ordered DynLex paint");
+        let saved = pdf_save::export_annotations(
+            &document.source_bytes,
+            &[text_first, highlight_after, square_after],
+        )
+        .unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = ordered else {
+            panic!("DynLex reordered Text Box output must be RGBA");
         };
         assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
     }

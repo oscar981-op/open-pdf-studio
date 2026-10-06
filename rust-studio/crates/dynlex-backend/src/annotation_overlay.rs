@@ -61,7 +61,37 @@ pub fn render_native_annotation_overlay_pixels_with_content(
 ) -> Result<Option<Bitmap>, String> {
     render_native_annotation_overlay_pixels_inner(
         base_rgba,
+        base_rgba,
         Some(content_rgba),
+        false,
+        width,
+        height,
+        page_points,
+        annotations,
+        page,
+    )
+}
+
+/// Paint later annotations on a page that already contains validated native
+/// marks. `source_rgba` and `content_rgba` describe the original PDF page;
+/// every Highlight pixel must be fully opaque there. The caller must derive
+/// `composited_rgba` only by ordered DynLex annotation operations from that
+/// same source page and bind all three buffers to one render ticket.
+pub fn render_native_annotation_overlay_pixels_on_opaque_source(
+    composited_rgba: &[u8],
+    source_rgba: &[u8],
+    content_rgba: &[u8],
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    annotations: &[Annotation],
+    page: usize,
+) -> Result<Option<Bitmap>, String> {
+    render_native_annotation_overlay_pixels_inner(
+        composited_rgba,
+        source_rgba,
+        Some(content_rgba),
+        true,
         width,
         height,
         page_points,
@@ -82,7 +112,9 @@ pub fn render_native_annotation_overlay_pixels(
 ) -> Result<Option<Bitmap>, String> {
     render_native_annotation_overlay_pixels_inner(
         base_rgba,
+        base_rgba,
         None,
+        false,
         width,
         height,
         page_points,
@@ -93,7 +125,9 @@ pub fn render_native_annotation_overlay_pixels(
 
 fn render_native_annotation_overlay_pixels_inner(
     base_rgba: &[u8],
+    source_rgba: &[u8],
     content_rgba: Option<&[u8]>,
+    require_opaque_source: bool,
     width: u32,
     height: u32,
     page_points: (f32, f32),
@@ -104,7 +138,9 @@ fn render_native_annotation_overlay_pixels_inner(
     {
         let _ = (
             base_rgba,
+            source_rgba,
             content_rgba,
+            require_opaque_source,
             width,
             height,
             page_points,
@@ -123,7 +159,9 @@ fn render_native_annotation_overlay_pixels_inner(
             || page_points.0 != width as f32
             || page_points.1 != height as f32
             || base_rgba.len() != (width as usize) * (height as usize) * 4
+            || source_rgba.len() != base_rgba.len()
             || base_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
+            || source_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
         {
             return Ok(None);
         }
@@ -143,11 +181,11 @@ fn render_native_annotation_overlay_pixels_inner(
                 return Ok(None);
             };
             if *color_rgb == [255, 226, 67] {
-                let mut colored_underlay = false;
+                let mut colored_underlay = require_opaque_source;
                 for y in bounds[1]..bounds[3] {
                     for x in bounds[0]..bounds[2] {
                         let at = ((y * width + x) as usize) * 4;
-                        if base_rgba[at..at + 3] != [255, 255, 255] {
+                        if source_rgba[at..at + 3] != [255, 255, 255] {
                             colored_underlay = true;
                             break;
                         }
@@ -165,7 +203,7 @@ fn render_native_annotation_overlay_pixels_inner(
                         for x in bounds[0]..bounds[2] {
                             let at = ((y * width + x) as usize) * 4;
                             if content[at + 3] != 255
-                                || content[at..at + 3] != base_rgba[at..at + 3]
+                                || content[at..at + 3] != source_rgba[at..at + 3]
                             {
                                 // Compositing over a translucent PDF source
                                 // group can differ by thousands of 8-bit
@@ -279,6 +317,65 @@ mod tests {
                 .unwrap()
                 .expect("64 disjoint Highlights must fit the bounded OPAN scene");
         assert_ne!(output.rgba, white);
+    }
+
+    #[test]
+    fn ordered_highlight_rejects_stale_or_translucent_source_proof() {
+        let mark = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 4.0,
+                y: 4.0,
+                width: 8.0,
+                height: 8.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let source = [30_u8, 70, 140, 255].repeat(16 * 16);
+        let changed = [231_u8, 76, 60, 255].repeat(16 * 16);
+        assert!(render_native_annotation_overlay_pixels_on_opaque_source(
+            &changed,
+            &source,
+            &source,
+            16,
+            16,
+            (16.0, 16.0),
+            &[mark.clone()],
+            0,
+        )
+        .unwrap()
+        .is_some());
+        let mut stale = source.clone();
+        stale[((4 * 16 + 4) * 4) as usize] ^= 1;
+        assert!(render_native_annotation_overlay_pixels_on_opaque_source(
+            &changed,
+            &source,
+            &stale,
+            16,
+            16,
+            (16.0, 16.0),
+            &[mark.clone()],
+            0,
+        )
+        .unwrap()
+        .is_none());
+        stale = source.clone();
+        stale[((4 * 16 + 4) * 4 + 3) as usize] = 128;
+        assert!(render_native_annotation_overlay_pixels_on_opaque_source(
+            &changed,
+            &source,
+            &stale,
+            16,
+            16,
+            (16.0, 16.0),
+            &[mark],
+            0,
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[test]

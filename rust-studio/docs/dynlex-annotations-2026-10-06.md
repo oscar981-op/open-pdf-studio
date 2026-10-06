@@ -217,8 +217,20 @@ vormannotaties compositeren: DynLex tekent eerst de tekst
 op de bewezen bronlaag en vervolgens de vormen. Een echte gemengde PDF met
 Text Box, blauwe Square en gele Highlight is over de hele pagina bytegelijk
 aan Hayro na Save As. Square- en Highlight-vormen mogen elkaar onder de
-bovenstaande grenzen overlappen; een Text Box-overlap blijft via Iced lopen. De
-annotaties moeten ook ieder afzonderlijk binnen hun bestaande
+bovenstaande grenzen overlappen. Voor een gecontroleerde bronpagina die
+volledig door één dekkende PDF-fill is geverfd, kan nu ook één Text Box met
+Square of Highlight overlappen. DynLex schildert de vormen vóór en na de
+glyphrun in de echte annotatie-/ID-volgorde. Bij een latere Highlight
+verifieert een nieuwe Rust-API de **oorspronkelijke** volledig dekkende
+PDF-bronlaag; zij vergelijkt die dus niet foutief met de reeds door glyphs
+of vormen gewijzigde bitmap. Een geïsoleerde Save As-PDF met blauwe `ΩΩΩ`
+en kruisende rode Square of gele Highlight is in beide volgordes volledig
+RGBA-bytegelijk aan Hayro. De app-cachetest bewijst ook vorm-vorm-tekst en
+tekst-vorm-vorm in beide volgordes op een gekleurde 256×192-pagina. Een
+verouderde of deels transparante bronlaag wordt geweigerd. Op een lege of
+gedeeltelijk dekkende PDF-bron blijft **tekst-vorm-overlap** voorlopig bij
+Iced, omdat de huidige vormkern daar nog geen premultiplied paginalaag
+bijwerkt. De annotaties moeten ook ieder afzonderlijk binnen hun bestaande
 bewezen rendergrenzen vallen. Voor grotere en complexere pagina's en
 achteraf toegevoegde Text Boxes zijn bredere bronlaagstaging en
 cache-integratie nodig. Volledige Text Box- en annotatiedekking zijn nog
@@ -237,6 +249,8 @@ cargo test --offline -p opds-native-app --features dynlex-experimental \
   dynlex_overlapping_highlights_and_squares_match_saved_appearances
 cargo test --offline -p opds-native-app --features dynlex-experimental \
   colored_highlight_waits_for_opaque_content_proof
+cargo test --offline -p opds-native-app --features dynlex-experimental \
+  dynlex_glyph_and_shape_order_matches_saved_appearances
 ```
 
 De andere OPDL-v2/v4-verifiers moeten bij verdere wijzigingen blijven slagen.

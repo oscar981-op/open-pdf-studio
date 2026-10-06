@@ -1612,6 +1612,170 @@ mod tests {
 
     #[cfg(feature = "dynlex-experimental")]
     #[test]
+    fn dynlex_glyph_and_shape_order_matches_saved_appearances() {
+        use opds_dynlex_backend::{
+            render_native_annotation_overlay_pixels,
+            render_native_annotation_overlay_pixels_on_opaque_source,
+            render_native_annotation_overlay_pixels_with_content,
+            render_validated_glyph_scene_over_opaque,
+        };
+        use opds_engine_probe::ParsedPdf;
+
+        let mut source = Document::load_mem(include_bytes!(
+            "../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf"
+        ))
+        .unwrap();
+        let page_id = *source.get_pages().get(&1).unwrap();
+        let contents_id = source
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        source
+            .get_object_mut(contents_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(b"0.2 0.4 0.7 rg 0 0 256 192 re f".to_vec());
+        let mut bytes = Vec::new();
+        source.save_to(&mut bytes).unwrap();
+        let parsed = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let base = parsed.render_page(1, 1.0).unwrap();
+        let content = parsed.render_page_content_layer(1, 1.0).unwrap();
+        let text = Annotation {
+            id: 1001,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        let mut shape = Annotation {
+            id: 1002,
+            page: 0,
+            bounds: Rect {
+                x: 55.0,
+                y: 40.0,
+                width: 40.0,
+                height: 30.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let scene = crate::native_text_scene::stage_native_text_box_scene(&text).unwrap();
+        let clip = [20, 30, 130, 88];
+        let points = (base.page_width_pt, base.page_height_pt);
+        for shape_color in [[231, 76, 60], [255, 226, 67]] {
+            shape.kind = Kind::Rectangle {
+                color_rgb: shape_color,
+            };
+            for order in 0..2 {
+                let marks = if order == 0 {
+                    vec![text.clone(), shape.clone()]
+                } else {
+                    vec![shape.clone(), text.clone()]
+                };
+                let actual = if order == 0 {
+                    let text_bitmap = render_validated_glyph_scene_over_opaque(
+                        &scene,
+                        &base.rgba,
+                        base.width,
+                        base.height,
+                        clip,
+                    )
+                    .unwrap();
+                    if shape_color == [255, 226, 67] {
+                        render_native_annotation_overlay_pixels_on_opaque_source(
+                            &text_bitmap.rgba,
+                            &base.rgba,
+                            &content.rgba,
+                            base.width,
+                            base.height,
+                            points,
+                            &[shape.clone()],
+                            0,
+                        )
+                    } else {
+                        render_native_annotation_overlay_pixels(
+                            &text_bitmap.rgba,
+                            base.width,
+                            base.height,
+                            points,
+                            &[shape.clone()],
+                            0,
+                        )
+                    }
+                    .unwrap()
+                    .unwrap()
+                } else {
+                    let painted = if shape_color == [255, 226, 67] {
+                        render_native_annotation_overlay_pixels_with_content(
+                            &base.rgba,
+                            &content.rgba,
+                            base.width,
+                            base.height,
+                            points,
+                            &[shape.clone()],
+                            0,
+                        )
+                    } else {
+                        render_native_annotation_overlay_pixels(
+                            &base.rgba,
+                            base.width,
+                            base.height,
+                            points,
+                            &[shape.clone()],
+                            0,
+                        )
+                    }
+                    .unwrap()
+                    .unwrap();
+                    render_validated_glyph_scene_over_opaque(
+                        &scene,
+                        &painted.rgba,
+                        base.width,
+                        base.height,
+                        clip,
+                    )
+                    .unwrap()
+                };
+                let saved = export_annotations(&bytes, &marks).unwrap();
+                let expected = ParsedPdf::open(Arc::new(saved))
+                    .unwrap()
+                    .render_page(1, 1.0)
+                    .unwrap();
+                let wrong: Vec<_> = actual
+                    .rgba
+                    .iter()
+                    .zip(&expected.rgba)
+                    .enumerate()
+                    .filter_map(|(at, (actual, expected))| {
+                        (actual != expected).then_some((at, *actual, *expected))
+                    })
+                    .collect();
+                assert!(
+                    wrong.is_empty(),
+                    "glyph/{shape_color:?} order {order}: {} mismatches, first {:?}",
+                    wrong.len(),
+                    &wrong[..wrong.len().min(12)]
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
     fn dynlex_highlight_over_translucent_source_content_falls_back() {
         use opds_dynlex_backend::render_native_annotation_overlay_pixels_with_content;
         use opds_engine_probe::ParsedPdf;

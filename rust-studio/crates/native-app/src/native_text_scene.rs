@@ -135,6 +135,13 @@ pub fn eligible_mixed_page(source_pdf: &[u8], page: usize, width: u32, height: u
     supported_page_paint(source_pdf, page, width, height) == Some(PagePaint::Mixed)
 }
 
+/// All visible page pixels come from one validated opaque PDF fill. Ordered
+/// native shapes may therefore be painted before or after a Text Box while
+/// keeping the same opaque glyph-compositor input contract.
+pub fn eligible_opaque_page(source_pdf: &[u8], page: usize, width: u32, height: u32) -> bool {
+    supported_page_paint(source_pdf, page, width, height) == Some(PagePaint::OpaqueFill)
+}
+
 /// An async content render can prove opacity under a colored Highlight only
 /// for this small, independently classified source subset. The compositor
 /// still checks every covered source pixel after the render completes.
