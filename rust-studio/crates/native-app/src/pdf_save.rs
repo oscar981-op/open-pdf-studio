@@ -1160,8 +1160,71 @@ mod tests {
 
     #[cfg(feature = "dynlex-experimental")]
     #[test]
-    fn dynlex_highlight_over_colored_page_falls_back() {
-        use opds_dynlex_backend::render_native_annotation_overlay;
+    fn highlight_appearance_exposes_premultiplied_alpha_and_overlap_edge() {
+        use opds_engine_probe::ParsedPdf;
+        let source = source_pdf();
+        let square = Annotation {
+            id: 991,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 48.0,
+                height: 36.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let highlight = Annotation {
+            id: 992,
+            page: 0,
+            bounds: Rect {
+                x: 42.0,
+                y: 46.0,
+                width: 48.0,
+                height: 36.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let pixel = |raster: &opds_engine_probe::Raster, x: u32, y: u32| -> [u8; 4] {
+            let at = ((y * raster.width + x) * 4) as usize;
+            raster.rgba[at..at + 4].try_into().unwrap()
+        };
+        for (name, marks) in [
+            ("square", vec![square.clone()]),
+            ("highlight", vec![highlight.clone()]),
+            ("both", vec![square.clone(), highlight.clone()]),
+        ] {
+            let saved = export_annotations(&source, &marks).unwrap();
+            let pdf = ParsedPdf::open(Arc::new(saved)).unwrap();
+            let raster = pdf.render_page_content_layer(1, 1.0).unwrap();
+            match name {
+                "square" => {
+                    assert_eq!(pixel(&raster, 66, 46), [231, 76, 60, 255]);
+                    assert_eq!(pixel(&raster, 66, 48), [231, 76, 60, 255]);
+                }
+                "highlight" => {
+                    assert_eq!(pixel(&raster, 66, 46), [89, 79, 23, 89]);
+                    assert_eq!(pixel(&raster, 66, 48), [89, 79, 23, 89]);
+                }
+                "both" => {
+                    assert_eq!(pixel(&raster, 66, 46), [239, 128, 62, 255]);
+                    assert_eq!(pixel(&raster, 66, 48), [239, 129, 62, 255]);
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn dynlex_highlight_over_partially_covered_page_falls_back() {
+        use opds_dynlex_backend::{
+            render_native_annotation_overlay, render_native_annotation_overlay_pixels_with_content,
+        };
         use opds_engine_probe::ParsedPdf;
 
         let source =
@@ -1183,9 +1246,27 @@ mod tests {
             .unwrap()
             .render_page(1, 1.0)
             .unwrap();
-        assert!(render_native_annotation_overlay(&base, &[mark], 0)
+        let source_layer = ParsedPdf::open(Arc::new(source.clone()))
+            .unwrap()
+            .render_page_content_layer(1, 1.0)
+            .unwrap();
+        assert!(render_native_annotation_overlay(&base, &[mark.clone()], 0)
             .unwrap()
             .is_none());
+        let highlight = render_native_annotation_overlay_pixels_with_content(
+            &base.rgba,
+            &source_layer.rgba,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &[mark.clone()],
+            0,
+        )
+        .unwrap();
+        assert!(
+            highlight.is_none(),
+            "the source layer is not opaque throughout the Highlight"
+        );
         let opaque_square = Annotation {
             id: 79,
             page: 0,
@@ -1211,6 +1292,217 @@ mod tests {
             dynlex.rgba == hayro.rgba,
             "opaque Square over colored page differs"
         );
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn dynlex_highlight_premultiplied_composition_matches_colored_and_layered_pages() {
+        use opds_dynlex_backend::render_native_annotation_overlay_pixels_with_content;
+        use opds_engine_probe::ParsedPdf;
+
+        let mut seed = 0x5ac3_1947_u32;
+        for case in 0..128 {
+            let mut source = Document::load_mem(&source_pdf()).unwrap();
+            let page_id = *source.get_pages().get(&1).unwrap();
+            let contents_id = source
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Contents")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let mut color = [0_u8; 3];
+            for channel in &mut color {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                *channel = (seed >> 24) as u8;
+            }
+            let mut content = format!(
+                "{:.3} {:.3} {:.3} rg 0 0 200 300 re f",
+                color[0] as f64 / 255.0,
+                color[1] as f64 / 255.0,
+                color[2] as f64 / 255.0,
+            );
+            if case % 2 == 1 {
+                // A second opaque source shape crosses the Highlight. The
+                // compositor must use each pixel's actual rendered underlay.
+                content.push_str(" q 0.13 0.61 0.92 rg 35 225 42 44 re f Q");
+            }
+            source
+                .get_object_mut(contents_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap()
+                .set_plain_content(content.into_bytes());
+            if case % 8 == 0 {
+                let page = source
+                    .get_object_mut(page_id)
+                    .unwrap()
+                    .as_dict_mut()
+                    .unwrap();
+                page.set(
+                    "CropBox",
+                    vec![20.into(), 20.into(), 180.into(), 260.into()],
+                );
+                page.set("Rotate", 90);
+            }
+            let mut bytes = Vec::new();
+            source.save_to(&mut bytes).unwrap();
+            let mark = Annotation {
+                id: 994,
+                page: 0,
+                bounds: Rect {
+                    x: 20.0 + (case % 11) as f64,
+                    y: 30.0 + (case % 9) as f64,
+                    width: 40.0 + (case % 7) as f64,
+                    height: 28.0 + (case % 13) as f64,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [255, 226, 67],
+                },
+            };
+            let mut marks = vec![mark];
+            if case % 3 == 0 {
+                marks.push(Annotation {
+                    id: 995,
+                    page: 0,
+                    bounds: Rect {
+                        x: 105.0,
+                        y: 110.0,
+                        width: 40.0,
+                        height: 28.0,
+                    },
+                    kind: Kind::Rectangle {
+                        color_rgb: [255, 226, 67],
+                    },
+                });
+            }
+            let parsed = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let base = parsed.render_page(1, 1.0).unwrap();
+            let content_layer = parsed.render_page_content_layer(1, 1.0).unwrap();
+            if case == 0 {
+                let mut stale = content_layer.rgba.clone();
+                let at = ((30 * base.width + 20) * 4) as usize;
+                stale[at] ^= 1;
+                assert!(render_native_annotation_overlay_pixels_with_content(
+                    &base.rgba,
+                    &stale,
+                    base.width,
+                    base.height,
+                    (base.page_width_pt, base.page_height_pt),
+                    &marks,
+                    0,
+                )
+                .unwrap()
+                .is_none());
+            }
+            let actual = render_native_annotation_overlay_pixels_with_content(
+                &base.rgba,
+                &content_layer.rgba,
+                base.width,
+                base.height,
+                (base.page_width_pt, base.page_height_pt),
+                &marks,
+                0,
+            )
+            .unwrap()
+            .expect("opaque page and pixel-aligned Highlight");
+            let saved = export_annotations(&bytes, &marks).unwrap();
+            let expected = ParsedPdf::open(Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let wrong: Vec<_> = actual
+                .rgba
+                .iter()
+                .zip(&expected.rgba)
+                .enumerate()
+                .filter_map(|(index, (actual, expected))| {
+                    (actual != expected).then_some((index, *actual, *expected))
+                })
+                .collect();
+            assert!(
+                wrong.is_empty(),
+                "case {case}, input {color:?}, bounds {:?}, {} mismatches: {:?}",
+                marks[0].bounds,
+                wrong.len(),
+                &wrong[..wrong.len().min(12)]
+            );
+        }
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn dynlex_highlight_over_translucent_source_content_falls_back() {
+        use opds_dynlex_backend::render_native_annotation_overlay_pixels_with_content;
+        use opds_engine_probe::ParsedPdf;
+
+        let mut source = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *source.get_pages().get(&1).unwrap();
+        let contents_id = source
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let gs_id = source.add_object(dictionary! {
+            "Type" => "ExtGState", "ca" => 0.5,
+        });
+        let resources_id = source.add_object(dictionary! {
+            "ExtGState" => dictionary! { "GS1" => gs_id },
+        });
+        source
+            .get_object_mut(page_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .set("Resources", resources_id);
+        source
+            .get_object_mut(contents_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(b"0.2 0.4 0.7 rg /GS1 gs 0 0 200 300 re f".to_vec());
+        let mut bytes = Vec::new();
+        source.save_to(&mut bytes).unwrap();
+        let mark = Annotation {
+            id: 997,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 48.0,
+                height: 36.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let parsed = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let base = parsed.render_page(1, 1.0).unwrap();
+        let content_layer = parsed.render_page_content_layer(1, 1.0).unwrap();
+        assert!(content_layer
+            .rgba
+            .chunks_exact(4)
+            .any(|pixel| pixel[3] != 255));
+        let actual = render_native_annotation_overlay_pixels_with_content(
+            &base.rgba,
+            &content_layer.rgba,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &[mark.clone()],
+            0,
+        )
+        .unwrap()
+        .is_none();
+        let saved = export_annotations(&bytes, &[mark]).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert!(actual, "translucent underlay must use the fallback");
+        assert_ne!(base.rgba, expected.rgba);
     }
 
     #[cfg(feature = "dynlex-experimental")]

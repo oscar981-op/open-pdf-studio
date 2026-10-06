@@ -135,6 +135,21 @@ pub fn eligible_mixed_page(source_pdf: &[u8], page: usize, width: u32, height: u
     supported_page_paint(source_pdf, page, width, height) == Some(PagePaint::Mixed)
 }
 
+/// An async content render can prove opacity under a colored Highlight only
+/// for this small, independently classified source subset. The compositor
+/// still checks every covered source pixel after the render completes.
+pub fn eligible_annotation_content_layer(
+    source_pdf: &[u8],
+    page: usize,
+    width: u32,
+    height: u32,
+) -> bool {
+    matches!(
+        supported_page_paint(source_pdf, page, width, height),
+        Some(PagePaint::Mixed | PagePaint::OpaqueFill)
+    )
+}
+
 pub fn render_mixed_page_text_box(
     source_pdf: &[u8],
     page: usize,

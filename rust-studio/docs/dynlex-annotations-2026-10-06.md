@@ -17,9 +17,14 @@ bevat alleen gevalideerde pixeluitgelijnde native Square- en
 Highlight-opdrachten. Rust maakt één RGBA-uitvoer van de reeds gerenderde
 pagina; DynLex tekent de vormen daarin direct in model-/laagvolgorde. Een
 volledige tweede RGB-paginalaag in OPDL is niet meer nodig. Square is een
-2px-rand, Highlight één geel vlak met de 8-bit-dekkingsstap 90/255 die bij
-de PDF-appearance met `/ca 0.35` hoort. De invoer is tot 4096 px per zijde,
-6 miljoen pixels, 64 annotaties en 1556 OPAN-bytes begrensd. De Rust-grens
+2px-rand. De native gele Highlight-appearance met `/ca 0.35` levert
+premultiplied RGBA `[89,79,23,89]`. DynLex mengt die kleur met de
+onderliggende pagina. Rust deelt het vlak voor Vello's 4×4-tegelgrenzen op
+in maximaal negen niet-overlappende stroken: gedeeltelijke randtegels
+gebruiken de gemaskeerde `/256`-afronding, de binnenkant de directe
+source-over-afronding. De invoer is tot 4096 px per zijde,
+6 miljoen pixels, 64 annotaties, 576 strookopdrachten en 13.844 OPAN-bytes
+begrensd. De Rust-grens
 controleert paginaformaat, ondoorzichtige bronpixels, gehele
 rechthoekcoördinaten, grenzen en aantallen vóór de DynLex-ABI; de ABI
 weigert null/te korte buffers en ongeldige totale lengtes.
@@ -34,13 +39,24 @@ Het experiment weigert tekst in deze OPAN-route en fractionele coördinaten
 zonder een gedeeltelijke bitmap terug te geven. Bij een overlappende
 Square/Highlight weken acht kanaalbytes op
 de doorsnijding van de PDF-appearance-randen één stap af; daarom is die
-combinatie in beide volgordes nog fallback. Een Highlight over gekleurde PDF-pagina-inhoud week
-op een gecontroleerde fixture 3.000 kanaalbytes af; ook die combinatie valt
-terug. De proef accepteert Highlight alleen als **alle** onderliggende
-RGB-pixels binnen de rechthoek wit zijn. Een directe 8-bit-beeldpatch met de
-alternatieve Vello-/256-menging week op de witte achtergrond af en is niet
-ingeschakeld. Een dekkende blauwe Square **over gekleurde pagina-inhoud** was
-wel bytegelijk. De annotatie blijft bij afwijzing zichtbaar via Iced.
+combinatie in beide volgordes nog fallback. De nieuwe strokencompositie
+vergelijkt **128 gecontroleerde PDF's** met een volledig dekkend gekleurd
+bronvlak, wisselende Highlight-positie en -grootte, een tweede gekleurd
+bronvlak in de helft van de gevallen, soms een tweede losse Highlight, en
+periodiek `/Rotate 90` plus CropBox. Elke volledige RGBA-pagina is bytegelijk
+aan Hayro na Save As. Voor een niet-witte ondergrond vraagt de app asynchroon
+een transparante bronlaag op, gekoppeld aan dezelfde paginabitmap en hetzelfde
+renderticket. DynLex wordt pas gebruikt wanneer **alle** pixels in het
+Highlight-vlak in die bronlaag alpha 255 hebben en RGB-bytegewijs overeenkomen
+met de zichtbare ondergrond. Deze extra render wordt uitsluitend voor de
+begrensde PDF-subset met eenvoudige fills/strokes aangevraagd en daarna
+gecacht. Een app-test controleert de overgang van fallback naar DynLex na
+binnenkomst van die bronlaag. De bestaande gedeeltelijk gevulde
+fill/stroke-fixture en een bron met `/ca 0.5` blijven fallback: de laatste
+week zonder deze controle op 3.456 kanaalbytes af.
+Een dekkende blauwe Square over gekleurde pagina-inhoud blijft eveneens
+bytegelijk. Dit bewijst geen algemene PDF-transparantie of overlappende
+Highlight-appearances; bij afwijzing blijft de annotatie via Iced zichtbaar.
 Een extra gecontroleerde PDF met verschoven CropBox en `/Rotate 90` toont
 beide annotaties op een zichtbare 1100×1000-pagina: de volledige RGBA-uitvoer
 is na Save As bytegelijk aan Hayro. Daarmee is de oude 1024px-grens voor
@@ -210,7 +226,9 @@ cargo test --offline -p opds-native-app --features dynlex-experimental \
 cargo test --offline -p opds-native-app --features dynlex-experimental \
   dynlex_annotation_overlay_tests
 cargo test --offline -p opds-native-app --features dynlex-experimental \
-  dynlex_highlight_over_colored_page_falls_back
+  dynlex_highlight_premultiplied_composition_matches_colored_and_layered_pages
+cargo test --offline -p opds-native-app --features dynlex-experimental \
+  colored_highlight_waits_for_opaque_content_proof
 ```
 
 De andere OPDL-v2/v4-verifiers moeten bij verdere wijzigingen blijven slagen.

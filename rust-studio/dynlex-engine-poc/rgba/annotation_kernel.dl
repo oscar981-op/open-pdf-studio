@@ -3,6 +3,9 @@ import renderer.dl
 # OPAN-v1 is an internal, Rust-validated list of native annotation marks.
 # Header: magic, version, width, height, count (five little-endian u32).
 # Each 24-byte mark has kind, x0, y0, x1, y1, RGB and opacity.
+# Kinds 3 and 4 receive premultiplied Highlight channels. Rust partitions
+# partial Vello tiles (kind 3, masked blend) from full tiles (kind 4, direct
+# source-over) before invoking the kernel. The commands never overlap.
 # This kernel paints onto an existing opaque RGBA page, avoiding a second
 # full-page RGB payload in OPDL. It trusts the Rust boundary for all bounds.
 function render {cstring:scene} into {cstring:pixels}:
@@ -28,6 +31,10 @@ function render {cstring:scene} into {cstring:pixels}:
                     set hit to 0
                     if kind = 1:
                         set hit to 1
+                    if kind = 3:
+                        set hit to 1
+                    if kind = 4:
+                        set hit to 1
                     if kind = 2:
                         if x < (left + 2):
                             set hit to 1
@@ -43,6 +50,20 @@ function render {cstring:scene} into {cstring:pixels}:
                             store (red as a byte) into pixels at pixel
                             store (green as a byte) into pixels at (pixel + 1)
                             store (blue as a byte) into pixels at (pixel + 2)
+                        else if kind = 3:
+                            set old_red to unsigned byte at pixel in pixels
+                            set old_green to unsigned byte at (pixel + 1) in pixels
+                            set old_blue to unsigned byte at (pixel + 2) in pixels
+                            store (((red * 255 + old_red * (255 - opacity) + 255) / 256) as a byte) into pixels at pixel
+                            store (((green * 255 + old_green * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 1)
+                            store (((blue * 255 + old_blue * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 2)
+                        else if kind = 4:
+                            set old_red to unsigned byte at pixel in pixels
+                            set old_green to unsigned byte at (pixel + 1) in pixels
+                            set old_blue to unsigned byte at (pixel + 2) in pixels
+                            store ((red + (old_red * (255 - opacity) + 255) / 256) as a byte) into pixels at pixel
+                            store ((green + (old_green * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 1)
+                            store ((blue + (old_blue * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 2)
                         else:
                             set old_red to unsigned byte at pixel in pixels
                             set old_green to unsigned byte at (pixel + 1) in pixels

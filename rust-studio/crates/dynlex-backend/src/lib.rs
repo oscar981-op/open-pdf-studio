@@ -3,6 +3,7 @@
 mod annotation_overlay;
 pub use annotation_overlay::{
     render_native_annotation_overlay, render_native_annotation_overlay_pixels,
+    render_native_annotation_overlay_pixels_with_content,
 };
 #[cfg(feature = "kernel")]
 mod appearance_stage;

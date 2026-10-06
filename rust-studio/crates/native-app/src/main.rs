@@ -725,6 +725,34 @@ impl OpenDocument {
             ..
         } = base
         {
+            let render_shapes = |page_rgba: &[u8], shapes: &[Annotation]| {
+                #[cfg(feature = "dynlex-experimental")]
+                {
+                    let cache = self.content_layer_cache.borrow();
+                    if let Some(layer) = cache
+                        .as_ref()
+                        .filter(|cached| cached.base == *base && cached.page == self.displayed_page)
+                    {
+                        return opds_dynlex_backend::render_native_annotation_overlay_pixels_with_content(
+                            page_rgba,
+                            &layer.rgba,
+                            *width,
+                            *height,
+                            self.bitmap_page_points,
+                            shapes,
+                            self.displayed_page,
+                        );
+                    }
+                }
+                opds_dynlex_backend::render_native_annotation_overlay_pixels(
+                    page_rgba,
+                    *width,
+                    *height,
+                    self.bitmap_page_points,
+                    shapes,
+                    self.displayed_page,
+                )
+            };
             let text: Option<Vec<u8>> = {
                 #[cfg(feature = "dynlex-experimental")]
                 {
@@ -776,17 +804,10 @@ impl OpenDocument {
                             if shapes.is_empty() {
                                 return Some(text_rgba);
                             }
-                            opds_dynlex_backend::render_native_annotation_overlay_pixels(
-                                &text_rgba,
-                                *width,
-                                *height,
-                                self.bitmap_page_points,
-                                &shapes,
-                                self.displayed_page,
-                            )
-                            .ok()
-                            .flatten()
-                            .map(|result| result.rgba)
+                            render_shapes(&text_rgba, &shapes)
+                                .ok()
+                                .flatten()
+                                .map(|result| result.rgba)
                         })
                     } else {
                         None
@@ -800,17 +821,12 @@ impl OpenDocument {
             if let Some(rgba) = text {
                 Some(image::Handle::from_rgba(*width, *height, rgba))
             } else {
-                opds_dynlex_backend::render_native_annotation_overlay_pixels(
-                    pixels.as_ref(),
-                    *width,
-                    *height,
-                    self.bitmap_page_points,
-                    &annotations,
-                    self.displayed_page,
-                )
-                .ok()
-                .flatten()
-                .map(|result| image::Handle::from_rgba(result.width, result.height, result.rgba))
+                render_shapes(pixels.as_ref(), &annotations)
+                    .ok()
+                    .flatten()
+                    .map(|result| {
+                        image::Handle::from_rgba(result.width, result.height, result.rgba)
+                    })
             }
         } else {
             None
@@ -884,6 +900,116 @@ impl OpenDocument {
 #[cfg(all(test, feature = "dynlex-experimental"))]
 mod dynlex_annotation_overlay_tests {
     use super::*;
+
+    #[test]
+    fn colored_highlight_waits_for_opaque_content_proof() {
+        let mut source = lopdf::Document::load_mem(include_bytes!(
+            "../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf"
+        ))
+        .unwrap();
+        let page_id = *source.get_pages().get(&1).unwrap();
+        let contents_id = source
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        source
+            .get_object_mut(contents_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(b"0.2 0.4 0.7 rg 0 0 256 192 re f".to_vec());
+        let mut bytes = Vec::new();
+        source.save_to(&mut bytes).unwrap();
+        assert!(native_text_scene::eligible_annotation_content_layer(
+            &bytes, 0, 256, 192
+        ));
+        let pdf = Arc::new(ParsedPdf::open(Arc::new(bytes.clone())).unwrap());
+        let raster = pdf.render_page(1, 1.0).unwrap();
+        let mark = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 21.0,
+                y: 31.0,
+                width: 41.0,
+                height: 29.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let mut model = DocumentModel::new(DocumentId(73), 1).unwrap();
+        model.apply(Edit::Add(mark.clone())).unwrap();
+        let mut document = OpenDocument {
+            path: "opaque-color.pdf".into(),
+            source_bytes: Arc::new(bytes),
+            pdf,
+            model,
+            last_saved_annotations: Vec::new(),
+            bitmap: None,
+            annotation_overlay_cache: RefCell::new(None),
+            content_layer_cache: RefCell::new(None),
+            content_layer_in_flight: None,
+            bitmap_size: (0, 0),
+            bitmap_page_points: (0.0, 0.0),
+            bitmap_scale: 1.0,
+            bitmap_backend: Backend::Hayro,
+            displayed_page: 0,
+            selected_annotation: None,
+            page_cache: VecDeque::new(),
+            thumbnails: VecDeque::new(),
+            thumbnail_in_flight: None,
+            thumbnail_failed: HashSet::new(),
+            thumbnail_focus: 0,
+        };
+        document.cache_bitmap(
+            0,
+            1.0,
+            RenderOutcome {
+                raster,
+                used: Backend::Hayro,
+            },
+            None,
+        );
+        assert!(document.dynlex_annotation_bitmap().is_none());
+        let ticket = document.model.view().ticket();
+        let base = document.bitmap.as_ref().unwrap().clone();
+        let layer = document.pdf.render_page_content_layer(1, 1.0).unwrap();
+        let mut app = App {
+            backend: Backend::Dynlex,
+            next_load: 73,
+            document: Some(document),
+            ..Default::default()
+        };
+        let _task = app.render_content_layer_if_needed();
+        assert_eq!(
+            app.document.as_ref().unwrap().content_layer_in_flight,
+            Some(ticket)
+        );
+        let _ = app.update(Message::ContentLayerRendered(
+            73,
+            0,
+            ticket,
+            base,
+            Ok(layer),
+        ));
+        let document = app.document.as_ref().unwrap();
+        let combined = document
+            .dynlex_annotation_bitmap()
+            .expect("verified opaque content");
+        let saved = pdf_save::export_annotations(&document.source_bytes, &[mark]).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = combined else {
+            panic!("DynLex annotation output must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+    }
 
     #[test]
     fn one_transparent_render_recovers_visible_page_and_text_overlay() {
@@ -2566,24 +2692,38 @@ impl App {
             let image::Handle::Rgba { width, height, .. } = base else {
                 return Task::none();
             };
+            let wants_text = document
+                .model
+                .items()
+                .filter(|item| item.page == page && matches!(item.kind, Kind::Text { .. }))
+                .count()
+                == 1;
+            let wants_highlight = document.model.items().any(|item| {
+                item.page == page
+                    && matches!(
+                        item.kind,
+                        Kind::Rectangle {
+                            color_rgb: [255, 226, 67]
+                        }
+                    )
+            });
             if page != document.displayed_page
                 || document.bitmap_scale != 1.0
-                || document
-                    .model
-                    .items()
-                    .filter(|item| item.page == page && matches!(item.kind, Kind::Text { .. }))
-                    .count()
-                    != 1
-                || !document
-                    .model
-                    .items()
-                    .any(|item| item.page == page && matches!(item.kind, Kind::Text { .. }))
-                || !native_text_scene::eligible_mixed_page(
-                    &document.source_bytes,
-                    page,
-                    *width,
-                    *height,
-                )
+                || !(wants_text || wants_highlight)
+                || !((wants_text
+                    && native_text_scene::eligible_mixed_page(
+                        &document.source_bytes,
+                        page,
+                        *width,
+                        *height,
+                    ))
+                    || (wants_highlight
+                        && native_text_scene::eligible_annotation_content_layer(
+                            &document.source_bytes,
+                            page,
+                            *width,
+                            *height,
+                        )))
                 || document.content_layer_in_flight == Some(ticket)
                 || document
                     .content_layer_cache
