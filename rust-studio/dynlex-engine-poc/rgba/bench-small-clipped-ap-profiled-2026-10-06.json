@@ -1,0 +1,654 @@
+{
+  "pdf": "/tmp/opds-clipped-polygon-ap.pdf",
+  "probe": "target/release/backend_probe",
+  "runs": 15,
+  "cache": "warm process and OS cache; cache was not cleared",
+  "includes": "PDF parse, render, raw RGBA file write and process startup",
+  "samples": {
+    "selected": [
+      {
+        "wall_ms": 6.638735,
+        "peak_rss_kib": 7036,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.032,
+            "open": 0.09,
+            "render": 1.917,
+            "write": 0.38,
+            "total": 2.42
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.155,
+            "stage": 0.402,
+            "base": 0.769,
+            "shapes": 0.022,
+            "polygons": 0.245,
+            "images": 0.02,
+            "paper": 0.253,
+            "total": 1.871
+          }
+        }
+      },
+      {
+        "wall_ms": 9.480344,
+        "peak_rss_kib": 7120,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.04,
+            "open": 0.12,
+            "render": 2.326,
+            "write": 0.586,
+            "total": 3.071
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.194,
+            "stage": 0.529,
+            "base": 0.865,
+            "shapes": 0.032,
+            "polygons": 0.335,
+            "images": 0.024,
+            "paper": 0.279,
+            "total": 2.263
+          }
+        }
+      },
+      {
+        "wall_ms": 11.821093,
+        "peak_rss_kib": 7388,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.059,
+            "open": 0.229,
+            "render": 3.589,
+            "write": 0.76,
+            "total": 4.637
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.31,
+            "stage": 0.859,
+            "base": 1.218,
+            "shapes": 0.061,
+            "polygons": 0.574,
+            "images": 0.038,
+            "paper": 0.419,
+            "total": 3.485
+          }
+        }
+      },
+      {
+        "wall_ms": 7.415287,
+        "peak_rss_kib": 7060,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.04,
+            "open": 0.114,
+            "render": 2.0,
+            "write": 0.415,
+            "total": 2.569
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.236,
+            "stage": 0.457,
+            "base": 0.756,
+            "shapes": 0.024,
+            "polygons": 0.234,
+            "images": 0.018,
+            "paper": 0.221,
+            "total": 1.949
+          }
+        }
+      },
+      {
+        "wall_ms": 9.059166,
+        "peak_rss_kib": 7308,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.048,
+            "open": 0.139,
+            "render": 2.186,
+            "write": 0.459,
+            "total": 2.832
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.204,
+            "stage": 0.522,
+            "base": 0.822,
+            "shapes": 0.033,
+            "polygons": 0.267,
+            "images": 0.022,
+            "paper": 0.26,
+            "total": 2.136
+          }
+        }
+      },
+      {
+        "wall_ms": 8.884583,
+        "peak_rss_kib": 6916,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.043,
+            "open": 0.135,
+            "render": 2.347,
+            "write": 0.416,
+            "total": 2.941
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.252,
+            "stage": 0.612,
+            "base": 0.837,
+            "shapes": 0.026,
+            "polygons": 0.262,
+            "images": 0.022,
+            "paper": 0.282,
+            "total": 2.297
+          }
+        }
+      },
+      {
+        "wall_ms": 8.461185,
+        "peak_rss_kib": 7092,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.035,
+            "open": 0.124,
+            "render": 2.339,
+            "write": 0.504,
+            "total": 3.002
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.205,
+            "stage": 0.601,
+            "base": 0.828,
+            "shapes": 0.026,
+            "polygons": 0.305,
+            "images": 0.031,
+            "paper": 0.277,
+            "total": 2.278
+          }
+        }
+      },
+      {
+        "wall_ms": 7.997038,
+        "peak_rss_kib": 6948,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.041,
+            "open": 0.111,
+            "render": 2.102,
+            "write": 0.443,
+            "total": 2.696
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.198,
+            "stage": 0.541,
+            "base": 0.735,
+            "shapes": 0.024,
+            "polygons": 0.273,
+            "images": 0.022,
+            "paper": 0.244,
+            "total": 2.041
+          }
+        }
+      },
+      {
+        "wall_ms": 9.821759,
+        "peak_rss_kib": 7236,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.044,
+            "open": 0.14,
+            "render": 2.039,
+            "write": 0.773,
+            "total": 2.996
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.166,
+            "stage": 0.444,
+            "base": 0.753,
+            "shapes": 0.032,
+            "polygons": 0.271,
+            "images": 0.022,
+            "paper": 0.246,
+            "total": 1.939
+          }
+        }
+      },
+      {
+        "wall_ms": 8.918184,
+        "peak_rss_kib": 7212,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.042,
+            "open": 0.127,
+            "render": 2.288,
+            "write": 0.405,
+            "total": 2.863
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.238,
+            "stage": 0.543,
+            "base": 0.776,
+            "shapes": 0.086,
+            "polygons": 0.298,
+            "images": 0.021,
+            "paper": 0.27,
+            "total": 2.236
+          }
+        }
+      },
+      {
+        "wall_ms": 8.65647,
+        "peak_rss_kib": 6876,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.036,
+            "open": 0.164,
+            "render": 2.321,
+            "write": 0.425,
+            "total": 2.947
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.205,
+            "stage": 0.538,
+            "base": 0.884,
+            "shapes": 0.026,
+            "polygons": 0.292,
+            "images": 0.023,
+            "paper": 0.288,
+            "total": 2.261
+          }
+        }
+      },
+      {
+        "wall_ms": 8.417555,
+        "peak_rss_kib": 7312,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.045,
+            "open": 0.132,
+            "render": 1.922,
+            "write": 0.408,
+            "total": 2.508
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.187,
+            "stage": 0.445,
+            "base": 0.695,
+            "shapes": 0.035,
+            "polygons": 0.247,
+            "images": 0.021,
+            "paper": 0.236,
+            "total": 1.87
+          }
+        }
+      },
+      {
+        "wall_ms": 8.486676,
+        "peak_rss_kib": 6920,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.037,
+            "open": 0.11,
+            "render": 1.883,
+            "write": 0.404,
+            "total": 2.435
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.183,
+            "stage": 0.449,
+            "base": 0.673,
+            "shapes": 0.023,
+            "polygons": 0.244,
+            "images": 0.021,
+            "paper": 0.232,
+            "total": 1.83
+          }
+        }
+      },
+      {
+        "wall_ms": 7.836505,
+        "peak_rss_kib": 7056,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.036,
+            "open": 0.102,
+            "render": 1.731,
+            "write": 0.396,
+            "total": 2.265
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.144,
+            "stage": 0.359,
+            "base": 0.652,
+            "shapes": 0.034,
+            "polygons": 0.249,
+            "images": 0.018,
+            "paper": 0.222,
+            "total": 1.681
+          }
+        }
+      },
+      {
+        "wall_ms": 10.343309,
+        "peak_rss_kib": 7312,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.067,
+            "open": 0.192,
+            "render": 2.105,
+            "write": 0.514,
+            "total": 2.877
+          },
+          "OPDS_AP_PHASES": {
+            "load": 0.263,
+            "stage": 0.504,
+            "base": 0.737,
+            "shapes": 0.033,
+            "polygons": 0.251,
+            "images": 0.02,
+            "paper": 0.236,
+            "total": 2.048
+          }
+        }
+      }
+    ],
+    "hayro": [
+      {
+        "wall_ms": 7.008661,
+        "peak_rss_kib": 6448,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.038,
+            "open": 0.09,
+            "render": 0.978,
+            "write": 0.429,
+            "total": 1.536
+          }
+        }
+      },
+      {
+        "wall_ms": 11.115591,
+        "peak_rss_kib": 6532,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.06,
+            "open": 0.163,
+            "render": 1.956,
+            "write": 0.804,
+            "total": 2.982
+          }
+        }
+      },
+      {
+        "wall_ms": 8.69096,
+        "peak_rss_kib": 6692,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.062,
+            "open": 0.182,
+            "render": 1.405,
+            "write": 0.535,
+            "total": 2.185
+          }
+        }
+      },
+      {
+        "wall_ms": 7.868756,
+        "peak_rss_kib": 6564,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.039,
+            "open": 0.105,
+            "render": 1.218,
+            "write": 0.489,
+            "total": 1.851
+          }
+        }
+      },
+      {
+        "wall_ms": 8.065098,
+        "peak_rss_kib": 6568,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.031,
+            "open": 0.091,
+            "render": 1.076,
+            "write": 0.542,
+            "total": 1.741
+          }
+        }
+      },
+      {
+        "wall_ms": 7.342486,
+        "peak_rss_kib": 6560,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.038,
+            "open": 0.106,
+            "render": 1.267,
+            "write": 0.487,
+            "total": 1.898
+          }
+        }
+      },
+      {
+        "wall_ms": 8.941584,
+        "peak_rss_kib": 6400,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.051,
+            "open": 0.149,
+            "render": 1.487,
+            "write": 0.603,
+            "total": 2.29
+          }
+        }
+      },
+      {
+        "wall_ms": 7.143233,
+        "peak_rss_kib": 6496,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.04,
+            "open": 0.118,
+            "render": 1.161,
+            "write": 0.57,
+            "total": 1.889
+          }
+        }
+      },
+      {
+        "wall_ms": 8.088499,
+        "peak_rss_kib": 6584,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.033,
+            "open": 0.11,
+            "render": 1.033,
+            "write": 0.48,
+            "total": 1.656
+          }
+        }
+      },
+      {
+        "wall_ms": 9.587385,
+        "peak_rss_kib": 6500,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.061,
+            "open": 0.167,
+            "render": 2.083,
+            "write": 0.473,
+            "total": 2.784
+          }
+        }
+      },
+      {
+        "wall_ms": 7.941337,
+        "peak_rss_kib": 6312,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.051,
+            "open": 0.127,
+            "render": 1.239,
+            "write": 0.451,
+            "total": 1.867
+          }
+        }
+      },
+      {
+        "wall_ms": 7.592471,
+        "peak_rss_kib": 6480,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.045,
+            "open": 0.103,
+            "render": 1.194,
+            "write": 0.473,
+            "total": 1.815
+          }
+        }
+      },
+      {
+        "wall_ms": 8.991635,
+        "peak_rss_kib": 6220,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.057,
+            "open": 0.118,
+            "render": 1.42,
+            "write": 0.651,
+            "total": 2.247
+          }
+        }
+      },
+      {
+        "wall_ms": 7.234065,
+        "peak_rss_kib": 6604,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.029,
+            "open": 0.105,
+            "render": 1.032,
+            "write": 0.448,
+            "total": 1.614
+          }
+        }
+      },
+      {
+        "wall_ms": 7.591091,
+        "peak_rss_kib": 6512,
+        "sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+        "bytes": 153600,
+        "phases_ms": {
+          "OPDS_PROBE_PHASES": {
+            "read": 0.038,
+            "open": 0.107,
+            "render": 1.191,
+            "write": 0.497,
+            "total": 1.833
+          }
+        }
+      }
+    ]
+  },
+  "median_wall_ms": {
+    "selected": 8.65647,
+    "hayro": 7.941337
+  },
+  "median_peak_rss_kib": {
+    "selected": 7092,
+    "hayro": 6512
+  },
+  "median_paired_selected_minus_hayro_ms": 0.7151330000000007,
+  "selected_wins": 6,
+  "rgba_sha256": "153e50778a660d8aed4fbdaa012dd8725f66c99426ee12d608445b40b254f95d",
+  "median_phases_ms": {
+    "selected": {
+      "OPDS_PROBE_PHASES": {
+        "read": 0.041,
+        "open": 0.127,
+        "render": 2.105,
+        "write": 0.425,
+        "total": 2.863
+      },
+      "OPDS_AP_PHASES": {
+        "load": 0.204,
+        "stage": 0.522,
+        "base": 0.769,
+        "shapes": 0.032,
+        "polygons": 0.267,
+        "images": 0.022,
+        "paper": 0.253,
+        "total": 2.048
+      }
+    },
+    "hayro": {
+      "OPDS_PROBE_PHASES": {
+        "read": 0.04,
+        "open": 0.11,
+        "render": 1.218,
+        "write": 0.489,
+        "total": 1.867
+      }
+    }
+  }
+}

@@ -728,3 +728,16 @@ pixeluitgelijnde clip, geen algemene clipping van transparante of gekromde
 paden. De paginagrote beeld- en vormpasses zijn later door begrensde tegels
 vervangen; [de prestatiemeting](dynlex-imported-ap-performance-2026-10-06.md)
 geeft de grenzen van die verbetering aan.
+
+**Doel: volledige annotatielaag in DynLex.** De huidige native editor tekent
+Rectangle, Highlight en een begrensde Text Box via DynLex wanneer de
+gevalideerde scène binnen de ondersteunde subset valt. Voor geïmporteerde
+annotaties zijn enkele `/AP`-Forms en Square/Highlight zonder `/AP` eveneens
+bewezen. De pagina-inhoud daaronder komt nog van Hayro; andere
+annotatiesubtypen, vrije `/AP`-operatorreeksen, transparantie-/maskerstates,
+willekeurige fonts, schaalniveaus en onzekere antialiasranden vallen terug.
+De opt-in status mag daarom alleen de werkelijk gebruikte annotatieroute
+melden, nooit volledige ondersteuning suggereren. Een volgende inhoudelijke
+stap is één ontbrekend subtype of Form-state met strikte staging en volledige
+pixelvergelijking toe te voegen; de prestatieprofilering van de bestaande
+route staat in de gekoppelde meetnotitie.

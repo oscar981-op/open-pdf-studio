@@ -55,3 +55,40 @@ meting is het reproduceerbare eindpunt. Er is op deze fixture nog **geen
 snelheidsvoordeel** ten opzichte van Hayro. De volgende prestatiestap moet
 zich richten op het resterende parse-/compositiewerk met faseprofilering en
 pixelcontrole.
+
+## Faseprofilering en papiercompositie
+
+`OPDS_AP_PROFILE=1` laat de geselecteerde annotatieroute en `backend_probe`
+afzonderlijk tijden voor PDF-inlezen, Hayro-basisinhoud, DynLex-vormen,
+polygonen, beelden, witte-papiercompositie en raw RGBA-uitvoer rapporteren.
+De profiler schrijft alleen naar stderr. Op vijftien nieuwe gepaarde warme
+procesruns van dezelfde grote PDF was de mediane geselecteerde **rendertijd
+47,83 ms** tegenover **36,37 ms** voor Hayro. Bestandsuitvoer kostte in beide
+gevallen circa **56 ms**; de vroegere totale wandtijd maskeerde daardoor een
+deel van het renderingsverschil. De geselecteerde route leest geen tweede
+Hayro-document in, maar stageert `/AP` met lopdf en rendert de pagina-inhoud
+zonder annotaties via Hayro. De faseverdeling binnen 47,73 ms was circa
+34,37 ms Hayro-basis, 4,01 ms DynLex-vormen, 0,94 ms polygonen, 0,10 ms
+beelden, 2,28 ms staging en 5,13 ms witte-papiercompositie. Mediaantijden
+van afzonderlijke fasen hoeven niet exact tot de mediaan van de totale tijd
+op te tellen.
+
+De grote witte-papierpass is nu in hoogstens vier niet-overlappende Rust-
+segmenten parallel verwerkt; onder 500.000 pixels blijft de seriële route.
+Een dertig-paar A/B tegen de vorige releasebinary gaf **8,28 → 5,36 ms**
+mediaan voor die pass, met winst in 30/30 paren en bytegelijke RGBA-uitvoer.
+De totale renderroute blijft trager; de nieuwe vijftien-paar meting gaf
+**112,37/98,88 ms** proceswandtijd (geselecteerd/Hayro), gepaard verschil
+**+11,58 ms**, en geselecteerd won slechts 1/15 paren. Op de kleine fixture
+was het verschil +0,72 ms met 6/15 winst. Dit is geen algemene
+snelheidsverbetering voor PDF's of de gehele app. De ruwe samples staan in
+[`bench-paper-parallel-ab-2026-10-06.json`](../dynlex-engine-poc/rgba/bench-paper-parallel-ab-2026-10-06.json),
+[`bench-large-clipped-ap-profiled-2026-10-06.json`](../dynlex-engine-poc/rgba/bench-large-clipped-ap-profiled-2026-10-06.json)
+en
+[`bench-small-clipped-ap-profiled-2026-10-06.json`](../dynlex-engine-poc/rgba/bench-small-clipped-ap-profiled-2026-10-06.json).
+
+Herhaal de gefaseerde gepaarde meting met `--profile-phases` op
+`benchmark_native_backend.py`; dit zet de omgevingsvariabele voor beide
+probeprocessen en legt hun stderr-fasen samen met hashes en RSS in JSON vast.
+De annotaties worden nog niet volledig door DynLex gerenderd: Hayro maakt
+de basispagina, de PDF-subset en meerdere appearance-typen vallen terug.

@@ -1,0 +1,1265 @@
+{
+  "fixture": "/tmp/opds-large-clipped-ap.pdf",
+  "warm_paired_process_runs": [
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.274,
+          "stage": 1.74,
+          "base": 37.044,
+          "shapes": 4.117,
+          "polygons": 0.913,
+          "images": 0.105,
+          "paper": 8.592,
+          "total": 52.802
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.037,
+          "open": 0.138,
+          "render": 52.876,
+          "write": 69.145,
+          "total": 122.196
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.403,
+          "stage": 3.366,
+          "base": 42.713,
+          "shapes": 6.171,
+          "polygons": 1.438,
+          "images": 0.165,
+          "paper": 4.978,
+          "total": 59.252
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.065,
+          "open": 0.182,
+          "render": 59.348,
+          "write": 83.794,
+          "total": 143.389
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.365,
+          "stage": 2.712,
+          "base": 36.805,
+          "shapes": 4.907,
+          "polygons": 1.023,
+          "images": 0.11,
+          "paper": 5.468,
+          "total": 51.405
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.064,
+          "open": 0.157,
+          "render": 51.517,
+          "write": 80.147,
+          "total": 131.885
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.342,
+          "stage": 1.972,
+          "base": 38.454,
+          "shapes": 3.799,
+          "polygons": 0.907,
+          "images": 0.091,
+          "paper": 7.9,
+          "total": 53.478
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.076,
+          "open": 0.187,
+          "render": 53.577,
+          "write": 58.948,
+          "total": 112.788
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.319,
+          "stage": 2.246,
+          "base": 38.143,
+          "shapes": 3.924,
+          "polygons": 0.864,
+          "images": 0.091,
+          "paper": 8.127,
+          "total": 53.726
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.061,
+          "open": 0.163,
+          "render": 53.819,
+          "write": 57.742,
+          "total": 111.785
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.365,
+          "stage": 2.456,
+          "base": 40.266,
+          "shapes": 4.715,
+          "polygons": 1.062,
+          "images": 0.118,
+          "paper": 6.183,
+          "total": 55.18
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.058,
+          "open": 0.193,
+          "render": 55.32,
+          "write": 60.985,
+          "total": 116.556
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.289,
+          "stage": 1.785,
+          "base": 39.948,
+          "shapes": 5.116,
+          "polygons": 1.152,
+          "images": 0.133,
+          "paper": 6.86,
+          "total": 55.3
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.061,
+          "open": 0.156,
+          "render": 55.399,
+          "write": 64.165,
+          "total": 119.781
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.251,
+          "stage": 1.568,
+          "base": 43.762,
+          "shapes": 5.217,
+          "polygons": 1.055,
+          "images": 0.151,
+          "paper": 9.51,
+          "total": 61.531
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.03,
+          "open": 0.119,
+          "render": 61.649,
+          "write": 50.691,
+          "total": 112.489
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.287,
+          "stage": 2.221,
+          "base": 38.398,
+          "shapes": 4.055,
+          "polygons": 0.896,
+          "images": 0.103,
+          "paper": 8.514,
+          "total": 54.488
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.041,
+          "open": 0.114,
+          "render": 54.571,
+          "write": 77.507,
+          "total": 132.232
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.357,
+          "stage": 2.236,
+          "base": 41.4,
+          "shapes": 4.723,
+          "polygons": 1.1,
+          "images": 0.118,
+          "paper": 5.239,
+          "total": 55.187
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.062,
+          "open": 0.18,
+          "render": 55.294,
+          "write": 58.105,
+          "total": 113.641
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.336,
+          "stage": 2.0,
+          "base": 37.36,
+          "shapes": 4.241,
+          "polygons": 0.978,
+          "images": 0.11,
+          "paper": 5.187,
+          "total": 50.227
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.066,
+          "open": 0.152,
+          "render": 50.306,
+          "write": 57.158,
+          "total": 107.682
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.416,
+          "stage": 2.709,
+          "base": 42.276,
+          "shapes": 3.65,
+          "polygons": 0.861,
+          "images": 0.085,
+          "paper": 7.626,
+          "total": 57.636
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.079,
+          "open": 0.208,
+          "render": 57.716,
+          "write": 60.873,
+          "total": 118.875
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.387,
+          "stage": 2.398,
+          "base": 38.782,
+          "shapes": 3.921,
+          "polygons": 0.896,
+          "images": 0.103,
+          "paper": 9.078,
+          "total": 55.578
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.065,
+          "open": 0.172,
+          "render": 55.664,
+          "write": 58.469,
+          "total": 114.37
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.223,
+          "stage": 1.77,
+          "base": 38.631,
+          "shapes": 4.811,
+          "polygons": 1.18,
+          "images": 0.128,
+          "paper": 5.272,
+          "total": 52.031
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.03,
+          "open": 0.114,
+          "render": 52.119,
+          "write": 60.812,
+          "total": 113.075
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.271,
+          "stage": 1.989,
+          "base": 34.755,
+          "shapes": 4.264,
+          "polygons": 1.004,
+          "images": 0.104,
+          "paper": 6.032,
+          "total": 48.43
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.047,
+          "open": 0.127,
+          "render": 48.507,
+          "write": 76.814,
+          "total": 125.494
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.408,
+          "stage": 2.771,
+          "base": 38.655,
+          "shapes": 4.512,
+          "polygons": 0.978,
+          "images": 0.106,
+          "paper": 8.233,
+          "total": 55.678
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.062,
+          "open": 0.192,
+          "render": 55.782,
+          "write": 57.416,
+          "total": 113.452
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.33,
+          "stage": 2.542,
+          "base": 35.192,
+          "shapes": 4.478,
+          "polygons": 0.96,
+          "images": 0.113,
+          "paper": 8.284,
+          "total": 51.915
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.049,
+          "open": 0.173,
+          "render": 52.004,
+          "write": 60.253,
+          "total": 112.478
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.233,
+          "stage": 1.492,
+          "base": 35.836,
+          "shapes": 4.567,
+          "polygons": 1.178,
+          "images": 0.159,
+          "paper": 5.56,
+          "total": 49.041
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.038,
+          "open": 0.106,
+          "render": 49.122,
+          "write": 60.093,
+          "total": 109.359
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.369,
+          "stage": 2.474,
+          "base": 38.451,
+          "shapes": 4.653,
+          "polygons": 1.131,
+          "images": 0.149,
+          "paper": 5.091,
+          "total": 52.335
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.061,
+          "open": 0.137,
+          "render": 52.433,
+          "write": 56.961,
+          "total": 109.592
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.415,
+          "stage": 3.176,
+          "base": 38.984,
+          "shapes": 4.174,
+          "polygons": 0.898,
+          "images": 0.1,
+          "paper": 8.473,
+          "total": 56.235
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.085,
+          "open": 0.212,
+          "render": 56.333,
+          "write": 61.543,
+          "total": 118.172
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.267,
+          "stage": 1.567,
+          "base": 38.11,
+          "shapes": 4.512,
+          "polygons": 1.044,
+          "images": 0.113,
+          "paper": 8.232,
+          "total": 53.862
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.052,
+          "open": 0.128,
+          "render": 53.943,
+          "write": 78.828,
+          "total": 132.95
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.386,
+          "stage": 3.102,
+          "base": 38.718,
+          "shapes": 4.668,
+          "polygons": 1.065,
+          "images": 0.12,
+          "paper": 4.695,
+          "total": 52.768
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.042,
+          "open": 0.149,
+          "render": 52.853,
+          "write": 58.24,
+          "total": 111.284
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.29,
+          "stage": 1.837,
+          "base": 38.295,
+          "shapes": 4.475,
+          "polygons": 1.046,
+          "images": 0.11,
+          "paper": 6.026,
+          "total": 52.092
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.047,
+          "open": 0.133,
+          "render": 52.167,
+          "write": 56.028,
+          "total": 108.375
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.432,
+          "stage": 3.103,
+          "base": 42.906,
+          "shapes": 3.9,
+          "polygons": 0.875,
+          "images": 0.096,
+          "paper": 8.345,
+          "total": 59.671
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.054,
+          "open": 0.17,
+          "render": 59.752,
+          "write": 60.783,
+          "total": 120.759
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.333,
+          "stage": 2.358,
+          "base": 37.436,
+          "shapes": 3.963,
+          "polygons": 0.868,
+          "images": 0.089,
+          "paper": 7.425,
+          "total": 52.484
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.071,
+          "open": 0.172,
+          "render": 52.565,
+          "write": 57.279,
+          "total": 110.088
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.278,
+          "stage": 1.709,
+          "base": 36.974,
+          "shapes": 4.597,
+          "polygons": 1.476,
+          "images": 0.121,
+          "paper": 4.983,
+          "total": 50.151
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.044,
+          "open": 0.124,
+          "render": 50.245,
+          "write": 60.456,
+          "total": 110.869
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.395,
+          "stage": 3.566,
+          "base": 36.432,
+          "shapes": 4.247,
+          "polygons": 1.022,
+          "images": 0.118,
+          "paper": 5.616,
+          "total": 51.413
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.053,
+          "open": 0.152,
+          "render": 51.496,
+          "write": 55.719,
+          "total": 107.419
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.439,
+          "stage": 2.591,
+          "base": 40.25,
+          "shapes": 4.337,
+          "polygons": 0.897,
+          "images": 0.095,
+          "paper": 8.621,
+          "total": 57.245
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.059,
+          "open": 0.17,
+          "render": 57.342,
+          "write": 79.787,
+          "total": 137.358
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.369,
+          "stage": 2.014,
+          "base": 34.631,
+          "shapes": 4.11,
+          "polygons": 0.928,
+          "images": 0.141,
+          "paper": 9.03,
+          "total": 51.237
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.051,
+          "open": 0.149,
+          "render": 51.318,
+          "write": 58.925,
+          "total": 110.443
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.355,
+          "stage": 2.36,
+          "base": 37.89,
+          "shapes": 4.079,
+          "polygons": 0.985,
+          "images": 0.103,
+          "paper": 5.805,
+          "total": 51.588
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.048,
+          "open": 0.178,
+          "render": 51.665,
+          "write": 56.599,
+          "total": 108.49
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.267,
+          "stage": 1.77,
+          "base": 34.788,
+          "shapes": 4.629,
+          "polygons": 1.054,
+          "images": 0.107,
+          "paper": 5.352,
+          "total": 47.982
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.048,
+          "open": 0.14,
+          "render": 48.064,
+          "write": 59.787,
+          "total": 108.039
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.225,
+          "stage": 1.703,
+          "base": 35.202,
+          "shapes": 4.306,
+          "polygons": 0.964,
+          "images": 0.12,
+          "paper": 7.929,
+          "total": 50.464
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.034,
+          "open": 0.12,
+          "render": 50.55,
+          "write": 62.387,
+          "total": 113.09
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.364,
+          "stage": 2.892,
+          "base": 39.128,
+          "shapes": 3.47,
+          "polygons": 0.815,
+          "images": 0.096,
+          "paper": 7.53,
+          "total": 54.306
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.068,
+          "open": 0.2,
+          "render": 54.377,
+          "write": 108.355,
+          "total": 162.999
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.227,
+          "stage": 1.529,
+          "base": 39.252,
+          "shapes": 5.804,
+          "polygons": 1.286,
+          "images": 0.14,
+          "paper": 6.879,
+          "total": 55.136
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.04,
+          "open": 0.109,
+          "render": 55.25,
+          "write": 60.469,
+          "total": 115.868
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.456,
+          "stage": 3.637,
+          "base": 42.865,
+          "shapes": 4.49,
+          "polygons": 1.157,
+          "images": 0.127,
+          "paper": 4.72,
+          "total": 57.469
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.08,
+          "open": 0.21,
+          "render": 57.583,
+          "write": 52.058,
+          "total": 109.931
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.298,
+          "stage": 1.642,
+          "base": 35.99,
+          "shapes": 3.176,
+          "polygons": 0.75,
+          "images": 0.079,
+          "paper": 7.183,
+          "total": 49.13
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.041,
+          "open": 0.119,
+          "render": 49.201,
+          "write": 59.156,
+          "total": 108.516
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.379,
+          "stage": 2.871,
+          "base": 32.952,
+          "shapes": 3.386,
+          "polygons": 0.723,
+          "images": 0.079,
+          "paper": 7.312,
+          "total": 47.713
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.047,
+          "open": 0.193,
+          "render": 47.778,
+          "write": 53.266,
+          "total": 101.284
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.287,
+          "stage": 1.949,
+          "base": 36.239,
+          "shapes": 4.044,
+          "polygons": 0.937,
+          "images": 0.101,
+          "paper": 5.032,
+          "total": 48.601
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.043,
+          "open": 0.133,
+          "render": 48.675,
+          "write": 52.745,
+          "total": 101.596
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.179,
+          "stage": 1.399,
+          "base": 32.808,
+          "shapes": 5.114,
+          "polygons": 1.302,
+          "images": 0.133,
+          "paper": 4.818,
+          "total": 45.768
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.032,
+          "open": 0.09,
+          "render": 45.85,
+          "write": 75.156,
+          "total": 121.128
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.252,
+          "stage": 2.091,
+          "base": 34.61,
+          "shapes": 3.503,
+          "polygons": 0.873,
+          "images": 0.087,
+          "paper": 7.477,
+          "total": 48.906
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.034,
+          "open": 0.13,
+          "render": 49.018,
+          "write": 55.271,
+          "total": 104.452
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.462,
+          "stage": 3.623,
+          "base": 42.625,
+          "shapes": 3.829,
+          "polygons": 0.866,
+          "images": 0.097,
+          "paper": 8.353,
+          "total": 59.869
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.066,
+          "open": 0.186,
+          "render": 59.942,
+          "write": 55.04,
+          "total": 115.234
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.445,
+          "stage": 2.64,
+          "base": 34.485,
+          "shapes": 4.41,
+          "polygons": 0.938,
+          "images": 0.107,
+          "paper": 5.251,
+          "total": 48.289
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.061,
+          "open": 0.187,
+          "render": 48.365,
+          "write": 56.199,
+          "total": 104.813
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.267,
+          "stage": 1.796,
+          "base": 40.159,
+          "shapes": 4.594,
+          "polygons": 0.995,
+          "images": 0.113,
+          "paper": 5.628,
+          "total": 53.566
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.046,
+          "open": 0.13,
+          "render": 53.649,
+          "write": 58.418,
+          "total": 112.244
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.247,
+          "stage": 1.676,
+          "base": 36.643,
+          "shapes": 3.994,
+          "polygons": 0.979,
+          "images": 0.101,
+          "paper": 9.169,
+          "total": 52.824
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.033,
+          "open": 0.136,
+          "render": 52.899,
+          "write": 63.921,
+          "total": 116.988
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.288,
+          "stage": 1.84,
+          "base": 35.468,
+          "shapes": 3.45,
+          "polygons": 0.783,
+          "images": 0.08,
+          "paper": 7.574,
+          "total": 49.494
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.07,
+          "open": 0.151,
+          "render": 49.576,
+          "write": 55.72,
+          "total": 105.518
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.268,
+          "stage": 1.905,
+          "base": 42.782,
+          "shapes": 4.157,
+          "polygons": 1.01,
+          "images": 0.108,
+          "paper": 5.914,
+          "total": 56.157
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.034,
+          "open": 0.126,
+          "render": 56.235,
+          "write": 79.665,
+          "total": 136.059
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.291,
+          "stage": 1.784,
+          "base": 33.539,
+          "shapes": 4.66,
+          "polygons": 1.079,
+          "images": 0.126,
+          "paper": 5.371,
+          "total": 46.865
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.067,
+          "open": 0.153,
+          "render": 46.946,
+          "write": 60.0,
+          "total": 107.166
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.354,
+          "stage": 2.506,
+          "base": 36.467,
+          "shapes": 4.177,
+          "polygons": 0.852,
+          "images": 0.091,
+          "paper": 7.515,
+          "total": 51.976
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.045,
+          "open": 0.17,
+          "render": 52.055,
+          "write": 56.231,
+          "total": 108.501
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.267,
+          "stage": 1.721,
+          "base": 40.138,
+          "shapes": 4.447,
+          "polygons": 0.973,
+          "images": 0.108,
+          "paper": 9.086,
+          "total": 56.755
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.031,
+          "open": 0.117,
+          "render": 56.833,
+          "write": 58.032,
+          "total": 115.013
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.196,
+          "stage": 1.441,
+          "base": 34.997,
+          "shapes": 4.298,
+          "polygons": 1.495,
+          "images": 0.113,
+          "paper": 5.961,
+          "total": 48.515
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.032,
+          "open": 0.089,
+          "render": 48.599,
+          "write": 58.871,
+          "total": 107.591
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.414,
+          "stage": 2.956,
+          "base": 41.703,
+          "shapes": 4.325,
+          "polygons": 0.985,
+          "images": 0.111,
+          "paper": 4.86,
+          "total": 55.368
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.06,
+          "open": 0.167,
+          "render": 55.45,
+          "write": 57.581,
+          "total": 113.258
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.406,
+          "stage": 2.811,
+          "base": 35.168,
+          "shapes": 4.42,
+          "polygons": 0.896,
+          "images": 0.096,
+          "paper": 8.267,
+          "total": 52.077
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.066,
+          "open": 0.17,
+          "render": 52.161,
+          "write": 80.175,
+          "total": 132.572
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.252,
+          "stage": 1.686,
+          "base": 37.95,
+          "shapes": 4.135,
+          "polygons": 0.945,
+          "images": 0.099,
+          "paper": 8.934,
+          "total": 54.015
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.056,
+          "open": 0.152,
+          "render": 54.085,
+          "write": 57.794,
+          "total": 112.088
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.343,
+          "stage": 2.776,
+          "base": 38.254,
+          "shapes": 4.359,
+          "polygons": 1.044,
+          "images": 0.119,
+          "paper": 5.346,
+          "total": 52.26
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.073,
+          "open": 0.162,
+          "render": 52.344,
+          "write": 57.257,
+          "total": 109.837
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.39,
+          "stage": 2.781,
+          "base": 37.376,
+          "shapes": 4.2,
+          "polygons": 1.024,
+          "images": 0.105,
+          "paper": 5.969,
+          "total": 51.856
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.065,
+          "open": 0.156,
+          "render": 51.944,
+          "write": 56.828,
+          "total": 108.992
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.455,
+          "stage": 1.928,
+          "base": 35.177,
+          "shapes": 5.766,
+          "polygons": 1.335,
+          "images": 0.145,
+          "paper": 8.658,
+          "total": 53.481
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.066,
+          "open": 0.288,
+          "render": 53.573,
+          "write": 60.949,
+          "total": 114.876
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.397,
+          "stage": 3.347,
+          "base": 38.944,
+          "shapes": 4.34,
+          "polygons": 0.924,
+          "images": 0.101,
+          "paper": 8.89,
+          "total": 56.956
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.05,
+          "open": 0.147,
+          "render": 57.039,
+          "write": 61.107,
+          "total": 118.344
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.379,
+          "stage": 2.687,
+          "base": 37.595,
+          "shapes": 4.405,
+          "polygons": 0.96,
+          "images": 0.105,
+          "paper": 5.511,
+          "total": 51.656
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.061,
+          "open": 0.172,
+          "render": 51.742,
+          "write": 94.416,
+          "total": 146.39
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    },
+    {
+      "new": {
+        "OPDS_AP_PHASES": {
+          "load": 0.225,
+          "stage": 1.292,
+          "base": 36.867,
+          "shapes": 3.779,
+          "polygons": 0.967,
+          "images": 0.098,
+          "paper": 5.004,
+          "total": 48.246
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.035,
+          "open": 0.113,
+          "render": 48.315,
+          "write": 50.266,
+          "total": 98.728
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      },
+      "old": {
+        "OPDS_AP_PHASES": {
+          "load": 0.264,
+          "stage": 1.837,
+          "base": 32.405,
+          "shapes": 3.559,
+          "polygons": 0.777,
+          "images": 0.11,
+          "paper": 7.047,
+          "total": 46.013
+        },
+        "OPDS_PROBE_PHASES": {
+          "read": 0.034,
+          "open": 0.125,
+          "render": 46.085,
+          "write": 58.064,
+          "total": 104.308
+        },
+        "sha256": "ef76d54c335b7ad139881fcab8266f0edb058c7347025b2309d3ce8f6460f951"
+      }
+    }
+  ]
+}

@@ -1451,11 +1451,32 @@ fn paint_staged_shapes(
 }
 
 fn add_white_paper(rgba: &mut [u8]) {
+    let pixels = rgba.len() / 4;
+    let workers = std::thread::available_parallelism()
+        .map(|count| count.get().min(4))
+        .unwrap_or(1);
+    if pixels < 500_000 || workers < 2 {
+        add_white_paper_chunk(rgba);
+        return;
+    }
+    let chunk_bytes = pixels.div_ceil(workers) * 4;
+    std::thread::scope(|scope| {
+        let mut chunks = rgba.chunks_mut(chunk_bytes);
+        if let Some(first) = chunks.next() {
+            for chunk in chunks {
+                scope.spawn(move || add_white_paper_chunk(chunk));
+            }
+            add_white_paper_chunk(first);
+        }
+    });
+}
+
+fn add_white_paper_chunk(rgba: &mut [u8]) {
     for pixel in rgba.chunks_exact_mut(4) {
         let paper = 255 - pixel[3];
-        for channel in &mut pixel[..3] {
-            *channel = channel.saturating_add(paper);
-        }
+        pixel[0] = pixel[0].saturating_add(paper);
+        pixel[1] = pixel[1].saturating_add(paper);
+        pixel[2] = pixel[2].saturating_add(paper);
         pixel[3] = 255;
     }
 }
@@ -1800,6 +1821,7 @@ pub fn render_imported_shape_appearances_for_app(
         return Ok(None);
     }
     let doc = Document::load_mem(source).map_err(|e| e.to_string())?;
+    let load_done = std::time::Instant::now();
     if doc.is_encrypted() {
         return Ok(None);
     }
@@ -1891,18 +1913,28 @@ pub fn render_imported_shape_appearances_for_app(
                 .collect(),
         ));
     }
+    let stage_done = std::time::Instant::now();
     let mut layer = pdf
         .render_page_content_without_annotations(page_number, 1.0)
         .map_err(|e| e.to_string())?;
+    let base_done = std::time::Instant::now();
     let mut pending_shapes = Vec::new();
     let mut paper_added = false;
+    let mut shapes_time = std::time::Duration::ZERO;
+    let mut polygons_time = std::time::Duration::ZERO;
+    let mut text_time = std::time::Duration::ZERO;
+    let mut images_time = std::time::Duration::ZERO;
+    let mut paper_time = std::time::Duration::ZERO;
     for appearance in appearances {
         match appearance {
             ImportedAppearance::Shapes(commands) => pending_shapes.extend(commands),
             ImportedAppearance::Polygon(polygon) => {
+                let shape_start = std::time::Instant::now();
                 if !flush_shapes(&mut layer, &mut pending_shapes)? {
                     return Ok(None);
                 }
+                shapes_time += shape_start.elapsed();
+                let polygon_start = std::time::Instant::now();
                 let Some(right) = polygon.origin[0].checked_add(256) else {
                     return Ok(None);
                 };
@@ -1967,13 +1999,17 @@ pub fn render_imported_shape_appearances_for_app(
                             .copy_from_slice(&painted[source..source + span]);
                     }
                 }
+                polygons_time += polygon_start.elapsed();
             }
             ImportedAppearance::Text(text) => {
+                let shape_start = std::time::Instant::now();
                 if !flush_shapes(&mut layer, &mut pending_shapes)?
                     || text.page_size != [layer.width, layer.height]
                 {
                     return Ok(None);
                 }
+                shapes_time += shape_start.elapsed();
+                let text_start = std::time::Instant::now();
                 for (scene, origin) in text.tiles {
                     let base = std::mem::take(&mut layer.rgba);
                     layer.rgba = render_validated_glyph_scene_over_premultiplied_at_origin_owned(
@@ -1986,15 +2022,21 @@ pub fn render_imported_shape_appearances_for_app(
                     )?
                     .rgba;
                 }
+                text_time += text_start.elapsed();
             }
             ImportedAppearance::Images(images) => {
+                let shape_start = std::time::Instant::now();
                 if !flush_shapes(&mut layer, &mut pending_shapes)? {
                     return Ok(None);
                 }
+                shapes_time += shape_start.elapsed();
                 if !paper_added {
+                    let paper_start = std::time::Instant::now();
                     add_white_paper(&mut layer.rgba);
+                    paper_time += paper_start.elapsed();
                     paper_added = true;
                 }
+                let image_start = std::time::Instant::now();
                 let image_refs: Vec<_> = images
                     .iter()
                     .map(|image| (image.rect, image.rgb.as_slice()))
@@ -2009,16 +2051,36 @@ pub fn render_imported_shape_appearances_for_app(
                     return Ok(None);
                 };
                 layer.rgba = painted;
+                images_time += image_start.elapsed();
             }
         }
     }
+    let shape_start = std::time::Instant::now();
     if !flush_shapes(&mut layer, &mut pending_shapes)? {
         return Ok(None);
     }
+    shapes_time += shape_start.elapsed();
     if !paper_added {
+        let paper_start = std::time::Instant::now();
         add_white_paper(&mut layer.rgba);
+        paper_time += paper_start.elapsed();
     }
     layer.render_ms = started.elapsed().as_millis();
+    if std::env::var_os("OPDS_AP_PROFILE").is_some() {
+        let ms = |duration: std::time::Duration| duration.as_secs_f64() * 1000.0;
+        eprintln!(
+            "OPDS_AP_PHASES load={:.3} stage={:.3} base={:.3} shapes={:.3} polygons={:.3} text={:.3} images={:.3} paper={:.3} total={:.3}",
+            ms(load_done - started),
+            ms(stage_done - load_done),
+            ms(base_done - stage_done),
+            ms(shapes_time),
+            ms(polygons_time),
+            ms(text_time),
+            ms(images_time),
+            ms(paper_time),
+            ms(started.elapsed()),
+        );
+    }
     Ok(Some(layer))
 }
 
