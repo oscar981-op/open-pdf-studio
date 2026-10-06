@@ -549,21 +549,28 @@ implementatie van Hayro/Vello's f32-randdekking blijft nodig om de
 conservatieve terugval te verkleinen; deze route heeft nog geen
 prestatievoordeel aangetoond.
 
-**Twee Form-contouren.** Dezelfde versieerbare OPM2-kernel accepteert nu
-maximaal twee eenvoudige, niet-rakende `m/l/h`-contouren met samen maximaal
-128 hoekpunten in één `f`- of `f*`-opdracht. De parser bewaart expliciete
-contourgrenzen en valideert topologie vóór vereenvoudiging. Losse vlakken
-worden met dezelfde winding getekend; een binnencontour met tegengestelde
-winding maakt onder `f` een gat. `f*` maakt onafhankelijk van de
-contourrichting een gat. Een binnencontour met gelijke winding onder `f`
-heeft geen zichtbare rand en wordt pas na topologievalidatie verwijderd.
-Gerichte PDF-proeven voor losse vlakken, omgekeerde contourrichting en
--volgorde, gaten met beide vulregels en een gekleurde onderlaag zijn op
-0/90/180/270° met verschoven CropBox volledig RGBA-bytegelijk aan Hayro.
+**Begrensde Form-contourhiërarchie.** Dezelfde versieerbare OPM2-kernel
+accepteert nu maximaal acht eenvoudige, niet-rakende `m/l/h`-contouren met
+samen maximaal 256 punten inclusief sluitpunten in één `f`- of
+`f*`-opdracht. De parser bewaart expliciete contourgrenzen en valideert
+zelfkruising en onderlinge aanraking vóór vereenvoudiging. Een
+containmentboom bepaalt per contour de ouder, vuldiepte en cumulatieve
+winding. Onder `f*` wisselen buitenvlak en gat per niveau af; onder `f`
+wordt alleen een grens met overgang tussen nul en niet-nul winding
+getekend. Onzichtbare binnencontouren verdwijnen pas na topologievalidatie.
+Gerichte PDF-proeven voor losse vlakken met tegengestelde richting,
+omgekeerde contourvolgorde, meerdere gaten, een genest eiland, een
+vierde binnengat, een hol buitenpad en acht losse vlakken zijn op
+0/90/180/270° met verschoven CropBox en een gekleurde onderlaag volledig
+RGBA-bytegelijk aan Hayro.
 Een 2384×1684 zichtbare 90°-pagina rendert hetzelfde Form-gat via één
 begrensde tegel eveneens bytegelijk.
 Van 96 gevarieerde driehoekige gaten waren 88 geaccepteerde gevallen
-bytegelijk; acht onzekere gevallen vielen volledig terug. Drie contouren,
+bytegelijk; acht onzekere gevallen vielen volledig terug. Een tweede reeks
+met twee gescheiden driehoekige gaten accepteerde 62/64 bytegelijke
+gevallen; twee onzekere gevallen vielen terug. Negen contouren,
 elkaar kruisende of rakende contouren, curven, polygonale strokes en
 onbewezen randafronding blijven Hayro-fallback. Dit is een volgende stap
 richting een volledige annotatielaag, geen algemene Form-renderer.
+De conservatieve randcontrole slaat pixels buiten de afzonderlijke
+contourgrenzen over; daarvoor is nog geen gepaarde prestatiewinst gemeten.
