@@ -1,12 +1,7 @@
 //! Bounded direct staging of a saved Open PDF Studio FreeText /AP into OPGS.
 //! Hayro renders the PDF body; DynLex paints only fully validated glyphs.
-use crate::{
-    glyph_scene::render_validated_glyph_scene_over_premultiplied_at_origin_owned,
-    imported_appearance::{display_point, page_geometry},
-    Bitmap,
-};
+use crate::imported_appearance::display_point;
 use lopdf::{content::Content, Dictionary, Document, Object};
-use opds_engine_probe::{ParsedPdf, Raster};
 use opds_opdl_adapter::text_quad_glyph::{self, Source};
 use std::collections::HashMap;
 
@@ -105,20 +100,21 @@ fn embedded_native_font(doc: &Document, resources: &Dictionary) -> Option<HashMa
     Some(widths)
 }
 
-/// One saved native FreeText Form. The scene is emitted only when its entire
-/// appearance fits a single 256×192 tile on a bounded, quarter-turned page.
-fn stage_one_native_freetext(
-    source: &[u8],
-    page_number: usize,
-) -> Option<(Vec<u8>, [u32; 4], [u32; 2], [u32; 2])> {
-    if source.len() > 16_000_000 || page_number == 0 {
-        return None;
-    }
-    let doc = Document::load_mem(source).ok()?;
-    if doc.is_encrypted() {
-        return None;
-    }
-    let (page_id, crop, rotation) = page_geometry(&doc, page_number)?;
+pub(crate) struct StagedImportedText {
+    pub scene: Vec<u8>,
+    pub clip: [u32; 4],
+    pub origin: [u32; 2],
+    pub page_size: [u32; 2],
+}
+
+/// Stage one selected annotation using the caller's parsed PDF and validated
+/// page geometry. All glyphs must fit a single 256×192 tile; no partial paint.
+pub(crate) fn stage_saved_native_freetext(
+    doc: &Document,
+    annotation: &Dictionary,
+    crop: [f64; 4],
+    rotation: u16,
+) -> Option<StagedImportedText> {
     let [raw_w, raw_h] = [crop[2] - crop[0], crop[3] - crop[1]];
     let [visible_w, visible_h] = if matches!(rotation, 90 | 270) {
         [raw_h, raw_w]
@@ -126,10 +122,6 @@ fn stage_one_native_freetext(
         [raw_w, raw_h]
     };
     let page_size = [visible_w as u32, visible_h as u32];
-    let annotations = doc.get_page_annotations(page_id).ok()?;
-    let [annotation] = annotations.as_slice() else {
-        return None;
-    };
     if !name(annotation, b"Subtype", b"FreeText")
         || annotation.get(b"F").ok().and_then(number) != Some(4.0)
         || annotation.iter().any(|(key, _)| {
@@ -365,41 +357,10 @@ fn stage_one_native_freetext(
         scene.extend_from_slice(&word.to_le_bytes());
     }
     scene.extend_from_slice(&records);
-    Some((scene, clip, origin, page_size))
-}
-
-pub fn render_saved_native_freetext_for_app(
-    pdf: &ParsedPdf,
-    source: &[u8],
-    page_number: usize,
-) -> Result<Option<Raster>, String> {
-    let Some((scene, clip, origin, page_size)) = stage_one_native_freetext(source, page_number)
-    else {
-        return Ok(None);
-    };
-    let mut layer = pdf
-        .render_page_content_without_annotations(page_number, 1.0)
-        .map_err(|e| e.to_string())?;
-    if layer.width != page_size[0] || layer.height != page_size[1] {
-        return Ok(None);
-    }
-    let started = std::time::Instant::now();
-    let Bitmap { rgba, .. } = render_validated_glyph_scene_over_premultiplied_at_origin_owned(
-        &scene,
-        layer.rgba,
-        layer.width,
-        layer.height,
+    Some(StagedImportedText {
+        scene,
         clip,
         origin,
-    )?;
-    layer.rgba = rgba;
-    for pixel in layer.rgba.chunks_exact_mut(4) {
-        let paper = 255 - pixel[3];
-        for channel in &mut pixel[..3] {
-            *channel = channel.saturating_add(paper);
-        }
-        pixel[3] = 255;
-    }
-    layer.render_ms += started.elapsed().as_millis();
-    Ok(Some(layer))
+        page_size,
+    })
 }

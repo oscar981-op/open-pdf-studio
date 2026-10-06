@@ -3,9 +3,11 @@
 //! This read-only probe is not the general imported annotation renderer.
 use crate::{
     annotation_overlay::{
-        native_imported_commands, paint_imported_commands, paint_opaque_imported_rectangles,
+        native_imported_commands, paint_imported_commands_owned, paint_opaque_imported_rectangles,
         render_native_annotation_overlay_pixels_over_premultiplied, ImportedCommand,
     },
+    glyph_scene::render_validated_glyph_scene_over_premultiplied_at_origin_owned,
+    imported_text::{stage_saved_native_freetext, StagedImportedText},
     Bitmap,
 };
 use lopdf::{content::Content, Dictionary, Document, Object, ObjectId};
@@ -781,17 +783,43 @@ pub fn render_missing_shape_appearances_for_app(
     Ok(Some(layer))
 }
 
-/// One bounded scene for native-shaped `/AP` Forms, preview-only
-/// Square/Highlight dictionaries without `/AP`, or a mixture of both.
-/// Hayro's current preview paints fallback marks after all Forms, so the
-/// staged order mirrors that visible behavior within one DynLex call.
+enum ImportedAppearance {
+    Shapes(Vec<ImportedCommand>),
+    Text(StagedImportedText),
+}
+
+fn flush_shapes(layer: &mut Raster, commands: &mut Vec<ImportedCommand>) -> Result<bool, String> {
+    if commands.is_empty() {
+        return Ok(true);
+    }
+    let Some(painted) = paint_imported_commands_owned(
+        std::mem::take(&mut layer.rgba),
+        layer.width,
+        layer.height,
+        (layer.page_width_pt, layer.page_height_pt),
+        commands,
+    )?
+    else {
+        return Ok(false);
+    };
+    layer.rgba = painted.rgba;
+    commands.clear();
+    Ok(true)
+}
+
+/// Ordered, bounded scene for validated native-shaped `/AP` Forms and the
+/// native FreeText glyph Form. Preview-only Square/Highlight dictionaries
+/// without `/AP` remain after all Forms to match Hayro's visible behavior.
+/// Hayro's current preview paints fallback marks after all Forms. Consecutive
+/// shape commands share one OPAN call; FreeText glyph tiles split those batches
+/// while preserving their PDF appearance order.
 pub fn render_imported_shape_appearances_for_app(
     pdf: &ParsedPdf,
     source: &[u8],
     page_number: usize,
 ) -> Result<Option<Raster>, String> {
     let started = std::time::Instant::now();
-    if source.len() > 2_000_000 || page_number == 0 {
+    if source.len() > 16_000_000 || page_number == 0 {
         return Ok(None);
     }
     let doc = Document::load_mem(source).map_err(|e| e.to_string())?;
@@ -807,7 +835,7 @@ pub fn render_imported_shape_appearances_for_app(
     if annotations.is_empty() || annotations.len() > 64 {
         return Ok(None);
     }
-    let mut forms = Vec::new();
+    let mut appearances = Vec::new();
     let mut fallback_rectangles = Vec::new();
     for (index, annotation) in annotations.iter().enumerate() {
         if annotation.has(b"AP") {
@@ -822,9 +850,12 @@ pub fn render_imported_shape_appearances_for_app(
                 let Some(native) = native_imported_commands(&mark, 4096, 4096) else {
                     return Ok(None);
                 };
-                forms.push(native);
+                appearances.push(ImportedAppearance::Shapes(native));
             } else if let Some(command) = parse_opaque_rect_form(&doc, annotation, crop, rotation) {
-                forms.push(vec![command]);
+                appearances.push(ImportedAppearance::Shapes(vec![command]));
+            } else if let Some(text) = stage_saved_native_freetext(&doc, annotation, crop, rotation)
+            {
+                appearances.push(ImportedAppearance::Text(text));
             } else {
                 return Ok(None);
             }
@@ -839,31 +870,47 @@ pub fn render_imported_shape_appearances_for_app(
     if fallback_rectangles.len() > 256 {
         return Ok(None);
     }
+    if !fallback_rectangles.is_empty() {
+        appearances.push(ImportedAppearance::Shapes(
+            fallback_rectangles
+                .into_iter()
+                .map(|(rect, color)| ImportedCommand {
+                    kind: 1,
+                    rect,
+                    tail: [color[0], color[1], color[2], 255],
+                })
+                .collect(),
+        ));
+    }
     let mut layer = pdf
         .render_page_content_without_annotations(page_number, 1.0)
         .map_err(|e| e.to_string())?;
-    let mut commands = Vec::new();
-    for form in forms {
-        commands.extend(form);
+    let mut pending_shapes = Vec::new();
+    for appearance in appearances {
+        match appearance {
+            ImportedAppearance::Shapes(commands) => pending_shapes.extend(commands),
+            ImportedAppearance::Text(text) => {
+                if !flush_shapes(&mut layer, &mut pending_shapes)?
+                    || text.page_size != [layer.width, layer.height]
+                {
+                    return Ok(None);
+                }
+                let base = std::mem::take(&mut layer.rgba);
+                layer.rgba = render_validated_glyph_scene_over_premultiplied_at_origin_owned(
+                    &text.scene,
+                    base,
+                    layer.width,
+                    layer.height,
+                    text.clip,
+                    text.origin,
+                )?
+                .rgba;
+            }
+        }
     }
-    for (rect, color) in fallback_rectangles {
-        commands.push(ImportedCommand {
-            kind: 1,
-            rect,
-            tail: [color[0], color[1], color[2], 255],
-        });
-    }
-    let Some(painted) = paint_imported_commands(
-        &layer.rgba,
-        layer.width,
-        layer.height,
-        (layer.page_width_pt, layer.page_height_pt),
-        &commands,
-    )?
-    else {
+    if !flush_shapes(&mut layer, &mut pending_shapes)? {
         return Ok(None);
-    };
-    layer.rgba = painted.rgba;
+    }
     add_white_paper(&mut layer.rgba);
     layer.render_ms = started.elapsed().as_millis();
     Ok(Some(layer))

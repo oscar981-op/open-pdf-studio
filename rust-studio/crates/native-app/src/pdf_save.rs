@@ -925,17 +925,169 @@ mod tests {
                 let actual = render_with_report(&pdf, &saved, 1, 1.0, Backend::Dynlex).unwrap();
                 assert!(actual.imported_annotations_dynlex, "{text}");
                 assert_eq!(actual.raster.rgba, expected.rgba, "{text}");
-                if text == "ΩΩΩ" && rotation == 0 && geometry == 0 {
+                if text == "ΩΩΩ" && matches!(rotation, 0 | 90) && geometry == 0 {
                     let mut second = annotation.clone();
                     second.id = 502;
                     second.bounds.x += 10.0;
-                    let multiple = export_annotations(&source, &[annotation, second]).unwrap();
+                    let multiple =
+                        export_annotations(&source, &[annotation.clone(), second.clone()]).unwrap();
                     let pdf = ParsedPdf::open(Arc::new(multiple.clone())).unwrap();
                     let expected = pdf.render_page(1, 1.0).unwrap();
                     let report =
                         render_with_report(&pdf, &multiple, 1, 1.0, Backend::Dynlex).unwrap();
-                    assert!(!report.imported_annotations_dynlex);
+                    assert!(report.imported_annotations_dynlex);
                     assert_eq!(report.raster.rgba, expected.rgba);
+
+                    let square = Annotation {
+                        id: 503,
+                        page: 0,
+                        bounds: Rect {
+                            x: 45.0,
+                            y: 60.0,
+                            width: 42.0,
+                            height: 32.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [231, 76, 60],
+                        },
+                    };
+                    let highlight = Annotation {
+                        id: 504,
+                        page: 0,
+                        bounds: Rect {
+                            x: 30.0,
+                            y: 40.0,
+                            width: 60.0,
+                            height: 24.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [255, 226, 67],
+                        },
+                    };
+                    for marks in [
+                        vec![annotation.clone(), square.clone(), highlight.clone()],
+                        vec![highlight.clone(), annotation.clone(), square.clone()],
+                        vec![
+                            square.clone(),
+                            annotation.clone(),
+                            highlight.clone(),
+                            second.clone(),
+                        ],
+                    ] {
+                        let mixed = export_annotations(&source, &marks).unwrap();
+                        let pdf = ParsedPdf::open(Arc::new(mixed.clone())).unwrap();
+                        let expected = pdf.render_page(1, 1.0).unwrap();
+                        let report =
+                            render_with_report(&pdf, &mixed, 1, 1.0, Backend::Dynlex).unwrap();
+                        assert!(report.imported_annotations_dynlex);
+                        assert_eq!(report.raster.rgba, expected.rgba);
+                        if rotation == 90
+                            && marks.len() == 4
+                            && std::env::var_os("OPDS_BENCH_IMPORTED_ANNOTATIONS").is_some()
+                        {
+                            let mut dynlex_us = Vec::new();
+                            let mut hayro_us = Vec::new();
+                            for round in 0..20 {
+                                let mut measure_dynlex = || {
+                                    let started = std::time::Instant::now();
+                                    let actual =
+                                        render_with_report(&pdf, &mixed, 1, 1.0, Backend::Dynlex)
+                                            .unwrap();
+                                    assert!(actual.imported_annotations_dynlex);
+                                    assert_eq!(actual.raster.rgba, expected.rgba);
+                                    dynlex_us.push(started.elapsed().as_micros());
+                                };
+                                let mut measure_hayro = || {
+                                    let started = std::time::Instant::now();
+                                    let actual = pdf.render_page(1, 1.0).unwrap();
+                                    assert_eq!(actual.rgba, expected.rgba);
+                                    hayro_us.push(started.elapsed().as_micros());
+                                };
+                                if round % 2 == 0 {
+                                    measure_dynlex();
+                                    measure_hayro();
+                                } else {
+                                    measure_hayro();
+                                    measure_dynlex();
+                                }
+                            }
+                            dynlex_us.sort_unstable();
+                            hayro_us.sort_unstable();
+                            println!(
+                                "mixed imported annotations, 20 warm paired renders: DynLex+Hayro {} µs, Hayro {} µs",
+                                dynlex_us[10], hayro_us[10]
+                            );
+                        }
+                        if rotation == 0 && marks.len() == 3 {
+                            let mut doc = Document::load_mem(&mixed).unwrap();
+                            let page_id = *doc.get_pages().get(&1).unwrap();
+                            let form = doc.add_object(Stream::new(
+                                dictionary! {
+                                    "Type" => "XObject", "Subtype" => "Form",
+                                    "BBox" => vec![0.into(),0.into(),40.into(),30.into()],
+                                },
+                                b"q 1 0 0 rg 0 0 40 30 re f Q".to_vec(),
+                            ));
+                            let stamp = doc.add_object(dictionary! {
+                                "Type" => "Annot", "Subtype" => "Stamp", "F" => 4,
+                                "Rect" => vec![70.into(),90.into(),110.into(),120.into()],
+                                "AP" => dictionary! { "N" => form },
+                            });
+                            let annots = doc
+                                .get_dictionary(page_id)
+                                .unwrap()
+                                .get(b"Annots")
+                                .unwrap()
+                                .clone();
+                            let (_, annots) = doc.dereference(&annots).unwrap();
+                            let mut ordered = annots.as_array().unwrap().clone();
+                            ordered.push(Object::Reference(stamp));
+                            doc.get_dictionary_mut(page_id)
+                                .unwrap()
+                                .set("Annots", ordered);
+                            doc.trailer.remove(b"Prev");
+                            let mut combined = Vec::new();
+                            doc.save_to(&mut combined).unwrap();
+                            let pdf = ParsedPdf::open(Arc::new(combined.clone())).unwrap();
+                            let expected = pdf.render_page(1, 1.0).unwrap();
+                            let report =
+                                render_with_report(&pdf, &combined, 1, 1.0, Backend::Dynlex)
+                                    .unwrap();
+                            assert!(report.imported_annotations_dynlex);
+                            assert_eq!(report.raster.rgba, expected.rgba);
+                        } else if rotation == 90 && marks.len() == 3 {
+                            let mut doc = Document::load_mem(&mixed).unwrap();
+                            let page_id = *doc.get_pages().get(&1).unwrap();
+                            let missing_square = doc.add_object(dictionary! {
+                                "Type" => "Annot", "Subtype" => "Square", "F" => 4,
+                                "Rect" => vec![90.into(),100.into(),130.into(),140.into()],
+                                "C" => vec![1.into(),0.into(),0.into()],
+                                "BS" => dictionary! { "W" => 3 },
+                            });
+                            let annots = doc
+                                .get_dictionary(page_id)
+                                .unwrap()
+                                .get(b"Annots")
+                                .unwrap()
+                                .clone();
+                            let (_, annots) = doc.dereference(&annots).unwrap();
+                            let mut ordered = annots.as_array().unwrap().clone();
+                            ordered.push(Object::Reference(missing_square));
+                            doc.get_dictionary_mut(page_id)
+                                .unwrap()
+                                .set("Annots", ordered);
+                            doc.trailer.remove(b"Prev");
+                            let mut combined = Vec::new();
+                            doc.save_to(&mut combined).unwrap();
+                            let pdf = ParsedPdf::open(Arc::new(combined.clone())).unwrap();
+                            let expected = pdf.render_page(1, 1.0).unwrap();
+                            let report =
+                                render_with_report(&pdf, &combined, 1, 1.0, Backend::Dynlex)
+                                    .unwrap();
+                            assert!(report.imported_annotations_dynlex);
+                            assert_eq!(report.raster.rgba, expected.rgba);
+                        }
+                    }
 
                     let mut modified = Document::load_mem(&saved).unwrap();
                     let page_id = *modified.get_pages().get(&1).unwrap();

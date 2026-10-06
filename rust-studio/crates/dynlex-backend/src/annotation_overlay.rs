@@ -104,14 +104,26 @@ pub(crate) fn paint_imported_commands(
     page_points: (f32, f32),
     commands: &[ImportedCommand],
 ) -> Result<Option<Bitmap>, String> {
+    paint_imported_commands_owned(layer_rgba.to_vec(), width, height, page_points, commands)
+}
+
+/// Reuse the caller's page allocation across ordered shape/text batches.
+#[cfg(feature = "kernel")]
+pub(crate) fn paint_imported_commands_owned(
+    mut output: Vec<u8>,
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    commands: &[ImportedCommand],
+) -> Result<Option<Bitmap>, String> {
     if width == 0
         || height == 0
         || width > 4096
         || height > 4096
         || u64::from(width) * u64::from(height) > 6_000_000
         || page_points != (width as f32, height as f32)
-        || layer_rgba.len() != width as usize * height as usize * 4
-        || layer_rgba
+        || output.len() != width as usize * height as usize * 4
+        || output
             .chunks_exact(4)
             .any(|pixel| pixel[..3].iter().any(|channel| *channel > pixel[3]))
         || commands.is_empty()
@@ -137,7 +149,6 @@ pub(crate) fn paint_imported_commands(
     for entry in commands {
         command(&mut scene, entry.kind, entry.rect, entry.tail);
     }
-    let mut output = layer_rgba.to_vec();
     // SAFETY: Rust has validated the complete scene and RGBA buffer before
     // the narrow ABI. The wrapper also checks lengths and page dimensions.
     let status = unsafe {

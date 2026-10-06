@@ -377,8 +377,8 @@ glyphdekking binnen dat vak. OPGS met één glyph is daarom geldig. De
 app-route geeft de paginabuffer aan de volgende tegel door zonder per tegel
 een volledige RGBA-kopie te maken.
 
-**Heropende native FreeText-`/AP`.** De opt-in backend leest nu één opgeslagen
-Open PDF Studio-FreeText-annotatie rechtstreeks uit de PDF en stageert haar
+**Heropende native FreeText-`/AP`.** De opt-in backend leest opgeslagen
+Open PDF Studio-FreeText-annotaties rechtstreeks uit de PDF en stageert hun
 ingebedde Type0/Identity-H-Liberation-Sans-glyphs als OPGS. De Rust-grens
 controleert de exacte FontFile2-bytes, CID-breedtes, Form-BBox, clip,
 operatorvolgorde, grafische toestand en glyphgrenzen vóór de in-process
@@ -389,9 +389,31 @@ FreeText-pagina's met Unicode, spaties, meerdere regels en links/midden/rechts
 op gewone, 0/90/180/270°-gecropte en een A1-achtige pagina zijn volledig
 RGBA-bytegelijk aan Hayro. Een onbekende annotatie-state of extra Form-operator
 valt terug zonder gedeeltelijke DynLex-tekening. De route is nog begrensd tot
-precies één FreeText, één tile van 256×192 binnen de pagina, maximaal 32
-zichtbare glyphs en het exacte ingebedde font; gemengde geïmporteerde
-FreeText/Square/Highlight-annotaties volgen later.
+één tile van 256×192 en maximaal 32 zichtbare glyphs **per FreeText**, en
+het exacte ingebedde font.
+
+De geïmporteerde annotatieroute parseert de PDF nu eenmaal, stageert alle
+ondersteunde `/AP`-Forms vóór het tekenen en verwerkt FreeText, Square,
+Highlight en de begrensde dekkende Stamp in PDF-volgorde. Opeenvolgende
+vormopdrachten delen een OPAN-aanroep; een FreeText-run onderbreekt de batch
+en gebruikt OPGS zonder een volledige paginakopie. Square/Highlight zonder
+`/AP` blijven, net als in Hayro's preview, na de Forms staan. Twaalf extra
+Save As-/PDF-mengproeven met twee overlappende teksten, kruisende vormen,
+Stamp, een ontbrekende Square-`/AP`, 90°/CropBox en gekleurde onderlaag zijn
+volledig RGBA-bytegelijk aan Hayro. Onbekende annotatie-inhoud laat de hele
+pagina veilig op Hayro terugvallen. Algemene tekstfonts, grotere of gesplitste
+geïmporteerde glyphruns en overige `/AP`-inhoud zijn nog niet ondersteund.
+
+Een kleine diagnostische, afwisselend gepaarde releaseproef op de gemengde
+90°/CropBox-pagina met twee FreeText-Forms en twee vormen gaf bij twintig
+warme in-process renders een mediaan van **4,74 ms** voor Hayro-paginainhoud
+plus DynLex-annotaties tegen **0,41 ms** voor Hayro's volledige pagina. De
+DynLex-route is hier dus duidelijk trager. Beide uitkomsten zijn bij iedere
+ronde bytegewijs vergeleken; OS-cache en `ParsedPdf` bleven warm. Dit is geen
+algemene prestatiemeting of RSS-vergelijking. Reproduceer met
+`OPDS_BENCH_IMPORTED_ANNOTATIONS=1 cargo test --release --offline -p
+opds-native-app --features dynlex-experimental
+reimported_native_freetext_appearance_uses_dynlex_glyphs -- --nocapture`.
 
 Negen volledige Save As-/Hayro-proeven zijn RGBA-bytegelijk:
 595×842 met twee posities, 842×595 met 90° en verschoven CropBox op twee
