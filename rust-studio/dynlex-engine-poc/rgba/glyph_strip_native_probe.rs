@@ -1,7 +1,7 @@
-//! Validate OPM2 in Rust, then compare native DynLex composition to legacy probe.
+//! Validate OPM2 in Rust, then time the native DynLex strip coverage kernel.
 use std::{env, error::Error, fs, time::Instant};
-#[path = "glyph_multi_probe.rs"]
-mod legacy;
+#[path = "glyph_multi_validation.rs"]
+mod validation;
 
 #[link(name = "opds_dynlex_glyph_strip", kind = "static")]
 unsafe extern "C" {
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if args.next().is_some() {
         return Err("extra argument".into());
     }
-    let contours = legacy::read_scene(&fs::read(input)?)?;
+    let contours = validation::read_scene(&fs::read(input)?)?;
     let mut quantized = Vec::with_capacity(contours.len());
     for contour in &contours {
         let mut path = Vec::with_capacity(contour.len());
@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     // Topology must still hold after the screen-coordinate f32 narrowing
     // actually used by the DynLex tile rasterizer.
-    legacy::validate_topology(&quantized)?;
+    validation::validate_topology(&quantized)?;
     let mut words = Vec::<u64>::new();
     words.push(u64::from_le_bytes(*b"OPM2\x01\0\0\0"));
     words.push((192_u64 << 32) | 256);

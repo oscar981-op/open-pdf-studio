@@ -411,12 +411,28 @@ geïmporteerde glyphruns boven deze grenzen en overige `/AP`-inhoud zijn nog
 niet ondersteund.
 
 Een kleine diagnostische, afwisselend gepaarde releaseproef op de gemengde
-90°/CropBox-pagina met twee FreeText-Forms en twee vormen gaf bij twintig
-warme in-process renders een mediaan van **4,74 ms** voor Hayro-paginainhoud
-plus DynLex-annotaties tegen **0,41 ms** voor Hayro's volledige pagina. De
-DynLex-route is hier dus duidelijk trager. Beide uitkomsten zijn bij iedere
-ronde bytegewijs vergeleken; OS-cache en `ParsedPdf` bleven warm. Dit is geen
-algemene prestatiemeting of RSS-vergelijking. Reproduceer met
+90°/CropBox-pagina met twee FreeText-Forms en twee vormen gaf vóór de
+glyphbegrenzing bij twintig warme in-process renders een mediaan van
+**4,74 ms** voor Hayro-paginainhoud plus DynLex-annotaties tegen **0,41 ms**
+voor Hayro's volledige pagina. Profielmetingen wezen naar de glyphpaintfase,
+niet naar PDF-parsing. De DynLex-stripkernel wist daarom eerst zijn volledige
+uitvoerbuffer en doorloopt vervolgens alleen 4×4-tegels rond de vooraf door
+Rust gevalideerde glyphgrenzen, met één tegel marge. Een uit dezelfde native
+Unicode-fixture geëxtraheerd OPM2-glyph gaf in dertig afwisselende A/B-paren,
+elk met honderd herhaalde calls per proces, **531,15→72,25 µs** mediaan per
+oude/nieuwe kernelcall; nieuw won 30/30 paren. Vijfhonderd deterministische
+convexe OPM2-omtrekken en vijfhonderd geneste contouren met gaten leverden
+exact dezelfde 49.152 coveragebytes bij beide kernels. Op de volledige
+gemengde PDF-proef zonder profieluitvoer werd de nieuwe route **1,54 ms**
+tegen **0,35 ms** Hayro-mediaan (twintig warme paren): nog steeds trager.
+De oude en nieuwe volledige-routeproeven zijn niet rechtstreeks gepaard;
+OS-cache en `ParsedPdf` bleven warm. Dit is geen algemene prestatie- of
+RSS-meting. De ruwe gepaarde kernelmetingen en maximale proces-RSS staan in
+`dynlex-engine-poc/rgba/glyph-strip-tile-bounds-bench-2026-10-06.json`;
+de invoer staat in `rgba/fixtures/glyph-strip-tile-bounds.opm`; de oude
+kernelbron is die van commit `4ea5f67e`. `bench_glyph_multi_bbox.py` voert de
+afwisselende probeparen uit. Reproduceer
+de volledige route met
 `OPDS_BENCH_IMPORTED_ANNOTATIONS=1 cargo test --release --offline -p
 opds-native-app --features dynlex-experimental
 reimported_native_freetext_appearance_uses_dynlex_glyphs -- --nocapture`.

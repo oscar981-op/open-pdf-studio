@@ -1,0 +1,317 @@
+{
+  "rounds": 30,
+  "repeats_per_process": 100,
+  "note": "Warm process A/B; kernel timing excludes validation, PDF and process startup",
+  "scenes": {
+    "glyph-strip-tile-bounds.opm": {
+      "median_old_ms": 0.53115,
+      "median_new_ms": 0.07225000000000001,
+      "median_paired_delta_ms": -0.44905,
+      "new_wins": 30,
+      "median_old_max_rss_kib": 2388.0,
+      "median_new_max_rss_kib": 2402.0,
+      "samples": [
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5596,
+            "process_max_rss_kib": 2296
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0699,
+            "process_max_rss_kib": 2404
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0837,
+            "process_max_rss_kib": 2428
+          },
+          "old": {
+            "kernel_ms_per_call": 0.521,
+            "process_max_rss_kib": 2380
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5032,
+            "process_max_rss_kib": 2328
+          },
+          "new": {
+            "kernel_ms_per_call": 0.1255,
+            "process_max_rss_kib": 2436
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.1124,
+            "process_max_rss_kib": 2480
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5765,
+            "process_max_rss_kib": 2312
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5441,
+            "process_max_rss_kib": 2376
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0516,
+            "process_max_rss_kib": 2364
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0788,
+            "process_max_rss_kib": 2340
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5189,
+            "process_max_rss_kib": 2400
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5039,
+            "process_max_rss_kib": 2376
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0969,
+            "process_max_rss_kib": 2436
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0573,
+            "process_max_rss_kib": 2400
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5239,
+            "process_max_rss_kib": 2296
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.4971,
+            "process_max_rss_kib": 2404
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0978,
+            "process_max_rss_kib": 2356
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0746,
+            "process_max_rss_kib": 2400
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5485,
+            "process_max_rss_kib": 2324
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.4668,
+            "process_max_rss_kib": 2328
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0462,
+            "process_max_rss_kib": 2412
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0874,
+            "process_max_rss_kib": 2436
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5374,
+            "process_max_rss_kib": 2400
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.6017,
+            "process_max_rss_kib": 2408
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0586,
+            "process_max_rss_kib": 2500
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0816,
+            "process_max_rss_kib": 2304
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5576,
+            "process_max_rss_kib": 2436
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5599,
+            "process_max_rss_kib": 2336
+          },
+          "new": {
+            "kernel_ms_per_call": 0.054,
+            "process_max_rss_kib": 2404
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0753,
+            "process_max_rss_kib": 2300
+          },
+          "old": {
+            "kernel_ms_per_call": 0.6127,
+            "process_max_rss_kib": 2440
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5531,
+            "process_max_rss_kib": 2320
+          },
+          "new": {
+            "kernel_ms_per_call": 0.053,
+            "process_max_rss_kib": 2404
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0556,
+            "process_max_rss_kib": 2328
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5037,
+            "process_max_rss_kib": 2432
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5407,
+            "process_max_rss_kib": 2376
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0952,
+            "process_max_rss_kib": 2332
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0535,
+            "process_max_rss_kib": 2328
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5488,
+            "process_max_rss_kib": 2404
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.4943,
+            "process_max_rss_kib": 2332
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0844,
+            "process_max_rss_kib": 2404
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.1146,
+            "process_max_rss_kib": 2404
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5282,
+            "process_max_rss_kib": 2396
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5411,
+            "process_max_rss_kib": 2412
+          },
+          "new": {
+            "kernel_ms_per_call": 0.1207,
+            "process_max_rss_kib": 2324
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0822,
+            "process_max_rss_kib": 2376
+          },
+          "old": {
+            "kernel_ms_per_call": 0.5922,
+            "process_max_rss_kib": 2412
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5341,
+            "process_max_rss_kib": 2416
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0541,
+            "process_max_rss_kib": 2324
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.054,
+            "process_max_rss_kib": 2324
+          },
+          "old": {
+            "kernel_ms_per_call": 0.4778,
+            "process_max_rss_kib": 2404
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.4574,
+            "process_max_rss_kib": 2304
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0532,
+            "process_max_rss_kib": 2424
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0527,
+            "process_max_rss_kib": 2404
+          },
+          "old": {
+            "kernel_ms_per_call": 0.4609,
+            "process_max_rss_kib": 2316
+          }
+        },
+        {
+          "old": {
+            "kernel_ms_per_call": 0.5118,
+            "process_max_rss_kib": 2480
+          },
+          "new": {
+            "kernel_ms_per_call": 0.0533,
+            "process_max_rss_kib": 2356
+          }
+        },
+        {
+          "new": {
+            "kernel_ms_per_call": 0.0543,
+            "process_max_rss_kib": 2408
+          },
+          "old": {
+            "kernel_ms_per_call": 0.4865,
+            "process_max_rss_kib": 2404
+          }
+        }
+      ]
+    }
+  }
+}

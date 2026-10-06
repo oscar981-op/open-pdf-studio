@@ -1,25 +1,70 @@
 import renderer.dl
 
-# Experimental scalar f32 tile-strip winding for a Rust-validated OPM2 scene.
+# Bounded scalar f32 tile-strip winding for a Rust-validated OPM2 scene.
 # The equations follow independently inspected Apache-2.0/MIT vello_common
-# 0.0.8 strip.rs. This function has no PDF parser or production app routing.
+# 0.0.8 strip.rs. The opt-in native app routes validated glyphs here.
 function strip raster {cstring:scene} into {cstring:output}:
     execute:
         set contours to unsigned word at 16 in scene
+        # Clear the full ABI output even when the validated glyph occupies
+        # only a small set of 4x4 tiles. Callers may reuse the same buffer.
+        set pixel to 0
+        loop while pixel < 49152:
+            store 0 into output at pixel
+            set pixel to pixel + 1
+        set min_x to 256.0 as a 32 bit float
+        set min_y to 192.0 as a 32 bit float
+        set max_x to 0.0 as a 32 bit float
+        set max_y to 0.0 as a 32 bit float
+        set bounds_offset to 24
+        set bounds_contour to 0
+        loop while bounds_contour < contours:
+            set bounds_count to unsigned word at bounds_offset in scene
+            set bounds_start to bounds_offset + 8
+            set bounds_points to (scene + bounds_start) as a pointer to a float
+            set bounds_index to 0
+            loop while bounds_index < bounds_count:
+                set bx to (item (bounds_index * 2) of bounds_points) as a 32 bit float
+                set by to (item (bounds_index * 2 + 1) of bounds_points) as a 32 bit float
+                if bx < min_x:
+                    set min_x to bx
+                if by < min_y:
+                    set min_y to by
+                if bx > max_x:
+                    set max_x to bx
+                if by > max_y:
+                    set max_y to by
+                set bounds_index to bounds_index + 1
+            set bounds_offset to bounds_start + bounds_count * 16
+            set bounds_contour to bounds_contour + 1
+        # Include a one-tile margin on each side for boundary coverage.
+        # Closed paths have zero winding outside their point bounds.
+        set tx_start to (min_x as an integer) / 4
+        if tx_start > 0:
+            set tx_start to tx_start - 1
+        set ty_start to (min_y as an integer) / 4
+        if ty_start > 0:
+            set ty_start to ty_start - 1
+        set tx_end to (max_x as an integer) / 4 + 2
+        if tx_end > 64:
+            set tx_end to 64
+        set ty_end to (max_y as an integer) / 4 + 2
+        if ty_end > 48:
+            set ty_end to 48
         set winding_bytes to allocate 16 bytes
         set location_bytes to allocate 64 bytes
         set acc_bytes to allocate 16 bytes
         set winding to winding_bytes as a pointer to a 32 bit float
         set location to location_bytes as a pointer to a 32 bit float
         set acc to acc_bytes as a pointer to a 32 bit float
-        set ty to 0
-        loop while ty < 48:
+        set ty to ty_start
+        loop while ty < ty_end:
             set row to 0
             loop while row < 4:
                 store (0.0 as a 32 bit float) into winding at row
                 set row to row + 1
-            set tx to 0
-            loop while tx < 64:
+            set tx to tx_start
+            loop while tx < tx_end:
                 set tile_origin_x to (tx * 4) as a 32 bit float
                 set top to (ty * 4) as a 32 bit float
                 set col to 0
