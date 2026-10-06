@@ -14,6 +14,19 @@ unsafe extern "C" {
     ) -> i32;
 }
 
+#[link(name = "opds_dynlex_glyph_compositor", kind = "static")]
+unsafe extern "C" {
+    fn opds_glyph_direct_compose(
+        scene: *const u8,
+        scene_len: i32,
+        output: *mut u8,
+        output_len: i32,
+    ) -> i32;
+}
+
+const GLYPH_PIXELS: usize = 256 * 192;
+const COMPOSITOR_BYTES: usize = 36 + GLYPH_PIXELS;
+
 fn words_for_opm(bytes: &[u8]) -> Result<Vec<u64>, Box<dyn Error>> {
     let contours = legacy::read_scene(bytes)?;
     let mut quantized = Vec::with_capacity(contours.len());
@@ -98,21 +111,9 @@ fn render_layer(scenes: &[(Vec<u64>, [u8; 3])]) -> Result<Vec<u8>, Box<dyn Error
     // Painting each glyph directly over white differs by one byte at some
     // colored overlapping antialiased edges.
     let mut layer = vec![0_u8; 256 * 192 * 4];
-    let mut alpha = vec![0_u8; 256 * 192];
+    let mut alpha = vec![0_u8; GLYPH_PIXELS];
     for (words, color) in scenes {
-        // SAFETY: complete OPM2/Rust topology validation happened before ABI,
-        // and both aligned input and writable output outlive this call.
-        let status = unsafe {
-            opds_glyph_strip_raster(
-                words.as_ptr().cast(),
-                i32::try_from(words.len() * 8)?,
-                alpha.as_mut_ptr(),
-                i32::try_from(alpha.len())?,
-            )
-        };
-        if status != 0 {
-            return Err(format!("DynLex glyph strip status {status}").into());
-        }
+        raster_glyph(words, &mut alpha)?;
         for (pixel, coverage) in alpha.iter().enumerate() {
             // Opaque RGB ink through the DynLex glyph-coverage mask, in PDF
             // content order. This composition still belongs to the Rust probe.
@@ -129,6 +130,100 @@ fn render_layer(scenes: &[(Vec<u64>, [u8; 3])]) -> Result<Vec<u8>, Box<dyn Error
         }
     }
     Ok(layer)
+}
+
+fn raster_glyph(words: &[u64], alpha: &mut [u8]) -> Result<(), Box<dyn Error>> {
+    // SAFETY: complete OPM2/Rust topology validation happened before ABI,
+    // and both aligned input and writable output outlive this call.
+    let status = unsafe {
+        opds_glyph_strip_raster(
+            words.as_ptr().cast(),
+            i32::try_from(words.len() * 8)?,
+            alpha.as_mut_ptr(),
+            i32::try_from(alpha.len())?,
+        )
+    };
+    if status != 0 {
+        return Err(format!("DynLex glyph strip status {status}").into());
+    }
+    Ok(())
+}
+
+/// Directly paint each validated glyph over an existing opaque page. This
+/// follows the non-isolated FreeText appearance order: an isolated glyph
+/// group produces different rounding on colored page content.
+pub fn render_opgs_over_opaque(
+    scene: &[u8],
+    base: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let scenes = read_scene(scene)?;
+    let pixels = usize::try_from(width)?
+        .checked_mul(usize::try_from(height)?)
+        .ok_or("glyph page dimensions overflow")?;
+    if width == 0
+        || width > 256
+        || height == 0
+        || height > 4096
+        || base.len() != pixels.checked_mul(4).ok_or("glyph RGBA length overflow")?
+        || base.chunks_exact(4).any(|pixel| pixel[3] != 255)
+        || clip[0] >= clip[2]
+        || clip[1] >= clip[3]
+        || clip[2] > width
+        || clip[3] > height.min(192)
+    {
+        return Err("glyph page is outside bounded opaque route".into());
+    }
+    let mut output = base.to_vec();
+    let mut alpha = vec![0_u8; GLYPH_PIXELS];
+    let mut command = vec![0_u8; COMPOSITOR_BYTES];
+    command[0..4].copy_from_slice(b"OPGC");
+    command[4..8].copy_from_slice(&1_u32.to_le_bytes());
+    command[8..12].copy_from_slice(&width.to_le_bytes());
+    command[12..16].copy_from_slice(&height.to_le_bytes());
+    for (words, color) in scenes {
+        raster_glyph(&words, &mut alpha)?;
+        let mut bounds = [256_u32, 192, 0, 0];
+        for (index, &coverage) in alpha.iter().enumerate() {
+            if coverage == 0 {
+                continue;
+            }
+            let x = (index % 256) as u32;
+            let y = (index / 256) as u32;
+            if x < clip[0] || x >= clip[2] || y < clip[1] || y >= clip[3] {
+                return Err("glyph antialias coverage extends beyond appearance clip".into());
+            }
+            bounds[0] = bounds[0].min(x);
+            bounds[1] = bounds[1].min(y);
+            bounds[2] = bounds[2].max(x + 1);
+            bounds[3] = bounds[3].max(y + 1);
+        }
+        if bounds[2] == 0 {
+            continue;
+        }
+        for (index, value) in bounds.into_iter().enumerate() {
+            command[16 + index * 4..20 + index * 4].copy_from_slice(&value.to_le_bytes());
+        }
+        command[32..35].copy_from_slice(&color);
+        command[36..].copy_from_slice(&alpha);
+        // SAFETY: Rust validated the full OPGS/OPM2 input, constructed the
+        // fixed OPGC command, checked bounds and allocated the output. The
+        // LLVM ABI wrapper rechecks lengths and header before DynLex enters.
+        let status = unsafe {
+            opds_glyph_direct_compose(
+                command.as_ptr(),
+                i32::try_from(command.len())?,
+                output.as_mut_ptr(),
+                i32::try_from(output.len())?,
+            )
+        };
+        if status != 0 {
+            return Err(format!("DynLex glyph compositor status {status}").into());
+        }
+    }
+    Ok(output)
 }
 
 fn over_white(layer: &[u8]) -> Vec<u8> {

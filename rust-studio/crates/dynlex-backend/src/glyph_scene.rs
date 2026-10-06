@@ -31,6 +31,24 @@ pub fn render_validated_glyph_layer(scene: &[u8]) -> Result<Bitmap, String> {
     })
 }
 
+/// Paint the validated glyphs directly over an opaque page, in PDF content
+/// order, using the separate DynLex 8-bit compositor for each glyph.
+pub fn render_validated_glyph_scene_over_opaque(
+    scene: &[u8],
+    base_rgba: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+) -> Result<Bitmap, String> {
+    let rgba = core::render_opgs_over_opaque(scene, base_rgba, width, height, clip)
+        .map_err(|error| error.to_string())?;
+    Ok(Bitmap {
+        width,
+        height,
+        rgba,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

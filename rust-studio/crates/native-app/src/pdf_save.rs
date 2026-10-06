@@ -1190,7 +1190,7 @@ mod tests {
             .unwrap()
             .render_page(1, 1.0)
             .unwrap();
-        let live = crate::native_text_scene::render_white_page_text_box(
+        let live = crate::native_text_scene::render_opaque_page_text_box(
             &source,
             0,
             &base.rgba,
@@ -1201,8 +1201,13 @@ mod tests {
         )
         .unwrap()
         .expect("the bounded Text Box should paint with DynLex");
-        assert_eq!(live, original.rgba);
-        assert!(crate::native_text_scene::render_white_page_text_box(
+        let mismatches = live
+            .iter()
+            .zip(&original.rgba)
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(mismatches, 0, "blank-page glyph composition differs");
+        assert!(crate::native_text_scene::render_opaque_page_text_box(
             &saved,
             0,
             &base.rgba,
@@ -1213,12 +1218,12 @@ mod tests {
         )
         .unwrap()
         .is_none());
-        let mut colored = base.rgba.clone();
-        colored[0] = 254;
-        assert!(crate::native_text_scene::render_white_page_text_box(
+        let mut transparent = base.rgba.clone();
+        transparent[3] = 254;
+        assert!(crate::native_text_scene::render_opaque_page_text_box(
             &source,
             0,
-            &colored,
+            &transparent,
             base.width,
             base.height,
             (base.page_width_pt, base.page_height_pt),
@@ -1254,7 +1259,7 @@ mod tests {
         let mut rotated = Vec::new();
         inherited_rotation.save_to(&mut rotated).unwrap();
         assert!(flatten_native_free_text_appearance(&rotated, 1).is_err());
-        assert!(crate::native_text_scene::render_white_page_text_box(
+        assert!(crate::native_text_scene::render_opaque_page_text_box(
             &rotated,
             0,
             &base.rgba,
@@ -1366,7 +1371,7 @@ mod tests {
             if let Err(error) = crate::native_text_scene::stage_native_text_box_scene(&mark) {
                 rejected.push((value, error));
             }
-            let rendered = crate::native_text_scene::render_white_page_text_box(
+            let rendered = crate::native_text_scene::render_opaque_page_text_box(
                 &source,
                 0,
                 &base.rgba,
@@ -1408,7 +1413,7 @@ mod tests {
 
     #[cfg(feature = "dynlex-experimental")]
     #[test]
-    fn colored_page_text_keeps_fallback_until_group_blend_matches() {
+    fn colored_page_text_direct_dynlex_matches_saved_appearance() {
         use opds_engine_probe::ParsedPdf;
 
         let mut doc = Document::load_mem(&source_pdf()).unwrap();
@@ -1424,7 +1429,7 @@ mod tests {
             .unwrap()
             .as_stream_mut()
             .unwrap()
-            .content = b"0.2 0.5 0.8 rg 0 0 200 300 re f".to_vec();
+            .set_plain_content(b"0.2 0.5 0.8 rg 0 0 200 300 re f".to_vec());
         let mut source = Vec::new();
         doc.save_to(&mut source).unwrap();
         let base = ParsedPdf::open(Arc::new(source.clone()))
@@ -1435,10 +1440,10 @@ mod tests {
             id: 11,
             page: 0,
             bounds: Rect {
-                x: 10.0,
-                y: 28.0,
-                width: 180.0,
-                height: 64.0,
+                x: 20.0,
+                y: 30.0,
+                width: 110.0,
+                height: 58.0,
             },
             kind: Kind::Text {
                 value: "ΩΩΩ".into(),
@@ -1448,13 +1453,27 @@ mod tests {
             },
         };
         let saved = export_annotations(&source, &[mark.clone()]).unwrap();
-        let expected = ParsedPdf::open(Arc::new(saved))
+        let expected = ParsedPdf::open(Arc::new(saved.clone()))
             .unwrap()
             .render_page(1, 1.0)
             .unwrap();
         let scene = crate::native_text_scene::stage_native_text_box_scene(&mark).unwrap();
         let layer = opds_dynlex_backend::render_validated_glyph_layer(&scene).unwrap();
-        assert!(crate::native_text_scene::render_white_page_text_box(
+        if let Some(directory) = std::env::var_os("OPDS_COLORED_TEXT_FIXTURE_DIR") {
+            let directory = std::path::PathBuf::from(directory);
+            std::fs::create_dir_all(&directory).unwrap();
+            for (name, bytes) in [
+                ("source.pdf", source.as_slice()),
+                ("saved.pdf", saved.as_slice()),
+                ("scene.opgs", scene.as_slice()),
+                ("base.rgba", base.rgba.as_slice()),
+                ("hayro.rgba", expected.rgba.as_slice()),
+                ("dynlex-layer.rgba", layer.rgba.as_slice()),
+            ] {
+                std::fs::write(directory.join(name), bytes).unwrap();
+            }
+        }
+        let live = crate::native_text_scene::render_opaque_page_text_box(
             &source,
             0,
             &base.rgba,
@@ -1464,8 +1483,15 @@ mod tests {
             &mark,
         )
         .unwrap()
-        .is_none());
+        .expect("opaque colored page should use direct DynLex glyph composition");
+        let mismatches = live
+            .iter()
+            .zip(&expected.rgba)
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(mismatches, 0, "opaque-page direct composition differs");
         let mut differing_channels = 0_usize;
+        let mut direct_differences = 0_usize;
         for y in 0..192_usize {
             for x in 0..200_usize {
                 let at = (y * 200 + x) * 4;
@@ -1475,16 +1501,47 @@ mod tests {
                     let bg = u32::from(base.rgba[at + channel]);
                     let fg = u32::from(layer.rgba[tile_at + channel]);
                     let attenuation = bg * (255 - alpha);
-                    // The current low-precision SrcOver formula cannot yet
-                    // reproduce the saved PDF's colored antialias edges.
+                    // Reblending a precomposed glyph group produces a
+                    // different 8-bit result than painting the PDF glyphs
+                    // directly over the page in appearance order.
                     let candidate = (fg + (attenuation + 255) / 256).min(255) as u8;
                     if candidate != expected.rgba[at + channel] {
                         differing_channels += 1;
+                    }
+                    let direct = ((u32::from([0_u8, 80, 240][channel]) * alpha + attenuation + 255)
+                        >> 8) as u8;
+                    if direct != expected.rgba[at + channel] {
+                        direct_differences += 1;
                     }
                 }
             }
         }
         assert_eq!(differing_channels, 207);
+        assert_eq!(direct_differences, 0);
+
+        // A visible opaque bitmap does not prove that the PDF content itself
+        // covers the page. Do not apply the direct path to partial paints or
+        // extra graphics operations; the Iced annotation path handles them.
+        let mut partial = Document::load_mem(&source).unwrap();
+        partial
+            .get_object_mut(contents_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(b"0.2 0.5 0.8 rg 20 20 100 100 re f".to_vec());
+        let mut partial_bytes = Vec::new();
+        partial.save_to(&mut partial_bytes).unwrap();
+        assert!(crate::native_text_scene::render_opaque_page_text_box(
+            &partial_bytes,
+            0,
+            &base.rgba,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &mark,
+        )
+        .unwrap()
+        .is_none());
     }
 
     #[cfg(feature = "dynlex-experimental")]
@@ -1558,7 +1615,7 @@ mod tests {
                 .unwrap()
                 .render_page(1, 1.0)
                 .unwrap();
-            let actual = crate::native_text_scene::render_white_page_text_box(
+            let actual = crate::native_text_scene::render_opaque_page_text_box(
                 &source,
                 0,
                 &base.rgba,
@@ -1569,7 +1626,12 @@ mod tests {
             )
             .unwrap()
             .expect("white rotated/CropBox page must use DynLex");
-            assert_eq!(actual, expected.rgba, "text differs at /Rotate {rotation}");
+            let mismatches = actual
+                .iter()
+                .zip(&expected.rgba)
+                .filter(|(a, b)| a != b)
+                .count();
+            assert_eq!(mismatches, 0, "text differs at /Rotate {rotation}");
         }
     }
 

@@ -482,9 +482,15 @@ area-libraries die hierboven zijn gebouwd:
 cargo build --release --offline -p opds-opdl-adapter --bin stage_type0_text
 cargo build --release --offline -p opds-engine-probe \
   --bin opds-engine-probe --bin glyph_run_vello_oracle
+python3 dynlex-engine-poc/rgba/build_glyph_compositor.py \
+  --compiler "$HOME/.cache/opds-toolchains/dynlex-0.0.1/dynlex/bin/dynlex" \
+  --opt "$HOME/.cache/opds-toolchains/llvm-20/root/usr/bin/opt-20" \
+  --llc "$HOME/.cache/opds-toolchains/llvm-20/root/usr/bin/llc-20" \
+  --output-dir /tmp/opds-glyph-compositor-build
 rustc --edition=2024 -O -A dead_code \
   dynlex-engine-poc/rgba/glyph_run_probe.rs \
   -L native=/tmp/opds-glyph-strip-quad-build \
+  -L native=/tmp/opds-glyph-compositor-build \
   -L native=/tmp/opds-curve-pixel-build \
   -o /tmp/opds-glyph-run-probe
 python3 dynlex-engine-poc/rgba/verify_real_glyph_run.py \

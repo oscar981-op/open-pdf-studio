@@ -1,0 +1,39 @@
+import renderer.dl
+
+# OPGC-v1: Rust-validated direct glyph paint over an opaque RGBA page.
+# Header: magic, version, width, height, left, top, right, bottom, RGB+flags.
+# The remaining 49,152 bytes are DynLex glyph coverage in a 256x192 tile.
+# Unlike an isolated group, each glyph is blended over the current page in
+# drawing order, matching the PDF FreeText appearance path on colored pages.
+function composite {cstring:scene} into {cstring:rgba}:
+    execute:
+        set width to unsigned word at 8 in scene
+        set left to unsigned word at 16 in scene
+        set top to unsigned word at 20 in scene
+        set right to unsigned word at 24 in scene
+        set bottom to unsigned word at 28 in scene
+        set red to unsigned byte at 32 in scene
+        set green to unsigned byte at 33 in scene
+        set blue to unsigned byte at 34 in scene
+        set y to top
+        loop while y < bottom:
+            set x to left
+            loop while x < right:
+                set mask_index to 36 + y * 256 + x
+                set coverage to unsigned byte at mask_index in scene
+                if coverage > 0:
+                    set pixel to (y * width + x) * 4
+                    set old_red to unsigned byte at pixel in rgba
+                    set old_green to unsigned byte at (pixel + 1) in rgba
+                    set old_blue to unsigned byte at (pixel + 2) in rgba
+                    store ((blend old_red with antialiased red at coverage) as a byte) into rgba at pixel
+                    store ((blend old_green with antialiased green at coverage) as a byte) into rgba at (pixel + 1)
+                    store ((blend old_blue with antialiased blue at coverage) as a byte) into rgba at (pixel + 2)
+                set x to x + 1
+            set y to y + 1
+        return 0
+
+set dummy_scene to allocate 49188 bytes
+set dummy_rgba to allocate 4 bytes
+set status to composite dummy_scene into dummy_rgba
+print status as a line

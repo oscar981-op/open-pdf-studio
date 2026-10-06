@@ -138,15 +138,24 @@ kwartslagen zijn volledig RGBA-bytegelijk met de opgeslagen /AP in Hayro.
 Glyphs met uitsluitend rechte contouren gebruiken dezelfde
 1000-unit pure-Rust fontuitlezing als Hayro: de ruwe TrueType-coördinaten
 gaven bij `Hello` nog 33 afwijkende kleurbytes en zijn daarom niet gebruikt.
-Een gekleurde onderlaag, tekst die clipping vraagt, ontbrekende glyph of een vorm buiten de tegel valt
+Een tekst die clipping vraagt, ontbrekende glyph of een vorm buiten de tegel valt
 terug zonder gedeeltelijke DynLex-bitmap. De opgeslagen scènebytes en de
 modelscène verschillen op lage floatbits, maar hun gerenderde pixels zijn
 gelijk. Niet-ondersteunde glyphcontouren, clipping en gemengde lagen
 vereisen verdere pariteitstests; dit is nog geen volledige Text Box-dekking.
-Een afzonderlijke gekleurde-paginaproef laat zien waarom de fallback nog nodig
-is: eenvoudige 8-bit-SrcOver van de huidige premultiplied glyphlaag wijkt op
-207 kleurkanalen af van een echte opgeslagen PDF. De proef bewaakt dat de app
-voor zulke pagina's niet stilzwijgend die onjuiste compositie gebruikt.
+Een afzonderlijke DynLex OPGC-v1-kernel schildert gevalideerde glyphs nu
+rechtstreeks in tekenvolgorde over de bestaande bitmap. Een zeer smalle
+PDF-inhoudscontrole accepteert daarvoor uitsluitend één expliciete dekkende
+`rg re f`-rechthoek die de hele zichtbare CropBox omvat. De gekleurde
+200×300-proef is dan volledig bytegelijk aan een opgeslagen PDF-appearance;
+hermenging van de premultiplied glyphlaag wijkt daar op 207 kleurkanalen af.
+Een lege pagina gebruikt juist de eerder bewezen geïsoleerde glyphtegel:
+direct schilderen over de zichtbare witte bitmap wijkt daar af omdat wit
+buiten de PDF-pagina-inhoudsgroep ligt. Een gedeeltelijke vulling, extra
+contentoperator, bestaande annotatie of onzekere ondergrond valt terug op
+Iced. De compositor bewijst dus nog geen gemengde raster-/vectorachtergrond
+of volledige Text Box-dekking; paginacontent-alpha en transparantiegroepen
+moeten expliciet worden meegenomen voordat deze grens kan worden verbreed.
 
 Gerichte reproductie vanuit `rust-studio`:
 

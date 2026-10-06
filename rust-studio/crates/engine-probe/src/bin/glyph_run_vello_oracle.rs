@@ -75,8 +75,30 @@ fn main() -> Result<(), Box<dyn Error>> {
         .next()
         .ok_or("usage: glyph_run_vello_oracle INPUT.opgs OUTPUT.rgba")?;
     let output = args.next().ok_or("missing output")?;
-    if args.next().is_some() {
-        return Err("extra argument".into());
+    let mut transparent = false;
+    let mut direct = false;
+    let mut background = None;
+    for option in args {
+        let option = option.to_string_lossy();
+        match option.as_ref() {
+            "--transparent" => transparent = true,
+            "--direct" => direct = true,
+            _ => {
+                let values = option
+                    .strip_prefix("--background=")
+                    .ok_or("unknown argument")?
+                    .split(',')
+                    .map(str::parse::<u8>)
+                    .collect::<Result<Vec<_>, _>>()?;
+                if values.len() != 3 || background.is_some() {
+                    return Err("invalid background RGB".into());
+                }
+                background = Some([values[0], values[1], values[2]]);
+            }
+        }
+    }
+    if transparent && background.is_some() {
+        return Err("transparent and RGB background conflict".into());
     }
     let bytes = fs::read(input)?;
     if bytes.len() < 20
@@ -91,10 +113,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     let count = u32_at(&bytes, 16)? as usize;
     let mut context = RenderContext::new(256, 192);
-    context.set_paint(css::WHITE);
-    context.fill_rect(&Rect::new(0.0, 0.0, 256.0, 192.0));
+    if !transparent {
+        context.set_paint(match background {
+            Some([r, g, b]) => AlphaColor::<Srgb>::from_rgb8(r, g, b),
+            None => css::WHITE,
+        });
+        context.fill_rect(&Rect::new(0.0, 0.0, 256.0, 192.0));
+    }
     context.push_clip_path(&Rect::new(0.0, 0.0, 256.0, 192.0).to_path(0.1));
-    context.push_layer(None, None, Some(1.0), None, None);
+    if !direct {
+        context.push_layer(None, None, Some(1.0), None, None);
+    }
     let mut at = 20;
     for _ in 0..count {
         if at + 44 > bytes.len() {
@@ -118,7 +147,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     if at != bytes.len() {
         return Err("trailing OPGS bytes".into());
     }
-    context.pop_layer();
+    if !direct {
+        context.pop_layer();
+    }
     context.pop_clip_path();
     context.flush();
     let mut pixmap = Pixmap::new(256, 192);

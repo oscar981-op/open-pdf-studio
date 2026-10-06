@@ -1,50 +1,118 @@
 //! Direct, bounded native Text Box -> OPGS staging for the opt-in DynLex path.
 //! The model and same Liberation Sans bytes used by Save As are the inputs.
 use super::text_layout;
-use lopdf::Document;
+use lopdf::{content::Content, Document, Object};
 use opds_native_core::annotations::{Annotation, Kind, TextAlign, TEXT_FONT_SIZES};
 use opds_opdl_adapter::text_quad_glyph::{self, Source};
 
-fn supported_page_geometry(source: &[u8], page: usize, width: u32, height: u32) -> bool {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PagePaint {
+    Blank,
+    OpaqueFill,
+}
+
+fn numeric(object: &Object) -> Option<f64> {
+    match object {
+        Object::Integer(value) => Some(*value as f64),
+        Object::Real(value) => Some(f64::from(*value)),
+        _ => None,
+    }
+}
+
+fn supported_page_paint(source: &[u8], page: usize, width: u32, height: u32) -> Option<PagePaint> {
     if source.len() > 16_000_000 {
-        return false;
+        return None;
     }
     let Ok(doc) = Document::load_mem(source) else {
-        return false;
+        return None;
     };
     if doc.is_encrypted() {
-        return false;
+        return None;
     }
     let Some(page_number) = page
         .checked_add(1)
         .and_then(|number| u32::try_from(number).ok())
     else {
-        return false;
+        return None;
     };
     let Some(page_id) = doc.get_pages().get(&page_number).copied() else {
-        return false;
+        return None;
     };
     if doc
         .get_dictionary(page_id)
-        .is_ok_and(|node| node.has(b"Annots"))
+        .is_ok_and(|node| node.has(b"Annots") || node.has(b"Group") || node.has(b"UserUnit"))
     {
         // An existing /AP on the source page must never be painted twice.
-        return false;
+        return None;
     }
     let Ok((crop, rotation)) = super::pdf_save::print_page_geometry(&doc, page_id) else {
-        return false;
+        return None;
     };
     let visible = if matches!(rotation, 90 | 270) {
         [crop[3] - crop[1], crop[2] - crop[0]]
     } else {
         [crop[2] - crop[0], crop[3] - crop[1]]
     };
-    visible == [f64::from(width), f64::from(height)]
+    if visible != [f64::from(width), f64::from(height)] {
+        return None;
+    }
+    // Keep this classifier independent of PDF decompression. A tiny single
+    // unfiltered stream is enough to prove blank/full-page opaque content;
+    // everything else retains the normal annotation overlay.
+    let contents = doc.get_page_contents(page_id);
+    let [content_id] = contents.as_slice() else {
+        return None;
+    };
+    let stream = doc.get_object(*content_id).ok()?.as_stream().ok()?;
+    if stream.content.len() > 1024
+        || stream.dict.has(b"Filter")
+        || stream.dict.has(b"DecodeParms")
+        || stream.dict.get(b"Length").ok().and_then(numeric)? != stream.content.len() as f64
+    {
+        return None;
+    }
+    let operations = Content::decode(&stream.content).ok()?.operations;
+    if operations.is_empty() {
+        return Some(PagePaint::Blank);
+    }
+    if operations.len() != 3
+        || operations[0].operator != "rg"
+        || operations[1].operator != "re"
+        || operations[2].operator != "f"
+        || operations[0].operands.len() != 3
+        || operations[1].operands.len() != 4
+        || !operations[2].operands.is_empty()
+    {
+        return None;
+    }
+    let color = operations[0]
+        .operands
+        .iter()
+        .map(numeric)
+        .collect::<Option<Vec<_>>>()?;
+    if color.iter().any(|value| !(0.0..=1.0).contains(value)) {
+        return None;
+    }
+    let rect = operations[1]
+        .operands
+        .iter()
+        .map(numeric)
+        .collect::<Option<Vec<_>>>()?;
+    if rect[2] <= 0.0
+        || rect[3] <= 0.0
+        || rect[0] > crop[0]
+        || rect[1] > crop[1]
+        || rect[0] + rect[2] < crop[2]
+        || rect[1] + rect[3] < crop[3]
+    {
+        return None;
+    }
+    Some(PagePaint::OpaqueFill)
 }
 
-/// Paint one validated run over an opaque white, one-pixel-per-point page.
-/// Every other page/annotation state remains on the existing Iced overlay.
-pub fn render_white_page_text_box(
+/// Paint one validated run on a blank or provably opaque single-fill page at
+/// one pixel per point. Other page states retain the existing Iced overlay.
+pub fn render_opaque_page_text_box(
     source_pdf: &[u8],
     page: usize,
     base_rgba: &[u8],
@@ -59,12 +127,19 @@ pub fn render_white_page_text_box(
         || height > 4096
         || page_points != (width as f32, height as f32)
         || base_rgba.len() != width as usize * height as usize * 4
-        || base_rgba
-            .chunks_exact(4)
-            .any(|pixel| pixel != [255, 255, 255, 255])
+        || base_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
         || mark.bounds.x + mark.bounds.width > f64::from(width)
         || mark.bounds.y + mark.bounds.height > f64::from(height)
-        || !supported_page_geometry(source_pdf, page, width, height)
+    {
+        return Ok(None);
+    }
+    let Some(page_paint) = supported_page_paint(source_pdf, page, width, height) else {
+        return Ok(None);
+    };
+    if page_paint == PagePaint::Blank
+        && base_rgba
+            .chunks_exact(4)
+            .any(|pixel| pixel != [255, 255, 255, 255])
     {
         return Ok(None);
     }
@@ -72,15 +147,27 @@ pub fn render_white_page_text_box(
         Ok(scene) => scene,
         Err(_) => return Ok(None),
     };
+    let clip = [
+        mark.bounds.x as u32,
+        mark.bounds.y as u32,
+        (mark.bounds.x + mark.bounds.width) as u32,
+        (mark.bounds.y + mark.bounds.height) as u32,
+    ];
+    if page_paint == PagePaint::OpaqueFill {
+        return match opds_dynlex_backend::render_validated_glyph_scene_over_opaque(
+            &scene, base_rgba, width, height, clip,
+        ) {
+            Ok(bitmap) => Ok(Some(bitmap.rgba)),
+            Err(_) => Ok(None),
+        };
+    }
     let tile = opds_dynlex_backend::render_validated_glyph_scene(&scene)?;
     let (left, top, right, bottom) = (
-        mark.bounds.x as usize,
-        mark.bounds.y as usize,
-        (mark.bounds.x + mark.bounds.width) as usize,
-        (mark.bounds.y + mark.bounds.height) as usize,
+        clip[0] as usize,
+        clip[1] as usize,
+        clip[2] as usize,
+        clip[3] as usize,
     );
-    // OPGS has no appearance clip yet. Reject a run if even its antialias
-    // fringe escapes the saved annotation's exact rectangle.
     for y in 0..tile.height as usize {
         for x in 0..tile.width as usize {
             if (x < left || x >= right || y < top || y >= bottom)

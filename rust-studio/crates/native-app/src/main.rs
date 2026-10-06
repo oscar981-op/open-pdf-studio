@@ -660,7 +660,7 @@ impl OpenDocument {
                 #[cfg(feature = "dynlex-experimental")]
                 {
                     if annotations.len() == 1 && matches!(annotations[0].kind, Kind::Text { .. }) {
-                        native_text_scene::render_white_page_text_box(
+                        native_text_scene::render_opaque_page_text_box(
                             &self.source_bytes,
                             self.displayed_page,
                             pixels.as_ref(),
@@ -818,17 +818,9 @@ mod dynlex_annotation_overlay_tests {
         document.bitmap = Some(image::Handle::from_rgba(256, 192, vec![255; 256 * 192 * 4]));
         document.bitmap_size = (256, 192);
         document.bitmap_page_points = (256.0, 192.0);
-        let text_bitmap = document
-            .dynlex_annotation_bitmap()
-            .expect("bounded model Text Box should use DynLex");
-        assert_eq!(
-            document.dynlex_annotation_bitmap(),
-            Some(text_bitmap.clone())
-        );
-        let image::Handle::Rgba { pixels, .. } = text_bitmap else {
-            panic!("DynLex annotation output must be RGBA");
-        };
-        assert!(pixels.chunks_exact(4).any(|pixel| pixel != [255; 4]));
+        // A white bitmap alone cannot prove the source page was blank. This
+        // fixture has other PDF drawing operations, so text stays on Iced.
+        assert!(document.dynlex_annotation_bitmap().is_none());
     }
 }
 

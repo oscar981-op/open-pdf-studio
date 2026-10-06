@@ -29,6 +29,8 @@ fn main() {
         "annotation_kernel.dl",
         "build_glyph_strip.py",
         "glyph_strip_kernel.dl",
+        "build_glyph_compositor.py",
+        "glyph_compositor.dl",
         "glyph_run_core.rs",
         "glyph_multi_validation.rs",
         "glyph_multi_probe.rs",
@@ -88,8 +90,27 @@ fn main() {
         .status()
         .expect("start DynLex glyph-strip build");
     assert!(glyph_status.success(), "DynLex glyph-strip build failed");
+    let compositor_status = Command::new("python3")
+        .arg(root.join("build_glyph_compositor.py"))
+        .args([
+            "--compiler",
+            compiler.to_str().expect("compiler path"),
+            "--opt",
+            opt.to_str().expect("opt path"),
+            "--llc",
+            llc.to_str().expect("llc path"),
+            "--output-dir",
+            output.to_str().expect("output path"),
+        ])
+        .status()
+        .expect("start DynLex glyph compositor build");
+    assert!(
+        compositor_status.success(),
+        "DynLex glyph compositor build failed"
+    );
     println!("cargo:rustc-link-search=native={}", output.display());
     println!("cargo:rustc-link-lib=static=opds_dynlex_buffer");
     println!("cargo:rustc-link-lib=static=opds_dynlex_annotation");
     println!("cargo:rustc-link-lib=static=opds_dynlex_glyph_strip");
+    println!("cargo:rustc-link-lib=static=opds_dynlex_glyph_compositor");
 }
