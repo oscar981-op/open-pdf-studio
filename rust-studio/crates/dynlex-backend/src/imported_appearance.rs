@@ -742,7 +742,8 @@ fn parse_bounded_opaque_form(
     let mut token_index = 0;
     for operation in &operations {
         let numeric_count = match operation.operator.as_str() {
-            "q" | "Q" | "h" | "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" => 0,
+            "q" | "Q" | "h" | "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" | "W"
+            | "W*" | "n" => 0,
             "w" | "Do" => 1,
             "m" | "l" => 2,
             "rg" | "RG" => 3,
@@ -783,6 +784,7 @@ fn parse_bounded_opaque_form(
         line_width: Option<f64>,
         image_matrix: Option<[f64; 4]>,
         image_painted: bool,
+        clip: Option<[u32; 4]>,
     }
     enum FormPath {
         Rect([f64; 4]),
@@ -807,7 +809,7 @@ fn parse_bounded_opaque_form(
             .try_into()
             .ok()
     };
-    let rect_command = |path: [f64; 4], stroke: bool, color: [u8; 3]| {
+    let rect_command = |path: [f64; 4], stroke: bool, color: [u8; 3], clip| {
         let [x, y, width, height] = path;
         let inset = if stroke { 1.0 } else { 0.0 };
         if [x, y, width, height]
@@ -830,6 +832,15 @@ fn parse_bounded_opaque_form(
                 [rect[0] + x + width + inset, rect[1] + y + height + inset],
             ],
         )?;
+        let bounds = if let Some(clip) = clip {
+            let intersection = pixel_rect_intersection(bounds, clip)?;
+            if stroke && intersection != bounds {
+                return None;
+            }
+            intersection
+        } else {
+            bounds
+        };
         Some(ImportedCommand {
             kind: if stroke { 2 } else { 1 },
             rect: bounds,
@@ -840,6 +851,7 @@ fn parse_bounded_opaque_form(
     let mut state = FormState::default();
     let mut stack = Vec::new();
     let mut pending_path = None;
+    let mut pending_clip = false;
     let mut image_count = 0_usize;
     let mut image_bytes = 0_usize;
     for (index, operation) in operations.iter().enumerate() {
@@ -848,13 +860,14 @@ fn parse_bounded_opaque_form(
         }
         match operation.operator.as_str() {
             "q" => {
-                if pending_path.is_some() || stack.len() >= 4 {
+                if pending_path.is_some() || pending_clip || stack.len() >= 4 {
                     return None;
                 }
                 stack.push(state);
             }
             "Q" => {
                 if pending_path.is_some()
+                    || pending_clip
                     || (state.image_matrix.is_some() && !state.image_painted)
                     || (stack.len() == 1 && index + 1 != operations.len())
                 {
@@ -863,7 +876,7 @@ fn parse_bounded_opaque_form(
                 state = stack.pop()?;
             }
             "cm" => {
-                if stack.len() != 2 || pending_path.is_some() {
+                if !(2..=4).contains(&stack.len()) || pending_path.is_some() || pending_clip {
                     return None;
                 }
                 let [w, b, c, h, tx, ty]: [f64; 6] = operation
@@ -880,7 +893,8 @@ fn parse_bounded_opaque_form(
                 state.image_painted = false;
             }
             "Do" => {
-                if stack.len() != 2 || pending_path.is_some() || state.image_painted {
+                if !(2..=4).contains(&stack.len()) || pending_path.is_some() || state.image_painted
+                {
                     return None;
                 }
                 let [w, h, tx, ty] = state.image_matrix?;
@@ -894,6 +908,11 @@ fn parse_bounded_opaque_form(
                     rotation,
                     [w, h, tx, ty],
                 )?;
+                let image = if let Some(clip) = state.clip {
+                    clip_staged_image(image, clip)?
+                } else {
+                    image
+                };
                 image_count += 1;
                 image_bytes += image.rgb.len();
                 if image_count > 8 || image_bytes > 1_000_000 {
@@ -927,7 +946,7 @@ fn parse_bounded_opaque_form(
                 state.line_width = Some(2.0);
             }
             "re" => {
-                if stack.is_empty() || pending_path.is_some() {
+                if stack.is_empty() || pending_path.is_some() || pending_clip {
                     return None;
                 }
                 pending_path = Some(FormPath::Rect(
@@ -999,8 +1018,38 @@ fn parse_bounded_opaque_form(
                 }
                 *closed = true;
             }
+            "W" | "W*" => {
+                if stack.is_empty()
+                    || pending_clip
+                    || !matches!(pending_path, Some(FormPath::Rect(_)))
+                {
+                    return None;
+                }
+                pending_clip = true;
+            }
+            "n" => {
+                if !pending_clip {
+                    return None;
+                }
+                let Some(FormPath::Rect([x, y, w, h])) = pending_path.take() else {
+                    return None;
+                };
+                let clip = pixel_box(
+                    crop,
+                    rotation,
+                    &[
+                        [rect[0] + x, rect[1] + y],
+                        [rect[0] + x + w, rect[1] + y + h],
+                    ],
+                )?;
+                state.clip = Some(match state.clip {
+                    Some(existing) => pixel_rect_intersection(existing, clip)?,
+                    None => clip,
+                });
+                pending_clip = false;
+            }
             "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" => {
-                if stack.is_empty() {
+                if stack.is_empty() || pending_clip {
                     return None;
                 }
                 let path = pending_path.take()?;
@@ -1014,6 +1063,7 @@ fn parse_bounded_opaque_form(
                                 path,
                                 false,
                                 state.fill?,
+                                state.clip,
                             )?]));
                         }
                         if matches!(
@@ -1027,11 +1077,14 @@ fn parse_bounded_opaque_form(
                                 path,
                                 true,
                                 state.stroke?,
+                                state.clip,
                             )?]));
                         }
                     }
                     FormPath::Polygon { contours, .. } => {
-                        if !matches!(operation.operator.as_str(), "f" | "F" | "f*") {
+                        if state.clip.is_some()
+                            || !matches!(operation.operator.as_str(), "f" | "F" | "f*")
+                        {
                             return None;
                         }
                         appearances.push(ImportedAppearance::Polygon(stage_form_polygon(
@@ -1051,12 +1104,42 @@ fn parse_bounded_opaque_form(
             _ => return None,
         }
     }
-    (stack.is_empty() && pending_path.is_none() && !appearances.is_empty()).then_some(appearances)
+    (stack.is_empty() && pending_path.is_none() && !pending_clip && !appearances.is_empty())
+        .then_some(appearances)
 }
 
 struct StagedImage {
     rect: [u32; 4],
     rgb: Vec<u8>,
+}
+
+fn pixel_rect_intersection(a: [u32; 4], b: [u32; 4]) -> Option<[u32; 4]> {
+    let rect = [
+        a[0].max(b[0]),
+        a[1].max(b[1]),
+        a[2].min(b[2]),
+        a[3].min(b[3]),
+    ];
+    (rect[0] < rect[2] && rect[1] < rect[3]).then_some(rect)
+}
+
+fn clip_staged_image(mut image: StagedImage, clip: [u32; 4]) -> Option<StagedImage> {
+    let visible = pixel_rect_intersection(image.rect, clip)?;
+    if visible == image.rect {
+        return Some(image);
+    }
+    let source_width = (image.rect[2] - image.rect[0]) as usize;
+    let visible_width = (visible[2] - visible[0]) as usize;
+    let mut rgb = Vec::with_capacity(visible_width * (visible[3] - visible[1]) as usize * 3);
+    for y in visible[1]..visible[3] {
+        let start = ((y - image.rect[1]) as usize * source_width
+            + (visible[0] - image.rect[0]) as usize)
+            * 3;
+        rgb.extend_from_slice(&image.rgb[start..start + visible_width * 3]);
+    }
+    image.rect = visible;
+    image.rgb = rgb;
+    Some(image)
 }
 
 fn decode_form_rgb_image(
@@ -2354,6 +2437,188 @@ mod missing_appearance_tests {
         let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
         assert!(!selected.imported_annotations_dynlex);
         assert_eq!(selected.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
+    }
+
+    fn clipped_mixed_form_fixture(rotation: i64, compressed: bool, even_odd: bool) -> Vec<u8> {
+        let original = mixed_image_vector_form_fixture(rotation, compressed);
+        let mut doc = Document::load_mem(&original).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let annotation_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = doc
+            .get_dictionary(annotation_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let form = doc
+            .get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        let rule = if even_odd { "W*" } else { "W" };
+        form.content = format!(
+            "q 0 1 0 rg 0 0 40 30 re f \
+             q 10 5 20 20 re {rule} n \
+             q 40 0 0 30 0 0 cm /Im0 Do Q \
+             1 0 0 rg 5 5 15 10 re f \
+             q 20 0 0 15 10 8 cm /Im1 Do Q Q \
+             0 0 0 RG 2 w 1 1 38 28 re S Q"
+        )
+        .into_bytes();
+        form.dict.set("Length", form.content.len() as i64);
+        let mut result = Vec::new();
+        doc.save_to(&mut result).unwrap();
+        result
+    }
+
+    #[test]
+    fn rectangular_form_clip_applies_to_images_and_fills_then_restores() {
+        for rotation in [0, 90, 180, 270] {
+            for compressed in [false, true] {
+                for even_odd in [false, true] {
+                    let bytes = clipped_mixed_form_fixture(rotation, compressed, even_odd);
+                    if rotation == 90 && compressed && even_odd {
+                        if let Ok(path) = std::env::var("OPDS_CLIPPED_MIXED_AP_TEST_PDF") {
+                            std::fs::write(path, &bytes).unwrap();
+                        }
+                    }
+                    let doc = Document::load_mem(&bytes).unwrap();
+                    let page_id = *doc.get_pages().get(&1).unwrap();
+                    let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+                    assert!(parse_bounded_opaque_form(
+                        &doc,
+                        doc.get_page_annotations(page_id).unwrap()[0],
+                        crop,
+                        turn,
+                    )
+                    .is_some());
+                    let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                    let selected =
+                        render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert!(selected.imported_annotations_dynlex);
+                    assert_eq!(
+                        selected.raster.rgba,
+                        pdf.render_page(1, 1.0).unwrap().rgba,
+                        "rotation={rotation}, compressed={compressed}, even_odd={even_odd}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nested_form_clips_intersect_and_restore() {
+        for rotation in [0, 90, 180, 270] {
+            let original = clipped_mixed_form_fixture(rotation, true, false);
+            let mut doc = Document::load_mem(&original).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let annotation_id = doc
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Annots")
+                .unwrap()
+                .as_array()
+                .unwrap()[0]
+                .as_reference()
+                .unwrap();
+            let form_id = doc
+                .get_dictionary(annotation_id)
+                .unwrap()
+                .get(b"AP")
+                .unwrap()
+                .as_dict()
+                .unwrap()
+                .get(b"N")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let form = doc
+                .get_object_mut(form_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap();
+            let content = String::from_utf8(form.content.clone()).unwrap();
+            let content = content
+                .replace(
+                    "q 10 5 20 20 re W n",
+                    "q 10 5 20 20 re W n q 16 10 8 10 re W* n",
+                )
+                .replace("/Im1 Do Q Q", "/Im1 Do Q Q Q");
+            form.content = content.into_bytes();
+            form.dict.set("Length", form.content.len() as i64);
+            let mut bytes = Vec::new();
+            doc.save_to(&mut bytes).unwrap();
+            let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert!(selected.imported_annotations_dynlex);
+            assert_eq!(
+                selected.raster.rgba,
+                pdf.render_page(1, 1.0).unwrap().rgba,
+                "rotation={rotation}"
+            );
+        }
+    }
+
+    #[test]
+    fn clipped_form_rejects_incomplete_clip_and_partially_clipped_stroke() {
+        let original = clipped_mixed_form_fixture(90, true, false);
+        for content in [
+            b"q 10 5 20 20 re W Q".as_slice(),
+            b"q 10 5 20 20 re W n 0 0 40 30 re W Q".as_slice(),
+            b"q 10 5 20 20 re W n 0 0 0 RG 2 w 1 1 38 28 re S Q".as_slice(),
+            b"q 10 5 20 20 re W n 0 1 0 rg 0 0 40 30 re f".as_slice(),
+        ] {
+            let mut doc = Document::load_mem(&original).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let annotation_id = doc
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Annots")
+                .unwrap()
+                .as_array()
+                .unwrap()[0]
+                .as_reference()
+                .unwrap();
+            let form_id = doc
+                .get_dictionary(annotation_id)
+                .unwrap()
+                .get(b"AP")
+                .unwrap()
+                .as_dict()
+                .unwrap()
+                .get(b"N")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let form = doc
+                .get_object_mut(form_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap();
+            form.content = content.to_vec();
+            form.dict.set("Length", form.content.len() as i64);
+            let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+            assert!(parse_bounded_opaque_form(
+                &doc,
+                doc.get_page_annotations(page_id).unwrap()[0],
+                crop,
+                turn,
+            )
+            .is_none());
+        }
     }
 
     #[test]

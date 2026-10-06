@@ -692,6 +692,22 @@ voor en na de beelden in PDF-volgorde blijven. Acht gecontroleerde PDF's
 een vulling tussen, en een rand ná twee beelden zijn volledig
 RGBA-bytegelijk aan Hayro. Een vectoropdracht terwijl de beeld-CTM nog actief
 is wordt vóór het schilderen afgewezen; de app gebruikt dan volledig Hayro.
-Dit is nog geen algemene Form-interpreter: willekeurige CTM, clipping,
+Dit is nog geen algemene Form-interpreter: willekeurige CTM, algemene clipping,
 transparantie, beeldmaskers, tekst en curven blijven buiten de bewezen
 deelset.
+
+**Rechthoekige Form-clip.** Binnen die beperkte gemengde appearance ondersteunt
+de parser nu een pixeluitgelijnde `re W n` of `re W* n`-clip. De Rust-staging
+snijdt de RGB8-beeldrijen en gevulde rechthoeken op dezelfde clipgrenzen af;
+`q/Q` bewaart en herstelt de clip en opeenvolgende clipvakken worden
+doorsneden. Zestien PDF-fixtures (beide vulregels × ongefilterd/FlateDecode ×
+0/90/180/270° met CropBox) met twee beelden, een tussengelegen vulling en
+een stroke na `Q` zijn volledig RGBA-bytegelijk aan Hayro. Een onafgemaakte
+clip, leeg clipvak, gedeeltelijk geclipte stroke of geclipte polygon blijft
+een veilige volledige Hayro-fallback. Vier aanvullende fixtures met twee
+geneste clipvakken en `q/Q`-herstel zijn eveneens bytegelijk op alle
+kwartslagen. In het 1200×832-appvenster waren Hayro en DynLex op 100% in
+de zichtbare pagina pixelgelijk; de status meldde `PDF: Hayro · Imported:
+DynLex`. Zoom In naar 125% schakelde correct over naar de Hayro-fallback.
+Subpixelclips, algemene clip-paden,
+transparantie en tekst in dezelfde Form zijn nog niet bewezen.
