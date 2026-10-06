@@ -483,4 +483,20 @@ vergelijkt de volledige pagina op 0/90/180/270 graden en verschoven CropBox
 RGBA-bytegewijs met Hayro; op 0 graden is ook Stamp gevolgd door Square in
 annotatievolgorde gecontroleerd. Een extra tekenoperator veroorzaakt veilige
 Hayro-fallback zonder gedeeltelijke DynLex-uitvoer. Dit ondersteunt nog geen
-algemene Stamp-inhoud, tekst-/afbeeldings-Form of andere annotatietypen.
+algemene Stamp-inhoud of tekst-/afbeeldings-Form.
+
+**Gevalideerde meervoudige Form-vullingen.** Dezelfde geïmporteerde route
+interpreteert nu een ongefilterde `/AP/N`-Form met één tot 32 opeenvolgende,
+expliciet gekleurde dekkende DeviceRGB-`rg re f`-vullingen in één `q`/`Q`.
+Elke vulling moet een gehele rechthoek binnen de Form-BBox zijn; de BBox
+moet exact op de annotatie-`/Rect` passen. Een expliciete identiteits-`/Matrix`,
+lege `/Resources` en `/FormType 1` zijn toegestaan. De Form-inhoud bepaalt de pixels,
+onafhankelijk van het annotatiesubtype. Op 0/90/180/270°-pagina's met
+verschoven CropBox zijn `Stamp`, `Circle`, `Ink` en `Widget` met twee
+overlappende vullingen, plus een overlappende `Underline`-Form in beide
+annotatievolgordes, over de volledige RGBA-pagina bytegelijk aan Hayro
+(32 gecontroleerde PDF-uitvoeren). De route weigert `/OC`/`/AS`, een
+vulling buiten de BBox, meer dan 32 vullingen, extra Form-operators en
+onbekende resources. Algemene `/AP`-paden, transparantie, XObjects en
+interactieve annotatiebewerking blijven open; dit is geen volledige
+subtype- of Form-dekking.
