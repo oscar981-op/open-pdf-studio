@@ -201,6 +201,64 @@ pub(crate) fn paint_opaque_imported_rectangles(
     paint_imported_commands(layer_rgba, width, height, page_points, &commands)
 }
 
+/// Draw the selected native annotation's frame and eight resize grips in the
+/// DynLex layer. Coordinates are deliberately restricted to whole pixels;
+/// the Iced overlay remains the fallback for zoomed or fractional geometry.
+pub fn render_native_selection_overlay_pixels(
+    base_rgba: &[u8],
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    bounds: opds_native_core::annotations::Rect,
+) -> Result<Option<Bitmap>, String> {
+    #[cfg(not(feature = "kernel"))]
+    {
+        let _ = (base_rgba, width, height, page_points, bounds);
+        Ok(None)
+    }
+    #[cfg(feature = "kernel")]
+    {
+        let Some([x0, y0, x1, y1]) = pixel_rect(bounds, width, height) else {
+            return Ok(None);
+        };
+        // The handles are six pixels wide around every corner and midpoint.
+        // Require an even span so every grip has an integral six-pixel box.
+        if (x1 - x0) % 2 != 0 || (y1 - y0) % 2 != 0 {
+            return Ok(None);
+        }
+        let blue = [31, 136, 255, 255];
+        let mut commands = Vec::with_capacity(9);
+        commands.push(ImportedCommand {
+            kind: 2,
+            rect: [x0, y0, x1, y1],
+            tail: blue,
+        });
+        for (cx, cy) in [
+            (x0, y0),
+            ((x0 + x1) / 2, y0),
+            (x1, y0),
+            (x1, (y0 + y1) / 2),
+            (x1, y1),
+            ((x0 + x1) / 2, y1),
+            (x0, y1),
+            (x0, (y0 + y1) / 2),
+        ] {
+            let left = cx.saturating_sub(3);
+            let top = cy.saturating_sub(3);
+            let right = cx.saturating_add(3).min(width);
+            let bottom = cy.saturating_add(3).min(height);
+            if left < right && top < bottom {
+                commands.push(ImportedCommand {
+                    kind: 1,
+                    rect: [left, top, right, bottom],
+                    tail: blue,
+                });
+            }
+        }
+        paint_imported_commands(base_rgba, width, height, page_points, &commands)
+    }
+}
+
 /// Return `None` rather than partially painting a document when any native
 /// annotation is outside the verified 1px/page-point Square subset.
 pub fn render_native_annotation_overlay(
@@ -474,6 +532,57 @@ fn render_native_annotation_overlay_pixels_inner(
 #[cfg(all(test, feature = "kernel"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_frame_and_eight_grips_are_painted_by_dynlex() {
+        let width = 40;
+        let height = 32;
+        let mut page = vec![255_u8; width * height * 4];
+        // Preserve an existing colored mark beneath the selection overlay.
+        page[(12 * width + 14) * 4..(12 * width + 14) * 4 + 4].copy_from_slice(&[220, 45, 30, 255]);
+        let rect = Rect {
+            x: 8.0,
+            y: 8.0,
+            width: 20.0,
+            height: 16.0,
+        };
+        let result = render_native_selection_overlay_pixels(
+            &page,
+            width as u32,
+            height as u32,
+            (width as f32, height as f32),
+            rect,
+        )
+        .unwrap()
+        .unwrap();
+        let pixel = |x: usize, y: usize| &result.rgba[(y * width + x) * 4..][..4];
+        for (x, y) in [
+            (8, 8),
+            (18, 8),
+            (28, 8),
+            (28, 16),
+            (28, 24),
+            (18, 24),
+            (8, 24),
+            (8, 16),
+        ] {
+            assert_eq!(pixel(x, y), [31, 136, 255, 255]);
+        }
+        assert_eq!(pixel(14, 12), [220, 45, 30, 255]);
+        assert_eq!(pixel(4, 4), [255, 255, 255, 255]);
+        assert!(render_native_selection_overlay_pixels(
+            &page,
+            width as u32,
+            height as u32,
+            (width as f32, height as f32),
+            Rect {
+                width: 21.0,
+                ..rect
+            },
+        )
+        .unwrap()
+        .is_none());
+    }
 
     #[test]
     fn sixty_four_disjoint_highlights_fit_expanded_command_bound() {

@@ -1096,10 +1096,13 @@ pub fn view(app: &App) -> Element<'_, Message> {
     let center: Element<'_, Message> =
         if let Some(document) = app.document.as_ref().filter(|d| d.bitmap.is_some()) {
             let annotation_bitmap = if app.backend == opds_dynlex_backend::Backend::Dynlex
-                && document.selected_annotation.is_none()
+                && !app.annotation_gesture_active
                 && app.editing_text_id.is_none()
             {
-                document.dynlex_annotation_bitmap()
+                match document.selected_annotation {
+                    Some(id) => document.dynlex_selected_annotation_bitmap(id),
+                    None => document.dynlex_annotation_bitmap(),
+                }
             } else {
                 None
             };
@@ -1380,9 +1383,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
         .as_ref()
         .map(|document| {
             let dynlex_annotations = app.backend == opds_dynlex_backend::Backend::Dynlex
-                && document.selected_annotation.is_none()
+                && !app.annotation_gesture_active
                 && app.editing_text_id.is_none()
-                && document.dynlex_annotation_bitmap().is_some();
+                && match document.selected_annotation {
+                    Some(id) => document.dynlex_selected_annotation_bitmap(id).is_some(),
+                    None => document.dynlex_annotation_bitmap().is_some(),
+                };
             let has_annotations = document
                 .model
                 .items()

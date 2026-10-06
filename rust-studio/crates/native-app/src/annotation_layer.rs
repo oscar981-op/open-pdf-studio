@@ -218,7 +218,10 @@ impl canvas::Program<Message> for Layer<'_> {
                             original,
                             current: position,
                         });
-                        return Some(canvas::Action::capture());
+                        return Some(
+                            canvas::Action::publish(Message::AnnotationGestureStarted)
+                                .and_capture(),
+                        );
                     }
                     let point = self.page_point(position, bounds);
                     let tolerance = f64::from(4.0 * self.page_points.0 / bounds.width);
@@ -267,7 +270,9 @@ impl canvas::Program<Message> for Layer<'_> {
                                 .and_capture(),
                         );
                     }
-                    return Some(canvas::Action::request_redraw().and_capture());
+                    return Some(
+                        canvas::Action::publish(Message::AnnotationGestureEnded).and_capture(),
+                    );
                 }
                 if let Some(moving) = state.moving.take() {
                     let end = cursor.position_in(bounds).unwrap_or(moving.current);
@@ -283,7 +288,9 @@ impl canvas::Program<Message> for Layer<'_> {
                                 .and_capture(),
                         );
                     }
-                    return Some(canvas::Action::request_redraw().and_capture());
+                    return Some(
+                        canvas::Action::publish(Message::AnnotationGestureEnded).and_capture(),
+                    );
                 }
                 let (start, last) = state.drawing.take()?;
                 let end = cursor.position_in(bounds).unwrap_or(last);

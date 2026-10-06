@@ -71,17 +71,31 @@ prestatie of subpixelplaatsing.
 
 De opt-in app toont de DynLex-composiet als een gecachte pagina-afbeelding
 wanneer de gebruiker DynLex heeft gekozen, de pagina op 100% staat, alle
-native annotaties binnen deze bewezen subset vallen en er geen annotatie
-geselecteerd of in tekstbewerking is. Een selectie schakelt terug naar het
-bestaande Iced-canvas zodat slepen, formaatgrepen en inline tekstbewerking
-beschikbaar blijven. De cache vergelijkt basisbitmap, pagina en de werkelijke
-annotatie-inhoud; een edit maakt een nieuwe bitmap. De statusregel meldt
-PDF- en annotatierenderer afzonderlijk. Een gerichte app-unit-test controleert
-cachehergebruik en invalidatie na een annotatieverplaatsing. De 1200×832-
-releaseapp is op een echte PDF geopend en als X11-venster vastgelegd; de
-computergebruik-koppeling bood geen native app aan en synthetische XTest-
-muisklikken veranderden het ribbon niet. Een betrouwbare end-to-end
-muistest voor annotatie-aanmaken/selecteren ontbreekt daarom nog.
+native annotaties binnen deze bewezen subset vallen en er geen tekstbewerking
+loopt. Bij een geselecteerde pixeluitgelijnde Rectangle/Highlight met even breedte en
+hoogte tekent een tweede begrensde OPAN-pass ook het blauwe kader en de acht
+6×6-formaatgrepen via DynLex. De app bewaart alleen het geselecteerde
+eindbeeld in de annotatiecache. Bij mouse-down op een annotatie of greep
+schakelt zij tijdelijk naar het Iced-canvas voor de levende verplaats- of
+vergrotingspreview; mouse-up maakt de DynLex-selectie opnieuw. Andere zoom,
+fractionele coördinaten, oneven afmetingen en Text Box-selectie/-bewerking blijven
+veilig bij Iced. De cache vergelijkt basisbitmap, pagina en de werkelijke
+annotatie-inhoud; een edit maakt een nieuwe bitmap en verwijdert het oude
+selectiebeeld. De statusregel meldt PDF- en annotatierenderer afzonderlijk.
+De OPAN-kaderrand is 2 px binnen de rechthoek; Iced tekent een 1,5px-rand
+met antialiasing. Deze visuele selectie is dus nog niet pixelgelijk.
+
+De 1200×832-releaseapp is met echte XTest-muisinvoer getest op
+`simple-fill-stroke.pdf`: rechthoek tekenen, een 40×30-rect selecteren,
+10 px verplaatsen en de zuidoostgreep 10×10 px vergroten. De status wisselde
+bij beide gestes van `Annotations: DynLex` naar `Annotations: Iced` en na
+mouse-up terug naar DynLex, zonder oude selectiebitmap. Een 57×49-rect
+bleef correct op Iced. Ctrl+scroll zoomde 100→132→100%, met Hayro/Iced-
+fallback tijdens de afwijkende zoom. Screenshots staan tijdelijk onder
+`/tmp/opds-dynlex-{even-selected,moving,moved,resizing,resized,ctrl-scroll-in,ctrl-scroll-back}.png`.
+Een gerichte app-unit-test controleert selectiecache en invalidatie na
+verplaatsing. De native computergebruik-koppeling bood geen vensters aan;
+deze UI-proef gebruikte XTest rechtstreeks op het X11-venster.
 
 Een bestaande normale Form-`/AP` kan nu als **ondergrond** voor nieuwe native
 DynLex-annotaties dienen. De classifier accepteert hoogstens 64 bestaande

@@ -322,6 +322,7 @@ struct App {
     hide_properties: bool,
     ribbon_collapsed: bool,
     annotation_tool: AnnotationTool,
+    annotation_gesture_active: bool,
     annotation_tool_activated: bool,
     next_annotation_id: u64,
     page_scroll_offset: scrollable::AbsoluteOffset,
@@ -682,6 +683,7 @@ struct AnnotationOverlayCache {
     page: usize,
     annotations: Vec<Annotation>,
     bitmap: Option<image::Handle>,
+    selected_bitmap: Option<(u64, image::Handle)>,
 }
 
 #[cfg(feature = "dynlex-experimental")]
@@ -707,6 +709,47 @@ struct CachedPage {
 impl OpenDocument {
     fn is_dirty(&self) -> bool {
         annotations_changed(&self.model, &self.last_saved_annotations)
+    }
+
+    fn dynlex_selected_annotation_bitmap(&self, selected: u64) -> Option<image::Handle> {
+        let static_bitmap = self.dynlex_annotation_bitmap()?;
+        if let Some((id, bitmap)) = self
+            .annotation_overlay_cache
+            .borrow()
+            .as_ref()
+            .and_then(|cache| cache.selected_bitmap.as_ref())
+        {
+            if *id == selected {
+                return Some(bitmap.clone());
+            }
+        }
+        let item = self.model.get(selected)?;
+        if item.page != self.displayed_page || !matches!(&item.kind, Kind::Rectangle { .. }) {
+            return None;
+        }
+        let image::Handle::Rgba {
+            width,
+            height,
+            pixels,
+            ..
+        } = &static_bitmap
+        else {
+            return None;
+        };
+        let painted = opds_dynlex_backend::render_native_selection_overlay_pixels(
+            pixels.as_ref(),
+            *width,
+            *height,
+            self.bitmap_page_points,
+            item.bounds,
+        )
+        .ok()
+        .flatten()?;
+        let bitmap = image::Handle::from_rgba(painted.width, painted.height, painted.rgba);
+        if let Some(cache) = self.annotation_overlay_cache.borrow_mut().as_mut() {
+            cache.selected_bitmap = Some((selected, bitmap.clone()));
+        }
+        Some(bitmap)
     }
 
     fn dynlex_annotation_bitmap(&self) -> Option<image::Handle> {
@@ -871,6 +914,7 @@ impl OpenDocument {
             page: self.displayed_page,
             annotations,
             bitmap: bitmap.clone(),
+            selected_bitmap: None,
         });
         bitmap
     }
@@ -2608,11 +2652,30 @@ mod dynlex_annotation_overlay_tests {
         );
         let first = document.dynlex_annotation_bitmap().expect("bounded mark");
         assert!(document.dynlex_annotation_bitmap() == Some(first.clone()));
+        let selected = document
+            .dynlex_selected_annotation_bitmap(1)
+            .expect("selected mark uses DynLex controls");
+        assert_ne!(selected, first);
+        assert_eq!(
+            document.dynlex_selected_annotation_bitmap(1),
+            Some(selected.clone())
+        );
+        let image::Handle::Rgba { pixels, .. } = selected else {
+            panic!("selected annotation bitmap must be RGBA");
+        };
+        assert_eq!(&pixels[((16 * 256 + 12) * 4)..][..4], &[31, 136, 255, 255]);
         let mut moved = mark;
         moved.bounds.x = 60.0;
         document.model.apply(Edit::Replace(moved)).unwrap();
         let second = document.dynlex_annotation_bitmap().expect("moved mark");
         assert!(first != second, "edit must invalidate the derived image");
+        let selected_after_move = document
+            .dynlex_selected_annotation_bitmap(1)
+            .expect("selection follows moved mark");
+        let image::Handle::Rgba { pixels, .. } = selected_after_move else {
+            panic!("moved annotation bitmap must be RGBA");
+        };
+        assert_eq!(&pixels[((16 * 256 + 60) * 4)..][..4], &[31, 136, 255, 255]);
 
         let text = Annotation {
             id: 1,
@@ -2963,6 +3026,8 @@ enum Message {
     CloseWindow,
     SelectAnnotationTool(AnnotationTool),
     SelectAnnotation(Option<u64>),
+    AnnotationGestureStarted,
+    AnnotationGestureEnded,
     MoveAnnotation(u64, [f64; 2]),
     ResizeAnnotation(u64, Rect),
     RemoveSelectedAnnotation,
@@ -3395,6 +3460,7 @@ impl App {
                     return Task::none();
                 }
                 self.backend = backend;
+                self.annotation_gesture_active = false;
                 self.backend_generation = self.backend_generation.wrapping_add(1);
                 if let Some(document) = &mut self.document {
                     document.page_cache.clear();
@@ -3446,6 +3512,7 @@ impl App {
                 return window::oldest().and_then(window::close);
             }
             Message::SelectAnnotationTool(tool) => {
+                self.annotation_gesture_active = false;
                 self.annotation_tool = tool;
                 self.annotation_tool_activated = true;
             }
@@ -3631,6 +3698,7 @@ impl App {
                 return self.render_content_layer_if_needed();
             }
             Message::SelectAnnotation(id) => {
+                self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
                     document.selected_annotation = id.filter(|id| {
                         document
@@ -3638,6 +3706,7 @@ impl App {
                             .get(*id)
                             .is_some_and(|item| item.page == document.displayed_page)
                     });
+                    self.annotation_gesture_active = document.selected_annotation.is_some();
                     if let Some(selected) = document
                         .selected_annotation
                         .and_then(|id| document.model.get(id))
@@ -3662,7 +3731,14 @@ impl App {
                 }
                 return self.render_content_layer_if_needed();
             }
+            Message::AnnotationGestureStarted => {
+                self.annotation_gesture_active = true;
+            }
+            Message::AnnotationGestureEnded => {
+                self.annotation_gesture_active = false;
+            }
             Message::MoveAnnotation(id, delta) => {
+                self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
                     if document.selected_annotation == Some(id)
                         && delta.iter().all(|value| value.is_finite())
@@ -3688,6 +3764,7 @@ impl App {
                 }
             }
             Message::ResizeAnnotation(id, bounds) => {
+                self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
                     if document.selected_annotation == Some(id) {
                         let page_width = f64::from(document.bitmap_page_points.0);
@@ -3713,6 +3790,7 @@ impl App {
                 }
             }
             Message::RemoveSelectedAnnotation => {
+                self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
                     if let Some(id) = document.selected_annotation {
                         match document.model.apply(Edit::Remove(id)) {
@@ -3765,6 +3843,7 @@ impl App {
                 }
             }
             Message::Undo => {
+                self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
                     if let Err(error) = document.model.undo() {
                         self.message = format!("Undo failed: {error:?}");
@@ -3782,6 +3861,7 @@ impl App {
                 return self.render_content_layer_if_needed();
             }
             Message::Redo => {
+                self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
                     if let Err(error) = document.model.redo() {
                         self.message = format!("Redo failed: {error:?}");
@@ -3832,6 +3912,7 @@ impl App {
                 if token != self.next_load {
                     return Task::none();
                 }
+                self.annotation_gesture_active = false;
                 self.busy = false;
                 match result {
                     Ok((path, source_bytes, pdf, initial_scale, outcome)) => {
@@ -3896,6 +3977,7 @@ impl App {
                 }
             }
             Message::Zoom(scale) => {
+                self.annotation_gesture_active = false;
                 self.pending_zoom_offset = None;
                 if let Some(document) = &mut self.document {
                     if document.model.zoom_at(scale, [0.0, 0.0]).is_err() {
@@ -3968,6 +4050,7 @@ impl App {
                 ]);
             }
             Message::GoToPage(page) => {
+                self.annotation_gesture_active = false;
                 self.pending_zoom_offset = None;
                 if let Some(document) = &mut self.document {
                     if document.model.go_to_page(page).is_err() {
