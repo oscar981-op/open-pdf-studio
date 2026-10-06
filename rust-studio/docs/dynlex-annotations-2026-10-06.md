@@ -680,3 +680,18 @@ afgewezen; een geldige PDF met extra kleurstaat viel via de app volledig op
 Hayro terug. De Form is nog beperkt tot zulke losse beeldgroepen: een
 willekeurig gemengd pad van beelden, tekst, clipping en vectorobjecten in
 één `/AP` is niet ondersteund.
+
+**Geordende Form met beeld en vector.** De bestaande begrensde
+Form-interpreter verwerkt nu ook `Do` binnen een eigen `q/cm/Q`-groep tussen
+bewezen dekkende `rg re f`-vullingen en `RG 2 w re S`-randen. De
+beeldmatrix mag uitsluitend een gehele asgerichte plaatsing zijn; de
+graphics-state-stack herstelt de vorige staat vóór de volgende vectoropdracht.
+Opeenvolgende beelden delen één DynLex-beeldpass, terwijl vectoropdrachten
+voor en na de beelden in PDF-volgorde blijven. Acht gecontroleerde PDF's
+(ongefilterd of FlateDecode × 0/90/180/270° met CropBox) met een vulling vóór,
+een vulling tussen, en een rand ná twee beelden zijn volledig
+RGBA-bytegelijk aan Hayro. Een vectoropdracht terwijl de beeld-CTM nog actief
+is wordt vóór het schilderen afgewezen; de app gebruikt dan volledig Hayro.
+Dit is nog geen algemene Form-interpreter: willekeurige CTM, clipping,
+transparantie, beeldmaskers, tekst en curven blijven buiten de bewezen
+deelset.

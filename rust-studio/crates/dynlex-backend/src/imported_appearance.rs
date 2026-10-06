@@ -665,9 +665,23 @@ fn parse_bounded_opaque_form(
     }
     let (_, normal) = doc.dereference(ap.get(b"N").ok()?).ok()?;
     let form = normal.as_stream().ok()?;
-    let empty_resources = match form.dict.get(b"Resources") {
-        Ok(value) => value.as_dict().ok()?.len() == 0,
-        Err(_) => true,
+    let image_resources = match form.dict.get(b"Resources") {
+        Ok(value) => {
+            let resources = value.as_dict().ok()?;
+            if resources.is_empty() {
+                None
+            } else {
+                if resources.len() != 1 {
+                    return None;
+                }
+                let xobjects = resources.get(b"XObject").ok()?.as_dict().ok()?;
+                if !(1..=8).contains(&xobjects.len()) {
+                    return None;
+                }
+                Some(xobjects)
+            }
+        }
+        Err(_) => None,
     };
     let identity_matrix = match form.dict.get(b"Matrix") {
         Ok(value) => {
@@ -687,7 +701,6 @@ fn parse_bounded_opaque_form(
         || form.dict.has(b"DecodeParms")
         || form.dict.has(b"Group")
         || !identity_matrix
-        || !empty_resources
         || form
             .dict
             .get(b"FormType")
@@ -730,17 +743,27 @@ fn parse_bounded_opaque_form(
     for operation in &operations {
         let numeric_count = match operation.operator.as_str() {
             "q" | "Q" | "h" | "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" => 0,
-            "w" => 1,
+            "w" | "Do" => 1,
             "m" | "l" => 2,
             "rg" | "RG" => 3,
             "re" => 4,
+            "cm" => 6,
             _ => return None,
         };
         let Some(record) = tokens.get(token_index..token_index + numeric_count + 1) else {
             return None;
         };
+        let operands_match = if operation.operator == "Do" {
+            let name = operation.operands.first()?.as_name().ok()?;
+            !name.is_empty()
+                && name.len() <= 32
+                && name.iter().all(u8::is_ascii_alphanumeric)
+                && record[0] == [b"/".as_slice(), name].concat()
+        } else {
+            record[..numeric_count].iter().all(|token| numeric(token))
+        };
         if operation.operands.len() != numeric_count
-            || !record[..numeric_count].iter().all(|token| numeric(token))
+            || !operands_match
             || record[numeric_count] != operation.operator.as_bytes()
         {
             return None;
@@ -758,6 +781,8 @@ fn parse_bounded_opaque_form(
         fill: Option<[u8; 3]>,
         stroke: Option<[u8; 3]>,
         line_width: Option<f64>,
+        image_matrix: Option<[f64; 4]>,
+        image_painted: bool,
     }
     enum FormPath {
         Rect([f64; 4]),
@@ -815,7 +840,12 @@ fn parse_bounded_opaque_form(
     let mut state = FormState::default();
     let mut stack = Vec::new();
     let mut pending_path = None;
+    let mut image_count = 0_usize;
+    let mut image_bytes = 0_usize;
     for (index, operation) in operations.iter().enumerate() {
+        if state.image_matrix.is_some() && !matches!(operation.operator.as_str(), "Do" | "Q") {
+            return None;
+        }
         match operation.operator.as_str() {
             "q" => {
                 if pending_path.is_some() || stack.len() >= 4 {
@@ -824,10 +854,57 @@ fn parse_bounded_opaque_form(
                 stack.push(state);
             }
             "Q" => {
-                if pending_path.is_some() || (stack.len() == 1 && index + 1 != operations.len()) {
+                if pending_path.is_some()
+                    || (state.image_matrix.is_some() && !state.image_painted)
+                    || (stack.len() == 1 && index + 1 != operations.len())
+                {
                     return None;
                 }
                 state = stack.pop()?;
+            }
+            "cm" => {
+                if stack.len() != 2 || pending_path.is_some() {
+                    return None;
+                }
+                let [w, b, c, h, tx, ty]: [f64; 6] = operation
+                    .operands
+                    .iter()
+                    .map(number)
+                    .collect::<Option<Vec<_>>>()?
+                    .try_into()
+                    .ok()?;
+                if b != 0.0 || c != 0.0 {
+                    return None;
+                }
+                state.image_matrix = Some([w, h, tx, ty]);
+                state.image_painted = false;
+            }
+            "Do" => {
+                if stack.len() != 2 || pending_path.is_some() || state.image_painted {
+                    return None;
+                }
+                let [w, h, tx, ty] = state.image_matrix?;
+                let name = operation.operands.first()?.as_name().ok()?;
+                let image = stage_form_image(
+                    doc,
+                    image_resources?,
+                    name,
+                    rect,
+                    crop,
+                    rotation,
+                    [w, h, tx, ty],
+                )?;
+                image_count += 1;
+                image_bytes += image.rgb.len();
+                if image_count > 8 || image_bytes > 1_000_000 {
+                    return None;
+                }
+                if let Some(ImportedAppearance::Images(images)) = appearances.last_mut() {
+                    images.push(image);
+                } else {
+                    appearances.push(ImportedAppearance::Images(vec![image]));
+                }
+                state.image_painted = true;
             }
             "rg" | "RG" => {
                 if stack.is_empty() || pending_path.is_some() {
@@ -1034,6 +1111,60 @@ fn decode_form_rgb_image(
     (pixels.len() == decoded_len).then_some(pixels)
 }
 
+fn stage_form_image(
+    doc: &Document,
+    xobjects: &Dictionary,
+    name: &[u8],
+    form_rect: [f64; 4],
+    crop: [f64; 4],
+    rotation: u16,
+    placement: [f64; 4], // width, height, x, y in Form coordinates
+) -> Option<StagedImage> {
+    let [w, h, tx, ty] = placement;
+    if w < 1.0
+        || h < 1.0
+        || [w, h, tx, ty]
+            .iter()
+            .any(|v| !v.is_finite() || *v < 0.0 || v.fract() != 0.0)
+        || tx + w > form_rect[2] - form_rect[0]
+        || ty + h > form_rect[3] - form_rect[1]
+        || w * h > 65_536.0
+    {
+        return None;
+    }
+    let (source_width, source_height) = (w as usize, h as usize);
+    let pixels = decode_form_rgb_image(doc, xobjects, name, source_width, source_height)?;
+    let bounds = pixel_box(
+        crop,
+        rotation,
+        &[
+            [form_rect[0] + tx, form_rect[1] + ty],
+            [form_rect[0] + tx + w, form_rect[1] + ty + h],
+        ],
+    )?;
+    let output_width = (bounds[2] - bounds[0]) as usize;
+    let output_height = (bounds[3] - bounds[1]) as usize;
+    if output_width * output_height != source_width * source_height {
+        return None;
+    }
+    let mut rgb = vec![0; pixels.len()];
+    for y in 0..source_height {
+        for x in 0..source_width {
+            let (out_x, out_y) = match rotation {
+                0 => (x, y),
+                90 => (source_height - 1 - y, x),
+                180 => (source_width - 1 - x, source_height - 1 - y),
+                270 => (y, source_width - 1 - x),
+                _ => return None,
+            };
+            let source = (y * source_width + x) * 3;
+            let target = (out_y * output_width + out_x) * 3;
+            rgb[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
+        }
+    }
+    Some(StagedImage { rect: bounds, rgb })
+}
+
 /// A bounded ordered sequence of opaque RGB8 XObjects in an annotation Form.
 /// Each image has its own axis-aligned, integral placement; unknown graphics
 /// operators or states reject the whole Form before any page paint begins.
@@ -1142,55 +1273,24 @@ fn parse_bounded_image_form(
         let [w, b, c, h, tx, ty] = values.as_slice() else {
             return None;
         };
-        if *b != 0.0
-            || *c != 0.0
-            || *w < 1.0
-            || *h < 1.0
-            || [w, h, tx, ty]
-                .iter()
-                .any(|v| !v.is_finite() || v.fract() != 0.0)
-            || tx + w > pdf_width
-            || ty + h > pdf_height
-            || w * h > 65_536.0
-        {
+        if *b != 0.0 || *c != 0.0 {
             return None;
         }
-        let (source_width, source_height) = (*w as usize, *h as usize);
-        let pixels = decode_form_rgb_image(doc, xobjects, name, source_width, source_height)?;
-        total_bytes += pixels.len();
+        let image = stage_form_image(
+            doc,
+            xobjects,
+            name,
+            rect,
+            crop,
+            rotation,
+            [*w, *h, *tx, *ty],
+        )?;
+        total_bytes += image.rgb.len();
         if total_bytes > 1_000_000 {
             return None;
         }
         used_names.insert(name);
-        let bounds = pixel_box(
-            crop,
-            rotation,
-            &[
-                [rect[0] + tx, rect[1] + ty],
-                [rect[0] + tx + w, rect[1] + ty + h],
-            ],
-        )?;
-        let output_width = (bounds[2] - bounds[0]) as usize;
-        let output_height = (bounds[3] - bounds[1]) as usize;
-        if output_width * output_height != source_width * source_height {
-            return None;
-        }
-        let mut rgb = vec![0; pixels.len()];
-        for y in 0..source_height {
-            for x in 0..source_width {
-                let (out_x, out_y) = match rotation {
-                    0 => (x, y),
-                    90 => (source_height - 1 - y, x),
-                    180 => (source_width - 1 - x, source_height - 1 - y),
-                    270 => (y, source_width - 1 - x),
-                    _ => return None,
-                };
-                let source = (y * source_width + x) * 3;
-                let target = (out_y * output_width + out_x) * 3;
-                rgb[target..target + 3].copy_from_slice(&pixels[source..source + 3]);
-            }
-        }
-        images.push(StagedImage { rect: bounds, rgb });
+        images.push(image);
     }
     (used_names.len() == xobjects.len()).then_some(images)
 }
@@ -2130,6 +2230,130 @@ mod missing_appearance_tests {
                 }
             }
         }
+    }
+
+    fn mixed_image_vector_form_fixture(rotation: i64, compressed: bool) -> Vec<u8> {
+        let original = layered_image_stamp_fixture(rotation, compressed, false);
+        let mut doc = Document::load_mem(&original).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let annotation_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = doc
+            .get_dictionary(annotation_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let form = doc
+            .get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        form.content = b"q 0 1 0 rg 0 0 40 30 re f \
+            q 40 0 0 30 0 0 cm /Im0 Do Q \
+            1 0 0 rg 5 5 15 10 re f \
+            q 20 0 0 15 10 8 cm /Im1 Do Q \
+            0 0 0 RG 2 w 1 1 38 28 re S Q"
+            .to_vec();
+        form.dict.set("Length", form.content.len() as i64);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn mixed_image_and_vector_form_preserves_pdf_paint_order() {
+        for rotation in [0, 90, 180, 270] {
+            for compressed in [false, true] {
+                let bytes = mixed_image_vector_form_fixture(rotation, compressed);
+                if rotation == 90 && compressed {
+                    if let Ok(path) = std::env::var("OPDS_MIXED_AP_TEST_PDF") {
+                        std::fs::write(path, &bytes).unwrap();
+                    }
+                }
+                let doc = Document::load_mem(&bytes).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+                let staged = parse_bounded_opaque_form(
+                    &doc,
+                    doc.get_page_annotations(page_id).unwrap()[0],
+                    crop,
+                    turn,
+                )
+                .unwrap();
+                assert_eq!(staged.len(), 5);
+                let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(selected.imported_annotations_dynlex);
+                assert_eq!(
+                    selected.raster.rgba,
+                    pdf.render_page(1, 1.0).unwrap().rgba,
+                    "rotation={rotation}, compressed={compressed}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn mixed_form_rejects_vector_paint_under_unmodeled_image_ctm() {
+        let original = mixed_image_vector_form_fixture(90, true);
+        let mut doc = Document::load_mem(&original).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let annotation_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = doc
+            .get_dictionary(annotation_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let form = doc
+            .get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        form.content = b"q 0 1 0 rg 0 0 40 30 re f \
+            q 40 0 0 30 0 0 cm /Im0 Do 1 0 0 rg 5 5 15 10 re f Q Q"
+            .to_vec();
+        form.dict.set("Length", form.content.len() as i64);
+        let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+        assert!(parse_bounded_opaque_form(
+            &doc,
+            doc.get_page_annotations(page_id).unwrap()[0],
+            crop,
+            turn,
+        )
+        .is_none());
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert!(!selected.imported_annotations_dynlex);
+        assert_eq!(selected.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
     }
 
     #[test]
