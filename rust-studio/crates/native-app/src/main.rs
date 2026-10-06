@@ -1103,6 +1103,271 @@ mod dynlex_annotation_overlay_tests {
     use super::*;
 
     #[test]
+    fn imported_highlight_appearance_matches_colored_source_and_square_order() {
+        for rotation in [0, 90] {
+            for colored in [false, true] {
+                for square_first in [false, true] {
+                    let mut source = lopdf::Document::load_mem(include_bytes!(
+                        "../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf"
+                    ))
+                    .unwrap();
+                    let page_id = *source.get_pages().get(&1).unwrap();
+                    let contents_id = source
+                        .get_dictionary(page_id)
+                        .unwrap()
+                        .get(b"Contents")
+                        .unwrap()
+                        .as_reference()
+                        .unwrap();
+                    let page = source
+                        .get_object_mut(page_id)
+                        .unwrap()
+                        .as_dict_mut()
+                        .unwrap();
+                    page.set("MediaBox", vec![0.into(), 0.into(), 500.into(), 400.into()]);
+                    page.set(
+                        "CropBox",
+                        vec![40.into(), 30.into(), 440.into(), 330.into()],
+                    );
+                    page.set("Rotate", rotation);
+                    source
+                        .get_object_mut(contents_id)
+                        .unwrap()
+                        .as_stream_mut()
+                        .unwrap()
+                        .set_plain_content(if colored {
+                            b"0.2 0.5 0.8 rg 0 0 500 400 re f".to_vec()
+                        } else {
+                            Vec::new()
+                        });
+                    let mut bytes = Vec::new();
+                    source.save_to(&mut bytes).unwrap();
+                    let square = Annotation {
+                        id: 1,
+                        page: 0,
+                        bounds: Rect {
+                            x: 50.0,
+                            y: 60.0,
+                            width: 100.0,
+                            height: 80.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [230, 20, 30],
+                        },
+                    };
+                    let highlight = Annotation {
+                        id: 2,
+                        page: 0,
+                        bounds: Rect {
+                            x: 80.0,
+                            y: 85.0,
+                            width: 110.0,
+                            height: 70.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [255, 226, 67],
+                        },
+                    };
+                    let mut marks = if square_first {
+                        vec![square, highlight]
+                    } else {
+                        vec![highlight, square]
+                    };
+                    if colored && square_first {
+                        marks.push(Annotation {
+                            id: 3,
+                            page: 0,
+                            bounds: Rect {
+                                x: 95.0,
+                                y: 100.0,
+                                width: 85.0,
+                                height: 55.0,
+                            },
+                            kind: Kind::Rectangle {
+                                color_rgb: [255, 226, 67],
+                            },
+                        });
+                    }
+                    let saved = pdf_save::export_annotations(&bytes, &marks).unwrap();
+                    let expected = ParsedPdf::open(Arc::new(saved.clone()))
+                        .unwrap()
+                        .render_page(1, 1.0)
+                        .unwrap();
+                    let direct =
+                        opds_dynlex_backend::render_native_shape_appearances_direct(&saved, 1)
+                            .unwrap()
+                            .expect("native Square and Highlight appearances");
+                    assert_eq!(
+                        direct.rgba, expected.rgba,
+                        "rotation={rotation}, colored={colored}, square_first={square_first}"
+                    );
+                    assert!(
+                        opds_dynlex_backend::render_square_appearances_direct(&saved, 1)
+                            .unwrap()
+                            .is_none()
+                    );
+                    if rotation == 0 && !colored && square_first {
+                        let mut malformed = lopdf::Document::load_mem(&saved).unwrap();
+                        let annotation_id = malformed
+                            .get_dictionary(page_id)
+                            .unwrap()
+                            .get(b"Annots")
+                            .unwrap()
+                            .as_array()
+                            .unwrap()[1]
+                            .as_reference()
+                            .unwrap();
+                        malformed
+                            .get_object_mut(annotation_id)
+                            .unwrap()
+                            .as_dict_mut()
+                            .unwrap()
+                            .set("QuadPoints", Vec::<lopdf::Object>::new());
+                        malformed.trailer.remove(b"Prev");
+                        malformed.trailer.remove(b"XRefStm");
+                        let mut malformed_bytes = Vec::new();
+                        malformed.save_to(&mut malformed_bytes).unwrap();
+                        assert!(opds_dynlex_backend::render_native_shape_appearances_direct(
+                            &malformed_bytes,
+                            1
+                        )
+                        .unwrap()
+                        .is_none());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn imported_squares_keep_pdf_order_over_color_and_rotated_crop() {
+        for rotation in [0, 90, 180, 270] {
+            for reverse in [false, true] {
+                let mut source = lopdf::Document::load_mem(include_bytes!(
+                    "../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf"
+                ))
+                .unwrap();
+                let page_id = *source.get_pages().get(&1).unwrap();
+                let contents_id = source
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Contents")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                let page = source
+                    .get_object_mut(page_id)
+                    .unwrap()
+                    .as_dict_mut()
+                    .unwrap();
+                page.set("MediaBox", vec![0.into(), 0.into(), 500.into(), 400.into()]);
+                page.set(
+                    "CropBox",
+                    vec![40.into(), 30.into(), 440.into(), 330.into()],
+                );
+                page.set("Rotate", rotation);
+                source
+                    .get_object_mut(contents_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap()
+                    .set_plain_content(b"0.2 0.5 0.8 rg 0 0 500 400 re f".to_vec());
+                let mut bytes = Vec::new();
+                source.save_to(&mut bytes).unwrap();
+                let mut marks = vec![
+                    Annotation {
+                        id: 1,
+                        page: 0,
+                        bounds: Rect {
+                            x: 50.0,
+                            y: 60.0,
+                            width: 120.0,
+                            height: 80.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [250, 20, 20],
+                        },
+                    },
+                    Annotation {
+                        id: 2,
+                        page: 0,
+                        bounds: Rect {
+                            x: 70.0,
+                            y: 80.0,
+                            width: 120.0,
+                            height: 80.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [20, 200, 40],
+                        },
+                    },
+                    Annotation {
+                        id: 3,
+                        page: 0,
+                        bounds: Rect {
+                            x: 200.0,
+                            y: 150.0,
+                            width: 60.0,
+                            height: 50.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [25, 30, 225],
+                        },
+                    },
+                ];
+                if reverse {
+                    marks.reverse();
+                }
+                let saved = pdf_save::export_annotations(&bytes, &marks).unwrap();
+                let expected = ParsedPdf::open(Arc::new(saved.clone()))
+                    .unwrap()
+                    .render_page(1, 1.0)
+                    .unwrap();
+                let direct = opds_dynlex_backend::render_square_appearances_direct(&saved, 1)
+                    .unwrap()
+                    .expect("three supported Square appearances");
+                assert_eq!(
+                    direct.rgba, expected.rgba,
+                    "rotation={rotation}, reverse={reverse}"
+                );
+                assert!(
+                    opds_dynlex_backend::render_single_square_appearance_direct(&saved, 1)
+                        .unwrap()
+                        .is_none()
+                );
+                if rotation == 0 && !reverse {
+                    let mut missing_ap = lopdf::Document::load_mem(&saved).unwrap();
+                    let annotation_id = missing_ap
+                        .get_dictionary(page_id)
+                        .unwrap()
+                        .get(b"Annots")
+                        .unwrap()
+                        .as_array()
+                        .unwrap()[1]
+                        .as_reference()
+                        .unwrap();
+                    missing_ap
+                        .get_object_mut(annotation_id)
+                        .unwrap()
+                        .as_dict_mut()
+                        .unwrap()
+                        .remove(b"AP");
+                    missing_ap.trailer.remove(b"Prev");
+                    missing_ap.trailer.remove(b"XRefStm");
+                    let mut missing_bytes = Vec::new();
+                    missing_ap.save_to(&mut missing_bytes).unwrap();
+                    assert!(opds_dynlex_backend::render_square_appearances_direct(
+                        &missing_bytes,
+                        1
+                    )
+                    .unwrap()
+                    .is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
     fn imported_square_direct_matches_all_quarter_turns_and_rejects_unknown_state() {
         for rotation in [0, 90, 180, 270] {
             let mut source = lopdf::Document::load_mem(include_bytes!(

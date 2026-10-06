@@ -116,6 +116,28 @@ opgenomen en is geen algemene `/AP`-interpretatie: Hayro blijft voor de
 pagina-inhoud én als pariteitsoracle nodig. Ook dit is dus nog geen volledige
 DynLex-annotatielaag.
 
+Dezelfde read-only route accepteert nu ook **tot 64** van deze gevalideerde
+Square-appearances in de volgorde van de PDF-`/Annots`-array. Drie gekleurde
+Squares, deels overlappend boven een gekleurde pagina, zijn in beide
+tekenvolgordes en op alle vier kwartslagen met verschoven CropBox over de
+volledige pagina bytegelijk aan Hayro. Eén ontbrekende `/AP` in de reeks
+weigert de gehele proef; de oude enkelvoudige API weigert meerdere
+annotaties. De app-router gebruikt dit nog niet en de twee Hayro-renders
+(kale pagina en oracle) maken dit een correctheidsproef, geen prestatiepad.
+
+`render_native_shape_appearances_direct` laat in dezelfde proef ook de
+native `/Highlight`-Form met gevalideerde `/GS0`-opacity 0,35,
+`/QuadPoints`, kleur en vulpad toe, gemengd met Squares in de PDF-volgorde.
+Voor gekleurde pagina-inhoud controleert de OPAN-compositor Hayro's
+transparante contentlaag en eist volledige dekking onder de Highlight.
+Geïsoleerde Highlight, beide volgordes Square/Highlight en twee deels
+overlappende Highlights op een gekleurde bron zijn op gewone en 90°/CropBox-
+pagina's volledig RGBA-bytegelijk aan de opgeslagen PDF in Hayro. Onbekende
+appearance-resources of gewijzigde grafische staat worden geweigerd. De
+oude Square-only-API blijft Highlights weigeren. De app gebruikt deze
+nieuwe read-only route nog niet; dit is geen algemene transparantiegroep- of
+annotation-support.
+
 ## Geïsoleerde native Text Box-appearance
 
 `flatten_native_free_text_appearance` is nu een **read-only onderzoeksbrug**
