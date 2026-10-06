@@ -6,10 +6,12 @@ import renderer.dl
 # Kinds 3 and 4 receive premultiplied Highlight channels. Rust partitions
 # partial Vello tiles (kind 3, masked blend) from full tiles (kind 4, direct
 # source-over) before invoking the kernel. The commands never overlap.
-# This kernel paints onto an existing opaque RGBA page, avoiding a second
-# full-page RGB payload in OPDL. It trusts the Rust boundary for all bounds.
+# Version 1 paints onto opaque RGBA. Version 2 paints onto a validated
+# premultiplied PDF-content layer and updates alpha in drawing order.
+# It trusts the Rust boundary for all bounds.
 function render {cstring:scene} into {cstring:pixels}:
     execute:
+        set version to unsigned word at 4 in scene
         set width to unsigned word at 8 in scene
         set count to unsigned word at 16 in scene
         set index to 0
@@ -50,6 +52,8 @@ function render {cstring:scene} into {cstring:pixels}:
                             store (red as a byte) into pixels at pixel
                             store (green as a byte) into pixels at (pixel + 1)
                             store (blue as a byte) into pixels at (pixel + 2)
+                            if version = 2:
+                                store (255 as a byte) into pixels at (pixel + 3)
                         else if kind = 3:
                             set old_red to unsigned byte at pixel in pixels
                             set old_green to unsigned byte at (pixel + 1) in pixels
@@ -57,6 +61,9 @@ function render {cstring:scene} into {cstring:pixels}:
                             store (((red * 255 + old_red * (255 - opacity) + 255) / 256) as a byte) into pixels at pixel
                             store (((green * 255 + old_green * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 1)
                             store (((blue * 255 + old_blue * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 2)
+                            if version = 2:
+                                set old_alpha to unsigned byte at (pixel + 3) in pixels
+                                store (((opacity * 255 + old_alpha * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 3)
                         else if kind = 4:
                             set old_red to unsigned byte at pixel in pixels
                             set old_green to unsigned byte at (pixel + 1) in pixels
@@ -64,6 +71,9 @@ function render {cstring:scene} into {cstring:pixels}:
                             store ((red + (old_red * (255 - opacity) + 255) / 256) as a byte) into pixels at pixel
                             store ((green + (old_green * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 1)
                             store ((blue + (old_blue * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 2)
+                            if version = 2:
+                                set old_alpha to unsigned byte at (pixel + 3) in pixels
+                                store ((opacity + (old_alpha * (255 - opacity) + 255) / 256) as a byte) into pixels at (pixel + 3)
                         else:
                             set old_red to unsigned byte at pixel in pixels
                             set old_green to unsigned byte at (pixel + 1) in pixels

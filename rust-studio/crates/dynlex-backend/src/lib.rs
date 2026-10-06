@@ -4,6 +4,7 @@ mod annotation_overlay;
 pub use annotation_overlay::{
     render_native_annotation_overlay, render_native_annotation_overlay_pixels,
     render_native_annotation_overlay_pixels_on_opaque_source,
+    render_native_annotation_overlay_pixels_over_premultiplied,
     render_native_annotation_overlay_pixels_with_content,
 };
 #[cfg(feature = "kernel")]

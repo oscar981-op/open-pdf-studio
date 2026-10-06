@@ -142,6 +142,53 @@ pub fn eligible_opaque_page(source_pdf: &[u8], page: usize, width: u32, height: 
     supported_page_paint(source_pdf, page, width, height) == Some(PagePaint::OpaqueFill)
 }
 
+/// Return a source PDF-content layer only when its premultiplied pixels
+/// reconstruct the displayed white-paper bitmap byte for byte. Blank pages
+/// need no async render; all other partial pages require a page-bound layer.
+pub fn verified_premultiplied_page_layer(
+    source_pdf: &[u8],
+    page: usize,
+    base_rgba: &[u8],
+    content_rgba: Option<&[u8]>,
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+) -> Option<Vec<u8>> {
+    if width == 0
+        || width > 256
+        || height == 0
+        || height > 4096
+        || page_points != (width as f32, height as f32)
+        || base_rgba.len() != width as usize * height as usize * 4
+        || base_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
+    {
+        return None;
+    }
+    match supported_page_paint(source_pdf, page, width, height)? {
+        PagePaint::Blank => base_rgba
+            .chunks_exact(4)
+            .all(|pixel| pixel == [255; 4])
+            .then(|| vec![0; base_rgba.len()]),
+        PagePaint::Mixed => {
+            let content = content_rgba.filter(|layer| layer.len() == base_rgba.len())?;
+            content
+                .chunks_exact(4)
+                .zip(base_rgba.chunks_exact(4))
+                .all(|(source, visible)| {
+                    let paper = 255 - source[3];
+                    source[..3]
+                        .iter()
+                        .zip(&visible[..3])
+                        .all(|(channel, target)| {
+                            *channel <= source[3] && channel.saturating_add(paper) == *target
+                        })
+                })
+                .then(|| content.to_vec())
+        }
+        PagePaint::OpaqueFill => None,
+    }
+}
+
 /// An async content render can prove opacity under a colored Highlight only
 /// for this small, independently classified source subset. The compositor
 /// still checks every covered source pixel after the render completes.

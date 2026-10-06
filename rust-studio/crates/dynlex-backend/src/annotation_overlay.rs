@@ -64,6 +64,7 @@ pub fn render_native_annotation_overlay_pixels_with_content(
         base_rgba,
         Some(content_rgba),
         false,
+        false,
         width,
         height,
         page_points,
@@ -92,6 +93,7 @@ pub fn render_native_annotation_overlay_pixels_on_opaque_source(
         source_rgba,
         Some(content_rgba),
         true,
+        false,
         width,
         height,
         page_points,
@@ -115,6 +117,32 @@ pub fn render_native_annotation_overlay_pixels(
         base_rgba,
         None,
         false,
+        false,
+        width,
+        height,
+        page_points,
+        annotations,
+        page,
+    )
+}
+
+/// Paint validated native shapes into an existing premultiplied PDF page
+/// content layer. The caller must prove that this layer belongs to the same
+/// page and add the viewer's white paper only after all marks are composited.
+pub fn render_native_annotation_overlay_pixels_over_premultiplied(
+    layer_rgba: &[u8],
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    annotations: &[Annotation],
+    page: usize,
+) -> Result<Option<Bitmap>, String> {
+    render_native_annotation_overlay_pixels_inner(
+        layer_rgba,
+        layer_rgba,
+        None,
+        false,
+        true,
         width,
         height,
         page_points,
@@ -128,6 +156,7 @@ fn render_native_annotation_overlay_pixels_inner(
     source_rgba: &[u8],
     content_rgba: Option<&[u8]>,
     require_opaque_source: bool,
+    premultiplied: bool,
     width: u32,
     height: u32,
     page_points: (f32, f32),
@@ -141,6 +170,7 @@ fn render_native_annotation_overlay_pixels_inner(
             source_rgba,
             content_rgba,
             require_opaque_source,
+            premultiplied,
             width,
             height,
             page_points,
@@ -160,8 +190,14 @@ fn render_native_annotation_overlay_pixels_inner(
             || page_points.1 != height as f32
             || base_rgba.len() != (width as usize) * (height as usize) * 4
             || source_rgba.len() != base_rgba.len()
-            || base_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
-            || source_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
+            || base_rgba.chunks_exact(4).any(|pixel| {
+                if premultiplied {
+                    pixel[..3].iter().any(|channel| *channel > pixel[3])
+                } else {
+                    pixel[3] != 255
+                }
+            })
+            || (!premultiplied && source_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255))
         {
             return Ok(None);
         }
@@ -180,7 +216,7 @@ fn render_native_annotation_overlay_pixels_inner(
             let Some(bounds) = pixel_rect(mark.bounds, width, height) else {
                 return Ok(None);
             };
-            if *color_rgb == [255, 226, 67] {
+            if *color_rgb == [255, 226, 67] && !premultiplied {
                 let mut colored_underlay = require_opaque_source;
                 for y in bounds[1]..bounds[3] {
                     for x in bounds[0]..bounds[2] {
@@ -218,7 +254,7 @@ fn render_native_annotation_overlay_pixels_inner(
         }
         let mut scene = Vec::with_capacity(20 + rectangles.len() * 9 * 24);
         scene.extend_from_slice(b"OPAN");
-        for value in [1, width, height, 0] {
+        for value in [if premultiplied { 2 } else { 1 }, width, height, 0] {
             scene.extend_from_slice(&value.to_le_bytes());
         }
         let mut command_count = 0_u32;
@@ -281,6 +317,13 @@ fn render_native_annotation_overlay_pixels_inner(
         };
         if status != 0 {
             return Err(format!("DynLex annotation kernel status {status}"));
+        }
+        if premultiplied
+            && output
+                .chunks_exact(4)
+                .any(|pixel| pixel[..3].iter().any(|channel| *channel > pixel[3]))
+        {
+            return Err("DynLex annotation kernel broke premultiplied RGBA".into());
         }
         Ok(Some(Bitmap {
             width,
@@ -376,6 +419,47 @@ mod tests {
         )
         .unwrap()
         .is_none());
+    }
+
+    #[test]
+    fn premultiplied_shape_input_rejects_unassociated_color() {
+        let mark = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 4.0,
+                y: 4.0,
+                width: 8.0,
+                height: 8.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let mut invalid = vec![0_u8; 16 * 16 * 4];
+        invalid[0] = 1;
+        assert!(render_native_annotation_overlay_pixels_over_premultiplied(
+            &invalid,
+            16,
+            16,
+            (16.0, 16.0),
+            &[mark.clone()],
+            0,
+        )
+        .unwrap()
+        .is_none());
+        let blank = vec![0_u8; invalid.len()];
+        let output = render_native_annotation_overlay_pixels_over_premultiplied(
+            &blank,
+            16,
+            16,
+            (16.0, 16.0),
+            &[mark],
+            0,
+        )
+        .unwrap()
+        .expect("valid transparent PDF content should reach DynLex");
+        assert_eq!(&output.rgba[(4 * 16 + 4) * 4..][..4], &[89, 79, 23, 89]);
     }
 
     #[test]

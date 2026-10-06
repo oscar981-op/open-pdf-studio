@@ -227,10 +227,18 @@ of vormen gewijzigde bitmap. Een geïsoleerde Save As-PDF met blauwe `ΩΩΩ`
 en kruisende rode Square of gele Highlight is in beide volgordes volledig
 RGBA-bytegelijk aan Hayro. De app-cachetest bewijst ook vorm-vorm-tekst en
 tekst-vorm-vorm in beide volgordes op een gekleurde 256×192-pagina. Een
-verouderde of deels transparante bronlaag wordt geweigerd. Op een lege of
-gedeeltelijk dekkende PDF-bron blijft **tekst-vorm-overlap** voorlopig bij
-Iced, omdat de huidige vormkern daar nog geen premultiplied paginalaag
-bijwerkt. De annotaties moeten ook ieder afzonderlijk binnen hun bestaande
+verouderde of deels transparante bronlaag wordt geweigerd voor de dekkende route.
+OPAN-v2 kan nu dezelfde vormopdrachten op een gevalideerde premultiplied
+PDF-bronlaag compositeren en werkt de alfawaarde per vorm bij. De app accepteert
+hiervoor een bewezen lege pagina of een kleine gedeeltelijk dekkende PDF met
+een asynchroon geladen content layer die de zichtbare pagina byte voor byte
+reconstrueert. Text Box en Square/Highlight worden vóór of na elkaar in de
+annotatievolgorde getekend; pas daarna wordt wit papier toegevoegd. Echte
+Save As-proeven voor leeg en gedeeltelijk gevuld, beide vormkleuren en beide
+volgordes zijn RGBA-bytegelijk aan Hayro. De app-cachetest controleert ook
+Highlight vóór en na Text Box op een gedeeltelijk geverfde PDF, met behoud van
+de bestaande stale-result-afwijzing. Niet-gevalideerde contentlagen blijven
+Iced-fallback. De annotaties moeten ook ieder afzonderlijk binnen hun bestaande
 bewezen rendergrenzen vallen. Voor grotere en complexere pagina's en
 achteraf toegevoegde Text Boxes zijn bredere bronlaagstaging en
 cache-integratie nodig. Volledige Text Box- en annotatiedekking zijn nog
@@ -251,6 +259,8 @@ cargo test --offline -p opds-native-app --features dynlex-experimental \
   colored_highlight_waits_for_opaque_content_proof
 cargo test --offline -p opds-native-app --features dynlex-experimental \
   dynlex_glyph_and_shape_order_matches_saved_appearances
+cargo test --offline -p opds-native-app --features dynlex-experimental \
+  dynlex_premultiplied_text_and_shape_order_matches_saved_appearances
 ```
 
 De andere OPDL-v2/v4-verifiers moeten bij verdere wijzigingen blijven slagen.

@@ -65,7 +65,10 @@ header:
   %width = load i32, ptr %width_p, align 1
   %height = load i32, ptr %height_p, align 1
   %count = load i32, ptr %count_p, align 1
-  %bad_version = icmp ne i32 %version, 1
+  %v1 = icmp eq i32 %version, 1
+  %v2 = icmp eq i32 %version, 2
+  %known_version = or i1 %v1, %v2
+  %bad_version = xor i1 %known_version, true
   %bad_width_min = icmp ult i32 %width, 1
   %bad_height_min = icmp ult i32 %height, 1
   %bad_width_max = icmp ugt i32 %width, 4096
