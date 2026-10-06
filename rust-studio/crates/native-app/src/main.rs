@@ -724,86 +724,39 @@ impl OpenDocument {
             }
         }
         let item = self.model.get(selected)?;
-        let Kind::Rectangle { color_rgb } = &item.kind else {
+        let Kind::Rectangle { .. } = &item.kind else {
             return None;
         };
         if item.page != self.displayed_page {
             return None;
         }
-        let image::Handle::Rgba {
-            width,
-            height,
-            pixels,
-            ..
-        } = &static_bitmap
-        else {
+        let image::Handle::Rgba { width, height, .. } = &static_bitmap else {
             return None;
         };
-        let selected_source = if *color_rgb == [255, 226, 67] {
-            pixels.as_ref().to_vec()
-        } else {
-            // Iced centers the 2px Rectangle stroke on its bounds. The
-            // normal DynLex /AP path uses the PDF-verified inside stroke;
-            // this selected-only preview shifts that one mark outward by a
-            // pixel without changing the model or saved appearance.
-            let mut marks: Vec<_> = self
-                .model
-                .items()
-                .filter(|mark| mark.page == self.displayed_page)
-                .cloned()
-                .collect();
-            if !marks
-                .iter()
-                .all(|mark| matches!(&mark.kind, Kind::Rectangle { .. }))
-            {
-                return None;
-            }
-            let target = marks.iter_mut().find(|mark| mark.id == selected)?;
-            target.bounds.x -= 1.0;
-            target.bounds.y -= 1.0;
-            target.bounds.width += 2.0;
-            target.bounds.height += 2.0;
-            let base = self.bitmap.as_ref()?;
-            let image::Handle::Rgba { pixels: source, .. } = base else {
-                return None;
-            };
-            #[cfg(feature = "dynlex-experimental")]
-            let content = self.content_layer_cache.borrow();
-            #[cfg(feature = "dynlex-experimental")]
-            let rendered = if let Some(layer) = content
-                .as_ref()
-                .filter(|cached| cached.base == *base && cached.page == self.displayed_page)
-            {
-                opds_dynlex_backend::render_native_annotation_overlay_pixels_with_content(
-                    source.as_ref(),
-                    &layer.rgba,
-                    *width,
-                    *height,
-                    self.bitmap_page_points,
-                    &marks,
-                    self.displayed_page,
-                )
-            } else {
-                opds_dynlex_backend::render_native_annotation_overlay_pixels(
-                    source.as_ref(),
-                    *width,
-                    *height,
-                    self.bitmap_page_points,
-                    &marks,
-                    self.displayed_page,
-                )
-            };
-            #[cfg(not(feature = "dynlex-experimental"))]
-            let rendered = opds_dynlex_backend::render_native_annotation_overlay_pixels(
-                source.as_ref(),
-                *width,
-                *height,
-                self.bitmap_page_points,
-                &marks,
-                self.displayed_page,
-            );
-            rendered.ok().flatten()?.rgba
+        // The selected viewer preview follows Iced's centered opaque stroke
+        // and linear-light Highlight, while the static bitmap and saved /AP
+        // retain the PDF-verified composition.
+        let marks: Vec<_> = self
+            .model
+            .items()
+            .filter(|mark| mark.page == self.displayed_page)
+            .cloned()
+            .collect();
+        let base = self.bitmap.as_ref()?;
+        let image::Handle::Rgba { pixels: source, .. } = base else {
+            return None;
         };
+        let selected_source = opds_dynlex_backend::render_native_ui_preview_pixels(
+            source.as_ref(),
+            *width,
+            *height,
+            self.bitmap_page_points,
+            &marks,
+            self.displayed_page,
+        )
+        .ok()
+        .flatten()?
+        .rgba;
         let painted = opds_dynlex_backend::render_native_selection_overlay_pixels(
             &selected_source,
             *width,

@@ -6,6 +6,7 @@ pub use annotation_overlay::{
     render_native_annotation_overlay_pixels_on_opaque_source,
     render_native_annotation_overlay_pixels_over_premultiplied,
     render_native_annotation_overlay_pixels_with_content, render_native_selection_overlay_pixels,
+    render_native_ui_preview_pixels,
 };
 #[cfg(feature = "kernel")]
 mod appearance_stage;

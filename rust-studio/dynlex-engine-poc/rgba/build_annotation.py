@@ -68,8 +68,10 @@ header:
   %v1 = icmp eq i32 %version, 1
   %v2 = icmp eq i32 %version, 2
   %v3 = icmp eq i32 %version, 3
+  %v4 = icmp eq i32 %version, 4
   %old_version = or i1 %v1, %v2
-  %known_version = or i1 %old_version, %v3
+  %new_version = or i1 %v3, %v4
+  %known_version = or i1 %old_version, %new_version
   %bad_version = xor i1 %known_version, true
   %bad_width_min = icmp ult i32 %width, 1
   %bad_height_min = icmp ult i32 %height, 1
@@ -78,7 +80,7 @@ header:
   %bad_count = icmp ugt i32 %count, 576
   %expected = mul i32 %count, 24
   %records_len = add i32 %expected, 20
-  %lut_len = select i1 %v3, i32 768, i32 0
+  %lut_len = select i1 %new_version, i32 768, i32 0
   %expected_len = add i32 %records_len, %lut_len
   %bad_len = icmp ne i32 %scene_len, %expected_len
   %width64 = zext i32 %width to i64

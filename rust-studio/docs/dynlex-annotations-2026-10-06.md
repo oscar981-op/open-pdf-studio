@@ -112,10 +112,20 @@ De latere directe selectiepariteit staat tijdelijk in
 `/tmp/opds-selection-aa2-{dynlex,iced}.png`; deze vergelijking corrigeert de
 512px horizontale verschuiving die de bestaande backendwissel in het venster
 veroorzaakte.
-De Highlight-vergelijking staat tijdelijk in
-`/tmp/opds-selection-highlight-{dynlex,iced}.png`; de volgende stap is een
-afzonderlijke UI-kleurmenging voor Highlights en gecentreerde strokepreview
-voor overige rechthoeken, terwijl Save As de bestaande PDF-appearance houdt.
+De eerste Highlight-vergelijking staat tijdelijk in
+`/tmp/opds-selection-highlight-{dynlex,iced}.png`. Een afzonderlijke
+OPAN-v4-viewerpreview mengt nu geel met Iced's lineaire 35%-dekking en zet
+een rode rechthoekstroke gecentreerd op zijn grenzen. De eerdere printbare
+PDF-/AP-route blijft ongewijzigd. Bij een overlappende rode Rectangle en
+geselecteerde Highlight daalde het verschil op 44.928 zichtbare paginapixels
+van 2.084 naar 164 pixels; alle resterende verschillen zijn één 8-bit-stap
+in de blauwe selectierand. Dat is consistent met een verschil in de
+afronding van twee opeenvolgende transparante lagen; de precieze Vello-regel
+is nog niet gereproduceerd in DynLex.
+Screenshots: `/tmp/opds-ui-preview-overlap-{dynlex,iced}.png`. Dit is nog
+geen volledige UI-pariteit en de OPAN-v4-preview is voorlopig alleen actief
+bij geselecteerde vormannotaties; andere zoom, tekst en paginaranden blijven
+veilig bij Iced.
 Een gerichte app-unit-test controleert selectiecache en invalidatie na
 verplaatsing. De native computergebruik-koppeling bood geen vensters aan;
 deze UI-proef gebruikte XTest rechtstreeks op het X11-venster.

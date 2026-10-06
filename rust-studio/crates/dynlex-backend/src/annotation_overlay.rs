@@ -116,7 +116,15 @@ pub(crate) fn paint_imported_commands_owned(
     page_points: (f32, f32),
     commands: &[ImportedCommand],
 ) -> Result<Option<Bitmap>, String> {
-    paint_commands_owned(output, width, height, page_points, commands, None)
+    paint_commands_owned(output, width, height, page_points, commands, PaintMode::Pdf)
+}
+
+#[cfg(feature = "kernel")]
+#[derive(Clone, Copy)]
+enum PaintMode {
+    Pdf,
+    Selection(&'static [u8; 768]),
+    UiPreview(&'static [u8; 768]),
 }
 
 #[cfg(feature = "kernel")]
@@ -126,9 +134,9 @@ fn paint_commands_owned(
     height: u32,
     page_points: (f32, f32),
     commands: &[ImportedCommand],
-    selection_lut: Option<&[u8; 768]>,
+    mode: PaintMode,
 ) -> Result<Option<Bitmap>, String> {
-    let selection = selection_lut.is_some();
+    let opaque_preview = !matches!(mode, PaintMode::Pdf);
     if width == 0
         || height == 0
         || width > 4096
@@ -139,44 +147,49 @@ fn paint_commands_owned(
         || output
             .chunks_exact(4)
             .any(|pixel| pixel[..3].iter().any(|channel| *channel > pixel[3]))
-        || (selection && output.chunks_exact(4).any(|pixel| pixel[3] != 255))
+        || (opaque_preview && output.chunks_exact(4).any(|pixel| pixel[3] != 255))
         || commands.is_empty()
         || commands.len() > 576
-        || (selection
+        || (matches!(mode, PaintMode::Selection(_))
             && (commands[0].kind != 5 || commands.iter().skip(1).any(|entry| entry.kind != 1)))
         || commands.iter().any(|entry| {
             let [x0, y0, x1, y1] = entry.rect;
-            !(matches!(entry.kind, 1..=4) || (selection && entry.kind == 5))
-                || x0 >= x1
+            !(match mode {
+                PaintMode::Pdf => matches!(entry.kind, 1..=4),
+                PaintMode::Selection(_) => matches!(entry.kind, 1 | 5),
+                PaintMode::UiPreview(_) => matches!(entry.kind, 2 | 6),
+            }) || x0 >= x1
                 || y0 >= y1
                 || x1 > width
                 || y1 > height
                 || (matches!(entry.kind, 1 | 2) && entry.tail[3] != 255)
                 || (matches!(entry.kind, 3 | 4) && entry.tail != [89, 79, 23, 89])
-                || (selection
+                || (matches!(mode, PaintMode::Selection(_))
                     && if entry.kind == 5 {
                         entry.tail != [31, 136, 255, 191]
                     } else {
                         entry.tail != [31, 136, 255, 255]
                     })
+                || (entry.kind == 6 && entry.tail != [255, 226, 67, 89])
         })
     {
         return Ok(None);
     }
-    let mut scene = Vec::with_capacity(20 + commands.len() * 24 + if selection { 768 } else { 0 });
+    let mut scene =
+        Vec::with_capacity(20 + commands.len() * 24 + if opaque_preview { 768 } else { 0 });
     scene.extend_from_slice(b"OPAN");
-    for value in [
-        if selection { 3 } else { 2 },
-        width,
-        height,
-        commands.len() as u32,
-    ] {
+    let version = match mode {
+        PaintMode::Pdf => 2,
+        PaintMode::Selection(_) => 3,
+        PaintMode::UiPreview(_) => 4,
+    };
+    for value in [version, width, height, commands.len() as u32] {
         scene.extend_from_slice(&value.to_le_bytes());
     }
     for entry in commands {
         command(&mut scene, entry.kind, entry.rect, entry.tail);
     }
-    if let Some(lut) = selection_lut {
+    if let PaintMode::Selection(lut) | PaintMode::UiPreview(lut) = mode {
         scene.extend_from_slice(lut);
     }
     // SAFETY: Rust has validated the complete scene and RGBA buffer before
@@ -232,35 +245,103 @@ pub(crate) fn paint_opaque_imported_rectangles(
 }
 
 #[cfg(feature = "kernel")]
+fn linear_blend_lut(ink: [u8; 3], coverage: f64) -> [u8; 768] {
+    let to_linear = |byte: u8| {
+        let value = f64::from(byte) / 255.0;
+        if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let to_srgb = |linear: f64| {
+        let value = if linear <= 0.0031308 {
+            12.92 * linear
+        } else {
+            1.055 * linear.powf(1.0 / 2.4) - 0.055
+        };
+        (value * 255.0).round().clamp(0.0, 255.0) as u8
+    };
+    let mut lut = [0_u8; 768];
+    for (channel, ink) in ink.into_iter().enumerate() {
+        for source in 0_u16..=255 {
+            let mixed = to_linear(source as u8) * (1.0 - coverage) + to_linear(ink) * coverage;
+            lut[channel * 256 + source as usize] = to_srgb(mixed);
+        }
+    }
+    lut
+}
+
+#[cfg(feature = "kernel")]
 fn selection_linear_lut() -> &'static [u8; 768] {
     static LUT: std::sync::OnceLock<[u8; 768]> = std::sync::OnceLock::new();
-    LUT.get_or_init(|| {
-        let to_linear = |byte: u8| {
-            let value = f64::from(byte) / 255.0;
-            if value <= 0.04045 {
-                value / 12.92
-            } else {
-                ((value + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        let to_srgb = |linear: f64| {
-            let value = if linear <= 0.0031308 {
-                12.92 * linear
-            } else {
-                1.055 * linear.powf(1.0 / 2.4) - 0.055
+    LUT.get_or_init(|| linear_blend_lut([31, 136, 255], 191.0 / 255.0))
+}
+
+#[cfg(feature = "kernel")]
+fn highlight_linear_lut() -> &'static [u8; 768] {
+    static LUT: std::sync::OnceLock<[u8; 768]> = std::sync::OnceLock::new();
+    LUT.get_or_init(|| linear_blend_lut([255, 226, 67], 0.35))
+}
+
+/// UI-only Rectangle/Highlight paint route. Its centered red stroke and
+/// linear-light yellow fill match Iced; PDF `/AP` staging remains separate.
+pub fn render_native_ui_preview_pixels(
+    base_rgba: &[u8],
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    annotations: &[Annotation],
+    page: usize,
+) -> Result<Option<Bitmap>, String> {
+    #[cfg(not(feature = "kernel"))]
+    {
+        let _ = (base_rgba, width, height, page_points, annotations, page);
+        Ok(None)
+    }
+    #[cfg(feature = "kernel")]
+    {
+        let marks: Vec<_> = annotations
+            .iter()
+            .filter(|mark| mark.page == page)
+            .collect();
+        if marks.is_empty() || marks.len() > 64 {
+            return Ok(None);
+        }
+        let mut commands = Vec::with_capacity(marks.len());
+        for mark in marks {
+            let Kind::Rectangle { color_rgb } = &mark.kind else {
+                return Ok(None);
             };
-            (value * 255.0).round().clamp(0.0, 255.0) as u8
-        };
-        let mut lut = [0_u8; 768];
-        for (channel, ink) in [31_u8, 136, 255].into_iter().enumerate() {
-            for source in 0_u16..=255 {
-                let coverage = 191.0 / 255.0;
-                let mixed = to_linear(source as u8) * (1.0 - coverage) + to_linear(ink) * coverage;
-                lut[channel * 256 + source as usize] = to_srgb(mixed);
+            let Some([x0, y0, x1, y1]) = pixel_rect(mark.bounds, width, height) else {
+                return Ok(None);
+            };
+            if *color_rgb == [255, 226, 67] {
+                commands.push(ImportedCommand {
+                    kind: 6,
+                    rect: [x0, y0, x1, y1],
+                    tail: [255, 226, 67, 89],
+                });
+            } else {
+                if x0 == 0 || y0 == 0 || x1 >= width || y1 >= height {
+                    return Ok(None);
+                }
+                commands.push(ImportedCommand {
+                    kind: 2,
+                    rect: [x0 - 1, y0 - 1, x1 + 1, y1 + 1],
+                    tail: [color_rgb[0], color_rgb[1], color_rgb[2], 255],
+                });
             }
         }
-        lut
-    })
+        paint_commands_owned(
+            base_rgba.to_vec(),
+            width,
+            height,
+            page_points,
+            &commands,
+            PaintMode::UiPreview(highlight_linear_lut()),
+        )
+    }
 }
 
 /// Draw the selected native annotation's frame and eight resize grips in the
@@ -331,7 +412,7 @@ pub fn render_native_selection_overlay_pixels(
             height,
             page_points,
             &commands,
-            Some(selection_linear_lut()),
+            PaintMode::Selection(selection_linear_lut()),
         )
     }
 }
@@ -611,6 +692,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn ui_preview_centers_rectangle_and_blends_highlight_without_touching_pdf_path() {
+        let white = vec![255_u8; 64 * 48 * 4];
+        let marks = [
+            Annotation {
+                id: 1,
+                page: 0,
+                bounds: Rect {
+                    x: 8.0,
+                    y: 8.0,
+                    width: 20.0,
+                    height: 16.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [231, 76, 60],
+                },
+            },
+            Annotation {
+                id: 2,
+                page: 0,
+                bounds: Rect {
+                    x: 32.0,
+                    y: 8.0,
+                    width: 20.0,
+                    height: 16.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [255, 226, 67],
+                },
+            },
+        ];
+        let preview = render_native_ui_preview_pixels(&white, 64, 48, (64.0, 48.0), &marks, 0)
+            .unwrap()
+            .unwrap();
+        let pixel = |x: usize, y: usize| &preview.rgba[(y * 64 + x) * 4..][..4];
+        assert_eq!(pixel(7, 12), [231, 76, 60, 255]);
+        assert_eq!(pixel(8, 12), [231, 76, 60, 255]);
+        assert_eq!(pixel(9, 12), [255, 255, 255, 255]);
+        assert_eq!(pixel(40, 12), [255, 245, 214, 255]);
+
+        let saved_appearance =
+            render_native_annotation_overlay_pixels(&white, 64, 48, (64.0, 48.0), &marks, 0)
+                .unwrap()
+                .unwrap();
+        assert_ne!(saved_appearance.rgba, preview.rgba);
+        assert_eq!(&white[(12 * 64 + 40) * 4..][..4], &[255; 4]);
+    }
+
+    #[test]
     fn selected_frame_and_eight_grips_are_painted_by_dynlex() {
         let width = 40;
         let height = 32;
@@ -843,6 +972,16 @@ mod tests {
             scene[4..8].copy_from_slice(&3_u32.to_le_bytes());
             scene[16..20].copy_from_slice(&0_u32.to_le_bytes());
             scene.resize(20 + 767, 0);
+            assert_eq!(
+                super::super::opds_paint_annotations(
+                    scene.as_ptr(),
+                    scene.len() as i32,
+                    pixels.as_mut_ptr(),
+                    pixels.len() as i32,
+                ),
+                2
+            );
+            scene[4..8].copy_from_slice(&4_u32.to_le_bytes());
             assert_eq!(
                 super::super::opds_paint_annotations(
                     scene.as_ptr(),

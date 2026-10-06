@@ -10,6 +10,8 @@ import renderer.dl
 # premultiplied PDF-content layer and updates alpha in drawing order.
 # Version 3 appends three 256-byte linear-light selection-blend tables;
 # kind 5 paints the 75%-covered 1.5px selection border on an opaque page.
+# Version 4 uses three 256-byte yellow-highlight blend tables; kind 6 fills
+# the UI preview without changing the PDF appearance path.
 # It trusts the Rust boundary for all bounds.
 function render {cstring:scene} into {cstring:pixels}:
     execute:
@@ -39,6 +41,8 @@ function render {cstring:scene} into {cstring:pixels}:
                         set hit to 1
                     if kind = 4:
                         set hit to 1
+                    if kind = 6:
+                        set hit to 1
                     if kind = 2 or kind = 5:
                         if x < (left + 2):
                             set hit to 1
@@ -50,7 +54,7 @@ function render {cstring:scene} into {cstring:pixels}:
                             set hit to 1
                     if hit = 1:
                         set pixel to (y * width + x) * 4
-                        if kind = 5:
+                        if kind = 5 or kind = 6:
                             set lut to 20 + count * 24
                             set old_red to unsigned byte at pixel in pixels
                             set old_green to unsigned byte at (pixel + 1) in pixels
