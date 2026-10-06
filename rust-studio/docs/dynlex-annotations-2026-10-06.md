@@ -741,3 +741,17 @@ melden, nooit volledige ondersteuning suggereren. Een volgende inhoudelijke
 stap is één ontbrekend subtype of Form-state met strikte staging en volledige
 pixelvergelijking toe te voegen; de prestatieprofilering van de bestaande
 route staat in de gekoppelde meetnotitie.
+
+**Gehele lokale Form-translatie.** De begrensde `/AP/N`-Form-interpreter
+herkent nu één `q 1 0 0 1 tx ty cm ... Q`-groep, ook genest, met gehele, eindige
+verschuiving tot 4096 PDF-eenheden. Rechthoekvulling/-rand,
+meervoudige lijncontouren en `re W n`-clip gebruiken dezelfde verschoven
+Form-coördinaten; `Q` herstelt de vorige positie, kleur en clip. Vier
+gecontroleerde Form-contents op elk van 0/90/180/270° met verschoven CropBox
+zijn over de volledige pagina RGBA-bytegelijk aan Hayro. Daarnaast zijn 64
+deterministische, wisselend geroteerde twee-vulling-PDF's exact vergeleken.
+De transformatie moet vóór de eerste verfopdracht in zijn `q/Q`-groep staan.
+Fractionele verschuiving, schaal, tweede `cm`, een buiten de BBox geschoven rand en
+PDF-decimalen die lopdf voortijdig naar f32 afrondt, worden vóór de
+DynLex-aanroep afgewezen; de app valt dan zonder gedeeltelijke bitmap terug.
+Algemene affiene CTM, Form-tekst en transparantie blijven open.

@@ -776,6 +776,17 @@ fn parse_bounded_opaque_form(
         {
             return None;
         }
+        // lopdf stores PDF real operands as f32. Reject coordinates whose
+        // original decimal has already moved before page/annotation geometry
+        // is calculated; Hayro reads the original PDF precision.
+        if matches!(operation.operator.as_str(), "cm" | "re" | "m" | "l") {
+            for (token, operand) in record[..numeric_count].iter().zip(&operation.operands) {
+                let precise = std::str::from_utf8(token).ok()?.parse::<f64>().ok()?;
+                if !precise.is_finite() || precise != number(operand)? {
+                    return None;
+                }
+            }
+        }
         token_index += numeric_count + 1;
     }
     if token_index != tokens.len()
@@ -790,7 +801,9 @@ fn parse_bounded_opaque_form(
         stroke: Option<[u8; 3]>,
         line_width: Option<f64>,
         image_matrix: Option<[f64; 4]>,
+        vector_translation: Option<[f64; 2]>,
         image_painted: bool,
+        painted_in_group: bool,
         clip: Option<[u32; 4]>,
     }
     enum FormPath {
@@ -862,7 +875,10 @@ fn parse_bounded_opaque_form(
     let mut image_count = 0_usize;
     let mut image_bytes = 0_usize;
     for (index, operation) in operations.iter().enumerate() {
-        if state.image_matrix.is_some() && !matches!(operation.operator.as_str(), "Do" | "Q") {
+        if (state.image_matrix.is_some() && state.vector_translation.is_none()
+            || state.image_painted)
+            && !matches!(operation.operator.as_str(), "Do" | "Q")
+        {
             return None;
         }
         match operation.operator.as_str() {
@@ -871,11 +887,14 @@ fn parse_bounded_opaque_form(
                     return None;
                 }
                 stack.push(state);
+                state.painted_in_group = false;
             }
             "Q" => {
                 if pending_path.is_some()
                     || pending_clip
-                    || (state.image_matrix.is_some() && !state.image_painted)
+                    || (state.image_matrix.is_some()
+                        && state.vector_translation.is_none()
+                        && !state.image_painted)
                     || (stack.len() == 1 && index + 1 != operations.len())
                 {
                     return None;
@@ -883,7 +902,12 @@ fn parse_bounded_opaque_form(
                 state = stack.pop()?;
             }
             "cm" => {
-                if !(2..=4).contains(&stack.len()) || pending_path.is_some() || pending_clip {
+                if !(1..=4).contains(&stack.len())
+                    || pending_path.is_some()
+                    || pending_clip
+                    || state.image_matrix.is_some()
+                    || state.painted_in_group
+                {
                     return None;
                 }
                 let [w, b, c, h, tx, ty]: [f64; 6] = operation
@@ -896,6 +920,19 @@ fn parse_bounded_opaque_form(
                 if b != 0.0 || c != 0.0 {
                     return None;
                 }
+                let translation = (w == 1.0
+                    && h == 1.0
+                    && tx.is_finite()
+                    && ty.is_finite()
+                    && tx.fract() == 0.0
+                    && ty.fract() == 0.0
+                    && tx.abs() <= 4096.0
+                    && ty.abs() <= 4096.0)
+                    .then_some([tx, ty]);
+                if stack.len() == 1 && translation.is_none() {
+                    return None;
+                }
+                state.vector_translation = translation;
                 state.image_matrix = Some([w, h, tx, ty]);
                 state.image_painted = false;
             }
@@ -931,6 +968,7 @@ fn parse_bounded_opaque_form(
                     appearances.push(ImportedAppearance::Images(vec![image]));
                 }
                 state.image_painted = true;
+                state.painted_in_group = true;
             }
             "rg" | "RG" => {
                 if stack.is_empty() || pending_path.is_some() {
@@ -956,27 +994,40 @@ fn parse_bounded_opaque_form(
                 if stack.is_empty() || pending_path.is_some() || pending_clip {
                     return None;
                 }
-                pending_path = Some(FormPath::Rect(
-                    operation
-                        .operands
-                        .iter()
-                        .map(number)
-                        .collect::<Option<Vec<_>>>()?
-                        .try_into()
-                        .ok()?,
-                ));
-            }
-            "m" => {
-                if stack.is_empty() {
-                    return None;
-                }
-                let point = operation
+                let mut path: [f64; 4] = operation
                     .operands
                     .iter()
                     .map(number)
                     .collect::<Option<Vec<_>>>()?
                     .try_into()
                     .ok()?;
+                if let Some([tx, ty]) = state.vector_translation {
+                    path[0] += tx;
+                    path[1] += ty;
+                }
+                if path.iter().any(|value| !value.is_finite()) {
+                    return None;
+                }
+                pending_path = Some(FormPath::Rect(path));
+            }
+            "m" => {
+                if stack.is_empty() {
+                    return None;
+                }
+                let mut point: [f64; 2] = operation
+                    .operands
+                    .iter()
+                    .map(number)
+                    .collect::<Option<Vec<_>>>()?
+                    .try_into()
+                    .ok()?;
+                if let Some([tx, ty]) = state.vector_translation {
+                    point[0] += tx;
+                    point[1] += ty;
+                }
+                if point.iter().any(|value| !value.is_finite()) {
+                    return None;
+                }
                 match &mut pending_path {
                     None => {
                         pending_path = Some(FormPath::Polygon {
@@ -1006,15 +1057,21 @@ fn parse_bounded_opaque_form(
                 if points.len() >= 64 {
                     return None;
                 }
-                points.push(
-                    operation
-                        .operands
-                        .iter()
-                        .map(number)
-                        .collect::<Option<Vec<_>>>()?
-                        .try_into()
-                        .ok()?,
-                );
+                let mut point: [f64; 2] = operation
+                    .operands
+                    .iter()
+                    .map(number)
+                    .collect::<Option<Vec<_>>>()?
+                    .try_into()
+                    .ok()?;
+                if let Some([tx, ty]) = state.vector_translation {
+                    point[0] += tx;
+                    point[1] += ty;
+                }
+                if point.iter().any(|value| !value.is_finite()) {
+                    return None;
+                }
+                points.push(point);
             }
             "h" => {
                 let Some(FormPath::Polygon { closed, .. }) = &mut pending_path else {
@@ -1106,6 +1163,7 @@ fn parse_bounded_opaque_form(
                 if appearances.len() > 32 {
                     return None;
                 }
+                state.painted_in_group = true;
             }
             _ => return None,
         }
@@ -2223,6 +2281,41 @@ mod missing_appearance_tests {
         bytes
     }
 
+    fn stamp_with_form_content(rotation: i64, content: &[u8]) -> Vec<u8> {
+        let mut doc = Document::load_mem(&opaque_stamp_fixture(rotation, false)).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let annotation_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = doc
+            .get_dictionary(annotation_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let form = doc
+            .get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap();
+        form.content = content.to_vec();
+        form.dict.set("Length", form.content.len() as i64);
+        let mut source = Vec::new();
+        doc.save_to(&mut source).unwrap();
+        source
+    }
+
     fn image_stamp_fixture(
         rotation: i64,
         compressed: bool,
@@ -3274,6 +3367,61 @@ mod missing_appearance_tests {
                 assert!(actual.imported_annotations_dynlex, "{rotation}");
                 assert_eq!(actual.raster.rgba, expected.rgba, "{rotation}");
             }
+        }
+    }
+
+    #[test]
+    fn translated_form_paths_and_clip_match_hayro_on_rotated_crop() {
+        for rotation in [0, 90, 180, 270] {
+            for content in [
+                &b"q 1 0 0 1 6 4 cm 1 0 0 rg 2 2 10 8 re f Q"[..],
+                &b"q q 1 0 0 1 6 4 cm 1 0 0 rg 2 2 10 8 re f Q 0 0 1 rg 3 4 6 5 re f Q"[..],
+                &b"q q 1 0 0 1 4 3 cm 0 1 0 rg 0 0 32 24 re W n 2 2 m 18 2 l 18 10 l 2 10 l h f Q 1 0 0 rg 3 3 5 5 re f Q"[..],
+                &b"q q 1 0 0 1 4 3 cm 1 0 0 rg 0 1 0 RG 2 w 2 2 20 14 re B Q Q"[..],
+            ] {
+                let source = stamp_with_form_content(rotation, content);
+                let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(actual.imported_annotations_dynlex, "rotation {rotation}");
+                assert_eq!(actual.raster.rgba, expected.rgba, "rotation {rotation}");
+            }
+        }
+    }
+
+    #[test]
+    fn bounded_form_translations_are_pixel_exact_across_quarter_turns() {
+        for index in 0..64 {
+            let tx = (index * 7) % 15;
+            let ty = (index * 11) % 12;
+            let rotation = [0, 90, 180, 270][index % 4];
+            let content =
+                format!("q 1 0 0 1 {tx} {ty} cm 1 0 0 rg 2 2 10 8 re f 0 1 0 rg 16 3 7 6 re f Q");
+            let source = stamp_with_form_content(rotation, content.as_bytes());
+            let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+            assert!(actual.imported_annotations_dynlex, "case {index}");
+            assert_eq!(actual.raster.rgba, expected.rgba, "case {index}");
+        }
+    }
+
+    #[test]
+    fn unproven_form_transforms_fall_back_without_partial_paint() {
+        for content in [
+            &b"q q 1 0 0 1 0.5 4 cm 1 0 0 rg 2 2 10 8 re f Q Q"[..],
+            &b"q q 1 0 0 1 0.99999999 4 cm 1 0 0 rg 2 2 10 8 re f Q Q"[..],
+            &b"q q 2 0 0 2 4 3 cm 1 0 0 rg 2 2 10 8 re f Q Q"[..],
+            &b"q q 1 0 0 1 4 3 cm 1 0 0 1 1 1 cm 1 0 0 rg 2 2 10 8 re f Q Q"[..],
+            &b"q q 1 0 0 1 30 25 cm 0 1 0 RG 2 w 2 2 20 14 re S Q Q"[..],
+            &b"q 1 0 0 rg 2.00000001 2 10 8 re f Q"[..],
+        ] {
+            let source = stamp_with_form_content(90, content);
+            let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+            assert!(!actual.imported_annotations_dynlex);
+            assert_eq!(actual.raster.rgba, expected.rgba);
         }
     }
 
