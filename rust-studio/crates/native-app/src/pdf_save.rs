@@ -979,20 +979,31 @@ mod tests {
         );
         marks[1].bounds.x = 42.0;
         marks[1].bounds.y = 46.0;
-        assert!(
-            render_native_annotation_overlay(&base, &marks, 0)
+        for order in 0..2 {
+            let candidate = render_native_annotation_overlay(&base, &marks, 0)
                 .unwrap()
-                .is_none(),
-            "overlapping Highlight/Square appearances must fall back"
-        );
-        marks.swap(0, 1);
-        assert!(
-            render_native_annotation_overlay(&base, &marks, 0)
+                .expect("bounded overlap");
+            let saved = export_annotations(&source, &marks).unwrap();
+            let expected = ParsedPdf::open(Arc::new(saved))
                 .unwrap()
-                .is_none(),
-            "reversed Highlight/Square order must also fall back"
-        );
-        marks.swap(0, 1);
+                .render_page(1, 1.0)
+                .unwrap();
+            let wrong: Vec<_> = candidate
+                .rgba
+                .iter()
+                .zip(&expected.rgba)
+                .enumerate()
+                .filter_map(|(at, (actual, expected))| {
+                    (actual != expected).then_some((at, *actual, *expected))
+                })
+                .collect();
+            assert!(
+                wrong.is_empty(),
+                "overlap order {order}: {:?}",
+                &wrong[..wrong.len().min(20)]
+            );
+            marks.swap(0, 1);
+        }
         marks[1].kind = Kind::Rectangle {
             color_rgb: [0, 80, 240],
         };
@@ -1424,6 +1435,175 @@ mod tests {
                 wrong.is_empty(),
                 "case {case}, input {color:?}, bounds {:?}, {} mismatches: {:?}",
                 marks[0].bounds,
+                wrong.len(),
+                &wrong[..wrong.len().min(12)]
+            );
+        }
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn dynlex_overlapping_highlights_and_squares_match_saved_appearances() {
+        use opds_dynlex_backend::render_native_annotation_overlay_pixels_with_content;
+        use opds_engine_probe::ParsedPdf;
+
+        let mut seed = 0x2981_64ea_u32;
+        for case in 0..64 {
+            let mut color = [0_u8; 3];
+            let mut square_color = [0_u8; 3];
+            for channel in color.iter_mut().chain(square_color.iter_mut()) {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                *channel = (seed >> 24) as u8;
+            }
+            if square_color == [255, 226, 67] {
+                square_color[0] = 254;
+            }
+            let mut source = Document::load_mem(&source_pdf()).unwrap();
+            let page_id = *source.get_pages().get(&1).unwrap();
+            let contents_id = source
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Contents")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            source
+                .get_object_mut(contents_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap()
+                .set_plain_content(
+                    format!(
+                        "{:.3} {:.3} {:.3} rg 0 0 200 300 re f",
+                        color[0] as f64 / 255.0,
+                        color[1] as f64 / 255.0,
+                        color[2] as f64 / 255.0,
+                    )
+                    .into_bytes(),
+                );
+            if case % 8 == 0 {
+                let page = source
+                    .get_object_mut(page_id)
+                    .unwrap()
+                    .as_dict_mut()
+                    .unwrap();
+                page.set(
+                    "CropBox",
+                    vec![20.into(), 20.into(), 180.into(), 260.into()],
+                );
+                page.set("Rotate", 90);
+            }
+            let mut bytes = Vec::new();
+            source.save_to(&mut bytes).unwrap();
+            let first_color = if case % 4 == 1 || case % 4 == 2 {
+                [255, 226, 67]
+            } else {
+                square_color
+            };
+            let second_color = [255, 226, 67];
+            let first = Annotation {
+                id: 998,
+                page: 0,
+                bounds: Rect {
+                    x: 20.0 + (case % 7) as f64,
+                    y: 30.0 + (case % 5) as f64,
+                    width: 48.0 + (case % 5) as f64,
+                    height: 36.0 + (case % 7) as f64,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: first_color,
+                },
+            };
+            let second = Annotation {
+                id: 999,
+                page: 0,
+                bounds: Rect {
+                    x: first.bounds.x + 20.0,
+                    y: first.bounds.y + 12.0,
+                    width: 48.0,
+                    height: 36.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: second_color,
+                },
+            };
+            let mut marks = if case % 4 == 3 {
+                vec![second, first]
+            } else {
+                vec![first, second]
+            };
+            if case % 5 == 0 {
+                marks.push(Annotation {
+                    id: 1000,
+                    page: 0,
+                    bounds: Rect {
+                        x: marks[0].bounds.x + 10.0,
+                        y: marks[0].bounds.y + 6.0,
+                        width: 40.0,
+                        height: 30.0,
+                    },
+                    kind: Kind::Rectangle {
+                        color_rgb: if case % 2 == 0 {
+                            [255, 226, 67]
+                        } else {
+                            square_color
+                        },
+                    },
+                });
+            }
+            if case == 0 {
+                while marks.len() < 64 {
+                    let index = marks.len();
+                    marks.push(Annotation {
+                        id: 1_001 + index as u64,
+                        page: 0,
+                        bounds: Rect {
+                            x: 24.0 + (index % 6) as f64,
+                            y: 34.0 + (index % 5) as f64,
+                            width: 44.0,
+                            height: 32.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: if index % 2 == 0 {
+                                [255, 226, 67]
+                            } else {
+                                square_color
+                            },
+                        },
+                    });
+                }
+            }
+            let parsed = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let base = parsed.render_page(1, 1.0).unwrap();
+            let layer = parsed.render_page_content_layer(1, 1.0).unwrap();
+            let actual = render_native_annotation_overlay_pixels_with_content(
+                &base.rgba,
+                &layer.rgba,
+                base.width,
+                base.height,
+                (base.page_width_pt, base.page_height_pt),
+                &marks,
+                0,
+            )
+            .unwrap()
+            .expect("opaque source and pixel-aligned annotations");
+            let saved = export_annotations(&bytes, &marks).unwrap();
+            let expected = ParsedPdf::open(Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let wrong: Vec<_> = actual
+                .rgba
+                .iter()
+                .zip(&expected.rgba)
+                .enumerate()
+                .filter_map(|(at, (actual, expected))| {
+                    (actual != expected).then_some((at, *actual, *expected))
+                })
+                .collect();
+            assert!(
+                wrong.is_empty(),
+                "case {case}, source {color:?}, square {square_color:?}, {} mismatches: {:?}",
                 wrong.len(),
                 &wrong[..wrong.len().min(12)]
             );

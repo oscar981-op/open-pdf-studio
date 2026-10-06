@@ -1000,13 +1000,41 @@ mod dynlex_annotation_overlay_tests {
         let combined = document
             .dynlex_annotation_bitmap()
             .expect("verified opaque content");
-        let saved = pdf_save::export_annotations(&document.source_bytes, &[mark]).unwrap();
+        let saved = pdf_save::export_annotations(&document.source_bytes, &[mark.clone()]).unwrap();
         let expected = ParsedPdf::open(Arc::new(saved))
             .unwrap()
             .render_page(1, 1.0)
             .unwrap();
         let image::Handle::Rgba { pixels, .. } = combined else {
             panic!("DynLex annotation output must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+
+        let document = app.document.as_mut().unwrap();
+        let square = Annotation {
+            id: 2,
+            page: 0,
+            bounds: Rect {
+                x: 41.0,
+                y: 43.0,
+                width: 48.0,
+                height: 36.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [231, 76, 60],
+            },
+        };
+        document.model.apply(Edit::Add(square.clone())).unwrap();
+        let overlapped = document
+            .dynlex_annotation_bitmap()
+            .expect("cached source proof also covers overlapping shapes");
+        let saved = pdf_save::export_annotations(&document.source_bytes, &[mark, square]).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = overlapped else {
+            panic!("DynLex overlap output must be RGBA");
         };
         assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
     }

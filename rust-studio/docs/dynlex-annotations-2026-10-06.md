@@ -36,10 +36,7 @@ afzonderlijke gele Highlight, twee gescheiden annotaties en overlappende
 overlap is gecontroleerd op witte en gekleurde bronpagina's, beide
 tekenvolgordes, een 90°/CropBox-pagina en 32 deterministische kleurparen.
 Het experiment weigert tekst in deze OPAN-route en fractionele coördinaten
-zonder een gedeeltelijke bitmap terug te geven. Bij een overlappende
-Square/Highlight weken acht kanaalbytes op
-de doorsnijding van de PDF-appearance-randen één stap af; daarom is die
-combinatie in beide volgordes nog fallback. De nieuwe strokencompositie
+zonder een gedeeltelijke bitmap terug te geven. De nieuwe strokencompositie
 vergelijkt **128 gecontroleerde PDF's** met een volledig dekkend gekleurd
 bronvlak, wisselende Highlight-positie en -grootte, een tweede gekleurd
 bronvlak in de helft van de gevallen, soms een tweede losse Highlight, en
@@ -55,8 +52,17 @@ binnenkomst van die bronlaag. De bestaande gedeeltelijk gevulde
 fill/stroke-fixture en een bron met `/ca 0.5` blijven fallback: de laatste
 week zonder deze controle op 3.456 kanaalbytes af.
 Een dekkende blauwe Square over gekleurde pagina-inhoud blijft eveneens
-bytegelijk. Dit bewijst geen algemene PDF-transparantie of overlappende
-Highlight-appearances; bij afwijzing blijft de annotatie via Iced zichtbaar.
+bytegelijk. Daarnaast zijn **64 gecontroleerde overlappende PDF's** met
+Square/Highlight en Highlight/Highlight, wisselende kleuren, posities,
+tekenvolgorde, meestal twee of drie vormen en 90°/CropBox over de hele pagina
+bytegelijk aan Hayro na Save As. Een geïsoleerde `/AP`-proef verklaart
+waarom een gewone RGBA-hermenging eerder acht randbytes miste: dezelfde
+tussenlaagkleur kan op een gedeeltelijk bedekte tegel een andere
+afrondingsweg doorlopen. De OPAN-stroken bewaren dat onderscheid in de
+tekenvolgorde. Een extra 90°/CropBox-geval met 64 grotendeels overlappende
+Square/Highlight-vormen bleef eveneens volledig bytegelijk. Dit bewijst
+geen algemene PDF-transparantie of willekeurige
+appearance-overlap; bij afwijzing blijft de annotatie via Iced zichtbaar.
 Een extra gecontroleerde PDF met verschoven CropBox en `/Rotate 90` toont
 beide annotaties op een zichtbare 1100×1000-pagina: de volledige RGBA-uitvoer
 is na Save As bytegelijk aan Hayro. Daarmee is de oude 1024px-grens voor
@@ -210,8 +216,8 @@ De app kan nu daarnaast precies één Text Box samen met meerdere native
 vormannotaties compositeren: DynLex tekent eerst de tekst
 op de bewezen bronlaag en vervolgens de vormen. Een echte gemengde PDF met
 Text Box, blauwe Square en gele Highlight is over de hele pagina bytegelijk
-aan Hayro na Save As. Opaque Square-vormen mogen elkaar overlappen; een
-Text Box-overlap of een overlap met Highlight blijft via Iced lopen. De
+aan Hayro na Save As. Square- en Highlight-vormen mogen elkaar onder de
+bovenstaande grenzen overlappen; een Text Box-overlap blijft via Iced lopen. De
 annotaties moeten ook ieder afzonderlijk binnen hun bestaande
 bewezen rendergrenzen vallen. Voor grotere en complexere pagina's en
 achteraf toegevoegde Text Boxes zijn bredere bronlaagstaging en
@@ -227,6 +233,8 @@ cargo test --offline -p opds-native-app --features dynlex-experimental \
   dynlex_annotation_overlay_tests
 cargo test --offline -p opds-native-app --features dynlex-experimental \
   dynlex_highlight_premultiplied_composition_matches_colored_and_layered_pages
+cargo test --offline -p opds-native-app --features dynlex-experimental \
+  dynlex_overlapping_highlights_and_squares_match_saved_appearances
 cargo test --offline -p opds-native-app --features dynlex-experimental \
   colored_highlight_waits_for_opaque_content_proof
 ```
