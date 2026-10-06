@@ -55,6 +55,10 @@ fn words_for_opm(bytes: &[u8]) -> Result<Vec<u64>, Box<dyn Error>> {
     Ok(words)
 }
 
+pub fn validate_opm_outline(bytes: &[u8]) -> Result<(), Box<dyn Error>> {
+    words_for_opm(bytes).map(|_| ())
+}
+
 fn read_scene(bytes: &[u8]) -> Result<Vec<(Vec<u64>, [u8; 3])>, Box<dyn Error>> {
     if bytes.len() < 20 || bytes.len() > 140_000 || &bytes[..4] != b"OPGS" {
         return Err("invalid OPGS size or magic".into());
@@ -251,7 +255,7 @@ fn render_opgs_over_page(
 
 fn render_opgs_over_page_owned(
     scene: &[u8],
-    mut output: Vec<u8>,
+    output: Vec<u8>,
     width: u32,
     height: u32,
     clip: [u32; 4],
@@ -260,6 +264,52 @@ fn render_opgs_over_page_owned(
     tiled: bool,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let scenes = read_scene(scene)?;
+    render_outlines_over_page_owned(
+        scenes,
+        output,
+        width,
+        height,
+        clip,
+        origin,
+        premultiplied,
+        tiled,
+    )
+}
+
+/// Paint one validated geometric OPM2 outline without requiring a fake font
+/// resource or CID. PDF path staging and paint order stay with the caller.
+pub fn render_opm_over_premultiplied_at_origin_owned(
+    outline: &[u8],
+    color: [u8; 3],
+    output: Vec<u8>,
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let words = words_for_opm(outline)?;
+    render_outlines_over_page_owned(
+        vec![(words, color)],
+        output,
+        width,
+        height,
+        clip,
+        origin,
+        true,
+        true,
+    )
+}
+
+fn render_outlines_over_page_owned(
+    scenes: Vec<(Vec<u64>, [u8; 3])>,
+    mut output: Vec<u8>,
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+    premultiplied: bool,
+    tiled: bool,
+) -> Result<Vec<u8>, Box<dyn Error>> {
     let pixels = usize::try_from(width)?
         .checked_mul(usize::try_from(height)?)
         .ok_or("glyph page dimensions overflow")?;

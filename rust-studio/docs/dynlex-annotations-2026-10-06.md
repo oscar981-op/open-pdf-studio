@@ -525,3 +525,26 @@ maximaal 128 operators, 32 tekenopdrachten en 4096 Form-bytes; ontbrekende
 kleur, een onafgemaakt pad, verkeerde nesting of onbekende operator laat de
 hele pagina op Hayro terugvallen. Clipping, transparantie, afbeeldingen,
 tekst en algemene vectorpaden in een Form zijn nog niet ondersteund.
+
+**Eerste gevulde Form-paden.** Dezelfde opt-in importroute kan nu ook een
+enkel `m/l/.../h f`-pad in een ongefilterde `/AP/N`-Form herkennen; `f` sluit
+het pad ook impliciet en `F`/`f*` zijn voor één eenvoudige contour gelijk.
+Rust valideert de volledige Form, lokale punten, BBox, maximaal 64 punten,
+kwartpixelcoördinaten en één 256×192-tegel voordat een bestaande zelfstandige
+DynLex-analytische-oppervlaktekernel het pad tekent. De padkleur is expliciet
+DeviceRGB; de getekende volgorde met rechthoekvullingen en -randen blijft
+behouden. Het resultaat gaat op een bestaande premultiplied paginalaag en
+werkt op de vier kwartslagen met verschoven CropBox. Een onzekere rand ligt
+dicht bij een halve 8-bit-dekkingsstap: zo'n pad wordt vóór enig schilderen
+afgewezen, waarna de hele pagina de Hayro-route gebruikt. In 256
+deterministische willekeurige driehoeken met gehele punten waren 39
+geaccepteerde gevallen volledig bytegelijk aan Hayro; op een kwartpixelgrid
+waren 234 van 256 geaccepteerde gevallen volledig bytegelijk. De andere
+gevallen vielen terug. Gerichte proeven bevestigen ook laagvolgorde,
+expliciete/impliciete sluiting, rotaties en foutafwijzing van o.a.
+zelfkruising, onvolledige/multi-contourpaden, curveoperatoren, stroke,
+punten buiten de Form en coördinaten buiten het kwartpixelgrid. Dit is een
+nauwe deelset en geen volledige vector- of annotatielaag. Een onafhankelijke
+implementatie van Hayro/Vello's f32-randdekking blijft nodig om de
+conservatieve terugval te verkleinen; deze route heeft nog geen
+prestatievoordeel aangetoond.

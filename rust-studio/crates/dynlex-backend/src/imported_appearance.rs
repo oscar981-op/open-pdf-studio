@@ -6,7 +6,10 @@ use crate::{
         native_imported_commands, paint_imported_commands_owned, paint_opaque_imported_rectangles,
         render_native_annotation_overlay_pixels_over_premultiplied, ImportedCommand,
     },
-    glyph_scene::render_validated_glyph_scene_over_premultiplied_at_origin_owned,
+    glyph_scene::{
+        render_validated_glyph_scene_over_premultiplied_at_origin_owned,
+        render_validated_polygon_over_premultiplied_at_origin_owned, validate_polygon_outline,
+    },
     imported_text::{stage_saved_native_freetext, StagedImportedText},
     Bitmap,
 };
@@ -316,15 +319,183 @@ fn parse_shape_annotation(
     Some(mark)
 }
 
-/// A bounded Form appearance with opaque DeviceRGB rectangle fills and 2pt
-/// outlines. The paint order, rather than `/Subtype`, determines the pixels.
-/// Other Form operators remain on Hayro.
+struct StagedPolygon {
+    outline: Vec<u8>,
+    color: [u8; 3],
+    clip: [u32; 4],
+    origin: [u32; 2],
+}
+
+fn clip_polygon_axis(
+    polygon: &[[f64; 2]],
+    axis: usize,
+    boundary: f64,
+    greater: bool,
+) -> Vec<[f64; 2]> {
+    if polygon.is_empty() {
+        return Vec::new();
+    }
+    let mut output = Vec::with_capacity(polygon.len() + 2);
+    let mut previous = *polygon.last().unwrap();
+    let mut was_inside = if greater {
+        previous[axis] >= boundary
+    } else {
+        previous[axis] <= boundary
+    };
+    for &point in polygon {
+        let inside = if greater {
+            point[axis] >= boundary
+        } else {
+            point[axis] <= boundary
+        };
+        if inside != was_inside {
+            let fraction = (boundary - previous[axis]) / (point[axis] - previous[axis]);
+            output.push([
+                previous[0] + fraction * (point[0] - previous[0]),
+                previous[1] + fraction * (point[1] - previous[1]),
+            ]);
+        }
+        if inside {
+            output.push(point);
+        }
+        previous = point;
+        was_inside = inside;
+    }
+    output
+}
+
+/// The DynLex kernel rounds exact polygon area to a byte; Hayro/Vello uses
+/// f32 edge strips. Near a half-byte threshold the two can choose opposite
+/// bytes. Reject such paths before any appearance in the page is painted.
+fn unambiguous_polygon_coverage(points: &[[f64; 2]], bounds: [u32; 4]) -> bool {
+    for y in bounds[1]..bounds[3] {
+        for x in bounds[0]..bounds[2] {
+            let mut clipped = points.to_vec();
+            for (axis, boundary, greater) in [
+                (0, f64::from(x), true),
+                (0, f64::from(x + 1), false),
+                (1, f64::from(y), true),
+                (1, f64::from(y + 1), false),
+            ] {
+                clipped = clip_polygon_axis(&clipped, axis, boundary, greater);
+                if clipped.is_empty() {
+                    break;
+                }
+            }
+            if clipped.is_empty() {
+                continue;
+            }
+            let mut signed = 0.0;
+            for index in 0..clipped.len() {
+                let a = clipped[index];
+                let b = clipped[(index + 1) % clipped.len()];
+                signed += a[0] * b[1] - b[0] * a[1];
+            }
+            let scaled = (signed.abs() * 0.5).min(1.0) * 255.0;
+            if (scaled.fract() - 0.5).abs() < 0.002 {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Stage one closed, line-only Form path for the existing validated DynLex
+/// area kernel. The tile may start anywhere on a larger page; the Form box
+/// remains its appearance clip. All points are on a quarter-pixel grid and
+/// fully inside it.
+fn stage_form_polygon(
+    points: &[[f64; 2]],
+    color: [u8; 3],
+    rect: [f64; 4],
+    crop: [f64; 4],
+    rotation: u16,
+) -> Option<StagedPolygon> {
+    if !(3..=64).contains(&points.len())
+        || points.iter().any(|point| {
+            !point[0].is_finite()
+                || !point[1].is_finite()
+                || (point[0] * 4.0).fract() != 0.0
+                || (point[1] * 4.0).fract() != 0.0
+                || point[0] < 0.0
+                || point[1] < 0.0
+                || point[0] > rect[2] - rect[0]
+                || point[1] > rect[3] - rect[1]
+        })
+    {
+        return None;
+    }
+    let clip = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])?;
+    if clip[2] > 4096 || clip[3] > 4096 {
+        return None;
+    }
+    let mapped: Vec<_> = points
+        .iter()
+        .map(|point| display_point(crop, rotation, rect[0] + point[0], rect[1] + point[1]))
+        .collect();
+    let left = mapped.iter().map(|p| p[0]).reduce(f64::min)?;
+    let top = mapped.iter().map(|p| p[1]).reduce(f64::min)?;
+    let right = mapped.iter().map(|p| p[0]).reduce(f64::max)?;
+    let bottom = mapped.iter().map(|p| p[1]).reduce(f64::max)?;
+    if left < f64::from(clip[0])
+        || top < f64::from(clip[1])
+        || right > f64::from(clip[2])
+        || bottom > f64::from(clip[3])
+        || right <= left
+        || bottom <= top
+    {
+        return None;
+    }
+    let origin = [left.floor() as u32, top.floor() as u32];
+    if right - f64::from(origin[0]) > 256.0 || bottom - f64::from(origin[1]) > 192.0 {
+        return None;
+    }
+    let local: Vec<_> = mapped
+        .iter()
+        .map(|point| {
+            [
+                point[0] - f64::from(origin[0]),
+                point[1] - f64::from(origin[1]),
+            ]
+        })
+        .collect();
+    if !unambiguous_polygon_coverage(
+        &local,
+        [
+            0,
+            0,
+            (right - f64::from(origin[0])).ceil() as u32,
+            (bottom - f64::from(origin[1])).ceil() as u32,
+        ],
+    ) {
+        return None;
+    }
+    let mut outline = Vec::with_capacity(24 + (points.len() + 1) * 16);
+    outline.extend_from_slice(b"OPM2");
+    for word in [1_u32, 256, 192, 1, (points.len() + 1) as u32] {
+        outline.extend_from_slice(&word.to_le_bytes());
+    }
+    for point in local.iter().chain(local.first()) {
+        outline.extend_from_slice(&point[0].to_le_bytes());
+        outline.extend_from_slice(&point[1].to_le_bytes());
+    }
+    validate_polygon_outline(&outline).then_some(StagedPolygon {
+        outline,
+        color,
+        clip,
+        origin,
+    })
+}
+
+/// A bounded Form appearance with opaque DeviceRGB rectangle fills, 2pt
+/// outlines and small line-only filled paths. The paint order, rather than
+/// `/Subtype`, determines the pixels. Other Form operators remain on Hayro.
 fn parse_opaque_rect_form(
     doc: &Document,
     annotation: &Dictionary,
     crop: [f64; 4],
     rotation: u16,
-) -> Option<Vec<ImportedCommand>> {
+) -> Option<Vec<ImportedAppearance>> {
     let subtype = annotation.get(b"Subtype").ok()?.as_name().ok()?;
     if subtype.is_empty()
         || subtype.len() > 32
@@ -406,8 +577,9 @@ fn parse_opaque_rect_form(
     let mut token_index = 0;
     for operation in &operations {
         let numeric_count = match operation.operator.as_str() {
-            "q" | "Q" | "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" => 0,
+            "q" | "Q" | "h" | "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" => 0,
             "w" => 1,
+            "m" | "l" => 2,
             "rg" | "RG" => 3,
             "re" => 4,
             _ => return None,
@@ -435,6 +607,10 @@ fn parse_opaque_rect_form(
         stroke: Option<[u8; 3]>,
         line_width: Option<f64>,
     }
+    enum FormPath {
+        Rect([f64; 4]),
+        Polygon { points: Vec<[f64; 2]>, closed: bool },
+    }
     let parse_color = |values: &[Object]| -> Option<[u8; 3]> {
         values
             .iter()
@@ -451,8 +627,7 @@ fn parse_opaque_rect_form(
             .try_into()
             .ok()
     };
-    let mut commands = Vec::new();
-    let mut push_rect = |path: [f64; 4], stroke: bool, color: [u8; 3]| -> Option<()> {
+    let rect_command = |path: [f64; 4], stroke: bool, color: [u8; 3]| {
         let [x, y, width, height] = path;
         let inset = if stroke { 1.0 } else { 0.0 };
         if [x, y, width, height]
@@ -464,7 +639,6 @@ fn parse_opaque_rect_form(
             || height < if stroke { 2.0 } else { 1.0 }
             || x + width + inset > rect[2] - rect[0]
             || y + height + inset > rect[3] - rect[1]
-            || commands.len() >= 32
         {
             return None;
         }
@@ -476,13 +650,13 @@ fn parse_opaque_rect_form(
                 [rect[0] + x + width + inset, rect[1] + y + height + inset],
             ],
         )?;
-        commands.push(ImportedCommand {
+        Some(ImportedCommand {
             kind: if stroke { 2 } else { 1 },
             rect: bounds,
             tail: [color[0], color[1], color[2], 255],
-        });
-        Some(())
+        })
     };
+    let mut appearances = Vec::new();
     let mut state = FormState::default();
     let mut stack = Vec::new();
     let mut pending_path = None;
@@ -524,7 +698,44 @@ fn parse_opaque_rect_form(
                 if stack.is_empty() || pending_path.is_some() {
                     return None;
                 }
-                pending_path = Some(
+                pending_path = Some(FormPath::Rect(
+                    operation
+                        .operands
+                        .iter()
+                        .map(number)
+                        .collect::<Option<Vec<_>>>()?
+                        .try_into()
+                        .ok()?,
+                ));
+            }
+            "m" => {
+                if stack.is_empty() || pending_path.is_some() {
+                    return None;
+                }
+                let point = operation
+                    .operands
+                    .iter()
+                    .map(number)
+                    .collect::<Option<Vec<_>>>()?
+                    .try_into()
+                    .ok()?;
+                pending_path = Some(FormPath::Polygon {
+                    points: vec![point],
+                    closed: false,
+                });
+            }
+            "l" => {
+                let Some(FormPath::Polygon {
+                    points,
+                    closed: false,
+                }) = &mut pending_path
+                else {
+                    return None;
+                };
+                if points.len() >= 64 {
+                    return None;
+                }
+                points.push(
                     operation
                         .operands
                         .iter()
@@ -534,31 +745,67 @@ fn parse_opaque_rect_form(
                         .ok()?,
                 );
             }
+            "h" => {
+                let Some(FormPath::Polygon { closed, .. }) = &mut pending_path else {
+                    return None;
+                };
+                if *closed {
+                    return None;
+                }
+                *closed = true;
+            }
             "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" => {
                 if stack.is_empty() {
                     return None;
                 }
                 let path = pending_path.take()?;
-                if matches!(
-                    operation.operator.as_str(),
-                    "f" | "F" | "f*" | "B" | "B*" | "b" | "b*"
-                ) {
-                    push_rect(path, false, state.fill?)?;
-                }
-                if matches!(
-                    operation.operator.as_str(),
-                    "S" | "s" | "B" | "B*" | "b" | "b*"
-                ) {
-                    if state.line_width != Some(2.0) {
-                        return None;
+                match path {
+                    FormPath::Rect(path) => {
+                        if matches!(
+                            operation.operator.as_str(),
+                            "f" | "F" | "f*" | "B" | "B*" | "b" | "b*"
+                        ) {
+                            appearances.push(ImportedAppearance::Shapes(vec![rect_command(
+                                path,
+                                false,
+                                state.fill?,
+                            )?]));
+                        }
+                        if matches!(
+                            operation.operator.as_str(),
+                            "S" | "s" | "B" | "B*" | "b" | "b*"
+                        ) {
+                            if state.line_width != Some(2.0) {
+                                return None;
+                            }
+                            appearances.push(ImportedAppearance::Shapes(vec![rect_command(
+                                path,
+                                true,
+                                state.stroke?,
+                            )?]));
+                        }
                     }
-                    push_rect(path, true, state.stroke?)?;
+                    FormPath::Polygon { points, .. } => {
+                        if !matches!(operation.operator.as_str(), "f" | "F" | "f*") {
+                            return None;
+                        }
+                        appearances.push(ImportedAppearance::Polygon(stage_form_polygon(
+                            &points,
+                            state.fill?,
+                            rect,
+                            crop,
+                            rotation,
+                        )?));
+                    }
+                }
+                if appearances.len() > 32 {
+                    return None;
                 }
             }
             _ => return None,
         }
     }
-    (stack.is_empty() && pending_path.is_none() && !commands.is_empty()).then_some(commands)
+    (stack.is_empty() && pending_path.is_none() && !appearances.is_empty()).then_some(appearances)
 }
 
 /// Return a DynLex-composited page only for one exact, opaque 2pt Square Form
@@ -937,6 +1184,7 @@ pub fn render_missing_shape_appearances_for_app(
 
 enum ImportedAppearance {
     Shapes(Vec<ImportedCommand>),
+    Polygon(StagedPolygon),
     Text(StagedImportedText),
 }
 
@@ -1005,7 +1253,7 @@ pub fn render_imported_shape_appearances_for_app(
                 appearances.push(ImportedAppearance::Shapes(native));
             } else if let Some(commands) = parse_opaque_rect_form(&doc, annotation, crop, rotation)
             {
-                appearances.push(ImportedAppearance::Shapes(commands));
+                appearances.extend(commands);
             } else if let Some(text) = stage_saved_native_freetext(&doc, annotation, crop, rotation)
             {
                 appearances.push(ImportedAppearance::Text(text));
@@ -1042,6 +1290,22 @@ pub fn render_imported_shape_appearances_for_app(
     for appearance in appearances {
         match appearance {
             ImportedAppearance::Shapes(commands) => pending_shapes.extend(commands),
+            ImportedAppearance::Polygon(polygon) => {
+                if !flush_shapes(&mut layer, &mut pending_shapes)? {
+                    return Ok(None);
+                }
+                let base = std::mem::take(&mut layer.rgba);
+                layer.rgba = render_validated_polygon_over_premultiplied_at_origin_owned(
+                    &polygon.outline,
+                    polygon.color,
+                    base,
+                    layer.width,
+                    layer.height,
+                    polygon.clip,
+                    polygon.origin,
+                )?
+                .rgba;
+            }
             ImportedAppearance::Text(text) => {
                 if !flush_shapes(&mut layer, &mut pending_shapes)?
                     || text.page_size != [layer.width, layer.height]
@@ -1513,6 +1777,214 @@ mod missing_appearance_tests {
                 assert!(actual.imported_annotations_dynlex, "{path} {rotation}");
                 assert_eq!(actual.raster.rgba, expected.rgba, "{path} {rotation}");
             }
+        }
+    }
+
+    #[test]
+    fn imported_form_triangle_uses_dynlex_area_kernel() {
+        for rotation in [0, 90, 180, 270] {
+            for path in [
+                "22 4 m 36 25 l 29 16 l h",
+                "25 12 m 20 18 l 3 8 l h",
+                "22 4 m 36 25 l 29 16 l",
+            ] {
+                for layered in [false, true] {
+                    let bytes = opaque_stamp_fixture(rotation, false);
+                    let mut doc = Document::load_mem(&bytes).unwrap();
+                    let page_id = *doc.get_pages().get(&1).unwrap();
+                    let annotation_id = doc
+                        .get_dictionary(page_id)
+                        .unwrap()
+                        .get(b"Annots")
+                        .unwrap()
+                        .as_array()
+                        .unwrap()[0]
+                        .as_reference()
+                        .unwrap();
+                    let form_id = doc
+                        .get_dictionary(annotation_id)
+                        .unwrap()
+                        .get(b"AP")
+                        .unwrap()
+                        .as_dict()
+                        .unwrap()
+                        .get(b"N")
+                        .unwrap()
+                        .as_reference()
+                        .unwrap();
+                    let form = doc
+                        .get_object_mut(form_id)
+                        .unwrap()
+                        .as_stream_mut()
+                        .unwrap();
+                    form.content = if layered {
+                    format!("q 0 1 0 rg 0 0 40 30 re f 1 0 0 rg {path} f 0 0 1 rg 15 8 12 10 re f Q")
+                } else {
+                    format!("q 1 0 0 rg {path} f Q")
+                }
+                .into_bytes();
+                    form.dict.set("Length", form.content.len() as i64);
+                    let mut source = Vec::new();
+                    doc.save_to(&mut source).unwrap();
+                    let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+                    let expected = pdf.render_page(1, 1.0).unwrap();
+                    let actual =
+                        render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert!(
+                        actual.imported_annotations_dynlex,
+                        "{path} {rotation} layered={layered}"
+                    );
+                    assert_eq!(
+                        actual.raster.rgba, expected.rgba,
+                        "{path} {rotation} layered={layered}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn bounded_imported_triangles_are_pixel_exact_when_accepted() {
+        let mut accepted = [0; 2];
+        for quarter in [false, true] {
+            for index in 0_u32..256 {
+                let offsets = if quarter {
+                    [0.25, 0.25, 0.5, 0.0, 0.75, 0.5]
+                } else {
+                    [0.0; 6]
+                };
+                let x0 = f64::from(2 + (index * 7) % 25) + offsets[0];
+                let y0 = f64::from(2 + (index * 11) % 18) + offsets[1];
+                let x1 = f64::from(3 + (index * 13 + 5) % 34) + offsets[2];
+                let y1 = f64::from(2 + (index * 17 + 3) % 25) + offsets[3];
+                let x2 = f64::from(2 + (index * 19 + 7) % 34) + offsets[4];
+                let y2 = f64::from(2 + (index * 23 + 9) % 25) + offsets[5];
+                let bytes = opaque_stamp_fixture(0, false);
+                let mut doc = Document::load_mem(&bytes).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let annotation_id = doc
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()[0]
+                    .as_reference()
+                    .unwrap();
+                let form_id = doc
+                    .get_dictionary(annotation_id)
+                    .unwrap()
+                    .get(b"AP")
+                    .unwrap()
+                    .as_dict()
+                    .unwrap()
+                    .get(b"N")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                let form = doc
+                    .get_object_mut(form_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap();
+                form.content =
+                    format!("q 0.906 0.298 0.235 rg {x0} {y0} m {x1} {y1} l {x2} {y2} l h f Q")
+                        .into_bytes();
+                form.dict.set("Length", form.content.len() as i64);
+                let mut source = Vec::new();
+                doc.save_to(&mut source).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+                if actual.imported_annotations_dynlex {
+                    accepted[usize::from(quarter)] += 1;
+                    let differences: Vec<_> = actual
+                        .raster
+                        .rgba
+                        .iter()
+                        .zip(&expected.rgba)
+                        .enumerate()
+                        .filter(|(_, (a, b))| a != b)
+                        .take(6)
+                        .map(|(at, (a, b))| {
+                            (
+                                at / 4 % actual.raster.width as usize,
+                                at / 4 / actual.raster.width as usize,
+                                at % 4,
+                                *a,
+                                *b,
+                            )
+                        })
+                        .collect();
+                    assert!(
+                        differences.is_empty(),
+                        "triangle {index} quarter={quarter}: {differences:?}"
+                    );
+                }
+            }
+        }
+        assert!(
+            accepted[0] >= 30,
+            "no useful integer triangle staging: {accepted:?}"
+        );
+        assert!(
+            accepted[1] >= 200,
+            "no useful quarter triangle staging: {accepted:?}"
+        );
+        eprintln!("accepted triangles, integer/quarter: {accepted:?}");
+    }
+
+    #[test]
+    fn unsupported_form_paths_fall_back_without_partial_paint() {
+        let cases = [
+            // The first fill is supported. A later invalid path must not
+            // leave that fill on a partially DynLex-painted page.
+            "q 0 1 0 rg 0 0 40 30 re f 1 0 0 rg 2 2 m 12 12 l S Q",
+            "q 1 0 0 rg 2 2 m 20 20 l 2 20 l 20 2 l h f Q",
+            "q 1 0 0 rg 2 2 m 20 20 l 2 20 l 20 2 l c f Q",
+            "q 1 0 0 rg 2 2 m 20 2 l 20 20 l h 1 1 m 2 1 l 2 2 l h f Q",
+            "q 1 0 0 rg 2 2 m 20 2 l 20 20 l h 3 3 l f Q",
+            "q 1 0 0 rg 2.125 2 m 20 2 l 20 20 l h f Q",
+            "q 1 0 0 rg 2 2 m 42 2 l 20 20 l h f Q",
+        ];
+        for (index, content) in cases.iter().enumerate() {
+            let bytes = opaque_stamp_fixture(90, false);
+            let mut doc = Document::load_mem(&bytes).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let annotation_id = doc
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Annots")
+                .unwrap()
+                .as_array()
+                .unwrap()[0]
+                .as_reference()
+                .unwrap();
+            let form_id = doc
+                .get_dictionary(annotation_id)
+                .unwrap()
+                .get(b"AP")
+                .unwrap()
+                .as_dict()
+                .unwrap()
+                .get(b"N")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let form = doc
+                .get_object_mut(form_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap();
+            form.content = content.as_bytes().to_vec();
+            form.dict.set("Length", form.content.len() as i64);
+            let mut source = Vec::new();
+            doc.save_to(&mut source).unwrap();
+            let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+            let expected = pdf.render_page(1, 1.0).unwrap();
+            let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+            assert!(!actual.imported_annotations_dynlex, "case {index}");
+            assert_eq!(actual.raster.rgba, expected.rgba, "case {index}");
         }
     }
 

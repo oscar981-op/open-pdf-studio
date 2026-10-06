@@ -148,6 +148,32 @@ pub fn render_validated_glyph_scene_over_premultiplied_at_origin_owned(
     })
 }
 
+/// Use the same validated DynLex area/compositing kernels for a geometric
+/// Form path. The caller supplies a real OPM2 outline, never a fake glyph.
+pub(crate) fn render_validated_polygon_over_premultiplied_at_origin_owned(
+    outline: &[u8],
+    color: [u8; 3],
+    base_rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Bitmap, String> {
+    let rgba = core::render_opm_over_premultiplied_at_origin_owned(
+        outline, color, base_rgba, width, height, clip, origin,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(Bitmap {
+        width,
+        height,
+        rgba,
+    })
+}
+
+pub(crate) fn validate_polygon_outline(outline: &[u8]) -> bool {
+    core::validate_opm_outline(outline).is_ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
