@@ -500,3 +500,15 @@ vulling buiten de BBox, meer dan 32 vullingen, extra Form-operators en
 onbekende resources. Algemene `/AP`-paden, transparantie, XObjects en
 interactieve annotatiebewerking blijven open; dit is geen volledige
 subtype- of Form-dekking.
+
+**Gemengde Form-vulling en rand.** Dezelfde begrensde Form-parser herkent
+naast `rg re f` nu ook een expliciete dekkende DeviceRGB-rand met
+`RG 2 w re S`. Het 2pt-pad moet gehele coördinaten hebben, rondom ten
+minste één pixel ruimte binnen de Form-BBox laten en minstens 2×2 pt zijn.
+De DynLex-OPAN-scene bewaart de volgorde van maximaal 32 vullingen en randen;
+een onbekende operator, andere lijndikte of pad buiten de BBox laat de hele
+annotatiepagina op Hayro terugvallen. Acht gemengde fill/stroke-PDF's met
+beide tekenvolgordes en 0/90/180/270° zijn volledig RGBA-bytegelijk aan
+Hayro. Zestien extra PDF's controleren randen van 2×2 tot 38×28 pt op
+dezelfde rotaties en een gekleurde onderlaag. Dit blijft een exacte 2pt-
+rechthoekdeelset, geen algemene PDF-stroker of volledige annotatielaag.

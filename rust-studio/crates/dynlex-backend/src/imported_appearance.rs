@@ -316,10 +316,10 @@ fn parse_shape_annotation(
     Some(mark)
 }
 
-/// A bounded Form appearance consisting only of explicitly colored opaque
-/// DeviceRGB rectangle fills. Its paint commands, rather than `/Subtype`,
-/// determine the visible pixels. Other Form operators remain on Hayro.
-fn parse_opaque_fill_form(
+/// A bounded Form appearance with explicitly colored, opaque DeviceRGB
+/// rectangle fills and 2pt outlines. The paint order, rather than `/Subtype`,
+/// determines the visible pixels. Other Form operators remain on Hayro.
+fn parse_opaque_rect_form(
     doc: &Document,
     annotation: &Dictionary,
     crop: [f64; 4],
@@ -382,37 +382,67 @@ fn parse_opaque_fill_form(
         return None;
     }
     // lopdf's content decoder can accept an incomplete trailing operand.
-    // Require a simple lexical form before lopdf decoding: q, one to 32
-    // explicit `rg re f` triples, Q. This rejects ignored trailing syntax,
+    // Require an exact lexical shape before lopdf decoding; its decoder may
+    // otherwise ignore trailing operands. Each record is either `rg re f` or
+    // `RG 2 w re S`, with every paint parameter explicit. This also excludes
     // comments, strings and compound operands before the DynLex ABI.
     let tokens: Vec<_> = form
         .content
         .split(|byte| byte.is_ascii_whitespace())
         .filter(|token| !token.is_empty())
         .collect();
-    if tokens.len() < 12
-        || (tokens.len() - 2) % 10 != 0
-        || (tokens.len() - 2) / 10 > 32
-        || tokens[0] != b"q"
-        || *tokens.last()? != b"Q"
-    {
+    if tokens.len() < 12 || tokens[0] != b"q" || *tokens.last()? != b"Q" {
         return None;
     }
-    for triple in tokens[1..tokens.len() - 1].chunks_exact(10) {
-        if triple[3] != b"rg"
-            || triple[8] != b"re"
-            || triple[9] != b"f"
-            || [0, 1, 2, 4, 5, 6, 7].into_iter().any(|index| {
-                !triple[index]
-                    .iter()
-                    .all(|byte| byte.is_ascii_digit() || matches!(byte, b'.' | b'-' | b'+'))
-            })
-        {
+    let numeric = |token: &[u8]| {
+        !token.is_empty()
+            && token
+                .iter()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'.' | b'-' | b'+'))
+    };
+    let mut kinds = Vec::new();
+    let mut token_index = 1;
+    while token_index < tokens.len() - 1 {
+        let rest = &tokens[token_index..tokens.len() - 1];
+        let stroke = rest.get(3) == Some(&&b"RG"[..]);
+        let width = if stroke { 12 } else { 10 };
+        let Some(record) = rest.get(..width) else {
+            return None;
+        };
+        let valid = if stroke {
+            record[3] == b"RG"
+                && record[5] == b"w"
+                && record[10] == b"re"
+                && record[11] == b"S"
+                && [0, 1, 2, 4, 6, 7, 8, 9]
+                    .into_iter()
+                    .all(|index| numeric(record[index]))
+        } else {
+            record[3] == b"rg"
+                && record[8] == b"re"
+                && record[9] == b"f"
+                && [0, 1, 2, 4, 5, 6, 7]
+                    .into_iter()
+                    .all(|index| numeric(record[index]))
+        };
+        if !valid {
             return None;
         }
+        kinds.push(stroke);
+        if kinds.len() > 32 {
+            return None;
+        }
+        token_index += width;
+    }
+    if kinds.is_empty() {
+        return None;
     }
     let operations = Content::decode(&form.content).ok()?.operations;
-    if operations.len() != 2 + 3 * ((tokens.len() - 2) / 10)
+    if operations.len()
+        != 2 + kinds
+            .iter()
+            .map(|stroke| if *stroke { 4 } else { 3 })
+            .sum::<usize>()
         || operations.first()?.operator != "q"
         || operations.last()?.operator != "Q"
         || !operations.first()?.operands.is_empty()
@@ -420,17 +450,28 @@ fn parse_opaque_fill_form(
     {
         return None;
     }
-    let mut commands = Vec::new();
-    for triple in operations[1..operations.len() - 1].chunks_exact(3) {
-        let [color, path, fill] = triple else {
-            return None;
+    let mut commands = Vec::with_capacity(kinds.len());
+    let mut op_index = 1;
+    for stroke in kinds {
+        let color = &operations[op_index];
+        let (path, paint) = if stroke {
+            let width = &operations[op_index + 1];
+            if width.operator != "w"
+                || width.operands.len() != 1
+                || width.operands.first().and_then(number) != Some(2.0)
+            {
+                return None;
+            }
+            (&operations[op_index + 2], &operations[op_index + 3])
+        } else {
+            (&operations[op_index + 1], &operations[op_index + 2])
         };
-        if color.operator != "rg"
+        if color.operator != if stroke { "RG" } else { "rg" }
             || path.operator != "re"
-            || fill.operator != "f"
+            || paint.operator != if stroke { "S" } else { "f" }
             || color.operands.len() != 3
             || path.operands.len() != 4
-            || !fill.operands.is_empty()
+            || !paint.operands.is_empty()
         {
             return None;
         }
@@ -454,15 +495,16 @@ fn parse_opaque_fill_form(
             .collect::<Option<Vec<_>>>()?
             .try_into()
             .ok()?;
+        let inset = if stroke { 1.0 } else { 0.0 };
         if [x, y, width, height]
             .iter()
             .any(|v: &f64| !v.is_finite() || v.fract() != 0.0)
-            || x < 0.0
-            || y < 0.0
-            || width <= 0.0
-            || height <= 0.0
-            || x + width > rect[2] - rect[0]
-            || y + height > rect[3] - rect[1]
+            || x < inset
+            || y < inset
+            || width < if stroke { 2.0 } else { 1.0 }
+            || height < if stroke { 2.0 } else { 1.0 }
+            || x + width + inset > rect[2] - rect[0]
+            || y + height + inset > rect[3] - rect[1]
         {
             return None;
         }
@@ -470,15 +512,16 @@ fn parse_opaque_fill_form(
             crop,
             rotation,
             &[
-                [rect[0] + x, rect[1] + y],
-                [rect[0] + x + width, rect[1] + y + height],
+                [rect[0] + x - inset, rect[1] + y - inset],
+                [rect[0] + x + width + inset, rect[1] + y + height + inset],
             ],
         )?;
         commands.push(ImportedCommand {
-            kind: 1,
+            kind: if stroke { 2 } else { 1 },
             rect: bounds,
             tail: [channels[0], channels[1], channels[2], 255],
         });
+        op_index += if stroke { 4 } else { 3 };
     }
     Some(commands)
 }
@@ -925,7 +968,7 @@ pub fn render_imported_shape_appearances_for_app(
                     return Ok(None);
                 };
                 appearances.push(ImportedAppearance::Shapes(native));
-            } else if let Some(commands) = parse_opaque_fill_form(&doc, annotation, crop, rotation)
+            } else if let Some(commands) = parse_opaque_rect_form(&doc, annotation, crop, rotation)
             {
                 appearances.push(ImportedAppearance::Shapes(commands));
             } else if let Some(text) = stage_saved_native_freetext(&doc, annotation, crop, rotation)
@@ -1146,7 +1189,7 @@ mod missing_appearance_tests {
                 let source_stamp = source_doc.get_page_annotations(source_page).unwrap()[0];
                 let (_, crop, page_rotation) = page_geometry(&source_doc, 1).unwrap();
                 assert!(
-                    parse_opaque_fill_form(&source_doc, source_stamp, crop, page_rotation)
+                    parse_opaque_rect_form(&source_doc, source_stamp, crop, page_rotation)
                         .is_some(),
                     "stage rotation={rotation}"
                 );
@@ -1239,6 +1282,157 @@ mod missing_appearance_tests {
     }
 
     #[test]
+    fn mixed_form_fill_and_stroke_preserve_paint_order() {
+        for rotation in [0, 90, 180, 270] {
+            for (content, subtype) in [
+                (
+                    &b"q 1 0 0 rg 0 0 40 30 re f 0 1 0 RG 2 w 5 5 30 20 re S Q"[..],
+                    "Ink",
+                ),
+                (
+                    &b"q 0 1 0 RG 2 w 5 5 30 20 re S 1 0 0 rg 10 5 20 15 re f Q"[..],
+                    "Widget",
+                ),
+            ] {
+                let bytes = opaque_stamp_fixture(rotation, false);
+                let mut doc = Document::load_mem(&bytes).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let annotation_id = doc
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()[0]
+                    .as_reference()
+                    .unwrap();
+                let form_id = doc
+                    .get_dictionary(annotation_id)
+                    .unwrap()
+                    .get(b"AP")
+                    .unwrap()
+                    .as_dict()
+                    .unwrap()
+                    .get(b"N")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                doc.get_dictionary_mut(annotation_id)
+                    .unwrap()
+                    .set("Subtype", Object::Name(subtype.as_bytes().to_vec()));
+                let form = doc
+                    .get_object_mut(form_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap();
+                form.content = content.to_vec();
+                form.dict.set("Length", form.content.len() as i64);
+                let mut source = Vec::new();
+                doc.save_to(&mut source).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(actual.imported_annotations_dynlex, "{subtype} {rotation}");
+                assert_eq!(actual.raster.rgba, expected.rgba, "{subtype} {rotation}");
+            }
+        }
+    }
+
+    #[test]
+    fn bounded_rectangle_strokes_match_hayro_at_multiple_sizes() {
+        for rotation in [0, 90, 180, 270] {
+            for path in ["1 1 2 2", "1 1 3 4", "10 7 12 10", "1 1 38 28"] {
+                let bytes = opaque_stamp_fixture(rotation, false);
+                let mut doc = Document::load_mem(&bytes).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let annotation_id = doc
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()[0]
+                    .as_reference()
+                    .unwrap();
+                let form_id = doc
+                    .get_dictionary(annotation_id)
+                    .unwrap()
+                    .get(b"AP")
+                    .unwrap()
+                    .as_dict()
+                    .unwrap()
+                    .get(b"N")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                let form = doc
+                    .get_object_mut(form_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap();
+                form.content = format!("q 0 1 0 RG 2 w {path} re S Q").into_bytes();
+                form.dict.set("Length", form.content.len() as i64);
+                let mut source = Vec::new();
+                doc.save_to(&mut source).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(actual.imported_annotations_dynlex, "{path} {rotation}");
+                assert_eq!(actual.raster.rgba, expected.rgba, "{path} {rotation}");
+            }
+        }
+    }
+
+    #[test]
+    fn form_stroke_does_not_inherit_page_dash_state() {
+        let bytes = opaque_stamp_fixture(0, false);
+        let mut doc = Document::load_mem(&bytes).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let content_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let annotation_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = doc
+            .get_dictionary(annotation_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        for (id, content) in [
+            (content_id, &b"0 0 1 rg 40 60 160 240 re f [3 2] 0 d"[..]),
+            (form_id, &b"q 0 1 0 RG 2 w 1 1 38 28 re S Q"[..]),
+        ] {
+            let stream = doc.get_object_mut(id).unwrap().as_stream_mut().unwrap();
+            stream.content = content.to_vec();
+            stream.dict.set("Length", stream.content.len() as i64);
+        }
+        let mut source = Vec::new();
+        doc.save_to(&mut source).unwrap();
+        let pdf = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+        let expected = pdf.render_page(1, 1.0).unwrap();
+        let actual = render_with_report(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+        assert!(actual.imported_annotations_dynlex);
+        assert_eq!(actual.raster.rgba, expected.rgba);
+    }
+
+    #[test]
     fn unsupported_stamp_form_falls_back_without_partial_paint() {
         let bytes = opaque_stamp_fixture(90, false);
         let mut doc = Document::load_mem(&bytes).unwrap();
@@ -1318,7 +1512,7 @@ mod missing_appearance_tests {
             .extend_from_slice(b" [");
         let stamp = doc.get_dictionary(stamp_id).unwrap();
         let (_, crop, rotation) = page_geometry(&doc, 1).unwrap();
-        assert!(parse_opaque_fill_form(&doc, stamp, crop, rotation).is_none());
+        assert!(parse_opaque_rect_form(&doc, stamp, crop, rotation).is_none());
     }
 
     #[test]
@@ -1350,7 +1544,7 @@ mod missing_appearance_tests {
         doc.get_dictionary_mut(annotation_id)
             .unwrap()
             .set("OC", Object::Null);
-        assert!(parse_opaque_fill_form(
+        assert!(parse_opaque_rect_form(
             &doc,
             doc.get_dictionary(annotation_id).unwrap(),
             crop,
@@ -1367,7 +1561,7 @@ mod missing_appearance_tests {
                 "Matrix",
                 vec![1.into(), 0.into(), 0.into(), 1.into(), 1.into(), 0.into()],
             );
-        assert!(parse_opaque_fill_form(
+        assert!(parse_opaque_rect_form(
             &doc,
             doc.get_dictionary(annotation_id).unwrap(),
             crop,
@@ -1386,7 +1580,7 @@ mod missing_appearance_tests {
             .unwrap()
             .dict
             .set("Resources", dictionary! { "XObject" => dictionary! {} });
-        assert!(parse_opaque_fill_form(
+        assert!(parse_opaque_rect_form(
             &doc,
             doc.get_dictionary(annotation_id).unwrap(),
             crop,
@@ -1402,6 +1596,11 @@ mod missing_appearance_tests {
         for content in [
             b"q 1 0 0 rg 39 0 2 30 re f Q".to_vec(),
             format!("q {}Q", "1 0 0 rg 0 0 40 30 re f ".repeat(33)).into_bytes(),
+            b"q 1 0 0 RG 1 w 1 1 38 28 re S Q".to_vec(),
+            b"q 1 0 0 RG 3 w 1 1 38 28 re S Q".to_vec(),
+            b"q 1 0 0 RG 2 w 0 1 38 28 re S Q".to_vec(),
+            b"q 1 0 0 RG 2 w 1 1 0 28 re S Q".to_vec(),
+            b"q 1 0 0 RG 2 w 1 1 38 28 re S Q 99".to_vec(),
         ] {
             let form = doc
                 .get_object_mut(form_id)
@@ -1410,7 +1609,7 @@ mod missing_appearance_tests {
                 .unwrap();
             form.content = content;
             form.dict.set("Length", form.content.len() as i64);
-            assert!(parse_opaque_fill_form(
+            assert!(parse_opaque_rect_form(
                 &doc,
                 doc.get_dictionary(annotation_id).unwrap(),
                 crop,
