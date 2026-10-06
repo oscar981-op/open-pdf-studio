@@ -930,15 +930,17 @@ impl OpenDocument {
         while at < annotations.len() {
             if matches!(&annotations[at].kind, Kind::Text { .. }) {
                 let text = &annotations[at];
-                let scene = native_text_scene::stage_native_text_box_scene(text).ok()?;
+                let origin = [text.bounds.x as u32, text.bounds.y as u32];
+                let scene =
+                    native_text_scene::stage_native_text_box_scene_at_origin(text, origin).ok()?;
                 let clip = [
                     text.bounds.x as u32,
                     text.bounds.y as u32,
                     (text.bounds.x + text.bounds.width) as u32,
                     (text.bounds.y + text.bounds.height) as u32,
                 ];
-                current = opds_dynlex_backend::render_validated_glyph_scene_over_opaque(
-                    &scene, &current, width, height, clip,
+                current = opds_dynlex_backend::render_validated_glyph_scene_over_opaque_at_origin(
+                    &scene, &current, width, height, clip, origin,
                 )
                 .ok()?
                 .rgba;
@@ -1005,18 +1007,21 @@ impl OpenDocument {
         while at < annotations.len() {
             if matches!(&annotations[at].kind, Kind::Text { .. }) {
                 let text = &annotations[at];
-                let scene = native_text_scene::stage_native_text_box_scene(text).ok()?;
+                let origin = [text.bounds.x as u32, text.bounds.y as u32];
+                let scene =
+                    native_text_scene::stage_native_text_box_scene_at_origin(text, origin).ok()?;
                 let clip = [
                     text.bounds.x as u32,
                     text.bounds.y as u32,
                     (text.bounds.x + text.bounds.width) as u32,
                     (text.bounds.y + text.bounds.height) as u32,
                 ];
-                layer = opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied(
-                    &scene, &layer, width, height, clip,
-                )
-                .ok()?
-                .rgba;
+                layer =
+                    opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied_at_origin(
+                        &scene, &layer, width, height, clip, origin,
+                    )
+                    .ok()?
+                    .rgba;
                 at += 1;
             } else {
                 let end = annotations[at..]
@@ -1097,6 +1102,204 @@ impl OpenDocument {
 #[cfg(all(test, feature = "dynlex-experimental"))]
 mod dynlex_annotation_overlay_tests {
     use super::*;
+
+    #[test]
+    fn large_page_tiled_text_boxes_match_saved_pdf() {
+        for (rotated, content, x, y, a1) in [
+            (
+                false,
+                b"0.2 0.5 0.8 rg 0 0 650 900 re f".as_slice(),
+                330.0,
+                480.0,
+                false,
+            ),
+            (
+                false,
+                b"0.2 0.5 0.8 rg 0 0 650 900 re f".as_slice(),
+                279.0,
+                205.0,
+                false,
+            ),
+            (
+                true,
+                b"0.2 0.5 0.8 rg 270 210 260 240 re f".as_slice(),
+                500.0,
+                330.0,
+                false,
+            ),
+            (
+                true,
+                b"0.2 0.5 0.8 rg 270 210 260 240 re f".as_slice(),
+                261.0,
+                203.0,
+                false,
+            ),
+            (
+                true,
+                b"0.2 0.5 0.8 rg 0 0 1684 2384 re f".as_slice(),
+                1800.0,
+                1200.0,
+                true,
+            ),
+        ] {
+            let mut source = lopdf::Document::load_mem(include_bytes!(
+                "../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf"
+            ))
+            .unwrap();
+            let page_id = *source.get_pages().get(&1).unwrap();
+            let contents_id = source
+                .get_dictionary(page_id)
+                .unwrap()
+                .get(b"Contents")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            let page = source
+                .get_object_mut(page_id)
+                .unwrap()
+                .as_dict_mut()
+                .unwrap();
+            if a1 {
+                page.set(
+                    "MediaBox",
+                    vec![0.into(), 0.into(), 1684.into(), 2384.into()],
+                );
+                page.set(
+                    "CropBox",
+                    vec![0.into(), 0.into(), 1684.into(), 2384.into()],
+                );
+            } else {
+                page.set("MediaBox", vec![0.into(), 0.into(), 650.into(), 900.into()]);
+                page.set(
+                    "CropBox",
+                    vec![40.into(), 30.into(), 635.into(), 872.into()],
+                );
+            }
+            page.set("Rotate", if rotated { 90 } else { 0 });
+            source
+                .get_object_mut(contents_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap()
+                .set_plain_content(content.to_vec());
+            let mut bytes = Vec::new();
+            source.save_to(&mut bytes).unwrap();
+            let pdf = Arc::new(ParsedPdf::open(Arc::new(bytes.clone())).unwrap());
+            let (outcome, layer) = render_page_with_content_layer(&pdf, 1, 1.0).unwrap();
+            let (width, height) = (outcome.raster.width, outcome.raster.height);
+            assert_eq!(
+                (width, height),
+                if a1 {
+                    (2384, 1684)
+                } else if rotated {
+                    (842, 595)
+                } else {
+                    (595, 842)
+                }
+            );
+            let marks = [
+                Annotation {
+                    id: 1,
+                    page: 0,
+                    bounds: Rect {
+                        x,
+                        y,
+                        width: 120.0,
+                        height: 60.0,
+                    },
+                    kind: Kind::Text {
+                        value: "ΩΩΩ".into(),
+                        color_rgb: [0, 80, 240],
+                        font_size: 20,
+                        align: TextAlign::Center,
+                    },
+                },
+                Annotation {
+                    id: 2,
+                    page: 0,
+                    bounds: Rect {
+                        x: x + 45.0,
+                        y: y + 10.0,
+                        width: 45.0,
+                        height: 30.0,
+                    },
+                    kind: Kind::Rectangle {
+                        color_rgb: [255, 226, 67],
+                    },
+                },
+                Annotation {
+                    id: 3,
+                    page: 0,
+                    bounds: Rect {
+                        x: x + 24.0,
+                        y: y + 4.0,
+                        width: 130.0,
+                        height: 60.0,
+                    },
+                    kind: Kind::Text {
+                        value: "Hello Ω".into(),
+                        color_rgb: [231, 76, 60],
+                        font_size: 16,
+                        align: TextAlign::Right,
+                    },
+                },
+            ];
+            let mut model = DocumentModel::new(DocumentId(102), 1).unwrap();
+            for mark in &marks {
+                model.apply(Edit::Add(mark.clone())).unwrap();
+            }
+            let mut document = OpenDocument {
+                path: "large-tiled-text.pdf".into(),
+                source_bytes: Arc::new(bytes),
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                content_layer_cache: RefCell::new(None),
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                displayed_page: 0,
+                selected_annotation: None,
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            };
+            document.cache_bitmap(0, 1.0, outcome, Some(layer));
+            let combined = document
+                .dynlex_annotation_bitmap()
+                .expect("large page with movable glyph tile should reach DynLex");
+            let saved = pdf_save::export_annotations(&document.source_bytes, &marks).unwrap();
+            let expected = ParsedPdf::open(Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let image::Handle::Rgba { pixels, .. } = combined else {
+                panic!("large DynLex annotation result must be RGBA");
+            };
+            let mut wrong_count = 0;
+            let mut first_wrong = Vec::new();
+            for (at, (actual, expected)) in pixels.iter().zip(&expected.rgba).enumerate() {
+                if actual != expected {
+                    wrong_count += 1;
+                    if first_wrong.len() < 16 {
+                        first_wrong.push((at, *actual, *expected));
+                    }
+                }
+            }
+            assert!(
+                wrong_count == 0,
+                "rotation={rotated} at ({x},{y}): {} differing channels, first {:?}",
+                wrong_count,
+                first_wrong
+            );
+        }
+    }
 
     #[test]
     fn two_overlapping_text_boxes_on_blank_page_follow_id_order() {

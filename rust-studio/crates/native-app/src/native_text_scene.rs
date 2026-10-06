@@ -155,9 +155,10 @@ pub fn verified_premultiplied_page_layer(
     page_points: (f32, f32),
 ) -> Option<Vec<u8>> {
     if width == 0
-        || width > 256
+        || width > 4096
         || height == 0
         || height > 4096
+        || u64::from(width) * u64::from(height) > 6_000_000
         || page_points != (width as f32, height as f32)
         || base_rgba.len() != width as usize * height as usize * 4
         || base_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
@@ -353,6 +354,15 @@ pub fn render_opaque_page_text_box(
 }
 
 pub fn stage_native_text_box_scene(mark: &Annotation) -> Result<Vec<u8>, String> {
+    stage_native_text_box_scene_at_origin(mark, [0, 0])
+}
+
+/// Stage one native Text Box into a 256×192 glyph tile at an integral page
+/// origin. The origin is carried separately by OPGC-v2 at composition time.
+pub fn stage_native_text_box_scene_at_origin(
+    mark: &Annotation,
+    origin: [u32; 2],
+) -> Result<Vec<u8>, String> {
     let Kind::Text {
         value,
         color_rgb,
@@ -369,8 +379,10 @@ pub fn stage_native_text_box_scene(mark: &Annotation) -> Result<Vec<u8>, String>
             .any(|v| !v.is_finite() || *v < 0.0 || v.fract() != 0.0)
         || bounds.width < 4.0
         || bounds.height < f64::from(*font_size)
-        || bounds.x + bounds.width > 256.0
-        || bounds.y + bounds.height > 192.0
+        || bounds.x < f64::from(origin[0])
+        || bounds.y < f64::from(origin[1])
+        || bounds.x + bounds.width > f64::from(origin[0]) + 256.0
+        || bounds.y + bounds.height > f64::from(origin[1]) + 192.0
     {
         return Err("Text Box is outside proven glyph tile geometry".into());
     }
@@ -450,8 +462,12 @@ pub fn stage_native_text_box_scene(mark: &Annotation) -> Result<Vec<u8>, String>
                 {
                     return Err("native glyph would require Text Box clipping".into());
                 }
-                text_quad_glyph::rebase(&mut opm, old_shift, [0.0, 0.0])
-                    .map_err(|error| error.to_string())?;
+                if origin == [0, 0] {
+                    text_quad_glyph::rebase(&mut opm, old_shift, [0.0, 0.0])
+                } else {
+                    text_quad_glyph::rebase_screen_f32(&mut opm, old_shift, origin)
+                }
+                .map_err(|error| error.to_string())?;
                 let mut name = [0_u8; 32];
                 name[..5].copy_from_slice(b"OPDS0");
                 records.extend_from_slice(&name);

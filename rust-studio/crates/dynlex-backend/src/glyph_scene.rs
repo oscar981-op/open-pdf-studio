@@ -49,6 +49,26 @@ pub fn render_validated_glyph_scene_over_opaque(
     })
 }
 
+/// Paint a 256×192 validated glyph tile at an integral position on a bounded
+/// larger opaque page. OPGC-v2 carries the tile origin to DynLex explicitly.
+pub fn render_validated_glyph_scene_over_opaque_at_origin(
+    scene: &[u8],
+    base_rgba: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Bitmap, String> {
+    let rgba =
+        core::render_opgs_over_opaque_at_origin(scene, base_rgba, width, height, clip, origin)
+            .map_err(|error| error.to_string())?;
+    Ok(Bitmap {
+        width,
+        height,
+        rgba,
+    })
+}
+
 /// Diagnostic path: render glyphs into an already-premultiplied PDF content
 /// layer. The caller is responsible for final paper composition.
 pub fn render_validated_glyph_scene_over_premultiplied(
@@ -60,6 +80,27 @@ pub fn render_validated_glyph_scene_over_premultiplied(
 ) -> Result<Bitmap, String> {
     let rgba = core::render_opgs_over_premultiplied(scene, base_rgba, width, height, clip)
         .map_err(|error| error.to_string())?;
+    Ok(Bitmap {
+        width,
+        height,
+        rgba,
+    })
+}
+
+/// Paint a validated glyph tile at an integral position on a bounded larger
+/// premultiplied PDF-content layer. Paper composition remains with the caller.
+pub fn render_validated_glyph_scene_over_premultiplied_at_origin(
+    scene: &[u8],
+    base_rgba: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Bitmap, String> {
+    let rgba = core::render_opgs_over_premultiplied_at_origin(
+        scene, base_rgba, width, height, clip, origin,
+    )
+    .map_err(|error| error.to_string())?;
     Ok(Bitmap {
         width,
         height,
@@ -93,6 +134,44 @@ mod tests {
             200,
             192,
             [20, 30, 130, 88],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn movable_glyph_tile_respects_page_bounds_and_source_alpha() {
+        let scene =
+            include_bytes!("../../../dynlex-engine-poc/rgba/fixtures/native-blue-omega.opgs");
+        let white = vec![255_u8; 595 * 842 * 4];
+        let output = render_validated_glyph_scene_over_opaque_at_origin(
+            scene,
+            &white,
+            595,
+            842,
+            [320, 430, 430, 488],
+            [300, 400],
+        )
+        .unwrap();
+        assert_eq!(output.rgba.len(), white.len());
+        assert!(output.rgba.chunks_exact(4).any(|pixel| pixel != [255; 4]));
+        assert!(render_validated_glyph_scene_over_opaque_at_origin(
+            scene,
+            &white,
+            595,
+            842,
+            [320, 430, 430, 488],
+            [400, 400],
+        )
+        .is_err());
+        let mut invalid_layer = vec![0_u8; white.len()];
+        invalid_layer[0] = 1;
+        assert!(render_validated_glyph_scene_over_premultiplied_at_origin(
+            scene,
+            &invalid_layer,
+            595,
+            842,
+            [320, 430, 430, 488],
+            [300, 400],
         )
         .is_err());
     }

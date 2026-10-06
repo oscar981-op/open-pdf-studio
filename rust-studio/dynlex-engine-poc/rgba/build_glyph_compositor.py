@@ -45,7 +45,10 @@ entry:
   %sn = icmp eq ptr %scene, null
   %rn = icmp eq ptr %rgba, null
   %null = or i1 %sn, %rn
-  %badlen = icmp ne i32 %scene_len, 49188
+  %old_len = icmp eq i32 %scene_len, 49188
+  %new_len = icmp eq i32 %scene_len, 49196
+  %known_len = or i1 %old_len, %new_len
+  %badlen = xor i1 %known_len, true
   %bad0 = or i1 %null, %badlen
   br i1 %bad0, label %reject, label %header
 header:
@@ -58,6 +61,8 @@ header:
   %rp = getelementptr i8, ptr %scene, i64 24
   %bp = getelementptr i8, ptr %scene, i64 28
   %fp = getelementptr i8, ptr %scene, i64 35
+  %oxp = getelementptr i8, ptr %scene, i64 36
+  %oyp = getelementptr i8, ptr %scene, i64 40
   %version = load i32, ptr %verp, align 1
   %width = load i32, ptr %wp, align 1
   %height = load i32, ptr %hp, align 1
@@ -66,23 +71,44 @@ header:
   %right = load i32, ptr %rp, align 1
   %bottom = load i32, ptr %bp, align 1
   %flags = load i8, ptr %fp, align 1
+  %raw_origin_x = load i32, ptr %oxp, align 1
+  %raw_origin_y = load i32, ptr %oyp, align 1
   %badmagic = icmp ne i32 %magic, 1128747087
-  %badversion = icmp ne i32 %version, 1
+  %v1 = icmp eq i32 %version, 1
+  %v2 = icmp eq i32 %version, 2
+  %valid_version = or i1 %v1, %v2
+  %badversion = xor i1 %valid_version, true
+  %bad_version_len_v1 = and i1 %v1, %new_len
+  %bad_version_len_v2 = and i1 %v2, %old_len
+  %bad_version_len = or i1 %bad_version_len_v1, %bad_version_len_v2
+  %origin_x = select i1 %v2, i32 %raw_origin_x, i32 0
+  %origin_y = select i1 %v2, i32 %raw_origin_y, i32 0
   %badwidthmin = icmp ult i32 %width, 1
-  %badwidthmax = icmp ugt i32 %width, 256
+  %maxwidth = select i1 %v2, i32 4096, i32 256
+  %badwidthmax = icmp ugt i32 %width, %maxwidth
   %badheightmin = icmp ult i32 %height, 1
   %badheightmax = icmp ugt i32 %height, 4096
   %badleft = icmp uge i32 %left, %right
   %badright = icmp ugt i32 %right, %width
   %badtop = icmp uge i32 %top, %bottom
   %badbottom = icmp ugt i32 %bottom, %height
-  %badtile = icmp ugt i32 %bottom, 192
+  %bad_origin_x = icmp ugt i32 %origin_x, %left
+  %bad_origin_y = icmp ugt i32 %origin_y, %top
+  %local_right = sub i32 %right, %origin_x
+  %local_bottom = sub i32 %bottom, %origin_y
+  %bad_tile_right = icmp ugt i32 %local_right, 256
+  %bad_tile_bottom = icmp ugt i32 %local_bottom, 192
+  %badtile0 = or i1 %bad_origin_x, %bad_origin_y
+  %badtile1 = or i1 %bad_tile_right, %bad_tile_bottom
+  %badtile = or i1 %badtile0, %badtile1
   %badflags = icmp ugt i8 %flags, 1
   %pix = mul i32 %width, %height
+  %too_many_pixels = icmp ugt i32 %pix, 6000000
   %bytes = mul i32 %pix, 4
-  %badoutput = icmp ult i32 %rgba_len, %bytes
+  %badoutput = icmp slt i32 %rgba_len, %bytes
   %a = or i1 %badmagic, %badversion
-  %b = or i1 %a, %badwidthmin
+  %a1 = or i1 %a, %bad_version_len
+  %b = or i1 %a1, %badwidthmin
   %c = or i1 %b, %badwidthmax
   %d = or i1 %c, %badheightmin
   %e = or i1 %d, %badheightmax
@@ -92,7 +118,8 @@ header:
   %i = or i1 %h, %badbottom
   %j = or i1 %i, %badtile
   %k = or i1 %j, %badflags
-  %bad = or i1 %k, %badoutput
+  %l = or i1 %k, %too_many_pixels
+  %bad = or i1 %l, %badoutput
   br i1 %bad, label %reject, label %call
 call:
   %sp = alloca ptr

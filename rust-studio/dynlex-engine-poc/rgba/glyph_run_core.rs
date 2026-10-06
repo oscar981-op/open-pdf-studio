@@ -25,7 +25,6 @@ unsafe extern "C" {
 }
 
 const GLYPH_PIXELS: usize = 256 * 192;
-const COMPOSITOR_BYTES: usize = 36 + GLYPH_PIXELS;
 
 fn words_for_opm(bytes: &[u8]) -> Result<Vec<u64>, Box<dyn Error>> {
     let contours = legacy::read_scene(bytes)?;
@@ -159,7 +158,18 @@ pub fn render_opgs_over_opaque(
     height: u32,
     clip: [u32; 4],
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    render_opgs_over_page(scene, base, width, height, clip, false)
+    render_opgs_over_page(scene, base, width, height, clip, [0, 0], false, false)
+}
+
+pub fn render_opgs_over_opaque_at_origin(
+    scene: &[u8],
+    base: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_opgs_over_page(scene, base, width, height, clip, origin, false, true)
 }
 
 /// Experimental direct drawing into a premultiplied page-content layer.
@@ -171,7 +181,18 @@ pub fn render_opgs_over_premultiplied(
     height: u32,
     clip: [u32; 4],
 ) -> Result<Vec<u8>, Box<dyn Error>> {
-    render_opgs_over_page(scene, base, width, height, clip, true)
+    render_opgs_over_page(scene, base, width, height, clip, [0, 0], true, false)
+}
+
+pub fn render_opgs_over_premultiplied_at_origin(
+    scene: &[u8],
+    base: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_opgs_over_page(scene, base, width, height, clip, origin, true, true)
 }
 
 fn render_opgs_over_page(
@@ -180,16 +201,19 @@ fn render_opgs_over_page(
     width: u32,
     height: u32,
     clip: [u32; 4],
+    origin: [u32; 2],
     premultiplied: bool,
+    tiled: bool,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     let scenes = read_scene(scene)?;
     let pixels = usize::try_from(width)?
         .checked_mul(usize::try_from(height)?)
         .ok_or("glyph page dimensions overflow")?;
     if width == 0
-        || width > 256
+        || width > if tiled { 4096 } else { 256 }
         || height == 0
         || height > 4096
+        || (width as u64) * (height as u64) > 6_000_000
         || base.len() != pixels.checked_mul(4).ok_or("glyph RGBA length overflow")?
         || base.chunks_exact(4).any(|pixel| {
             if premultiplied {
@@ -201,27 +225,38 @@ fn render_opgs_over_page(
         || clip[0] >= clip[2]
         || clip[1] >= clip[3]
         || clip[2] > width
-        || clip[3] > height.min(192)
+        || clip[3] > height
+        || (tiled
+            && (origin[0] > clip[0]
+                || origin[1] > clip[1]
+                || clip[2] - origin[0] > 256
+                || clip[3] - origin[1] > 192))
+        || (!tiled && (origin != [0, 0] || clip[2] > 256 || clip[3] > 192))
     {
         return Err("glyph page is outside bounded compositor route".into());
     }
     let mut output = base.to_vec();
     let mut alpha = vec![0_u8; GLYPH_PIXELS];
-    let mut command = vec![0_u8; COMPOSITOR_BYTES];
+    let header_len = if tiled { 44 } else { 36 };
+    let mut command = vec![0_u8; header_len + GLYPH_PIXELS];
     command[0..4].copy_from_slice(b"OPGC");
-    command[4..8].copy_from_slice(&1_u32.to_le_bytes());
+    command[4..8].copy_from_slice(&(if tiled { 2_u32 } else { 1_u32 }).to_le_bytes());
     command[8..12].copy_from_slice(&width.to_le_bytes());
     command[12..16].copy_from_slice(&height.to_le_bytes());
     command[35] = u8::from(premultiplied);
+    if tiled {
+        command[36..40].copy_from_slice(&origin[0].to_le_bytes());
+        command[40..44].copy_from_slice(&origin[1].to_le_bytes());
+    }
     for (words, color) in scenes {
         raster_glyph(&words, &mut alpha)?;
-        let mut bounds = [256_u32, 192, 0, 0];
+        let mut bounds = [u32::MAX, u32::MAX, 0, 0];
         for (index, &coverage) in alpha.iter().enumerate() {
             if coverage == 0 {
                 continue;
             }
-            let x = (index % 256) as u32;
-            let y = (index / 256) as u32;
+            let x = origin[0] + (index % 256) as u32;
+            let y = origin[1] + (index / 256) as u32;
             if x < clip[0] || x >= clip[2] || y < clip[1] || y >= clip[3] {
                 return Err("glyph antialias coverage extends beyond appearance clip".into());
             }
@@ -237,7 +272,7 @@ fn render_opgs_over_page(
             command[16 + index * 4..20 + index * 4].copy_from_slice(&value.to_le_bytes());
         }
         command[32..35].copy_from_slice(&color);
-        command[36..].copy_from_slice(&alpha);
+        command[header_len..].copy_from_slice(&alpha);
         // SAFETY: Rust validated the full OPGS/OPM2 input, constructed the
         // fixed OPGC command, checked bounds and allocated the output. The
         // LLVM ABI wrapper rechecks lengths and header before DynLex enters.

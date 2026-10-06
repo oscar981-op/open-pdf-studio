@@ -16,7 +16,9 @@ mod glyph_scene;
 #[cfg(feature = "kernel")]
 pub use glyph_scene::{
     render_validated_glyph_layer, render_validated_glyph_scene,
-    render_validated_glyph_scene_over_opaque, render_validated_glyph_scene_over_premultiplied,
+    render_validated_glyph_scene_over_opaque, render_validated_glyph_scene_over_opaque_at_origin,
+    render_validated_glyph_scene_over_premultiplied,
+    render_validated_glyph_scene_over_premultiplied_at_origin,
 };
 use opds_engine_probe::{ParsedPdf, Raster, RenderError};
 #[cfg(feature = "kernel")]

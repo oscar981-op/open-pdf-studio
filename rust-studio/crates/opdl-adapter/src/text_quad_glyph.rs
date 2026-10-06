@@ -352,6 +352,30 @@ pub fn rebase(
     Ok(())
 }
 
+/// Rebase a PDF screen-space glyph into a movable tile after the f32 screen
+/// quantization used by the reference renderer. Quantizing only after the
+/// local shift changes edge coverage on large pages by one 8-bit step.
+pub fn rebase_screen_f32(
+    scene: &mut [u8],
+    old_shift: Point,
+    tile_origin: [u32; 2],
+) -> Result<(), Box<dyn Error>> {
+    let offsets = opm_point_offsets(scene)?;
+    for at in offsets {
+        for axis in 0..2 {
+            let start = at + axis * 8;
+            let absolute =
+                f64::from_le_bytes(scene[start..start + 8].try_into()?) - old_shift[axis];
+            let value = (absolute as f32 - tile_origin[axis] as f32) as f64;
+            if !value.is_finite() || value < 0.0 || value > [256.0, 192.0][axis] {
+                return Err("glyph run exceeds quantized output tile".into());
+            }
+            scene[start..start + 8].copy_from_slice(&value.to_le_bytes());
+        }
+    }
+    Ok(())
+}
+
 /// Build a bounded OPM2 scene from one embedded quadratic TrueType glyph.
 /// The returned shift is used only to make an isolated 256×192 PDF oracle.
 pub fn stage(

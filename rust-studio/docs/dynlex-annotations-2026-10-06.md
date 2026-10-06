@@ -241,9 +241,24 @@ Save As-proeven voor leeg en gedeeltelijk gevuld, beide vormkleuren en beide
 volgordes zijn RGBA-bytegelijk aan Hayro. De app-cachetest controleert ook
 Highlight vóór en na Text Box op een gedeeltelijk geverfde PDF, met behoud van
 de bestaande stale-result-afwijzing. Niet-gevalideerde contentlagen blijven
-Iced-fallback. Voor grotere en complexere pagina's zijn bredere
-bronlaagstaging en glyphtegels nodig. Volledige Text Box- en
-annotatiedekking zijn nog niet bewezen.
+Iced-fallback.
+
+**Verplaatsbare glyphtegel (OPGC-v2).** Een afzonderlijke Text Box mag nu op
+een andere plek dan de linkerbovenhoek staan. Rust stageert haar glyphs in een
+lokale tegel van maximaal 256×192 pixels; OPGC-v2 draagt de gehele
+pagina-oorsprong van die tegel mee aan DynLex. De oude OPGC-v1-records blijven
+geldig. De pagina mag maximaal 4096 pixels per zijde en 6 miljoen pixels
+hebben, mits de PDF-bronlaag afzonderlijk bytegewijs is gevalideerd. De
+schermcoördinaten worden vóór het aftrekken van de tegeloorsprong naar `f32`
+afgerond; anders gaf een 90°/CropBox-proef één afwijkende 8-bit-kleurbyte.
+De annotaties blijven in ID-/laagvolgorde getekend, met eigen tegel per
+Text Box. Vijf volledige Save As-/Hayro-proeven zijn RGBA-bytegelijk:
+595×842 met twee posities, 842×595 met 90° en verschoven CropBox op twee
+posities, en een synthetische A1-achtige 2384×1684/90°-pagina. Iedere proef
+bevat twee overlappende Unicode-Text Boxes en een Highlight. Dit bewijst nog
+geen Text Box die een tegelgrens overschrijdt, geen complexe bron-PDF en geen
+echte technische A1-tekening. Die gevallen blijven bij de Iced/Hayro-route;
+volledige Text Box- en annotatiedekking zijn nog niet bewezen.
 
 Gerichte reproductie vanuit `rust-studio`:
 
@@ -262,6 +277,8 @@ cargo test --offline -p opds-native-app --features dynlex-experimental \
   dynlex_glyph_and_shape_order_matches_saved_appearances
 cargo test --offline -p opds-native-app --features dynlex-experimental \
   dynlex_premultiplied_text_and_shape_order_matches_saved_appearances
+cargo test --offline -p opds-native-app --features dynlex-experimental \
+  large_page_tiled_text_boxes_match_saved_pdf
 ```
 
 De andere OPDL-v2/v4-verifiers moeten bij verdere wijzigingen blijven slagen.
