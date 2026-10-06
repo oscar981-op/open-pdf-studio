@@ -558,6 +558,8 @@ mod unsaved_annotation_tests {
                 annotation_overlay_cache: RefCell::new(None),
                 #[cfg(feature = "dynlex-experimental")]
                 content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
                 bitmap_size: (0, 0),
                 bitmap_page_points: (0.0, 0.0),
                 bitmap_scale: 1.0,
@@ -598,6 +600,8 @@ struct OpenDocument {
     annotation_overlay_cache: RefCell<Option<AnnotationOverlayCache>>,
     #[cfg(feature = "dynlex-experimental")]
     content_layer_cache: RefCell<Option<ContentLayerCache>>,
+    #[cfg(feature = "dynlex-experimental")]
+    content_layer_in_flight: Option<RenderTicket>,
     bitmap_size: (u32, u32),
     bitmap_page_points: (f32, f32),
     bitmap_scale: f32,
@@ -691,28 +695,16 @@ impl OpenDocument {
                             ) {
                                 return None;
                             }
-                            let mut content_cache = self.content_layer_cache.borrow_mut();
-                            if !content_cache.as_ref().is_some_and(|cached| {
-                                cached.base == *base && cached.page == self.displayed_page
-                            }) {
-                                let layer = self
-                                    .pdf
-                                    .render_page_content_layer(self.displayed_page + 1, 1.0)
-                                    .ok()?;
-                                if (layer.width, layer.height) != (*width, *height) {
-                                    return None;
-                                }
-                                *content_cache = Some(ContentLayerCache {
-                                    base: base.clone(),
-                                    page: self.displayed_page,
-                                    rgba: layer.rgba,
-                                });
+                            let content_cache = self.content_layer_cache.borrow();
+                            let cached = content_cache.as_ref()?;
+                            if cached.base != *base || cached.page != self.displayed_page {
+                                return None;
                             }
                             native_text_scene::render_mixed_page_text_box(
                                 &self.source_bytes,
                                 self.displayed_page,
                                 pixels.as_ref(),
-                                &content_cache.as_ref()?.rgba,
+                                &cached.rgba,
                                 *width,
                                 *height,
                                 self.bitmap_page_points,
@@ -759,6 +751,10 @@ impl OpenDocument {
 
     fn cache_bitmap(&mut self, page: usize, scale: f32, outcome: RenderOutcome) {
         let raster = outcome.raster;
+        #[cfg(feature = "dynlex-experimental")]
+        {
+            self.content_layer_in_flight = None;
+        }
         self.bitmap_backend = outcome.used;
         self.bitmap_size = (raster.width, raster.height);
         self.bitmap_page_points = (raster.page_width_pt, raster.page_height_pt);
@@ -822,6 +818,8 @@ mod dynlex_annotation_overlay_tests {
             annotation_overlay_cache: RefCell::new(None),
             #[cfg(feature = "dynlex-experimental")]
             content_layer_cache: RefCell::new(None),
+            #[cfg(feature = "dynlex-experimental")]
+            content_layer_in_flight: None,
             bitmap_size: (0, 0),
             bitmap_page_points: (0.0, 0.0),
             bitmap_scale: 1.0,
@@ -889,6 +887,43 @@ mod dynlex_annotation_overlay_tests {
                 used: Backend::Hayro,
             },
         );
+        assert!(document.dynlex_annotation_bitmap().is_none());
+        let ticket = document.model.view().ticket();
+        let base = document.bitmap.as_ref().unwrap().clone();
+        let layer = document.pdf.render_page_content_layer(1, 1.0).unwrap();
+        let mut app = App {
+            backend: Backend::Dynlex,
+            next_load: 48,
+            document: Some(document),
+            ..Default::default()
+        };
+        let _task = app.render_content_layer_if_needed();
+        assert_eq!(
+            app.document.as_ref().unwrap().content_layer_in_flight,
+            Some(ticket)
+        );
+        let _ = app.update(Message::ContentLayerRendered(
+            48,
+            1,
+            ticket,
+            base.clone(),
+            Ok(layer.clone()),
+        ));
+        assert!(app
+            .document
+            .as_ref()
+            .unwrap()
+            .content_layer_cache
+            .borrow()
+            .is_none());
+        let _ = app.update(Message::ContentLayerRendered(
+            48,
+            0,
+            ticket,
+            base,
+            Ok(layer),
+        ));
+        let document = app.document.as_mut().unwrap();
         let mixed = document
             .dynlex_annotation_bitmap()
             .expect("small vector PDF and Text Box should reach DynLex");
@@ -932,6 +967,34 @@ mod dynlex_annotation_overlay_tests {
             layer_ptr,
             "text edit must reuse unchanged PDF content layer"
         );
+        let stale_ticket = document.model.view().ticket();
+        let stale_base = document.bitmap.as_ref().unwrap().clone();
+        let stale_layer = document.pdf.render_page_content_layer(1, 1.0).unwrap();
+        document.content_layer_in_flight = Some(stale_ticket);
+        document.model.zoom_at(1.25, [0.0, 0.0]).unwrap();
+        let _ = app.update(Message::ContentLayerRendered(
+            48,
+            0,
+            stale_ticket,
+            stale_base,
+            Ok(stale_layer),
+        ));
+        let document = app.document.as_ref().unwrap();
+        assert_eq!(document.content_layer_in_flight, None);
+        assert_eq!(
+            document
+                .content_layer_cache
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .rgba
+                .as_ptr(),
+            layer_ptr,
+            "obsolete zoom result must not replace the content layer"
+        );
+        app.document.as_mut().unwrap().content_layer_in_flight = Some(stale_ticket);
+        let _ = app.update(Message::SelectBackend(Backend::Hayro));
+        assert_eq!(app.document.as_ref().unwrap().content_layer_in_flight, None);
     }
 }
 
@@ -1019,6 +1082,14 @@ enum Message {
     ThumbnailsScrolled(scrollable::Viewport),
     GoToPage(usize),
     Rendered(u64, RenderTicket, Result<RenderOutcome, String>),
+    #[cfg(feature = "dynlex-experimental")]
+    ContentLayerRendered(
+        u64,
+        u64,
+        RenderTicket,
+        image::Handle,
+        Result<Raster, String>,
+    ),
     ThumbnailRendered(u64, u64, usize, Result<Raster, String>),
     SelectBackend(Backend),
     SelectRibbon(RibbonTab),
@@ -1465,6 +1536,10 @@ impl App {
                 if let Some(document) = &mut self.document {
                     document.page_cache.clear();
                     document.bitmap = None;
+                    #[cfg(feature = "dynlex-experimental")]
+                    {
+                        document.content_layer_in_flight = None;
+                    }
                     document.thumbnails.clear();
                     document.thumbnail_failed.clear();
                     document.thumbnail_in_flight = None;
@@ -1591,8 +1666,12 @@ impl App {
                 self.text_draft = iced::widget::text_editor::Content::new();
                 if let Some(offset) = self.text_scroll_offset.take() {
                     self.page_scroll_offset = offset;
-                    return scroll_page_to(offset);
+                    return Task::batch([
+                        scroll_page_to(offset),
+                        self.render_content_layer_if_needed(),
+                    ]);
                 }
+                return self.render_content_layer_if_needed();
             }
             Message::EditSelectedText => {
                 if let Some(document) = &self.document {
@@ -1680,8 +1759,12 @@ impl App {
                 self.text_draft = iced::widget::text_editor::Content::new();
                 if let Some(offset) = self.text_scroll_offset.take() {
                     self.page_scroll_offset = offset;
-                    return scroll_page_to(offset);
+                    return Task::batch([
+                        scroll_page_to(offset),
+                        self.render_content_layer_if_needed(),
+                    ]);
                 }
+                return self.render_content_layer_if_needed();
             }
             Message::SelectAnnotation(id) => {
                 if let Some(document) = &mut self.document {
@@ -1713,6 +1796,7 @@ impl App {
                         self.active_ribbon = RibbonTab::Comment;
                     }
                 }
+                return self.render_content_layer_if_needed();
             }
             Message::MoveAnnotation(id, delta) => {
                 if let Some(document) = &mut self.document {
@@ -1831,6 +1915,7 @@ impl App {
                         }
                     }
                 }
+                return self.render_content_layer_if_needed();
             }
             Message::Redo => {
                 if let Some(document) = &mut self.document {
@@ -1838,6 +1923,7 @@ impl App {
                         self.message = format!("Redo failed: {error:?}");
                     }
                 }
+                return self.render_content_layer_if_needed();
             }
             Message::Open => {
                 if self.save_busy {
@@ -1908,6 +1994,8 @@ impl App {
                             annotation_overlay_cache: RefCell::new(None),
                             #[cfg(feature = "dynlex-experimental")]
                             content_layer_cache: RefCell::new(None),
+                            #[cfg(feature = "dynlex-experimental")]
+                            content_layer_in_flight: None,
                             bitmap_size: (0, 0),
                             bitmap_page_points: (0.0, 0.0),
                             bitmap_scale: initial_scale,
@@ -2026,6 +2114,34 @@ impl App {
                     scroll_thumbnail_to(page),
                 ]);
             }
+            #[cfg(feature = "dynlex-experimental")]
+            Message::ContentLayerRendered(token, generation, ticket, base, result) => {
+                if token != self.next_load || generation != self.backend_generation {
+                    return Task::none();
+                }
+                let Some(document) = &mut self.document else {
+                    return Task::none();
+                };
+                if document.content_layer_in_flight != Some(ticket) {
+                    return Task::none();
+                }
+                document.content_layer_in_flight = None;
+                if !document.model.view().accepts(ticket) || document.bitmap.as_ref() != Some(&base)
+                {
+                    return Task::none();
+                }
+                if let Ok(layer) = result {
+                    if (layer.width, layer.height) == document.bitmap_size {
+                        *document.content_layer_cache.borrow_mut() = Some(ContentLayerCache {
+                            base,
+                            page: document.displayed_page,
+                            rgba: layer.rgba,
+                        });
+                        document.annotation_overlay_cache.borrow_mut().take();
+                    }
+                }
+                return Task::none();
+            }
             Message::Rendered(generation, ticket, result) => {
                 if generation != self.backend_generation {
                     return Task::none();
@@ -2048,8 +2164,12 @@ impl App {
                         self.message = format!("{}×{} px", width, height);
                         if let Some(offset) = self.pending_zoom_offset.take() {
                             self.page_scroll_offset = offset;
-                            return scroll_page_to(offset);
+                            return Task::batch([
+                                scroll_page_to(offset),
+                                self.render_content_layer_if_needed(),
+                            ]);
                         }
+                        return self.render_content_layer_if_needed();
                     }
                     Err(error) => {
                         self.pending_zoom_offset = None;
@@ -2131,6 +2251,70 @@ impl App {
         )
     }
 
+    fn render_content_layer_if_needed(&mut self) -> Task<Message> {
+        #[cfg(feature = "dynlex-experimental")]
+        {
+            if self.backend != Backend::Dynlex {
+                return Task::none();
+            }
+            let Some(document) = &mut self.document else {
+                return Task::none();
+            };
+            let view = document.model.view();
+            let page = view.page();
+            let ticket = view.ticket();
+            let Some(base) = document.bitmap.as_ref() else {
+                return Task::none();
+            };
+            let image::Handle::Rgba { width, height, .. } = base else {
+                return Task::none();
+            };
+            if page != document.displayed_page
+                || document.bitmap_scale != 1.0
+                || document
+                    .model
+                    .items()
+                    .filter(|item| item.page == page)
+                    .count()
+                    != 1
+                || !document
+                    .model
+                    .items()
+                    .any(|item| item.page == page && matches!(item.kind, Kind::Text { .. }))
+                || !native_text_scene::eligible_mixed_page(
+                    &document.source_bytes,
+                    page,
+                    *width,
+                    *height,
+                )
+                || document.content_layer_in_flight == Some(ticket)
+                || document
+                    .content_layer_cache
+                    .borrow()
+                    .as_ref()
+                    .is_some_and(|cached| cached.base == *base && cached.page == page)
+            {
+                return Task::none();
+            }
+            document.content_layer_in_flight = Some(ticket);
+            let pdf = Arc::clone(&document.pdf);
+            let base = base.clone();
+            let token = self.next_load;
+            let generation = self.backend_generation;
+            return Task::perform(
+                async move {
+                    pdf.render_page_content_layer(page + 1, 1.0)
+                        .map_err(|error| error.to_string())
+                },
+                move |result| {
+                    Message::ContentLayerRendered(token, generation, ticket, base.clone(), result)
+                },
+            );
+        }
+        #[cfg(not(feature = "dynlex-experimental"))]
+        Task::none()
+    }
+
     fn render_current_page(&mut self) -> Task<Message> {
         let Some(document) = &mut self.document else {
             return Task::none();
@@ -2150,9 +2334,13 @@ impl App {
             document.bitmap_scale = scale;
             document.bitmap_backend = cached.backend;
             document.displayed_page = cached.page;
+            #[cfg(feature = "dynlex-experimental")]
+            {
+                document.content_layer_in_flight = None;
+            }
             self.busy = false;
             self.message = format!("Page {page} • {:.0}% (cached)", scale * 100.0);
-            return Task::none();
+            return self.render_content_layer_if_needed();
         }
         let pdf = Arc::clone(&document.pdf);
         let source = Arc::clone(&document.source_bytes);

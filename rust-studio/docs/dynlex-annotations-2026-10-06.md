@@ -166,19 +166,24 @@ eenvoudige kleur-, rechthoek-, lijn- en fill/stroke-operators, geen bestaande
 broncontentlaag wordt per pagina/bitmap gecacht en blijft bij
 annotatiebewerkingen herbruikbaar. Lege en volledig dekkende bronnen blijven
 op hun snellere eerder bewezen paden; andere graphics-state, fonts,
-XObjects, clips en filters blijven fallback. Bij de eerste cachemiss rendert
-Hayro de transparante bron nogmaals. Dit is dus **geen volledig DynLex-PDF-pad
-en geen prestatieclaim**.
+XObjects, clips en filters blijven fallback. De eerste cachemiss start nu een
+afzonderlijke asynchrone render-taak; totdat die klaar is blijft de Iced-laag
+zichtbaar. De taak draagt documenttoken, backendgeneratie, renderticket en
+basisbitmap mee. Verouderde resultaten worden geweigerd, terwijl een geldig
+resultaat de annotatiecache ververst. De in-flight-status wordt bij een nieuwe
+bitmap of backendwissel gewist. Dit voorkomt de eerdere extra Hayro-render
+op de UI-thread, maar de bron wordt nog wel een tweede keer gerenderd. Het
+is dus **geen volledig DynLex-PDF-pad en geen prestatieclaim**.
 
 Echte Save As-/AP-vergelijkingen zijn bytegelijk voor een gedeeltelijk
 gekleurde rechthoek, een rechthoek die de glyphs kruist, twee overlappende
 vectorvlakken, een lijn/gevulde vorm via de app-cache en een 90°-pagina met
 verschoven CropBox. De broncontent-alpha onderscheidt een lege pagina
 (alpha 0), een volledig dekkende pagina (255) en gedeeltelijke vectorinhoud.
-Voor grotere en complexere pagina's moet deze laag in het asynchrone
-renderresultaat worden opgebouwd zodat een eerste annotatie geen extra
-synchrone Hayro-render veroorzaakt. Volledige Text Box- en
-annotatiedekking zijn nog niet bewezen.
+Voor grotere en complexere pagina's moet deze laag uiteindelijk samen met
+het normale paginarenderresultaat worden opgebouwd om de tweede Hayro-render
+ook in de achtergrond te vermijden. Volledige Text Box- en annotatiedekking
+zijn nog niet bewezen.
 
 Gerichte reproductie vanuit `rust-studio`:
 
