@@ -83,10 +83,22 @@ computergebruik-koppeling bood geen native app aan en synthetische XTest-
 muisklikken veranderden het ribbon niet. Een betrouwbare end-to-end
 muistest voor annotatie-aanmaken/selecteren ontbreekt daarom nog.
 
-De PDF-importroute gebruikt deze compositor nog niet. Hierna moeten
-geïmporteerde `/AP`-streams, annotaties
-zonder `/AP`, tekst/free-text, meerdere kleurmodellen, transparantiegroepen,
-rotatie/CropBox en subpixelplaatsing met echte PDF's worden geverifieerd.
+Een bestaande normale Form-`/AP` kan nu als **ondergrond** voor nieuwe native
+DynLex-annotaties dienen. De classifier accepteert hoogstens 64 bestaande
+annotaties en vereist bij elk een `/AP/N`-stream; de eenvoudige
+pagina-content en resourcegrenzen blijven gelden. De app gebruikt alleen de
+premultiplied route nadat Hayro's transparante pagina **inclusief bestaande
+appearances** de zichtbare witte pagina byte voor byte reconstrueert. Een
+90°/CropBox-proef met een bestaande rode Square-`/AP`, twee nieuwe brede
+Unicode-Text Boxes en een Highlight is na Save As over de volledige RGBA-pagina
+bytegelijk aan Hayro. Een lege bronpagina met bestaande Square-`/AP` en nieuwe
+Text Boxes/Highlight is eveneens bytegelijk. Dezelfde bron zonder `/AP` wordt
+afgewezen, omdat de
+previewfallback niet in de transparante bronlaag zit. De bestaande `/AP`
+wordt hier **nog door Hayro**, niet DynLex, gerenderd; dit is dus een bewezen
+laagvolgorde-/overgangspad en geen voltooide DynLex-importrenderer. Directe
+DynLex-rendering van geïmporteerde `/AP`, annotaties zonder `/AP`, meer
+kleurmodellen, transparantiegroepen en subpixelplaatsing blijven open.
 De huidige app bevat nog geen PDFium-backend; Hayro blijft de fallback.
 
 ## Geïsoleerde native Text Box-appearance
@@ -260,11 +272,12 @@ glyphdekking binnen dat vak. OPGS met één glyph is daarom geldig. De
 app-route geeft de paginabuffer aan de volgende tegel door zonder per tegel
 een volledige RGBA-kopie te maken.
 
-Acht volledige Save As-/Hayro-proeven zijn RGBA-bytegelijk:
+Negen volledige Save As-/Hayro-proeven zijn RGBA-bytegelijk:
 595×842 met twee posities, 842×595 met 90° en verschoven CropBox op twee
 posities, een synthetische A1-achtige 2384×1684/90°-pagina, twee brede
 Text Boxes over meerdere tegels (waarvan één 90°/CropBox) en een hoge
-vierregelige 72pt-Text Box over meerdere tegelrijen. Iedere proef bevat
+vierregelige 72pt-Text Box over meerdere tegelrijen, en een lege bronpagina
+met bestaande Square-`/AP`. Iedere proef bevat
 Unicode-Text Boxes en een Highlight in annotatievolgorde. Het tekstpad
 beperkt invoer nog tot 64 tekens, vier regels, 64 zichtbare glyphs en de
 bewezen ingebedde fontglyphs; complexe bron-PDF's en de echte technische

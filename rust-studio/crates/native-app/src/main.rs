@@ -1169,6 +1169,7 @@ mod dynlex_annotation_overlay_tests {
                 false,
                 (false, true),
             ),
+            (false, b"".as_slice(), 150.0, 220.0, false, (false, false)),
         ] {
             let mut source = lopdf::Document::load_mem(include_bytes!(
                 "../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf"
@@ -1212,9 +1213,85 @@ mod dynlex_annotation_overlay_tests {
                 .set_plain_content(content.to_vec());
             let mut bytes = Vec::new();
             source.save_to(&mut bytes).unwrap();
+            // Keep one imported /AP below the new native annotations. The
+            // rotated mixed-content case exercises source alpha and order.
+            let with_existing_ap = (rotated && wide) || content.is_empty();
+            if with_existing_ap {
+                let imported = Annotation {
+                    id: 91,
+                    page: 0,
+                    bounds: Rect {
+                        x: x + 55.0,
+                        y: y + 12.0,
+                        width: 76.0,
+                        height: 38.0,
+                    },
+                    kind: Kind::Rectangle {
+                        color_rgb: [250, 20, 20],
+                    },
+                };
+                bytes = pdf_save::export_annotations(&bytes, &[imported]).unwrap();
+            }
             let pdf = Arc::new(ParsedPdf::open(Arc::new(bytes.clone())).unwrap());
             let (outcome, layer) = render_page_with_content_layer(&pdf, 1, 1.0).unwrap();
             let (width, height) = (outcome.raster.width, outcome.raster.height);
+            if with_existing_ap {
+                assert!(native_text_scene::eligible_mixed_page(
+                    &bytes, 0, width, height
+                ));
+                let mut no_appearance = lopdf::Document::load_mem(&bytes).unwrap();
+                let page_id = *no_appearance.get_pages().get(&1).unwrap();
+                let annotation_id = no_appearance
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()[0]
+                    .as_reference()
+                    .unwrap();
+                no_appearance
+                    .get_object_mut(annotation_id)
+                    .unwrap()
+                    .as_dict_mut()
+                    .unwrap()
+                    .remove(b"AP");
+                let mut no_ap_bytes = Vec::new();
+                no_appearance.save_to(&mut no_ap_bytes).unwrap();
+                assert!(!native_text_scene::eligible_mixed_page(
+                    &no_ap_bytes,
+                    0,
+                    width,
+                    height
+                ));
+                let mut wrong_form = lopdf::Document::load_mem(&bytes).unwrap();
+                let form_id = wrong_form
+                    .get_dictionary(annotation_id)
+                    .unwrap()
+                    .get(b"AP")
+                    .unwrap()
+                    .as_dict()
+                    .unwrap()
+                    .get(b"N")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                wrong_form
+                    .get_object_mut(form_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap()
+                    .dict
+                    .set("Subtype", "Image");
+                let mut wrong_form_bytes = Vec::new();
+                wrong_form.save_to(&mut wrong_form_bytes).unwrap();
+                assert!(!native_text_scene::eligible_mixed_page(
+                    &wrong_form_bytes,
+                    0,
+                    width,
+                    height
+                ));
+            }
             assert_eq!(
                 (width, height),
                 if a1 {

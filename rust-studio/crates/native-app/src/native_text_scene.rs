@@ -39,13 +39,39 @@ fn supported_page_paint(source: &[u8], page: usize, width: u32, height: u32) -> 
     let Some(page_id) = doc.get_pages().get(&page_number).copied() else {
         return None;
     };
-    if doc
-        .get_dictionary(page_id)
-        .is_ok_and(|node| node.has(b"Annots") || node.has(b"Group") || node.has(b"UserUnit"))
-    {
-        // An existing /AP on the source page must never be painted twice.
+    let page_dict = doc.get_dictionary(page_id).ok()?;
+    if page_dict.has(b"Group") || page_dict.has(b"UserUnit") {
         return None;
     }
+    let has_appearances = if page_dict.has(b"Annots") {
+        let annotations = doc.get_page_annotations(page_id).ok()?;
+        if annotations.is_empty()
+            || annotations.len() > 64
+            || !annotations.iter().all(|annotation| {
+                let Ok(ap) = annotation.get(b"AP").and_then(Object::as_dict) else {
+                    return false;
+                };
+                let Ok(normal) = ap.get(b"N") else {
+                    return false;
+                };
+                doc.dereference(normal).is_ok_and(|(_, object)| {
+                    object.as_stream().is_ok_and(|form| {
+                        form.dict
+                            .get(b"Subtype")
+                            .and_then(Object::as_name)
+                            .is_ok_and(|name| name == b"Form")
+                    })
+                })
+            })
+        {
+            // Imported annotations without a normal appearance use a
+            // separate preview fallback absent from the transparent layer.
+            return None;
+        }
+        true
+    } else {
+        false
+    };
     let Ok((crop, rotation)) = super::pdf_save::print_page_geometry(&doc, page_id) else {
         return None;
     };
@@ -73,7 +99,7 @@ fn supported_page_paint(source: &[u8], page: usize, width: u32, height: u32) -> 
         return None;
     }
     let operations = Content::decode(&stream.content).ok()?.operations;
-    if operations.is_empty() {
+    if operations.is_empty() && !has_appearances {
         return Some(PagePaint::Blank);
     }
     let mixed = || {
@@ -93,6 +119,12 @@ fn supported_page_paint(source: &[u8], page: usize, width: u32, height: u32) -> 
             }))
         .then_some(PagePaint::Mixed)
     };
+    if has_appearances {
+        // The opaque shortcut would lose the source alpha of imported /AP.
+        // The mixed route must independently reconstruct the displayed page
+        // from Hayro's transparent source layer before DynLex draws on it.
+        return mixed();
+    }
     if operations.len() != 3
         || operations[0].operator != "rg"
         || operations[1].operator != "re"
