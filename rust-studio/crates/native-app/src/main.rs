@@ -167,15 +167,13 @@ fn single_disjoint_text(annotations: &[Annotation]) -> Option<&Annotation> {
     if texts.next().is_some() {
         return None;
     }
-    for (index, item) in annotations.iter().enumerate() {
-        for other in annotations.iter().skip(index + 1) {
-            if !(item.bounds.x + item.bounds.width <= other.bounds.x
-                || other.bounds.x + other.bounds.width <= item.bounds.x
-                || item.bounds.y + item.bounds.height <= other.bounds.y
-                || other.bounds.y + other.bounds.height <= item.bounds.y)
-            {
-                return None;
-            }
+    for item in annotations.iter().filter(|item| item.id != text.id) {
+        if !(item.bounds.x + item.bounds.width <= text.bounds.x
+            || text.bounds.x + text.bounds.width <= item.bounds.x
+            || item.bounds.y + item.bounds.height <= text.bounds.y
+            || text.bounds.y + text.bounds.height <= item.bounds.y)
+        {
+            return None;
         }
     }
     Some(text)
@@ -1200,13 +1198,36 @@ mod dynlex_annotation_overlay_tests {
             panic!("combined DynLex annotations must be RGBA");
         };
         assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+        let mut second_square = document.model.get(3).unwrap().clone();
+        second_square.kind = Kind::Rectangle {
+            color_rgb: [231, 76, 60],
+        };
+        second_square.bounds.x = 185.0;
+        second_square.bounds.y = 30.0;
+        document.model.apply(Edit::Replace(second_square)).unwrap();
+        let opaque_overlap = document
+            .dynlex_annotation_bitmap()
+            .expect("overlapping opaque squares remain supported beside text");
+        let saved = pdf_save::export_annotations(
+            &document.source_bytes,
+            &document.model.items().cloned().collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = opaque_overlap else {
+            panic!("combined DynLex annotations must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
         let mut overlapping = document.model.get(3).unwrap().clone();
         overlapping.bounds.x = 110.0;
         overlapping.bounds.y = 120.0;
         document.model.apply(Edit::Replace(overlapping)).unwrap();
         assert!(
             document.dynlex_annotation_bitmap().is_none(),
-            "unverified Text Box/Highlight overlap must use the Iced layer"
+            "unverified Text Box/Square overlap must use the Iced layer"
         );
         let stale_ticket = document.model.view().ticket();
         let stale_base = document.bitmap.as_ref().unwrap().clone();

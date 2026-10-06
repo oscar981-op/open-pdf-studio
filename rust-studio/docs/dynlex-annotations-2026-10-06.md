@@ -26,12 +26,15 @@ weigert null/te korte buffers en ongeldige totale lengtes.
 
 Een gecontroleerde PDF vergelijkt de
 DynLex-composiet rechtstreeks met Hayro na Save As: afzonderlijke rode Square,
-afzonderlijke gele Highlight en twee **niet-overlappende** annotaties zijn
-volledig RGBA-bytegelijk. Het experiment weigerde tekst, fractionele
-coördinaten en overlappende annotaties zonder een gedeeltelijke bitmap terug
-te geven. Bij een overlappende Square/Highlight weken acht kanaalbytes op
+afzonderlijke gele Highlight, twee gescheiden annotaties en overlappende
+**dekkende Square**-appearances zijn volledig RGBA-bytegelijk. De dekkende
+overlap is gecontroleerd op witte en gekleurde bronpagina's, beide
+tekenvolgordes, een 90°/CropBox-pagina en 32 deterministische kleurparen.
+Het experiment weigert tekst in deze OPAN-route en fractionele coördinaten
+zonder een gedeeltelijke bitmap terug te geven. Bij een overlappende
+Square/Highlight weken acht kanaalbytes op
 de doorsnijding van de PDF-appearance-randen één stap af; daarom is die
-combinatie nog fallback. Een Highlight over gekleurde PDF-pagina-inhoud week
+combinatie in beide volgordes nog fallback. Een Highlight over gekleurde PDF-pagina-inhoud week
 op een gecontroleerde fixture 3.000 kanaalbytes af; ook die combinatie valt
 terug. De proef accepteert Highlight alleen als **alle** onderliggende
 RGB-pixels binnen de rechthoek wit zijn. Een directe 8-bit-beeldpatch met de
@@ -187,13 +190,13 @@ gekleurde rechthoek, een rechthoek die de glyphs kruist, twee overlappende
 vectorvlakken, een lijn/gevulde vorm via de app-cache en een 90°-pagina met
 verschoven CropBox. De broncontent-alpha onderscheidt een lege pagina
 (alpha 0), een volledig dekkende pagina (255) en gedeeltelijke vectorinhoud.
-De app kan nu daarnaast precies één Text Box samen met meerdere onderling
-gescheiden native vormannotaties compositeren: DynLex tekent eerst de tekst
+De app kan nu daarnaast precies één Text Box samen met meerdere native
+vormannotaties compositeren: DynLex tekent eerst de tekst
 op de bewezen bronlaag en vervolgens de vormen. Een echte gemengde PDF met
 Text Box, blauwe Square en gele Highlight is over de hele pagina bytegelijk
-aan Hayro na Save As. Wanneer hun annotatievakken elkaar overlappen,
-blijft de Iced-laag actief; die compositieregel is nog niet
-bewezen. De annotaties moeten ook ieder afzonderlijk binnen hun bestaande
+aan Hayro na Save As. Opaque Square-vormen mogen elkaar overlappen; een
+Text Box-overlap of een overlap met Highlight blijft via Iced lopen. De
+annotaties moeten ook ieder afzonderlijk binnen hun bestaande
 bewezen rendergrenzen vallen. Voor grotere en complexere pagina's en
 achteraf toegevoegde Text Boxes zijn bredere bronlaagstaging en
 cache-integratie nodig. Volledige Text Box- en annotatiedekking zijn nog

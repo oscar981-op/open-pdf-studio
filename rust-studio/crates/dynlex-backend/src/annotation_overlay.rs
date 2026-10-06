@@ -104,15 +104,19 @@ pub fn render_native_annotation_overlay_pixels(
                 // been proved byte-identical so far.
                 return Ok(None);
             }
-            if rectangles.iter().any(|(prior, _): &([u32; 4], [u8; 3])| {
-                bounds[0] < prior[2]
-                    && prior[0] < bounds[2]
-                    && bounds[1] < prior[3]
-                    && prior[1] < bounds[3]
-            }) {
-                // Separate PDF appearances can round their compositing at
-                // intersecting edges differently. Keep the existing overlay
-                // until that full transparency-group case is proven.
+            if rectangles
+                .iter()
+                .any(|(prior, prior_color): &([u32; 4], [u8; 3])| {
+                    (bounds[0] < prior[2]
+                        && prior[0] < bounds[2]
+                        && bounds[1] < prior[3]
+                        && prior[1] < bounds[3])
+                        && (*color_rgb == [255, 226, 67] || *prior_color == [255, 226, 67])
+                })
+            {
+                // Overlapping highlight appearances use a separate PDF
+                // transparency group. Its edge rounding is not represented
+                // by the current opaque-page OPAN commands.
                 return Ok(None);
             }
             rectangles.push((bounds, *color_rgb));

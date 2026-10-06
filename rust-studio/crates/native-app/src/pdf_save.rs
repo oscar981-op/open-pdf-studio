@@ -983,8 +983,31 @@ mod tests {
             render_native_annotation_overlay(&base, &marks, 0)
                 .unwrap()
                 .is_none(),
-            "overlapping appearances must fall back"
+            "overlapping Highlight/Square appearances must fall back"
         );
+        marks.swap(0, 1);
+        assert!(
+            render_native_annotation_overlay(&base, &marks, 0)
+                .unwrap()
+                .is_none(),
+            "reversed Highlight/Square order must also fall back"
+        );
+        marks.swap(0, 1);
+        marks[1].kind = Kind::Rectangle {
+            color_rgb: [0, 80, 240],
+        };
+        let overlap = render_native_annotation_overlay(&base, &marks, 0)
+            .unwrap()
+            .expect("overlapping opaque Square appearances should reach DynLex");
+        let saved = export_annotations(&source, &marks).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert_eq!(overlap.rgba, expected.rgba);
+        marks[1].kind = Kind::Rectangle {
+            color_rgb: [255, 226, 67],
+        };
         marks[1].bounds.x = 90.5;
         marks[1].bounds.y = 80.0;
         assert!(
@@ -1007,6 +1030,132 @@ mod tests {
                 .is_none(),
             "unproven annotation text must fall back"
         );
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn dynlex_overlapping_opaque_squares_match_colored_and_rotated_pages() {
+        use opds_dynlex_backend::render_native_annotation_overlay;
+        use opds_engine_probe::ParsedPdf;
+
+        let colored =
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec();
+        let mut rotated = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *rotated.get_pages().get(&1).unwrap();
+        let page = rotated
+            .get_object_mut(page_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap();
+        page.set(
+            "CropBox",
+            vec![20.into(), 20.into(), 180.into(), 260.into()],
+        );
+        page.set("Rotate", 90);
+        let mut rotated_bytes = Vec::new();
+        rotated.save_to(&mut rotated_bytes).unwrap();
+
+        for (source, top) in [(colored, 140.0), (rotated_bytes, 30.0)] {
+            let parsed = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+            let base = parsed.render_page(1, 1.0).unwrap();
+            for colors in [([231, 76, 60], [0, 80, 240]), ([0, 80, 240], [231, 76, 60])] {
+                let marks = [
+                    Annotation {
+                        id: 901,
+                        page: 0,
+                        bounds: Rect {
+                            x: 20.0,
+                            y: top,
+                            width: 48.0,
+                            height: 36.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: colors.0,
+                        },
+                    },
+                    Annotation {
+                        id: 902,
+                        page: 0,
+                        bounds: Rect {
+                            x: 42.0,
+                            y: top + 16.0,
+                            width: 48.0,
+                            height: 36.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: colors.1,
+                        },
+                    },
+                ];
+                let actual = render_native_annotation_overlay(&base, &marks, 0)
+                    .unwrap()
+                    .expect("pixel-aligned opaque overlap");
+                let saved = export_annotations(&source, &marks).unwrap();
+                let expected = ParsedPdf::open(Arc::new(saved))
+                    .unwrap()
+                    .render_page(1, 1.0)
+                    .unwrap();
+                assert_eq!(actual.rgba, expected.rgba, "colors={colors:?}, top={top}");
+            }
+        }
+
+        let source = source_pdf();
+        let parsed = ParsedPdf::open(Arc::new(source.clone())).unwrap();
+        let base = parsed.render_page(1, 1.0).unwrap();
+        let mut seed = 0x4da7_36b1_u32;
+        for case in 0..32 {
+            let mut next_color = || {
+                let mut color = [0; 3];
+                for channel in &mut color {
+                    seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    *channel = (seed >> 24) as u8;
+                }
+                color
+            };
+            let mut colors = [next_color(), next_color()];
+            for color in &mut colors {
+                if *color == [255, 226, 67] {
+                    color[0] = 254;
+                }
+            }
+            let marks = [
+                Annotation {
+                    id: 910,
+                    page: 0,
+                    bounds: Rect {
+                        x: 20.0,
+                        y: 30.0,
+                        width: 48.0,
+                        height: 36.0,
+                    },
+                    kind: Kind::Rectangle {
+                        color_rgb: colors[0],
+                    },
+                },
+                Annotation {
+                    id: 911,
+                    page: 0,
+                    bounds: Rect {
+                        x: 42.0,
+                        y: 46.0,
+                        width: 48.0,
+                        height: 36.0,
+                    },
+                    kind: Kind::Rectangle {
+                        color_rgb: colors[1],
+                    },
+                },
+            ];
+            let actual = render_native_annotation_overlay(&base, &marks, 0)
+                .unwrap()
+                .expect("opaque overlap");
+            let saved = export_annotations(&source, &marks).unwrap();
+            let expected = ParsedPdf::open(Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            assert_eq!(actual.rgba, expected.rgba, "case {case}, colors={colors:?}");
+        }
     }
 
     #[cfg(feature = "dynlex-experimental")]
