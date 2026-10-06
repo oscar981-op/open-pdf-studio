@@ -30,17 +30,79 @@ fn command(scene: &mut Vec<u8>, kind: u32, rect: [u32; 4], tail: [u8; 4]) {
     scene.extend_from_slice(&tail);
 }
 
-/// Opaque pixel rectangles for imported annotations without `/AP`. The
-/// caller stages these in `/Annots` order from a single validated page.
-/// This reuses OPAN's fill command rather than emulating annotation pixels
-/// in Rust. Unknown geometry must be rejected before calling this function.
 #[cfg(feature = "kernel")]
-pub(crate) fn paint_opaque_imported_rectangles(
+#[derive(Clone, Copy)]
+pub(crate) struct ImportedCommand {
+    pub kind: u32,
+    pub rect: [u32; 4],
+    pub tail: [u8; 4],
+}
+
+#[cfg(feature = "kernel")]
+pub(crate) fn native_imported_commands(
+    mark: &Annotation,
+    width: u32,
+    height: u32,
+) -> Option<Vec<ImportedCommand>> {
+    let Kind::Rectangle { color_rgb } = mark.kind else {
+        return None;
+    };
+    let bounds = pixel_rect(mark.bounds, width, height)?;
+    Some(native_commands_for_rect(bounds, color_rgb))
+}
+
+#[cfg(feature = "kernel")]
+fn native_commands_for_rect(
+    [x0, y0, x1, y1]: [u32; 4],
+    color_rgb: [u8; 3],
+) -> Vec<ImportedCommand> {
+    let mut result = Vec::with_capacity(9);
+    if color_rgb == [255, 226, 67] {
+        // The native Highlight's partially covered Vello start tile follows
+        // a different rounded blend from its fully covered interior.
+        let left_full = (x0 / 4 + 1) * 4;
+        let right_full = (x1 / 4) * 4;
+        let top_full = y0.div_ceil(4) * 4;
+        let bottom_full = (y1 / 4) * 4;
+        let mut xs = [x0, left_full.min(x1), right_full.max(x0), x1];
+        let mut ys = [y0, top_full.min(y1), bottom_full.max(y0), y1];
+        xs.sort_unstable();
+        ys.sort_unstable();
+        for [y_start, y_end] in ys.windows(2).map(|window| [window[0], window[1]]) {
+            for [x_start, x_end] in xs.windows(2).map(|window| [window[0], window[1]]) {
+                if x_start == x_end || y_start == y_end {
+                    continue;
+                }
+                let masked = x_start < left_full
+                    || x_start >= right_full
+                    || y_start < top_full
+                    || y_start >= bottom_full;
+                result.push(ImportedCommand {
+                    kind: if masked { 3 } else { 4 },
+                    rect: [x_start, y_start, x_end, y_end],
+                    tail: [89, 79, 23, 89],
+                });
+            }
+        }
+    } else {
+        result.push(ImportedCommand {
+            kind: 2,
+            rect: [x0, y0, x1, y1],
+            tail: [color_rgb[0], color_rgb[1], color_rgb[2], 255],
+        });
+    }
+    result
+}
+
+/// Paint a fully staged OPAN list in one DynLex call. Both imported `/AP`
+/// forms and preview-only marks use this validated boundary.
+#[cfg(feature = "kernel")]
+pub(crate) fn paint_imported_commands(
     layer_rgba: &[u8],
     width: u32,
     height: u32,
     page_points: (f32, f32),
-    rectangles: &[([u32; 4], [u8; 3])],
+    commands: &[ImportedCommand],
 ) -> Result<Option<Bitmap>, String> {
     if width == 0
         || height == 0
@@ -52,25 +114,32 @@ pub(crate) fn paint_opaque_imported_rectangles(
         || layer_rgba
             .chunks_exact(4)
             .any(|pixel| pixel[..3].iter().any(|channel| *channel > pixel[3]))
-        || rectangles.is_empty()
-        || rectangles.len() > 256
-        || rectangles.iter().any(|(rect, _)| {
-            rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height
+        || commands.is_empty()
+        || commands.len() > 576
+        || commands.iter().any(|entry| {
+            let [x0, y0, x1, y1] = entry.rect;
+            !matches!(entry.kind, 1..=4)
+                || x0 >= x1
+                || y0 >= y1
+                || x1 > width
+                || y1 > height
+                || (matches!(entry.kind, 1 | 2) && entry.tail[3] != 255)
+                || (matches!(entry.kind, 3 | 4) && entry.tail != [89, 79, 23, 89])
         })
     {
         return Ok(None);
     }
-    let mut scene = Vec::with_capacity(20 + rectangles.len() * 24);
+    let mut scene = Vec::with_capacity(20 + commands.len() * 24);
     scene.extend_from_slice(b"OPAN");
-    for value in [2, width, height, rectangles.len() as u32] {
+    for value in [2, width, height, commands.len() as u32] {
         scene.extend_from_slice(&value.to_le_bytes());
     }
-    for &(rect, color) in rectangles {
-        command(&mut scene, 1, rect, [color[0], color[1], color[2], 255]);
+    for entry in commands {
+        command(&mut scene, entry.kind, entry.rect, entry.tail);
     }
     let mut output = layer_rgba.to_vec();
-    // SAFETY: Rust has checked the scene length, all rectangles, page size,
-    // source premultiplication and output size before calling the C ABI.
+    // SAFETY: Rust has validated the complete scene and RGBA buffer before
+    // the narrow ABI. The wrapper also checks lengths and page dimensions.
     let status = unsafe {
         super::opds_paint_annotations(
             scene.as_ptr(),
@@ -93,6 +162,32 @@ pub(crate) fn paint_opaque_imported_rectangles(
         height,
         rgba: output,
     }))
+}
+
+/// Opaque pixel rectangles for imported annotations without `/AP`. The
+/// caller stages these in `/Annots` order from a single validated page.
+/// This reuses OPAN's fill command rather than emulating annotation pixels
+/// in Rust. Unknown geometry must be rejected before calling this function.
+#[cfg(feature = "kernel")]
+pub(crate) fn paint_opaque_imported_rectangles(
+    layer_rgba: &[u8],
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    rectangles: &[([u32; 4], [u8; 3])],
+) -> Result<Option<Bitmap>, String> {
+    if rectangles.is_empty() || rectangles.len() > 256 {
+        return Ok(None);
+    }
+    let commands: Vec<_> = rectangles
+        .iter()
+        .map(|&(rect, color)| ImportedCommand {
+            kind: 1,
+            rect,
+            tail: [color[0], color[1], color[2], 255],
+        })
+        .collect();
+    paint_imported_commands(layer_rgba, width, height, page_points, &commands)
 }
 
 /// Return `None` rather than partially painting a document when any native
@@ -317,57 +412,24 @@ fn render_native_annotation_overlay_pixels_inner(
             }
             rectangles.push((bounds, *color_rgb));
         }
-        let mut scene = Vec::with_capacity(20 + rectangles.len() * 9 * 24);
+        let mut commands = Vec::with_capacity(rectangles.len() * 9);
+        for (bounds, color) in rectangles {
+            commands.extend(native_commands_for_rect(bounds, color));
+        }
+        let command_count = commands.len() as u32;
+        let mut scene = Vec::with_capacity(20 + commands.len() * 24);
         scene.extend_from_slice(b"OPAN");
-        for value in [if premultiplied { 2 } else { 1 }, width, height, 0] {
+        for value in [
+            if premultiplied { 2 } else { 1 },
+            width,
+            height,
+            command_count,
+        ] {
             scene.extend_from_slice(&value.to_le_bytes());
         }
-        let mut command_count = 0_u32;
-        for ([x0, y0, x1, y1], color) in rectangles {
-            if color == [255, 226, 67] {
-                // This native /AP's 0.35 opacity and 1 0.886 0.263 rg paint
-                // produce premultiplied [89,79,23,89] in Hayro. Partial
-                // four-pixel tiles use a separately rounded masked blend.
-                // Partitioning once here keeps both paint paths in DynLex.
-                // Vello's start tile goes through its mask path even when
-                // the left edge happens to sit exactly on a tile boundary.
-                let left_full = (x0 / 4 + 1) * 4;
-                let right_full = (x1 / 4) * 4;
-                let top_full = y0.div_ceil(4) * 4;
-                let bottom_full = (y1 / 4) * 4;
-                let mut xs = [x0, left_full.min(x1), right_full.max(x0), x1];
-                let mut ys = [y0, top_full.min(y1), bottom_full.max(y0), y1];
-                xs.sort_unstable();
-                ys.sort_unstable();
-                for [y_start, y_end] in ys.windows(2).map(|window| [window[0], window[1]]) {
-                    for [x_start, x_end] in xs.windows(2).map(|window| [window[0], window[1]]) {
-                        if x_start == x_end || y_start == y_end {
-                            continue;
-                        }
-                        let masked = x_start < left_full
-                            || x_start >= right_full
-                            || y_start < top_full
-                            || y_start >= bottom_full;
-                        command(
-                            &mut scene,
-                            if masked { 3 } else { 4 },
-                            [x_start, y_start, x_end, y_end],
-                            [89, 79, 23, 89],
-                        );
-                        command_count += 1;
-                    }
-                }
-            } else {
-                command(
-                    &mut scene,
-                    2,
-                    [x0, y0, x1, y1],
-                    [color[0], color[1], color[2], 255],
-                );
-                command_count += 1;
-            }
+        for entry in commands {
+            command(&mut scene, entry.kind, entry.rect, entry.tail);
         }
-        scene[16..20].copy_from_slice(&command_count.to_le_bytes());
         debug_assert!(command_count <= 576 && scene.len() <= 13_844);
         let mut output = base_rgba.to_vec();
         // SAFETY: Rust checked the full mark list, sizes and pixel buffer.

@@ -1107,6 +1107,161 @@ impl OpenDocument {
 #[cfg(all(test, feature = "dynlex-experimental"))]
 mod dynlex_annotation_overlay_tests {
     use super::*;
+    use lopdf::dictionary;
+
+    #[test]
+    fn imported_ap_and_missing_ap_share_one_ordered_dynlex_scene() {
+        for rotation in [0, 90, 180, 270] {
+            for reverse in [false, true] {
+                let mut source = lopdf::Document::load_mem(include_bytes!(
+                    "../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf"
+                ))
+                .unwrap();
+                let page_id = *source.get_pages().get(&1).unwrap();
+                let contents_id = source
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Contents")
+                    .unwrap()
+                    .as_reference()
+                    .unwrap();
+                let page = source.get_dictionary_mut(page_id).unwrap();
+                page.set("MediaBox", vec![0.into(), 0.into(), 500.into(), 400.into()]);
+                page.set(
+                    "CropBox",
+                    vec![40.into(), 30.into(), 440.into(), 330.into()],
+                );
+                page.set("Rotate", rotation);
+                source
+                    .get_object_mut(contents_id)
+                    .unwrap()
+                    .as_stream_mut()
+                    .unwrap()
+                    .set_plain_content(b"0.2 0.5 0.8 rg 0 0 500 400 re f".to_vec());
+                let mut bytes = Vec::new();
+                source.save_to(&mut bytes).unwrap();
+                let marks = vec![
+                    Annotation {
+                        id: 1,
+                        page: 0,
+                        bounds: Rect {
+                            x: 50.0,
+                            y: 60.0,
+                            width: 100.0,
+                            height: 80.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [230, 20, 30],
+                        },
+                    },
+                    Annotation {
+                        id: 2,
+                        page: 0,
+                        bounds: Rect {
+                            x: 75.0,
+                            y: 80.0,
+                            width: 90.0,
+                            height: 70.0,
+                        },
+                        kind: Kind::Rectangle {
+                            color_rgb: [255, 226, 67],
+                        },
+                    },
+                ];
+                let saved = pdf_save::export_annotations(&bytes, &marks).unwrap();
+                let mut doc = lopdf::Document::load_mem(&saved).unwrap();
+                let page_id = *doc.get_pages().get(&1).unwrap();
+                let ap_ids: Vec<_> = doc
+                    .get_dictionary(page_id)
+                    .unwrap()
+                    .get(b"Annots")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|entry| entry.as_reference().unwrap())
+                    .collect();
+                let rect = doc
+                    .get_dictionary(ap_ids[0])
+                    .unwrap()
+                    .get(b"Rect")
+                    .unwrap()
+                    .as_array()
+                    .unwrap()
+                    .clone();
+                let [x0, y0, x1, y1] = rect.as_slice() else {
+                    panic!("AP rect")
+                };
+                let no_ap_square = doc.add_object(lopdf::dictionary! {
+                    "Type" => "Annot", "Subtype" => "Square", "F" => 4,
+                    "Rect" => rect.clone(), "C" => vec![0.into(), 1.into(), 0.into()],
+                    "BS" => lopdf::dictionary! { "W" => 3 },
+                });
+                let no_ap_highlight = doc.add_object(lopdf::dictionary! {
+                    "Type" => "Annot", "Subtype" => "Highlight", "F" => 4,
+                    "Rect" => rect.clone(), "C" => vec![1.into(), 1.into(), 0.into()],
+                    "QuadPoints" => vec![x0.clone(), y1.clone(), x1.clone(), y1.clone(),
+                        x0.clone(), y0.clone(), x1.clone(), y0.clone()],
+                });
+                let mut order = vec![no_ap_square, ap_ids[0], no_ap_highlight, ap_ids[1]];
+                if reverse {
+                    order.reverse();
+                }
+                doc.get_dictionary_mut(page_id).unwrap().set(
+                    "Annots",
+                    order
+                        .into_iter()
+                        .map(lopdf::Object::Reference)
+                        .collect::<Vec<_>>(),
+                );
+                doc.trailer.remove(b"Prev");
+                doc.trailer.remove(b"XRefStm");
+                bytes.clear();
+                doc.save_to(&mut bytes).unwrap();
+                if rotation == 90 && !reverse {
+                    if let Some(directory) = std::env::var_os("OPDS_MIXED_AP_FIXTURE_DIR") {
+                        std::fs::create_dir_all(&directory).unwrap();
+                        std::fs::write(
+                            std::path::Path::new(&directory).join("mixed-ap-missing-ap.pdf"),
+                            &bytes,
+                        )
+                        .unwrap();
+                    }
+                }
+                let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let selected = render_page_selected(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                assert_eq!(selected.used, Backend::Hayro);
+                assert!(
+                    selected.imported_annotations_dynlex,
+                    "rotation={rotation}, reverse={reverse}"
+                );
+                assert_eq!(
+                    selected.raster.rgba, expected.rgba,
+                    "rotation={rotation}, reverse={reverse}"
+                );
+                if rotation == 90 && !reverse {
+                    let highlight = doc.get_dictionary_mut(no_ap_highlight).unwrap();
+                    let mut quad = highlight
+                        .get(b"QuadPoints")
+                        .unwrap()
+                        .as_array()
+                        .unwrap()
+                        .clone();
+                    quad[0] = 999.into();
+                    highlight.set("QuadPoints", quad);
+                    bytes.clear();
+                    doc.save_to(&mut bytes).unwrap();
+                    let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                    let expected = pdf.render_page(1, 1.0).unwrap();
+                    let selected =
+                        render_page_selected(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert!(!selected.imported_annotations_dynlex);
+                    assert_eq!(selected.raster.rgba, expected.rgba);
+                }
+            }
+        }
+    }
 
     #[test]
     fn imported_highlight_appearance_matches_colored_source_and_square_order() {

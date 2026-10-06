@@ -15,9 +15,9 @@ pub use appearance_stage::flatten_native_free_text_appearance;
 mod imported_appearance;
 #[cfg(feature = "kernel")]
 pub use imported_appearance::{
-    render_missing_shape_appearances_for_app, render_native_shape_appearances_direct,
-    render_native_shape_appearances_for_app, render_single_square_appearance_direct,
-    render_square_appearances_direct,
+    render_imported_shape_appearances_for_app, render_missing_shape_appearances_for_app,
+    render_native_shape_appearances_direct, render_native_shape_appearances_for_app,
+    render_single_square_appearance_direct, render_square_appearances_direct,
 };
 #[cfg(feature = "kernel")]
 mod glyph_scene;
@@ -79,14 +79,7 @@ pub fn render_with_report(
         let started = std::time::Instant::now();
         #[cfg(feature = "kernel")]
         if scale == 1.0 && source.windows(7).any(|window| window == b"/Annots") {
-            if let Ok(Some(raster)) = render_native_shape_appearances_for_app(pdf, source, page) {
-                return Ok(RenderOutcome {
-                    used: Backend::Hayro,
-                    imported_annotations_dynlex: true,
-                    raster,
-                });
-            }
-            if let Ok(Some(raster)) = render_missing_shape_appearances_for_app(pdf, source, page) {
+            if let Ok(Some(raster)) = render_imported_shape_appearances_for_app(pdf, source, page) {
                 return Ok(RenderOutcome {
                     used: Backend::Hayro,
                     imported_annotations_dynlex: true,

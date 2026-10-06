@@ -181,6 +181,31 @@ bytegelijk: geselecteerde route/Hayro 7,257/6,823 ms mediaan, gepaard
 verschil +0,395 ms, geselecteerde route 10/30 keer sneller. Mediane piek-RSS
 was 6.500/6.140 KiB. De OS-cache is niet gewist; het is één kleine fixture.
 
+Een gemengde pagina kan nu native Square/Highlight-`/AP`-Forms en de
+begrensde `/AP`-loze previewvormen in **één OPAN-commandolijst en één
+DynLex-kernelaanroep** tekenen. De parser valideert eerst alle annotaties;
+één ongeldige dictionary maakt de hele route onbruikbaar. De bestaande
+preview schildert eerst alle Form-appearances en daarna zijn fallbackvormen,
+ook wanneer hun entries in `/Annots` zijn verweven. De gemengde DynLex-route
+neemt precies die zichtbare volgorde over en bewaart de onderlinge volgorde
+binnen beide groepen. Acht gecontroleerde PDF's (vier kwartslagen × beide
+`/Annots`-volgordes) met gekleurde bron, dekkende en transparante overlap
+zijn over de volledige RGBA-pagina bytegelijk aan de bestaande preview.
+Een beschadigde Highlight-quad dwingt volledige Hayro-fallback af. Dit is
+nog geen algemene PDF-annotatievolgorde of willekeurige Form-rendering.
+De app-router gebruikt inmiddels deze gezamenlijke parser ook voor pagina's
+met alleen `/AP` of alleen `/AP`-loze vormen, zodat hij per niet-gecachete
+pagina niet eerst drie afzonderlijke lopdf-parses hoeft te proberen.
+Op de gemengde 90°/CropBox-fixture zijn 30 afwisselende warme procesparen met
+dezelfde `/usr/bin/time`-wrapper en volledige bytecontrole gemeten:
+geselecteerde route/Hayro 13,071/11,957 ms mediaan, gepaard verschil
++1,267 ms, geselecteerde route 8/30 keer sneller. Piek-RSS was
+7.218/7.064 KiB mediaan. Een diagnostische A/B tegen de voorafgaande
+drie-parser-route op exact dezelfde PDF gaf -0,855 ms gepaard mediaanverschil
+voor de gezamenlijke parser (21/30 keer sneller), maar de totale route is
+nog niet sneller dan Hayro. De OS-cache is niet gewist; één kleine fixture
+bewijst geen algemene prestatie.
+
 ## Geïsoleerde native Text Box-appearance
 
 `flatten_native_free_text_appearance` is nu een **read-only onderzoeksbrug**

@@ -3,8 +3,8 @@
 //! This read-only probe is not the general imported annotation renderer.
 use crate::{
     annotation_overlay::{
-        paint_opaque_imported_rectangles,
-        render_native_annotation_overlay_pixels_over_premultiplied,
+        native_imported_commands, paint_imported_commands, paint_opaque_imported_rectangles,
+        render_native_annotation_overlay_pixels_over_premultiplied, ImportedCommand,
     },
     Bitmap,
 };
@@ -501,6 +501,125 @@ fn fallback_stroke_width(annotation: &Dictionary) -> Option<u32> {
         .then_some(width as u32)
 }
 
+fn parse_missing_shape_annotation(
+    annotation: &Dictionary,
+    crop: [f64; 4],
+    rotation: u16,
+) -> Option<Vec<([u32; 4], [u8; 3])>> {
+    let mut rectangles = Vec::new();
+    let flags = annotation.get(b"F").ok().and_then(number).unwrap_or(0.0);
+    if !flags.is_finite() || flags.fract() != 0.0 || flags < 0.0 || flags > i32::MAX as f64 {
+        return None;
+    }
+    if (flags as i32) & (1 | 2 | 32) != 0 {
+        return Some(Vec::new());
+    }
+    let Some(rect) = annotation.get(b"Rect").ok().and_then(four) else {
+        return None;
+    };
+    if rect[0] >= rect[2] || rect[1] >= rect[3] {
+        return None;
+    }
+    let Some(box_) = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]]) else {
+        return None;
+    };
+    if name_is(annotation, b"Subtype", b"Square") {
+        let Some(stroke) = fallback_stroke_width(annotation) else {
+            return None;
+        };
+        let Some(color) = fallback_color(annotation, [0, 0, 0]) else {
+            return None;
+        };
+        let [x0, y0, x1, y1] = box_;
+        for bounds in [
+            [x0, y0, x1, (y0 + stroke).min(y1)],
+            [x0, y1.saturating_sub(stroke).max(y0), x1, y1],
+            [x0, y0, (x0 + stroke).min(x1), y1],
+            [x1.saturating_sub(stroke).max(x0), y0, x1, y1],
+        ] {
+            rectangles.push((bounds, color));
+        }
+    } else if name_is(annotation, b"Subtype", b"Highlight") {
+        let Some(color) = fallback_color(annotation, [255, 255, 0]) else {
+            return None;
+        };
+        let quad = match annotation.get(b"QuadPoints") {
+            Ok(value) => {
+                let Ok(values) = value.as_array() else {
+                    return None;
+                };
+                if values.len() != 8 {
+                    return None;
+                }
+                let Some(points) = values
+                    .iter()
+                    .map(number)
+                    .collect::<Option<Vec<_>>>()
+                    .and_then(|v| {
+                        (v.iter().all(|n| n.is_finite())).then_some([
+                            [v[0], v[1]],
+                            [v[2], v[3]],
+                            [v[6], v[7]],
+                            [v[4], v[5]],
+                        ])
+                    })
+                else {
+                    return None;
+                };
+                points
+            }
+            Err(_) => [
+                [rect[0], rect[3]],
+                [rect[2], rect[3]],
+                [rect[2], rect[1]],
+                [rect[0], rect[1]],
+            ],
+        };
+        let Some(quad_box) = pixel_box(crop, rotation, &quad) else {
+            return None;
+        };
+        let [qx0, qy0, qx1, qy1] = quad_box;
+        let corners = [[qx0, qy0], [qx1, qy0], [qx1, qy1], [qx0, qy1]];
+        let transformed: Vec<_> = quad
+            .iter()
+            .map(|p| display_point(crop, rotation, p[0], p[1]))
+            .collect();
+        if transformed.iter().any(|p| {
+            !corners
+                .iter()
+                .any(|corner| p[0] == f64::from(corner[0]) && p[1] == f64::from(corner[1]))
+        }) || corners.iter().any(|corner| {
+            transformed
+                .iter()
+                .filter(|p| p[0] == f64::from(corner[0]) && p[1] == f64::from(corner[1]))
+                .count()
+                != 1
+        }) || {
+            let crosses: Vec<_> = (0..4)
+                .map(|i| {
+                    let a = transformed[i];
+                    let b = transformed[(i + 1) % 4];
+                    let c = transformed[(i + 2) % 4];
+                    (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+                })
+                .collect();
+            crosses
+                .iter()
+                .any(|cross| *cross == 0.0 || cross.signum() != crosses[0].signum())
+        } || qx0 < box_[0]
+            || qy0 < box_[1]
+            || qx1 > box_[2]
+            || qy1 > box_[3]
+        {
+            return None;
+        }
+        rectangles.push((quad_box, color));
+    } else {
+        return None;
+    }
+    Some(rectangles)
+}
+
 fn stage_missing_shape_appearances(
     source: &[u8],
     page_number: usize,
@@ -526,117 +645,10 @@ fn stage_missing_shape_appearances(
         if annotation.has(b"AP") {
             return Ok(None);
         }
-        let flags = annotation.get(b"F").ok().and_then(number).unwrap_or(0.0);
-        if !flags.is_finite() || flags.fract() != 0.0 || flags < 0.0 || flags > i32::MAX as f64 {
-            return Ok(None);
-        }
-        if (flags as i32) & (1 | 2 | 32) != 0 {
-            continue;
-        }
-        let Some(rect) = annotation.get(b"Rect").ok().and_then(four) else {
+        let Some(rectangles) = parse_missing_shape_annotation(annotation, crop, rotation) else {
             return Ok(None);
         };
-        if rect[0] >= rect[2] || rect[1] >= rect[3] {
-            return Ok(None);
-        }
-        let Some(box_) = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])
-        else {
-            return Ok(None);
-        };
-        if name_is(annotation, b"Subtype", b"Square") {
-            let Some(stroke) = fallback_stroke_width(annotation) else {
-                return Ok(None);
-            };
-            let Some(color) = fallback_color(annotation, [0, 0, 0]) else {
-                return Ok(None);
-            };
-            let [x0, y0, x1, y1] = box_;
-            for bounds in [
-                [x0, y0, x1, (y0 + stroke).min(y1)],
-                [x0, y1.saturating_sub(stroke).max(y0), x1, y1],
-                [x0, y0, (x0 + stroke).min(x1), y1],
-                [x1.saturating_sub(stroke).max(x0), y0, x1, y1],
-            ] {
-                painted.push((bounds, color));
-            }
-        } else if name_is(annotation, b"Subtype", b"Highlight") {
-            let Some(color) = fallback_color(annotation, [255, 255, 0]) else {
-                return Ok(None);
-            };
-            let quad = match annotation.get(b"QuadPoints") {
-                Ok(value) => {
-                    let Ok(values) = value.as_array() else {
-                        return Ok(None);
-                    };
-                    if values.len() != 8 {
-                        return Ok(None);
-                    }
-                    let Some(points) = values
-                        .iter()
-                        .map(number)
-                        .collect::<Option<Vec<_>>>()
-                        .and_then(|v| {
-                            (v.iter().all(|n| n.is_finite())).then_some([
-                                [v[0], v[1]],
-                                [v[2], v[3]],
-                                [v[6], v[7]],
-                                [v[4], v[5]],
-                            ])
-                        })
-                    else {
-                        return Ok(None);
-                    };
-                    points
-                }
-                Err(_) => [
-                    [rect[0], rect[3]],
-                    [rect[2], rect[3]],
-                    [rect[2], rect[1]],
-                    [rect[0], rect[1]],
-                ],
-            };
-            let Some(quad_box) = pixel_box(crop, rotation, &quad) else {
-                return Ok(None);
-            };
-            let [qx0, qy0, qx1, qy1] = quad_box;
-            let corners = [[qx0, qy0], [qx1, qy0], [qx1, qy1], [qx0, qy1]];
-            let transformed: Vec<_> = quad
-                .iter()
-                .map(|p| display_point(crop, rotation, p[0], p[1]))
-                .collect();
-            if transformed.iter().any(|p| {
-                !corners
-                    .iter()
-                    .any(|corner| p[0] == f64::from(corner[0]) && p[1] == f64::from(corner[1]))
-            }) || corners.iter().any(|corner| {
-                transformed
-                    .iter()
-                    .filter(|p| p[0] == f64::from(corner[0]) && p[1] == f64::from(corner[1]))
-                    .count()
-                    != 1
-            }) || {
-                let crosses: Vec<_> = (0..4)
-                    .map(|i| {
-                        let a = transformed[i];
-                        let b = transformed[(i + 1) % 4];
-                        let c = transformed[(i + 2) % 4];
-                        (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
-                    })
-                    .collect();
-                crosses
-                    .iter()
-                    .any(|cross| *cross == 0.0 || cross.signum() != crosses[0].signum())
-            } || qx0 < box_[0]
-                || qy0 < box_[1]
-                || qx1 > box_[2]
-                || qy1 > box_[3]
-            {
-                return Ok(None);
-            }
-            painted.push((quad_box, color));
-        } else {
-            return Ok(None);
-        }
+        painted.extend(rectangles);
     }
     Ok((!painted.is_empty() && painted.len() <= 256).then_some(painted))
 }
@@ -668,6 +680,91 @@ pub fn render_missing_shape_appearances_for_app(
     layer.rgba = painted.rgba;
     add_white_paper(&mut layer.rgba);
     layer.render_ms += started.elapsed().as_millis();
+    Ok(Some(layer))
+}
+
+/// One bounded scene for native-shaped `/AP` Forms, preview-only
+/// Square/Highlight dictionaries without `/AP`, or a mixture of both.
+/// Hayro's current preview paints fallback marks after all Forms, so the
+/// staged order mirrors that visible behavior within one DynLex call.
+pub fn render_imported_shape_appearances_for_app(
+    pdf: &ParsedPdf,
+    source: &[u8],
+    page_number: usize,
+) -> Result<Option<Raster>, String> {
+    let started = std::time::Instant::now();
+    if source.len() > 2_000_000 || page_number == 0 {
+        return Ok(None);
+    }
+    let doc = Document::load_mem(source).map_err(|e| e.to_string())?;
+    if doc.is_encrypted() {
+        return Ok(None);
+    }
+    let Some((page_id, crop, rotation)) = page_geometry(&doc, page_number) else {
+        return Ok(None);
+    };
+    let annotations = doc
+        .get_page_annotations(page_id)
+        .map_err(|e| e.to_string())?;
+    if annotations.is_empty() || annotations.len() > 64 {
+        return Ok(None);
+    }
+    let mut forms = Vec::new();
+    let mut fallback_rectangles = Vec::new();
+    for (index, annotation) in annotations.iter().enumerate() {
+        if annotation.has(b"AP") {
+            let Some(mark) = parse_shape_annotation(
+                &doc,
+                annotation,
+                crop,
+                rotation,
+                page_number - 1,
+                index as u64 + 1,
+            ) else {
+                return Ok(None);
+            };
+            forms.push(mark);
+        } else {
+            let Some(rectangles) = parse_missing_shape_annotation(annotation, crop, rotation)
+            else {
+                return Ok(None);
+            };
+            fallback_rectangles.extend(rectangles);
+        }
+    }
+    if fallback_rectangles.len() > 256 {
+        return Ok(None);
+    }
+    let mut layer = pdf
+        .render_page_content_without_annotations(page_number, 1.0)
+        .map_err(|e| e.to_string())?;
+    let mut commands = Vec::new();
+    for form in &forms {
+        let Some(native) = native_imported_commands(form, layer.width, layer.height) else {
+            return Ok(None);
+        };
+        commands.extend(native);
+    }
+    for (rect, color) in fallback_rectangles {
+        commands.push(ImportedCommand {
+            kind: 1,
+            rect,
+            tail: [color[0], color[1], color[2], 255],
+        });
+    }
+    let Some(painted) = paint_imported_commands(
+        &layer.rgba,
+        layer.width,
+        layer.height,
+        (layer.page_width_pt, layer.page_height_pt),
+        &commands,
+    )?
+    else {
+        return Ok(None);
+    };
+    layer.rgba = painted.rgba;
+    add_white_paper(&mut layer.rgba);
+    layer.render_ms = started.elapsed().as_millis();
     Ok(Some(layer))
 }
 
