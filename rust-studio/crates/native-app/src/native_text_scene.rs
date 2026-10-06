@@ -9,6 +9,7 @@ use opds_opdl_adapter::text_quad_glyph::{self, Source};
 enum PagePaint {
     Blank,
     OpaqueFill,
+    Mixed,
 }
 
 fn numeric(object: &Object) -> Option<f64> {
@@ -75,6 +76,23 @@ fn supported_page_paint(source: &[u8], page: usize, width: u32, height: u32) -> 
     if operations.is_empty() {
         return Some(PagePaint::Blank);
     }
+    let mixed = || {
+        let (direct, inherited) = doc.get_page_resources(page_id).ok()?;
+        (source.len() <= 2_000_000
+            && operations.len() <= 64
+            && operations.iter().all(|operation| {
+                matches!(
+                    operation.operator.as_str(),
+                    "rg" | "RG" | "w" | "re" | "f" | "m" | "l" | "S"
+                )
+            })
+            && direct.is_none_or(lopdf::Dictionary::is_empty)
+            && inherited.iter().all(|id| {
+                doc.get_dictionary(*id)
+                    .is_ok_and(lopdf::Dictionary::is_empty)
+            }))
+        .then_some(PagePaint::Mixed)
+    };
     if operations.len() != 3
         || operations[0].operator != "rg"
         || operations[1].operator != "re"
@@ -83,7 +101,7 @@ fn supported_page_paint(source: &[u8], page: usize, width: u32, height: u32) -> 
         || operations[1].operands.len() != 4
         || !operations[2].operands.is_empty()
     {
-        return None;
+        return mixed();
     }
     let color = operations[0]
         .operands
@@ -91,7 +109,7 @@ fn supported_page_paint(source: &[u8], page: usize, width: u32, height: u32) -> 
         .map(numeric)
         .collect::<Option<Vec<_>>>()?;
     if color.iter().any(|value| !(0.0..=1.0).contains(value)) {
-        return None;
+        return mixed();
     }
     let rect = operations[1]
         .operands
@@ -105,9 +123,84 @@ fn supported_page_paint(source: &[u8], page: usize, width: u32, height: u32) -> 
         || rect[0] + rect[2] < crop[2]
         || rect[1] + rect[3] < crop[3]
     {
-        return None;
+        return mixed();
     }
     Some(PagePaint::OpaqueFill)
+}
+
+/// Experimental bounded mixed-content path. Hayro supplies the source
+/// content's transparency as an oracle; DynLex paints every glyph into that
+/// premultiplied layer. Reconstructing the visible base must be byte exact.
+pub fn eligible_mixed_page(source_pdf: &[u8], page: usize, width: u32, height: u32) -> bool {
+    supported_page_paint(source_pdf, page, width, height) == Some(PagePaint::Mixed)
+}
+
+pub fn render_mixed_page_text_box(
+    source_pdf: &[u8],
+    page: usize,
+    base_rgba: &[u8],
+    content_rgba: &[u8],
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    mark: &Annotation,
+) -> Result<Option<Vec<u8>>, String> {
+    if width == 0
+        || width > 256
+        || height == 0
+        || height > 4096
+        || page_points != (width as f32, height as f32)
+        || base_rgba.len() != width as usize * height as usize * 4
+        || content_rgba.len() != base_rgba.len()
+        || base_rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
+        || mark.bounds.x + mark.bounds.width > f64::from(width)
+        || mark.bounds.y + mark.bounds.height > f64::from(height)
+        || supported_page_paint(source_pdf, page, width, height) != Some(PagePaint::Mixed)
+    {
+        return Ok(None);
+    }
+    if content_rgba
+        .chunks_exact(4)
+        .zip(base_rgba.chunks_exact(4))
+        .any(|(source, visible)| {
+            let paper = 255 - source[3];
+            visible[3] != 255
+                || source[..3]
+                    .iter()
+                    .zip(&visible[..3])
+                    .any(|(channel, target)| channel.saturating_add(paper) != *target)
+        })
+    {
+        return Ok(None);
+    }
+    let scene = match stage_native_text_box_scene(mark) {
+        Ok(scene) => scene,
+        Err(_) => return Ok(None),
+    };
+    let clip = [
+        mark.bounds.x as u32,
+        mark.bounds.y as u32,
+        (mark.bounds.x + mark.bounds.width) as u32,
+        (mark.bounds.y + mark.bounds.height) as u32,
+    ];
+    let mut output = match opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied(
+        &scene,
+        content_rgba,
+        width,
+        height,
+        clip,
+    ) {
+        Ok(bitmap) => bitmap.rgba,
+        Err(_) => return Ok(None),
+    };
+    for pixel in output.chunks_exact_mut(4) {
+        let paper = 255 - pixel[3];
+        for channel in &mut pixel[..3] {
+            *channel = channel.saturating_add(paper);
+        }
+        pixel[3] = 255;
+    }
+    Ok(Some(output))
 }
 
 /// Paint one validated run on a blank or provably opaque single-fill page at
@@ -160,6 +253,9 @@ pub fn render_opaque_page_text_box(
             Ok(bitmap) => Ok(Some(bitmap.rgba)),
             Err(_) => Ok(None),
         };
+    }
+    if page_paint != PagePaint::Blank {
+        return Ok(None);
     }
     let tile = opds_dynlex_backend::render_validated_glyph_scene(&scene)?;
     let (left, top, right, bottom) = (

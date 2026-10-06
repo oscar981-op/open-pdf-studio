@@ -151,11 +151,34 @@ PDF-inhoudscontrole accepteert daarvoor uitsluitend één expliciete dekkende
 hermenging van de premultiplied glyphlaag wijkt daar op 207 kleurkanalen af.
 Een lege pagina gebruikt juist de eerder bewezen geïsoleerde glyphtegel:
 direct schilderen over de zichtbare witte bitmap wijkt daar af omdat wit
-buiten de PDF-pagina-inhoudsgroep ligt. Een gedeeltelijke vulling, extra
-contentoperator, bestaande annotatie of onzekere ondergrond valt terug op
-Iced. De compositor bewijst dus nog geen gemengde raster-/vectorachtergrond
-of volledige Text Box-dekking; paginacontent-alpha en transparantiegroepen
-moeten expliciet worden meegenomen voordat deze grens kan worden verbreed.
+buiten de PDF-pagina-inhoudsgroep ligt. Een bestaande annotatie of onzekere
+ondergrond valt terug op Iced.
+
+Een experimentele route gebruikt nu Hayro's **transparante paginabitmap**
+als invoer voor een tweede modus van de DynLex OPGC-kernel. DynLex werkt
+premultiplied RGB en alpha per glyph in tekenvolgorde bij; pas daarna wordt
+de witte viewerachtergrond toegevoegd. Rust vergelijkt eerst de transparante
+bron over wit bytegewijs met de getoonde bronbitmap. Zo kan een verkeerd of
+verouderd renderresultaat niet als ondergrond dienen. De route accepteert
+alleen één kleine ongefilterde contentstream, lege resources, maximaal 64
+eenvoudige kleur-, rechthoek-, lijn- en fill/stroke-operators, geen bestaande
+`/Annots`, 100% weergave en een pagina van maximaal 256 px breed. Eén
+broncontentlaag wordt per pagina/bitmap gecacht en blijft bij
+annotatiebewerkingen herbruikbaar. Lege en volledig dekkende bronnen blijven
+op hun snellere eerder bewezen paden; andere graphics-state, fonts,
+XObjects, clips en filters blijven fallback. Bij de eerste cachemiss rendert
+Hayro de transparante bron nogmaals. Dit is dus **geen volledig DynLex-PDF-pad
+en geen prestatieclaim**.
+
+Echte Save As-/AP-vergelijkingen zijn bytegelijk voor een gedeeltelijk
+gekleurde rechthoek, een rechthoek die de glyphs kruist, twee overlappende
+vectorvlakken, een lijn/gevulde vorm via de app-cache en een 90°-pagina met
+verschoven CropBox. De broncontent-alpha onderscheidt een lege pagina
+(alpha 0), een volledig dekkende pagina (255) en gedeeltelijke vectorinhoud.
+Voor grotere en complexere pagina's moet deze laag in het asynchrone
+renderresultaat worden opgebouwd zodat een eerste annotatie geen extra
+synchrone Hayro-render veroorzaakt. Volledige Text Box- en
+annotatiedekking zijn nog niet bewezen.
 
 Gerichte reproductie vanuit `rust-studio`:
 

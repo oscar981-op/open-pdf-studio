@@ -1413,6 +1413,240 @@ mod tests {
 
     #[cfg(feature = "dynlex-experimental")]
     #[test]
+    fn page_content_alpha_distinguishes_blank_full_and_partial_paints() {
+        use opds_engine_probe::ParsedPdf;
+
+        let mut source = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *source.get_pages().get(&1).unwrap();
+        let contents_id = source
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        source
+            .get_object_mut(page_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap()
+            .remove(b"Annots");
+        let mark = Annotation {
+            id: 145,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        let scene = crate::native_text_scene::stage_native_text_box_scene(&mark).unwrap();
+        for (content, inside_y, inside, outside) in [
+            (b"".as_slice(), 250_usize, 0_u8, 0_u8),
+            (b"0.2 0.5 0.8 rg 0 0 200 300 re f".as_slice(), 250, 255, 255),
+            (b"0.2 0.5 0.8 rg 20 20 100 100 re f".as_slice(), 250, 255, 0),
+            (b"0.2 0.5 0.8 rg 20 245 100 55 re f".as_slice(), 30, 255, 0),
+            (
+                b"0.2 0.5 0.8 rg 20 245 100 55 re f 1 0 0 rg 50 230 30 70 re f".as_slice(),
+                30,
+                255,
+                0,
+            ),
+        ] {
+            source
+                .get_object_mut(contents_id)
+                .unwrap()
+                .as_stream_mut()
+                .unwrap()
+                .set_plain_content(content.to_vec());
+            let mut bytes = Vec::new();
+            source.save_to(&mut bytes).unwrap();
+            let parsed = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let visible = parsed.render_page(1, 1.0).unwrap();
+            let layer = parsed.render_page_content_layer(1, 1.0).unwrap();
+            assert_eq!((visible.width, visible.height), (layer.width, layer.height));
+            assert_eq!(visible.rgba[3], 255);
+            assert_eq!(
+                layer.rgba[(inside_y * 200 + 50) * 4 + 3],
+                inside,
+                "{content:?}"
+            );
+            assert_eq!(layer.rgba[(5 * 200 + 5) * 4 + 3], outside, "{content:?}");
+            let reconstructed: Vec<_> = layer
+                .rgba
+                .chunks_exact(4)
+                .flat_map(|pixel| {
+                    let paper = 255 - pixel[3];
+                    [
+                        pixel[0].saturating_add(paper),
+                        pixel[1].saturating_add(paper),
+                        pixel[2].saturating_add(paper),
+                        255,
+                    ]
+                })
+                .collect();
+            let base_differences = reconstructed
+                .iter()
+                .zip(&visible.rgba)
+                .filter(|(actual, expected)| actual != expected)
+                .count();
+            assert_eq!(
+                base_differences, 0,
+                "source layer reconstruction for {content:?}"
+            );
+            let saved = export_annotations(&bytes, &[mark.clone()]).unwrap();
+            let expected = ParsedPdf::open(Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let combined = opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied(
+                &scene,
+                &layer.rgba,
+                layer.width,
+                layer.height,
+                [20, 30, 130, 88],
+            )
+            .unwrap();
+            let mut paper = combined.rgba;
+            for pixel in paper.chunks_exact_mut(4) {
+                let remaining = 255 - pixel[3];
+                for channel in &mut pixel[..3] {
+                    *channel = channel.saturating_add(remaining);
+                }
+                pixel[3] = 255;
+            }
+            let mismatches = paper
+                .iter()
+                .zip(&expected.rgba)
+                .filter(|(actual, expected)| actual != expected)
+                .count();
+            assert_eq!(mismatches, 0, "content-alpha composition for {content:?}");
+            let live = crate::native_text_scene::render_mixed_page_text_box(
+                &bytes,
+                0,
+                &visible.rgba,
+                &layer.rgba,
+                visible.width,
+                visible.height,
+                (visible.page_width_pt, visible.page_height_pt),
+                &mark,
+            )
+            .unwrap();
+            if outside == 0 && inside == 255 {
+                let actual = live.expect("bounded partial paint must reach DynLex");
+                let differences = actual
+                    .iter()
+                    .zip(&expected.rgba)
+                    .filter(|(actual, expected)| actual != expected)
+                    .count();
+                assert_eq!(differences, 0, "mixed route for {content:?}");
+            } else {
+                assert!(live.is_none());
+            }
+        }
+        source
+            .get_object_mut(contents_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(b"0 0 200 300 re W n".to_vec());
+        let mut unsupported = Vec::new();
+        source.save_to(&mut unsupported).unwrap();
+        assert!(!crate::native_text_scene::eligible_mixed_page(
+            &unsupported,
+            0,
+            200,
+            300,
+        ));
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn mixed_page_text_on_rotated_crop_matches_saved_appearance() {
+        use opds_engine_probe::ParsedPdf;
+
+        let mut source = Document::load_mem(&source_pdf()).unwrap();
+        let page_id = *source.get_pages().get(&1).unwrap();
+        let contents_id = source
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let page = source
+            .get_object_mut(page_id)
+            .unwrap()
+            .as_dict_mut()
+            .unwrap();
+        page.remove(b"Annots");
+        page.set(
+            "CropBox",
+            vec![40.into(), 60.into(), 200.into(), 260.into()],
+        );
+        page.set("Rotate", 90);
+        source
+            .get_object_mut(contents_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(b"0.2 0.5 0.8 rg 50 160 100 100 re f".to_vec());
+        let mut source_bytes = Vec::new();
+        source.save_to(&mut source_bytes).unwrap();
+        let parsed = ParsedPdf::open(Arc::new(source_bytes.clone())).unwrap();
+        let base = parsed.render_page(1, 1.0).unwrap();
+        let content = parsed.render_page_content_layer(1, 1.0).unwrap();
+        assert_eq!((base.width, base.height), (200, 160));
+        let mark = Annotation {
+            id: 146,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        let live = crate::native_text_scene::render_mixed_page_text_box(
+            &source_bytes,
+            0,
+            &base.rgba,
+            &content.rgba,
+            base.width,
+            base.height,
+            (base.page_width_pt, base.page_height_pt),
+            &mark,
+        )
+        .unwrap()
+        .expect("rotated mixed page should reach DynLex");
+        let saved = export_annotations(&source_bytes, &[mark]).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let mismatches = live
+            .iter()
+            .zip(&expected.rgba)
+            .filter(|(actual, expected)| actual != expected)
+            .count();
+        assert_eq!(mismatches, 0);
+    }
+
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
     fn colored_page_text_direct_dynlex_matches_saved_appearance() {
         use opds_engine_probe::ParsedPdf;
 

@@ -49,6 +49,24 @@ pub fn render_validated_glyph_scene_over_opaque(
     })
 }
 
+/// Diagnostic path: render glyphs into an already-premultiplied PDF content
+/// layer. The caller is responsible for final paper composition.
+pub fn render_validated_glyph_scene_over_premultiplied(
+    scene: &[u8],
+    base_rgba: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+) -> Result<Bitmap, String> {
+    let rgba = core::render_opgs_over_premultiplied(scene, base_rgba, width, height, clip)
+        .map_err(|error| error.to_string())?;
+    Ok(Bitmap {
+        width,
+        height,
+        rgba,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,6 +79,22 @@ mod tests {
             scene.extend_from_slice(&word.to_le_bytes());
         }
         assert!(render_validated_glyph_scene(&scene).is_err());
+    }
+
+    #[test]
+    fn premultiplied_page_validation_rejects_unassociated_color() {
+        let scene =
+            include_bytes!("../../../dynlex-engine-poc/rgba/fixtures/native-blue-omega.opgs");
+        let mut invalid = vec![0_u8; 200 * 192 * 4];
+        invalid[0] = 1;
+        assert!(render_validated_glyph_scene_over_premultiplied(
+            scene,
+            &invalid,
+            200,
+            192,
+            [20, 30, 130, 88],
+        )
+        .is_err());
     }
 
     #[test]

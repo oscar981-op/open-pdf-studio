@@ -5,7 +5,7 @@ mod imported_annotations;
 
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
-use hayro::vello_cpu::color::palette::css::WHITE;
+use hayro::vello_cpu::color::palette::css::{TRANSPARENT, WHITE};
 use hayro::{RenderCache, RenderSettings};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
@@ -86,6 +86,25 @@ impl ParsedPdf {
     }
 
     pub fn render_page(&self, page_number: usize, scale: f32) -> Result<Raster, RenderError> {
+        self.render_page_with_background(page_number, scale, false)
+    }
+
+    /// Diagnostic page-content layer before the viewer's white paper is
+    /// applied. Imported annotation fallback is deliberately excluded.
+    pub fn render_page_content_layer(
+        &self,
+        page_number: usize,
+        scale: f32,
+    ) -> Result<Raster, RenderError> {
+        self.render_page_with_background(page_number, scale, true)
+    }
+
+    fn render_page_with_background(
+        &self,
+        page_number: usize,
+        scale: f32,
+        transparent: bool,
+    ) -> Result<Raster, RenderError> {
         validate_request(page_number, scale)?;
         let pages = self.pdf.pages();
         let page = pages.get(page_number - 1).ok_or(RenderError::InvalidPage)?;
@@ -110,7 +129,7 @@ impl ParsedPdf {
             &RenderSettings {
                 x_scale: scale,
                 y_scale: scale,
-                bg_color: WHITE,
+                bg_color: if transparent { TRANSPARENT } else { WHITE },
                 ..Default::default()
             },
         );
@@ -120,17 +139,19 @@ impl ParsedPdf {
         if width == 0 || height == 0 || rgba.len() != width as usize * height as usize * 4 {
             return Err(RenderError::InvalidBitmap);
         }
-        let annotations = self.imported_annotations[page_number - 1]
-            .get_or_init(|| imported_annotations::read(page));
-        if !annotations.is_empty() {
-            imported_annotations::paint(
-                annotations,
-                &mut rgba,
-                width,
-                height,
-                page.initial_transform(true).as_coeffs(),
-                f64::from(scale),
-            );
+        if !transparent {
+            let annotations = self.imported_annotations[page_number - 1]
+                .get_or_init(|| imported_annotations::read(page));
+            if !annotations.is_empty() {
+                imported_annotations::paint(
+                    annotations,
+                    &mut rgba,
+                    width,
+                    height,
+                    page.initial_transform(true).as_coeffs(),
+                    f64::from(scale),
+                );
+            }
         }
         Ok(Raster {
             width,

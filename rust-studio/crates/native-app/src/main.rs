@@ -556,6 +556,8 @@ mod unsaved_annotation_tests {
                 last_saved_annotations: Vec::new(),
                 bitmap: None,
                 annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
                 bitmap_size: (0, 0),
                 bitmap_page_points: (0.0, 0.0),
                 bitmap_scale: 1.0,
@@ -594,6 +596,8 @@ struct OpenDocument {
     last_saved_annotations: Vec<Annotation>,
     bitmap: Option<image::Handle>,
     annotation_overlay_cache: RefCell<Option<AnnotationOverlayCache>>,
+    #[cfg(feature = "dynlex-experimental")]
+    content_layer_cache: RefCell<Option<ContentLayerCache>>,
     bitmap_size: (u32, u32),
     bitmap_page_points: (f32, f32),
     bitmap_scale: f32,
@@ -612,6 +616,13 @@ struct AnnotationOverlayCache {
     page: usize,
     annotations: Vec<Annotation>,
     bitmap: Option<image::Handle>,
+}
+
+#[cfg(feature = "dynlex-experimental")]
+struct ContentLayerCache {
+    base: image::Handle,
+    page: usize,
+    rgba: Vec<u8>,
 }
 
 struct CachedPage {
@@ -671,6 +682,45 @@ impl OpenDocument {
                         )
                         .ok()
                         .flatten()
+                        .or_else(|| {
+                            if !native_text_scene::eligible_mixed_page(
+                                &self.source_bytes,
+                                self.displayed_page,
+                                *width,
+                                *height,
+                            ) {
+                                return None;
+                            }
+                            let mut content_cache = self.content_layer_cache.borrow_mut();
+                            if !content_cache.as_ref().is_some_and(|cached| {
+                                cached.base == *base && cached.page == self.displayed_page
+                            }) {
+                                let layer = self
+                                    .pdf
+                                    .render_page_content_layer(self.displayed_page + 1, 1.0)
+                                    .ok()?;
+                                if (layer.width, layer.height) != (*width, *height) {
+                                    return None;
+                                }
+                                *content_cache = Some(ContentLayerCache {
+                                    base: base.clone(),
+                                    page: self.displayed_page,
+                                    rgba: layer.rgba,
+                                });
+                            }
+                            native_text_scene::render_mixed_page_text_box(
+                                &self.source_bytes,
+                                self.displayed_page,
+                                pixels.as_ref(),
+                                &content_cache.as_ref()?.rgba,
+                                *width,
+                                *height,
+                                self.bitmap_page_points,
+                                &annotations[0],
+                            )
+                            .ok()
+                            .flatten()
+                        })
                     } else {
                         None
                     }
@@ -770,6 +820,8 @@ mod dynlex_annotation_overlay_tests {
             last_saved_annotations: Vec::new(),
             bitmap: None,
             annotation_overlay_cache: RefCell::new(None),
+            #[cfg(feature = "dynlex-experimental")]
+            content_layer_cache: RefCell::new(None),
             bitmap_size: (0, 0),
             bitmap_page_points: (0.0, 0.0),
             bitmap_scale: 1.0,
@@ -821,6 +873,65 @@ mod dynlex_annotation_overlay_tests {
         // A white bitmap alone cannot prove the source page was blank. This
         // fixture has other PDF drawing operations, so text stays on Iced.
         assert!(document.dynlex_annotation_bitmap().is_none());
+
+        let mut actual_text = document.model.get(1).unwrap().clone();
+        actual_text.bounds.y = 105.0;
+        document
+            .model
+            .apply(Edit::Replace(actual_text.clone()))
+            .unwrap();
+        let actual_base = document.pdf.render_page(1, 1.0).unwrap();
+        document.cache_bitmap(
+            0,
+            1.0,
+            RenderOutcome {
+                raster: actual_base,
+                used: Backend::Hayro,
+            },
+        );
+        let mixed = document
+            .dynlex_annotation_bitmap()
+            .expect("small vector PDF and Text Box should reach DynLex");
+        assert!(document.content_layer_cache.borrow().is_some());
+        assert_eq!(document.dynlex_annotation_bitmap(), Some(mixed.clone()));
+        let saved = pdf_save::export_annotations(&document.source_bytes, &[actual_text]).unwrap();
+        let hayro = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = mixed else {
+            panic!("DynLex annotation output must be RGBA");
+        };
+        let differences = pixels
+            .iter()
+            .zip(&hayro.rgba)
+            .filter(|(actual, expected)| actual != expected)
+            .count();
+        assert_eq!(differences, 0, "mixed vector PDF/annotation mismatch");
+        let layer_ptr = document
+            .content_layer_cache
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .rgba
+            .as_ptr();
+        let mut recolored = document.model.get(1).unwrap().clone();
+        if let Kind::Text { color_rgb, .. } = &mut recolored.kind {
+            *color_rgb = [255, 0, 0];
+        }
+        document.model.apply(Edit::Replace(recolored)).unwrap();
+        assert!(document.dynlex_annotation_bitmap().is_some());
+        assert_eq!(
+            document
+                .content_layer_cache
+                .borrow()
+                .as_ref()
+                .unwrap()
+                .rgba
+                .as_ptr(),
+            layer_ptr,
+            "text edit must reuse unchanged PDF content layer"
+        );
     }
 }
 
@@ -1795,6 +1906,8 @@ impl App {
                             last_saved_annotations: Vec::new(),
                             bitmap: None,
                             annotation_overlay_cache: RefCell::new(None),
+                            #[cfg(feature = "dynlex-experimental")]
+                            content_layer_cache: RefCell::new(None),
                             bitmap_size: (0, 0),
                             bitmap_page_points: (0.0, 0.0),
                             bitmap_scale: initial_scale,

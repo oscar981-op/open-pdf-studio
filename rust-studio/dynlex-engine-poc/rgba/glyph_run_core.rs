@@ -159,6 +159,29 @@ pub fn render_opgs_over_opaque(
     height: u32,
     clip: [u32; 4],
 ) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_opgs_over_page(scene, base, width, height, clip, false)
+}
+
+/// Experimental direct drawing into a premultiplied page-content layer.
+/// The caller must compose the resulting layer over the viewer's paper.
+pub fn render_opgs_over_premultiplied(
+    scene: &[u8],
+    base: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_opgs_over_page(scene, base, width, height, clip, true)
+}
+
+fn render_opgs_over_page(
+    scene: &[u8],
+    base: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    premultiplied: bool,
+) -> Result<Vec<u8>, Box<dyn Error>> {
     let scenes = read_scene(scene)?;
     let pixels = usize::try_from(width)?
         .checked_mul(usize::try_from(height)?)
@@ -168,13 +191,19 @@ pub fn render_opgs_over_opaque(
         || height == 0
         || height > 4096
         || base.len() != pixels.checked_mul(4).ok_or("glyph RGBA length overflow")?
-        || base.chunks_exact(4).any(|pixel| pixel[3] != 255)
+        || base.chunks_exact(4).any(|pixel| {
+            if premultiplied {
+                pixel[..3].iter().any(|channel| *channel > pixel[3])
+            } else {
+                pixel[3] != 255
+            }
+        })
         || clip[0] >= clip[2]
         || clip[1] >= clip[3]
         || clip[2] > width
         || clip[3] > height.min(192)
     {
-        return Err("glyph page is outside bounded opaque route".into());
+        return Err("glyph page is outside bounded compositor route".into());
     }
     let mut output = base.to_vec();
     let mut alpha = vec![0_u8; GLYPH_PIXELS];
@@ -183,6 +212,7 @@ pub fn render_opgs_over_opaque(
     command[4..8].copy_from_slice(&1_u32.to_le_bytes());
     command[8..12].copy_from_slice(&width.to_le_bytes());
     command[12..16].copy_from_slice(&height.to_le_bytes());
+    command[35] = u8::from(premultiplied);
     for (words, color) in scenes {
         raster_glyph(&words, &mut alpha)?;
         let mut bounds = [256_u32, 192, 0, 0];

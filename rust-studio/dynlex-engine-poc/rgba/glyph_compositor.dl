@@ -15,6 +15,7 @@ function composite {cstring:scene} into {cstring:rgba}:
         set red to unsigned byte at 32 in scene
         set green to unsigned byte at 33 in scene
         set blue to unsigned byte at 34 in scene
+        set flags to unsigned byte at 35 in scene
         set y to top
         loop while y < bottom:
             set x to left
@@ -29,6 +30,9 @@ function composite {cstring:scene} into {cstring:rgba}:
                     store ((blend old_red with antialiased red at coverage) as a byte) into rgba at pixel
                     store ((blend old_green with antialiased green at coverage) as a byte) into rgba at (pixel + 1)
                     store ((blend old_blue with antialiased blue at coverage) as a byte) into rgba at (pixel + 2)
+                    if flags = 1:
+                        set old_alpha to unsigned byte at (pixel + 3) in rgba
+                        store ((blend old_alpha with antialiased 255 at coverage) as a byte) into rgba at (pixel + 3)
                 set x to x + 1
             set y to y + 1
         return 0

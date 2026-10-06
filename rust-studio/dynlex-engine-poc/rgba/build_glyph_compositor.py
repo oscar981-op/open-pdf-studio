@@ -26,8 +26,10 @@ def main():
         (work / "lib").symlink_to(compiler.parent.parent / "share/dynlex/lib", target_is_directory=True)
         for name in ("renderer.dl", "glyph_compositor.dl"):
             shutil.copy2(HERE / name, work / name)
-        subprocess.run([compiler, "glyph_compositor.dl", "--emit-llvm", "-O0", "-o", "raw.ll"],
-                       cwd=work, check=True, capture_output=True)
+        compiled = subprocess.run([compiler, "glyph_compositor.dl", "--emit-llvm", "-O0", "-o", "raw.ll"],
+                                  cwd=work, capture_output=True, text=True)
+        if compiled.returncode:
+            raise RuntimeError(f"DynLex glyph compositor compile failed:\n{compiled.stderr}")
         ir = (work / "raw.ll").read_text()
         ir, count = re.subn(r"^define i32 @main\(\) \{.*?^\}\n", "", ir, count=1,
                             flags=re.MULTILINE | re.DOTALL)
@@ -75,7 +77,7 @@ header:
   %badtop = icmp uge i32 %top, %bottom
   %badbottom = icmp ugt i32 %bottom, %height
   %badtile = icmp ugt i32 %bottom, 192
-  %badflags = icmp ne i8 %flags, 0
+  %badflags = icmp ugt i8 %flags, 1
   %pix = mul i32 %width, %height
   %bytes = mul i32 %pix, 4
   %badoutput = icmp ult i32 %rgba_len, %bytes
