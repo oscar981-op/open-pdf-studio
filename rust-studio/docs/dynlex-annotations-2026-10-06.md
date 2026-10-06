@@ -377,6 +377,22 @@ glyphdekking binnen dat vak. OPGS met één glyph is daarom geldig. De
 app-route geeft de paginabuffer aan de volgende tegel door zonder per tegel
 een volledige RGBA-kopie te maken.
 
+**Heropende native FreeText-`/AP`.** De opt-in backend leest nu één opgeslagen
+Open PDF Studio-FreeText-annotatie rechtstreeks uit de PDF en stageert haar
+ingebedde Type0/Identity-H-Liberation-Sans-glyphs als OPGS. De Rust-grens
+controleert de exacte FontFile2-bytes, CID-breedtes, Form-BBox, clip,
+operatorvolgorde, grafische toestand en glyphgrenzen vóór de in-process
+DynLex-aanroep. De pagina-inhoud komt als transparante Hayro-laag binnen;
+DynLex schildert de glyphs daarop en daarna wordt het witte papier toegevoegd.
+Er wordt geen tijdelijke afgevlakte PDF geschreven. Zestien opgeslagen
+FreeText-pagina's met Unicode, spaties, meerdere regels en links/midden/rechts
+op gewone, 0/90/180/270°-gecropte en een A1-achtige pagina zijn volledig
+RGBA-bytegelijk aan Hayro. Een onbekende annotatie-state of extra Form-operator
+valt terug zonder gedeeltelijke DynLex-tekening. De route is nog begrensd tot
+precies één FreeText, één tile van 256×192 binnen de pagina, maximaal 32
+zichtbare glyphs en het exacte ingebedde font; gemengde geïmporteerde
+FreeText/Square/Highlight-annotaties volgen later.
+
 Negen volledige Save As-/Hayro-proeven zijn RGBA-bytegelijk:
 595×842 met twee posities, 842×595 met 90° en verschoven CropBox op twee
 posities, een synthetische A1-achtige 2384×1684/90°-pagina, twee brede

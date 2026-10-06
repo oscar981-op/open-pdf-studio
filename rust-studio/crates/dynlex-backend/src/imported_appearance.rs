@@ -55,7 +55,7 @@ fn inherited<'a>(
     Err(())
 }
 
-fn display_point(crop: [f64; 4], rotation: u16, x: f64, y: f64) -> [f64; 2] {
+pub(crate) fn display_point(crop: [f64; 4], rotation: u16, x: f64, y: f64) -> [f64; 2] {
     match rotation {
         0 => [x - crop[0], crop[3] - y],
         90 => [y - crop[1], x - crop[0]],
@@ -483,7 +483,10 @@ fn add_white_paper(rgba: &mut [u8]) {
     }
 }
 
-fn page_geometry(doc: &Document, page_number: usize) -> Option<(ObjectId, [f64; 4], u16)> {
+pub(crate) fn page_geometry(
+    doc: &Document,
+    page_number: usize,
+) -> Option<(ObjectId, [f64; 4], u16)> {
     let page_number_u32 = u32::try_from(page_number).ok()?;
     let page_id = *doc.get_pages().get(&page_number_u32)?;
     let page = doc.get_dictionary(page_id).ok()?;

@@ -853,6 +853,146 @@ mod tests {
     #[cfg(feature = "dynlex-experimental")]
     use std::sync::Arc;
 
+    #[cfg(feature = "dynlex-experimental")]
+    #[test]
+    fn reimported_native_freetext_appearance_uses_dynlex_glyphs() {
+        use opds_dynlex_backend::{render_with_report, Backend};
+        use opds_engine_probe::ParsedPdf;
+
+        for (rotation, geometry) in [(0, 0), (90, 0), (180, 0), (270, 0), (0, 1), (90, 2)] {
+            let (media, crop, position) = match geometry {
+                1 => ([0_i64, 0, 595, 842], [0_i64, 0, 595, 842], [300.0, 500.0]),
+                2 => (
+                    [0_i64, 0, 1684, 2384],
+                    [0_i64, 0, 1684, 2384],
+                    [1100.0, 900.0],
+                ),
+                _ => ([20_i64, 30, 220, 330], [40_i64, 60, 200, 300], [20.0, 30.0]),
+            };
+            let mut doc = Document::with_version("1.4");
+            let pages = doc.new_object_id();
+            let content = doc.add_object(Stream::new(
+                Dictionary::new(),
+                if rotation == 90 {
+                    b"0 0 1 rg 50 70 90 60 re f".to_vec()
+                } else {
+                    Vec::new()
+                },
+            ));
+            let page = doc.add_object(dictionary! {
+                "Type" => "Page", "Parent" => pages, "Contents" => content,
+                "MediaBox" => media.map(Object::from).to_vec(),
+                "CropBox" => crop.map(Object::from).to_vec(),
+                "Rotate" => rotation,
+            });
+            doc.objects.insert(
+                pages,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1,
+                }),
+            );
+            let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+            doc.trailer.set("Root", Object::Reference(catalog));
+            let mut source = Vec::new();
+            doc.save_to(&mut source).unwrap();
+            for (text, align) in [
+                ("ΩΩΩ", TextAlign::Center),
+                ("Hello Ω", TextAlign::Left),
+                ("Line one\nNext Ω", TextAlign::Right),
+            ] {
+                if geometry == 2 && text != "ΩΩΩ" {
+                    continue;
+                }
+                let annotation = Annotation {
+                    id: 501,
+                    page: 0,
+                    bounds: Rect {
+                        x: position[0],
+                        y: position[1],
+                        width: 110.0,
+                        height: 58.0,
+                    },
+                    kind: Kind::Text {
+                        value: text.into(),
+                        color_rgb: [0, 80, 240],
+                        font_size: 20,
+                        align,
+                    },
+                };
+                let saved = export_annotations(&source, &[annotation.clone()]).unwrap();
+                let pdf = ParsedPdf::open(Arc::new(saved.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let actual = render_with_report(&pdf, &saved, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(actual.imported_annotations_dynlex, "{text}");
+                assert_eq!(actual.raster.rgba, expected.rgba, "{text}");
+                if text == "ΩΩΩ" && rotation == 0 && geometry == 0 {
+                    let mut second = annotation.clone();
+                    second.id = 502;
+                    second.bounds.x += 10.0;
+                    let multiple = export_annotations(&source, &[annotation, second]).unwrap();
+                    let pdf = ParsedPdf::open(Arc::new(multiple.clone())).unwrap();
+                    let expected = pdf.render_page(1, 1.0).unwrap();
+                    let report =
+                        render_with_report(&pdf, &multiple, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert!(!report.imported_annotations_dynlex);
+                    assert_eq!(report.raster.rgba, expected.rgba);
+
+                    let mut modified = Document::load_mem(&saved).unwrap();
+                    let page_id = *modified.get_pages().get(&1).unwrap();
+                    let annotation_id = modified
+                        .get_dictionary(page_id)
+                        .unwrap()
+                        .get(b"Annots")
+                        .unwrap()
+                        .as_array()
+                        .unwrap()[0]
+                        .as_reference()
+                        .unwrap();
+                    modified
+                        .get_dictionary_mut(annotation_id)
+                        .unwrap()
+                        .set("OC", Object::Null);
+                    modified.trailer.remove(b"Prev");
+                    let mut unsupported = Vec::new();
+                    modified.save_to(&mut unsupported).unwrap();
+                    let pdf = ParsedPdf::open(Arc::new(unsupported.clone())).unwrap();
+                    let report =
+                        render_with_report(&pdf, &unsupported, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert!(!report.imported_annotations_dynlex);
+
+                    modified
+                        .get_dictionary_mut(annotation_id)
+                        .unwrap()
+                        .remove(b"OC");
+                    let form_id = modified
+                        .get_dictionary(annotation_id)
+                        .unwrap()
+                        .get(b"AP")
+                        .unwrap()
+                        .as_dict()
+                        .unwrap()
+                        .get(b"N")
+                        .unwrap()
+                        .as_reference()
+                        .unwrap();
+                    modified
+                        .get_object_mut(form_id)
+                        .unwrap()
+                        .as_stream_mut()
+                        .unwrap()
+                        .content
+                        .extend_from_slice(b"\n0 0 m");
+                    unsupported.clear();
+                    modified.save_to(&mut unsupported).unwrap();
+                    let pdf = ParsedPdf::open(Arc::new(unsupported.clone())).unwrap();
+                    let report =
+                        render_with_report(&pdf, &unsupported, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert!(!report.imported_annotations_dynlex);
+                }
+            }
+        }
+    }
+
     fn source_pdf() -> Vec<u8> {
         let mut doc = Document::with_version("1.4");
         let pages_id = doc.new_object_id();
