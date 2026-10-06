@@ -212,37 +212,38 @@ gekleurde rechthoek, een rechthoek die de glyphs kruist, twee overlappende
 vectorvlakken, een lijn/gevulde vorm via de app-cache en een 90°-pagina met
 verschoven CropBox. De broncontent-alpha onderscheidt een lege pagina
 (alpha 0), een volledig dekkende pagina (255) en gedeeltelijke vectorinhoud.
-De app kan nu daarnaast precies één Text Box samen met meerdere native
-vormannotaties compositeren: DynLex tekent eerst de tekst
-op de bewezen bronlaag en vervolgens de vormen. Een echte gemengde PDF met
-Text Box, blauwe Square en gele Highlight is over de hele pagina bytegelijk
-aan Hayro na Save As. Square- en Highlight-vormen mogen elkaar onder de
-bovenstaande grenzen overlappen. Voor een gecontroleerde bronpagina die
-volledig door één dekkende PDF-fill is geverfd, kan nu ook één Text Box met
-Square of Highlight overlappen. DynLex schildert de vormen vóór en na de
-glyphrun in de echte annotatie-/ID-volgorde. Bij een latere Highlight
+De app kan native Text Boxes en Square/Highlight-vormen in de echte
+annotatie-/ID-volgorde compositeren. Opeenvolgende vormen worden samen als
+één OPAN-batch getekend; elke Text Box krijgt zijn eigen begrensde OPGS-run.
+Tot 64 annotaties zijn toegestaan, zolang iedere individuele glyphrun en
+vorm binnen de bewezen rendergrenzen past. Een volledig dekkende PDF-fill,
+een bewezen lege pagina of een kleine gedeeltelijk dekkende bronpagina zijn
+geschikt. Square- en Highlight-vormen en Text Boxes mogen elkaar overlappen.
+Bij een latere Highlight op een volledig dekkende bron
 verifieert een nieuwe Rust-API de **oorspronkelijke** volledig dekkende
 PDF-bronlaag; zij vergelijkt die dus niet foutief met de reeds door glyphs
 of vormen gewijzigde bitmap. Een geïsoleerde Save As-PDF met blauwe `ΩΩΩ`
 en kruisende rode Square of gele Highlight is in beide volgordes volledig
-RGBA-bytegelijk aan Hayro. De app-cachetest bewijst ook vorm-vorm-tekst en
-tekst-vorm-vorm in beide volgordes op een gekleurde 256×192-pagina. Een
+RGBA-bytegelijk aan Hayro. App-tests bewijzen ook twee overlappende Text Boxes
+met verschillende kleur, grootte en uitlijning, plus vormen ertussen: op
+dekkende, lege en gedeeltelijk geverfde pagina's volledig bytegelijk aan
+Save As/Hayro. Een afzonderlijke PDF-proef met 90°-rotatie en verschoven
+CropBox vergelijkt twee Text Boxes met een Highlight ertussen eveneens
+bytegelijk. Een
 verouderde of deels transparante bronlaag wordt geweigerd voor de dekkende route.
 OPAN-v2 kan nu dezelfde vormopdrachten op een gevalideerde premultiplied
 PDF-bronlaag compositeren en werkt de alfawaarde per vorm bij. De app accepteert
 hiervoor een bewezen lege pagina of een kleine gedeeltelijk dekkende PDF met
 een asynchroon geladen content layer die de zichtbare pagina byte voor byte
-reconstrueert. Text Box en Square/Highlight worden vóór of na elkaar in de
+reconstrueert. Text Boxes en Square/Highlight worden vóór of na elkaar in de
 annotatievolgorde getekend; pas daarna wordt wit papier toegevoegd. Echte
 Save As-proeven voor leeg en gedeeltelijk gevuld, beide vormkleuren en beide
 volgordes zijn RGBA-bytegelijk aan Hayro. De app-cachetest controleert ook
 Highlight vóór en na Text Box op een gedeeltelijk geverfde PDF, met behoud van
 de bestaande stale-result-afwijzing. Niet-gevalideerde contentlagen blijven
-Iced-fallback. De annotaties moeten ook ieder afzonderlijk binnen hun bestaande
-bewezen rendergrenzen vallen. Voor grotere en complexere pagina's en
-achteraf toegevoegde Text Boxes zijn bredere bronlaagstaging en
-cache-integratie nodig. Volledige Text Box- en annotatiedekking zijn nog
-niet bewezen.
+Iced-fallback. Voor grotere en complexere pagina's zijn bredere
+bronlaagstaging en glyphtegels nodig. Volledige Text Box- en
+annotatiedekking zijn nog niet bewezen.
 
 Gerichte reproductie vanuit `rust-studio`:
 

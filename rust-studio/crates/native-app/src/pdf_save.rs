@@ -2570,7 +2570,7 @@ mod tests {
         )
         .unwrap()
         .expect("rotated mixed page should reach DynLex");
-        let saved = export_annotations(&source_bytes, &[mark]).unwrap();
+        let saved = export_annotations(&source_bytes, &[mark.clone()]).unwrap();
         let expected = ParsedPdf::open(Arc::new(saved))
             .unwrap()
             .render_page(1, 1.0)
@@ -2581,6 +2581,77 @@ mod tests {
             .filter(|(actual, expected)| actual != expected)
             .count();
         assert_eq!(mismatches, 0);
+
+        let shape = Annotation {
+            id: 147,
+            page: 0,
+            bounds: Rect {
+                x: 55.0,
+                y: 40.0,
+                width: 40.0,
+                height: 30.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 226, 67],
+            },
+        };
+        let later = Annotation {
+            id: 148,
+            page: 0,
+            bounds: Rect {
+                x: 45.0,
+                y: 35.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "Hello Ω".into(),
+                color_rgb: [231, 76, 60],
+                font_size: 16,
+                align: TextAlign::Right,
+            },
+        };
+        let first = opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied(
+            &crate::native_text_scene::stage_native_text_box_scene(&mark).unwrap(),
+            &content.rgba,
+            base.width,
+            base.height,
+            [20, 30, 130, 88],
+        )
+        .unwrap();
+        let middle =
+            opds_dynlex_backend::render_native_annotation_overlay_pixels_over_premultiplied(
+                &first.rgba,
+                base.width,
+                base.height,
+                (base.page_width_pt, base.page_height_pt),
+                &[shape.clone()],
+                0,
+            )
+            .unwrap()
+            .unwrap();
+        let mut actual = opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied(
+            &crate::native_text_scene::stage_native_text_box_scene(&later).unwrap(),
+            &middle.rgba,
+            base.width,
+            base.height,
+            [45, 35, 155, 93],
+        )
+        .unwrap()
+        .rgba;
+        for pixel in actual.chunks_exact_mut(4) {
+            let paper = 255 - pixel[3];
+            for channel in &mut pixel[..3] {
+                *channel = channel.saturating_add(paper);
+            }
+            pixel[3] = 255;
+        }
+        let saved = export_annotations(&source_bytes, &[mark, shape, later]).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert_eq!(actual, expected.rgba, "rotated two-text/shape order");
     }
 
     #[cfg(feature = "dynlex-experimental")]

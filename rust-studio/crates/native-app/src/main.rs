@@ -880,8 +880,11 @@ impl OpenDocument {
         height: u32,
         annotations: &[Annotation],
     ) -> Option<Vec<u8>> {
-        let (text_index, text) = single_text_index(annotations)?;
-        if self.bitmap_page_points != (width as f32, height as f32)
+        if annotations.len() > 64
+            || !annotations
+                .iter()
+                .any(|item| matches!(item.kind, Kind::Text { .. }))
+            || self.bitmap_page_points != (width as f32, height as f32)
             || !native_text_scene::eligible_opaque_page(
                 &self.source_bytes,
                 self.displayed_page,
@@ -891,13 +894,6 @@ impl OpenDocument {
         {
             return None;
         }
-        let scene = native_text_scene::stage_native_text_box_scene(text).ok()?;
-        let clip = [
-            text.bounds.x as u32,
-            text.bounds.y as u32,
-            (text.bounds.x + text.bounds.width) as u32,
-            (text.bounds.y + text.bounds.height) as u32,
-        ];
         let paint_shapes = |current: &[u8], shapes: &[Annotation]| -> Option<Vec<u8>> {
             if shapes.is_empty() {
                 return Some(current.to_vec());
@@ -929,14 +925,34 @@ impl OpenDocument {
             };
             painted.ok().flatten().map(|bitmap| bitmap.rgba)
         };
-        let (before, text_and_after) = annotations.split_at(text_index);
-        let current = paint_shapes(base_rgba, before)?;
-        let current = opds_dynlex_backend::render_validated_glyph_scene_over_opaque(
-            &scene, &current, width, height, clip,
-        )
-        .ok()?
-        .rgba;
-        paint_shapes(&current, &text_and_after[1..])
+        let mut current = base_rgba.to_vec();
+        let mut at = 0;
+        while at < annotations.len() {
+            if matches!(&annotations[at].kind, Kind::Text { .. }) {
+                let text = &annotations[at];
+                let scene = native_text_scene::stage_native_text_box_scene(text).ok()?;
+                let clip = [
+                    text.bounds.x as u32,
+                    text.bounds.y as u32,
+                    (text.bounds.x + text.bounds.width) as u32,
+                    (text.bounds.y + text.bounds.height) as u32,
+                ];
+                current = opds_dynlex_backend::render_validated_glyph_scene_over_opaque(
+                    &scene, &current, width, height, clip,
+                )
+                .ok()?
+                .rgba;
+                at += 1;
+            } else {
+                let end = annotations[at..]
+                    .iter()
+                    .position(|item| matches!(item.kind, Kind::Text { .. }))
+                    .map_or(annotations.len(), |offset| at + offset);
+                current = paint_shapes(&current, &annotations[at..end])?;
+                at = end;
+            }
+        }
+        Some(current)
     }
 
     #[cfg(feature = "dynlex-experimental")]
@@ -948,7 +964,13 @@ impl OpenDocument {
         height: u32,
         annotations: &[Annotation],
     ) -> Option<Vec<u8>> {
-        let (text_index, text) = single_text_index(annotations)?;
+        if annotations.len() > 64
+            || !annotations
+                .iter()
+                .any(|item| matches!(item.kind, Kind::Text { .. }))
+        {
+            return None;
+        }
         let content_cache = self.content_layer_cache.borrow();
         let content = content_cache
             .as_ref()
@@ -964,13 +986,6 @@ impl OpenDocument {
             self.bitmap_page_points,
         )?;
         drop(content_cache);
-        let scene = native_text_scene::stage_native_text_box_scene(text).ok()?;
-        let clip = [
-            text.bounds.x as u32,
-            text.bounds.y as u32,
-            (text.bounds.x + text.bounds.width) as u32,
-            (text.bounds.y + text.bounds.height) as u32,
-        ];
         let paint_shapes = |current: &[u8], shapes: &[Annotation]| -> Option<Vec<u8>> {
             if shapes.is_empty() {
                 return Some(current.to_vec());
@@ -986,14 +1001,32 @@ impl OpenDocument {
             .ok()?
             .map(|bitmap| bitmap.rgba)
         };
-        let (before, text_and_after) = annotations.split_at(text_index);
-        layer = paint_shapes(&layer, before)?;
-        layer = opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied(
-            &scene, &layer, width, height, clip,
-        )
-        .ok()?
-        .rgba;
-        layer = paint_shapes(&layer, &text_and_after[1..])?;
+        let mut at = 0;
+        while at < annotations.len() {
+            if matches!(&annotations[at].kind, Kind::Text { .. }) {
+                let text = &annotations[at];
+                let scene = native_text_scene::stage_native_text_box_scene(text).ok()?;
+                let clip = [
+                    text.bounds.x as u32,
+                    text.bounds.y as u32,
+                    (text.bounds.x + text.bounds.width) as u32,
+                    (text.bounds.y + text.bounds.height) as u32,
+                ];
+                layer = opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied(
+                    &scene, &layer, width, height, clip,
+                )
+                .ok()?
+                .rgba;
+                at += 1;
+            } else {
+                let end = annotations[at..]
+                    .iter()
+                    .position(|item| matches!(item.kind, Kind::Text { .. }))
+                    .map_or(annotations.len(), |offset| at + offset);
+                layer = paint_shapes(&layer, &annotations[at..end])?;
+                at = end;
+            }
+        }
         for pixel in layer.chunks_exact_mut(4) {
             let paper = 255 - pixel[3];
             for channel in &mut pixel[..3] {
@@ -1064,6 +1097,110 @@ impl OpenDocument {
 #[cfg(all(test, feature = "dynlex-experimental"))]
 mod dynlex_annotation_overlay_tests {
     use super::*;
+
+    #[test]
+    fn two_overlapping_text_boxes_on_blank_page_follow_id_order() {
+        let mut source = lopdf::Document::load_mem(include_bytes!(
+            "../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf"
+        ))
+        .unwrap();
+        let page_id = *source.get_pages().get(&1).unwrap();
+        let contents_id = source
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Contents")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        source
+            .get_object_mut(contents_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .set_plain_content(Vec::new());
+        let mut bytes = Vec::new();
+        source.save_to(&mut bytes).unwrap();
+        let pdf = Arc::new(ParsedPdf::open(Arc::new(bytes.clone())).unwrap());
+        let raster = pdf.render_page(1, 1.0).unwrap();
+        let first = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "ΩΩΩ".into(),
+                color_rgb: [0, 80, 240],
+                font_size: 20,
+                align: TextAlign::Center,
+            },
+        };
+        let second = Annotation {
+            id: 2,
+            page: 0,
+            bounds: Rect {
+                x: 50.0,
+                y: 32.0,
+                width: 110.0,
+                height: 58.0,
+            },
+            kind: Kind::Text {
+                value: "Hello Ω".into(),
+                color_rgb: [231, 76, 60],
+                font_size: 16,
+                align: TextAlign::Right,
+            },
+        };
+        let mut model = DocumentModel::new(DocumentId(101), 1).unwrap();
+        model.apply(Edit::Add(first.clone())).unwrap();
+        model.apply(Edit::Add(second.clone())).unwrap();
+        let mut document = OpenDocument {
+            path: "blank-two-text.pdf".into(),
+            source_bytes: Arc::new(bytes),
+            pdf,
+            model,
+            last_saved_annotations: Vec::new(),
+            bitmap: None,
+            annotation_overlay_cache: RefCell::new(None),
+            content_layer_cache: RefCell::new(None),
+            content_layer_in_flight: None,
+            bitmap_size: (0, 0),
+            bitmap_page_points: (0.0, 0.0),
+            bitmap_scale: 1.0,
+            bitmap_backend: Backend::Hayro,
+            displayed_page: 0,
+            selected_annotation: None,
+            page_cache: VecDeque::new(),
+            thumbnails: VecDeque::new(),
+            thumbnail_in_flight: None,
+            thumbnail_failed: HashSet::new(),
+            thumbnail_focus: 0,
+        };
+        document.cache_bitmap(
+            0,
+            1.0,
+            RenderOutcome {
+                raster,
+                used: Backend::Hayro,
+            },
+            None,
+        );
+        let combined = document
+            .dynlex_annotation_bitmap()
+            .expect("blank page with two Text Boxes should reach DynLex");
+        let saved = pdf_save::export_annotations(&document.source_bytes, &[first, second]).unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = combined else {
+            panic!("blank multi-text DynLex result must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+    }
 
     #[test]
     fn colored_highlight_waits_for_opaque_content_proof() {
@@ -1270,6 +1407,42 @@ mod dynlex_annotation_overlay_tests {
             panic!("DynLex reordered Text Box output must be RGBA");
         };
         assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+
+        document
+            .model
+            .apply(Edit::Add(Annotation {
+                id: 4,
+                page: 0,
+                bounds: Rect {
+                    x: 60.0,
+                    y: 35.0,
+                    width: 110.0,
+                    height: 58.0,
+                },
+                kind: Kind::Text {
+                    value: "Hello Ω".into(),
+                    color_rgb: [231, 76, 60],
+                    font_size: 16,
+                    align: TextAlign::Right,
+                },
+            }))
+            .unwrap();
+        let ordered = document
+            .dynlex_annotation_bitmap()
+            .expect("two overlapping Text Boxes and shapes should reach DynLex");
+        let saved = pdf_save::export_annotations(
+            &document.source_bytes,
+            &document.model.items().cloned().collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = ordered else {
+            panic!("multi-text DynLex output must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
     }
 
     #[test]
@@ -1385,6 +1558,41 @@ mod dynlex_annotation_overlay_tests {
             .unwrap();
         let image::Handle::Rgba { pixels, .. } = combined else {
             panic!("reordered DynLex result must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+        document
+            .model
+            .apply(Edit::Add(Annotation {
+                id: 3,
+                page: 0,
+                bounds: Rect {
+                    x: 45.0,
+                    y: 107.0,
+                    width: 110.0,
+                    height: 58.0,
+                },
+                kind: Kind::Text {
+                    value: "Hello Ω".into(),
+                    color_rgb: [231, 76, 60],
+                    font_size: 16,
+                    align: TextAlign::Right,
+                },
+            }))
+            .unwrap();
+        let combined = document
+            .dynlex_annotation_bitmap()
+            .expect("two Text Boxes over a partial PDF layer should reach DynLex");
+        let saved = pdf_save::export_annotations(
+            &document.source_bytes,
+            &document.model.items().cloned().collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = combined else {
+            panic!("multi-text premultiplied DynLex result must be RGBA");
         };
         assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
         let layer = Arc::clone(&document.content_layer_cache.borrow().as_ref().unwrap().rgba);
@@ -3018,12 +3226,13 @@ impl App {
             let image::Handle::Rgba { width, height, .. } = base else {
                 return Task::none();
             };
-            let wants_text = document
+            let text_count = document
                 .model
                 .items()
                 .filter(|item| item.page == page && matches!(item.kind, Kind::Text { .. }))
-                .count()
-                == 1;
+                .take(65)
+                .count();
+            let wants_text = (1..=64).contains(&text_count);
             let wants_highlight = document.model.items().any(|item| {
                 item.page == page
                     && matches!(
@@ -3116,17 +3325,15 @@ impl App {
         let generation = self.backend_generation;
         let backend = self.backend;
         #[cfg(feature = "dynlex-experimental")]
-        let wants_content_layer = backend == Backend::Dynlex
-            && scale == 1.0
-            && single_text_index(
-                &document
-                    .model
-                    .items()
-                    .filter(|item| item.page + 1 == page)
-                    .cloned()
-                    .collect::<Vec<_>>(),
-            )
-            .is_some();
+        let text_count = document
+            .model
+            .items()
+            .filter(|item| item.page + 1 == page && matches!(item.kind, Kind::Text { .. }))
+            .take(65)
+            .count();
+        #[cfg(feature = "dynlex-experimental")]
+        let wants_content_layer =
+            backend == Backend::Dynlex && scale == 1.0 && (1..=64).contains(&text_count);
         self.busy = true;
         self.message = format!("Rendering page {page} at {:.0}%…", scale * 100.0);
         Task::perform(
