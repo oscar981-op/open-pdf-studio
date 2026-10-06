@@ -127,6 +127,29 @@ fn annotations_changed(model: &DocumentModel, saved: &[Annotation]) -> bool {
     !model.items().eq(saved.iter())
 }
 
+#[cfg(feature = "dynlex-experimental")]
+fn single_disjoint_text(annotations: &[Annotation]) -> Option<&Annotation> {
+    let mut texts = annotations
+        .iter()
+        .filter(|item| matches!(item.kind, Kind::Text { .. }));
+    let text = texts.next()?;
+    if texts.next().is_some() {
+        return None;
+    }
+    for (index, item) in annotations.iter().enumerate() {
+        for other in annotations.iter().skip(index + 1) {
+            if !(item.bounds.x + item.bounds.width <= other.bounds.x
+                || other.bounds.x + other.bounds.width <= item.bounds.x
+                || item.bounds.y + item.bounds.height <= other.bounds.y
+                || other.bounds.y + other.bounds.height <= item.bounds.y)
+            {
+                return None;
+            }
+        }
+    }
+    Some(text)
+}
+
 fn theme(_: &App) -> Theme {
     Theme::custom(
         "Open PDF Studio",
@@ -674,7 +697,12 @@ impl OpenDocument {
             let text: Option<Vec<u8>> = {
                 #[cfg(feature = "dynlex-experimental")]
                 {
-                    if annotations.len() == 1 && matches!(annotations[0].kind, Kind::Text { .. }) {
+                    if let Some(text_mark) = single_disjoint_text(&annotations) {
+                        let shapes: Vec<_> = annotations
+                            .iter()
+                            .filter(|item| !matches!(item.kind, Kind::Text { .. }))
+                            .cloned()
+                            .collect();
                         native_text_scene::render_opaque_page_text_box(
                             &self.source_bytes,
                             self.displayed_page,
@@ -682,7 +710,7 @@ impl OpenDocument {
                             *width,
                             *height,
                             self.bitmap_page_points,
-                            &annotations[0],
+                            text_mark,
                         )
                         .ok()
                         .flatten()
@@ -708,10 +736,26 @@ impl OpenDocument {
                                 *width,
                                 *height,
                                 self.bitmap_page_points,
-                                &annotations[0],
+                                text_mark,
                             )
                             .ok()
                             .flatten()
+                        })
+                        .and_then(|text_rgba| {
+                            if shapes.is_empty() {
+                                return Some(text_rgba);
+                            }
+                            opds_dynlex_backend::render_native_annotation_overlay_pixels(
+                                &text_rgba,
+                                *width,
+                                *height,
+                                self.bitmap_page_points,
+                                &shapes,
+                                self.displayed_page,
+                            )
+                            .ok()
+                            .flatten()
+                            .map(|result| result.rgba)
                         })
                     } else {
                         None
@@ -966,6 +1010,62 @@ mod dynlex_annotation_overlay_tests {
                 .as_ptr(),
             layer_ptr,
             "text edit must reuse unchanged PDF content layer"
+        );
+        document
+            .model
+            .apply(Edit::Add(Annotation {
+                id: 2,
+                page: 0,
+                bounds: Rect {
+                    x: 170.0,
+                    y: 20.0,
+                    width: 30.0,
+                    height: 20.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [0, 80, 240],
+                },
+            }))
+            .unwrap();
+        document
+            .model
+            .apply(Edit::Add(Annotation {
+                id: 3,
+                page: 0,
+                bounds: Rect {
+                    x: 170.0,
+                    y: 70.0,
+                    width: 30.0,
+                    height: 20.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [255, 226, 67],
+                },
+            }))
+            .unwrap();
+        let combined = document
+            .dynlex_annotation_bitmap()
+            .expect("disjoint text, square and highlight should reach DynLex");
+        let saved = pdf_save::export_annotations(
+            &document.source_bytes,
+            &document.model.items().cloned().collect::<Vec<_>>(),
+        )
+        .unwrap();
+        let expected = ParsedPdf::open(Arc::new(saved))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let image::Handle::Rgba { pixels, .. } = combined else {
+            panic!("combined DynLex annotations must be RGBA");
+        };
+        assert_eq!(pixels.as_ref(), expected.rgba.as_slice());
+        let mut overlapping = document.model.get(3).unwrap().clone();
+        overlapping.bounds.x = 110.0;
+        overlapping.bounds.y = 120.0;
+        document.model.apply(Edit::Replace(overlapping)).unwrap();
+        assert!(
+            document.dynlex_annotation_bitmap().is_none(),
+            "unverified Text Box/Highlight overlap must use the Iced layer"
         );
         let stale_ticket = document.model.view().ticket();
         let stale_base = document.bitmap.as_ref().unwrap().clone();
@@ -2274,7 +2374,7 @@ impl App {
                 || document
                     .model
                     .items()
-                    .filter(|item| item.page == page)
+                    .filter(|item| item.page == page && matches!(item.kind, Kind::Text { .. }))
                     .count()
                     != 1
                 || !document

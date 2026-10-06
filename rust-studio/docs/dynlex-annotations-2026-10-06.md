@@ -180,6 +180,14 @@ gekleurde rechthoek, een rechthoek die de glyphs kruist, twee overlappende
 vectorvlakken, een lijn/gevulde vorm via de app-cache en een 90°-pagina met
 verschoven CropBox. De broncontent-alpha onderscheidt een lege pagina
 (alpha 0), een volledig dekkende pagina (255) en gedeeltelijke vectorinhoud.
+De app kan nu daarnaast precies één Text Box samen met meerdere onderling
+gescheiden native vormannotaties compositeren: DynLex tekent eerst de tekst
+op de bewezen bronlaag en vervolgens de vormen. Een echte gemengde PDF met
+Text Box, blauwe Square en gele Highlight is over de hele pagina bytegelijk
+aan Hayro na Save As. Wanneer hun annotatievakken elkaar overlappen,
+blijft de Iced-laag actief; die compositieregel is nog niet
+bewezen. De annotaties moeten ook ieder afzonderlijk binnen hun bestaande
+bewezen rendergrenzen vallen.
 Voor grotere en complexere pagina's moet deze laag uiteindelijk samen met
 het normale paginarenderresultaat worden opgebouwd om de tweede Hayro-render
 ook in de achtergrond te vermijden. Volledige Text Box- en annotatiedekking
