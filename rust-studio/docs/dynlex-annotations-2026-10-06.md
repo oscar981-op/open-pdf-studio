@@ -412,3 +412,15 @@ cargo test --offline -p opds-native-app --features dynlex-experimental \
 
 De andere OPDL-v2/v4-verifiers moeten bij verdere wijzigingen blijven slagen.
 Er is geen algemene PDF-objectdekking of prestatievoordeel bewezen.
+
+**Geïmporteerde dekkende Stamp-Form.** De opt-in DynLex-annotatieroute
+accepteert nu ook een `/Stamp` met precies één ongefilterde `/AP/N`-Form:
+geen resources, Matrix of Group, een BBox gelijk aan de gehele `/Rect`, en
+uitsluitend `q rg re f Q` met een pixeluitgelijnde, volledig dekkende
+DeviceRGB-rechthoek. De Form wordt als OPAN-v2-vulopdracht in dezelfde
+gevalideerde annotatiescene gezet als Square/Highlight. Een echte PDF-proef
+vergelijkt de volledige pagina op 0/90/180/270 graden en verschoven CropBox
+RGBA-bytegewijs met Hayro; op 0 graden is ook Stamp gevolgd door Square in
+annotatievolgorde gecontroleerd. Een extra tekenoperator veroorzaakt veilige
+Hayro-fallback zonder gedeeltelijke DynLex-uitvoer. Dit ondersteunt nog geen
+algemene Stamp-inhoud, tekst-/afbeeldings-Form of andere annotatietypen.

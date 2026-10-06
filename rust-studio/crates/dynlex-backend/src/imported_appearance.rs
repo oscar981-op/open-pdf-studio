@@ -312,6 +312,101 @@ fn parse_shape_annotation(
     Some(mark)
 }
 
+/// A deliberately small, subtype-independent Form appearance: an opaque
+/// DeviceRGB rectangle covering its entire annotation box. This lets the
+/// imported layer honor a plain Stamp appearance without interpreting the
+/// annotation subtype as native Square/Highlight semantics.
+fn parse_opaque_rect_form(
+    doc: &Document,
+    annotation: &Dictionary,
+    crop: [f64; 4],
+    rotation: u16,
+) -> Option<ImportedCommand> {
+    if !name_is(annotation, b"Subtype", b"Stamp")
+        || annotation.get(b"F").ok().and_then(number) != Some(4.0)
+    {
+        return None;
+    }
+    let rect = four(annotation.get(b"Rect").ok()?)?;
+    let bounds = pixel_box(crop, rotation, &[[rect[0], rect[1]], [rect[2], rect[3]]])?;
+    let ap = annotation.get(b"AP").ok()?.as_dict().ok()?;
+    let (_, normal) = doc.dereference(ap.get(b"N").ok()?).ok()?;
+    let form = normal.as_stream().ok()?;
+    if !name_is(&form.dict, b"Type", b"XObject")
+        || !name_is(&form.dict, b"Subtype", b"Form")
+        || form.dict.has(b"Filter")
+        || form.dict.has(b"DecodeParms")
+        || form.dict.has(b"Matrix")
+        || form.dict.has(b"Group")
+        || form.dict.has(b"Resources")
+        || form.content.len() > 256
+        || four(form.dict.get(b"BBox").ok()?)? != [0.0, 0.0, rect[2] - rect[0], rect[3] - rect[1]]
+    {
+        return None;
+    }
+    // lopdf's content decoder can accept an incomplete trailing operand.
+    // This tiny Form subset has exactly twelve whitespace-separated tokens;
+    // reject comments, compound operands and ignored trailing syntax before
+    // any appearance reaches the DynLex ABI.
+    let tokens: Vec<_> = form
+        .content
+        .split(|byte| byte.is_ascii_whitespace())
+        .filter(|token| !token.is_empty())
+        .collect();
+    if tokens.len() != 12
+        || [0, 4, 9, 10, 11]
+            .into_iter()
+            .zip([&b"q"[..], &b"rg"[..], &b"re"[..], &b"f"[..], &b"Q"[..]])
+            .any(|(index, expected)| tokens[index] != expected)
+        || [1, 2, 3, 5, 6, 7, 8].into_iter().any(|index| {
+            !tokens[index]
+                .iter()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'.' | b'-' | b'+'))
+        })
+    {
+        return None;
+    }
+    let operations = Content::decode(&form.content).ok()?.operations;
+    let [save, color, path, fill, restore] = operations.as_slice() else {
+        return None;
+    };
+    if save.operator != "q"
+        || color.operator != "rg"
+        || path.operator != "re"
+        || fill.operator != "f"
+        || restore.operator != "Q"
+        || !save.operands.is_empty()
+        || !fill.operands.is_empty()
+        || !restore.operands.is_empty()
+        || color.operands.len() != 3
+        || path.operands.len() != 4
+        || path
+            .operands
+            .iter()
+            .map(number)
+            .collect::<Option<Vec<_>>>()?
+            != [0.0, 0.0, rect[2] - rect[0], rect[3] - rect[1]]
+    {
+        return None;
+    }
+    let channels = color
+        .operands
+        .iter()
+        .map(|value| {
+            let value = number(value)?;
+            (value.is_finite()
+                && (0.0..=1.0).contains(&value)
+                && value * 255.0 == (value * 255.0).round())
+            .then_some((value * 255.0) as u8)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(ImportedCommand {
+        kind: 1,
+        rect: bounds,
+        tail: [channels[0], channels[1], channels[2], 255],
+    })
+}
+
 /// Return a DynLex-composited page only for one exact, opaque 2pt Square Form
 /// on a quarter-turned, integral page. Any uncertainty stays on Hayro.
 pub fn render_single_square_appearance_direct(
@@ -713,17 +808,23 @@ pub fn render_imported_shape_appearances_for_app(
     let mut fallback_rectangles = Vec::new();
     for (index, annotation) in annotations.iter().enumerate() {
         if annotation.has(b"AP") {
-            let Some(mark) = parse_shape_annotation(
+            if let Some(mark) = parse_shape_annotation(
                 &doc,
                 annotation,
                 crop,
                 rotation,
                 page_number - 1,
                 index as u64 + 1,
-            ) else {
+            ) {
+                let Some(native) = native_imported_commands(&mark, 4096, 4096) else {
+                    return Ok(None);
+                };
+                forms.push(native);
+            } else if let Some(command) = parse_opaque_rect_form(&doc, annotation, crop, rotation) {
+                forms.push(vec![command]);
+            } else {
                 return Ok(None);
-            };
-            forms.push(mark);
+            }
         } else {
             let Some(rectangles) = parse_missing_shape_annotation(annotation, crop, rotation)
             else {
@@ -739,11 +840,8 @@ pub fn render_imported_shape_appearances_for_app(
         .render_page_content_without_annotations(page_number, 1.0)
         .map_err(|e| e.to_string())?;
     let mut commands = Vec::new();
-    for form in &forms {
-        let Some(native) = native_imported_commands(form, layer.width, layer.height) else {
-            return Ok(None);
-        };
-        commands.extend(native);
+    for form in forms {
+        commands.extend(form);
     }
     for (rect, color) in fallback_rectangles {
         commands.push(ImportedCommand {
@@ -850,6 +948,170 @@ mod missing_appearance_tests {
     use super::*;
     use crate::{render_with_report, Backend};
     use lopdf::{dictionary, Stream};
+
+    fn opaque_stamp_fixture(rotation: i64, include_square: bool) -> Vec<u8> {
+        let mut doc = Document::with_version("1.4");
+        let pages_id = doc.new_object_id();
+        let content_id = doc.add_object(Stream::new(
+            Dictionary::new(),
+            b"0 0 1 rg 40 60 160 240 re f".to_vec(),
+        ));
+        let form_id = doc.add_object(Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Form",
+                "BBox" => vec![0.into(), 0.into(), 40.into(), 30.into()],
+            },
+            b"q 1 0 0 rg 0 0 40 30 re f Q".to_vec(),
+        ));
+        let stamp_id = doc.add_object(dictionary! {
+            "Type" => "Annot", "Subtype" => "Stamp", "F" => 4,
+            "Rect" => vec![70.into(), 90.into(), 110.into(), 120.into()],
+            "AP" => dictionary! { "N" => form_id },
+        });
+        let mut annotations = vec![Object::Reference(stamp_id)];
+        if include_square {
+            let square_form = doc.add_object(Stream::new(
+                dictionary! {
+                    "Type" => "XObject", "Subtype" => "Form",
+                    "BBox" => vec![0.into(), 0.into(), 40.into(), 30.into()],
+                },
+                b"q 0 1 0 RG 2 w 1 1 38 28 re S Q".to_vec(),
+            ));
+            let square_id = doc.add_object(dictionary! {
+                "Type" => "Annot", "Subtype" => "Square", "F" => 4,
+                "Rect" => vec![80.into(), 100.into(), 120.into(), 130.into()],
+                "C" => vec![0.into(), 1.into(), 0.into()],
+                "AP" => dictionary! { "N" => square_form },
+            });
+            annotations.push(Object::Reference(square_id));
+        }
+        let page_id = doc.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
+            "Annots" => annotations,
+            "MediaBox" => vec![20.into(),30.into(),220.into(),330.into()],
+            "CropBox" => vec![40.into(),60.into(),200.into(),300.into()],
+            "Rotate" => rotation,
+        });
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages", "Kids" => vec![Object::Reference(page_id)], "Count" => 1,
+            }),
+        );
+        let catalog_id = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn opaque_stamp_form_matches_hayro_with_rotated_crop_and_square_order() {
+        for rotation in [0, 90, 180, 270] {
+            for include_square in if rotation == 0 {
+                &[false, true][..]
+            } else {
+                &[false][..]
+            } {
+                let bytes = opaque_stamp_fixture(rotation, *include_square);
+                let source_doc = Document::load_mem(&bytes).unwrap();
+                let source_page = *source_doc.get_pages().get(&1).unwrap();
+                let source_stamp = source_doc.get_page_annotations(source_page).unwrap()[0];
+                let (_, crop, page_rotation) = page_geometry(&source_doc, 1).unwrap();
+                assert!(
+                    parse_opaque_rect_form(&source_doc, source_stamp, crop, page_rotation)
+                        .is_some(),
+                    "stage rotation={rotation}"
+                );
+                let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+                let expected = pdf.render_page(1, 1.0).unwrap();
+                let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                assert!(
+                    selected.imported_annotations_dynlex,
+                    "rotation={rotation}, square={include_square}"
+                );
+                assert_eq!(
+                    selected.raster.rgba, expected.rgba,
+                    "rotation={rotation}, square={include_square}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unsupported_stamp_form_falls_back_without_partial_paint() {
+        let bytes = opaque_stamp_fixture(90, false);
+        let mut doc = Document::load_mem(&bytes).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let stamp_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = doc
+            .get_dictionary(stamp_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        doc.get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .content = b"q 1 0 0 rg 0 0 40 30 re f 0 0 m 10 10 l S Q".to_vec();
+        let mut modified = Vec::new();
+        doc.save_to(&mut modified).unwrap();
+        let pdf = ParsedPdf::open(Arc::new(modified.clone())).unwrap();
+        let expected = pdf.render_page(1, 1.0).unwrap();
+        let selected = render_with_report(&pdf, &modified, 1, 1.0, Backend::Dynlex).unwrap();
+        assert!(!selected.imported_annotations_dynlex);
+        assert_eq!(selected.raster.rgba, expected.rgba);
+    }
+
+    #[test]
+    fn stamp_form_rejects_ignored_trailing_pdf_syntax() {
+        let bytes = opaque_stamp_fixture(0, false);
+        let mut doc = Document::load_mem(&bytes).unwrap();
+        let page_id = *doc.get_pages().get(&1).unwrap();
+        let stamp_id = doc
+            .get_dictionary(page_id)
+            .unwrap()
+            .get(b"Annots")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
+            .as_reference()
+            .unwrap();
+        let form_id = doc
+            .get_dictionary(stamp_id)
+            .unwrap()
+            .get(b"AP")
+            .unwrap()
+            .as_dict()
+            .unwrap()
+            .get(b"N")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        doc.get_object_mut(form_id)
+            .unwrap()
+            .as_stream_mut()
+            .unwrap()
+            .content
+            .extend_from_slice(b" [");
+        let stamp = doc.get_dictionary(stamp_id).unwrap();
+        let (_, crop, rotation) = page_geometry(&doc, 1).unwrap();
+        assert!(parse_opaque_rect_form(&doc, stamp, crop, rotation).is_none());
+    }
 
     fn fixture(rotation: i64, stroke: i64, slanted_quad: bool) -> Vec<u8> {
         let mut doc = Document::with_version("1.4");
