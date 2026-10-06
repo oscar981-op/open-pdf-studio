@@ -86,7 +86,7 @@ impl ParsedPdf {
     }
 
     pub fn render_page(&self, page_number: usize, scale: f32) -> Result<Raster, RenderError> {
-        self.render_page_with_background(page_number, scale, false)
+        self.render_page_with_background(page_number, scale, false, true)
     }
 
     /// Diagnostic page-content layer before the viewer's white paper is
@@ -96,7 +96,18 @@ impl ParsedPdf {
         page_number: usize,
         scale: f32,
     ) -> Result<Raster, RenderError> {
-        self.render_page_with_background(page_number, scale, true)
+        self.render_page_with_background(page_number, scale, true, true)
+    }
+
+    /// Render the original PDF page without imported annotation appearances
+    /// or the preview fallback for annotations lacking /AP. This preserves
+    /// the already parsed document and lets a separate renderer paint /Annots.
+    pub fn render_page_content_without_annotations(
+        &self,
+        page_number: usize,
+        scale: f32,
+    ) -> Result<Raster, RenderError> {
+        self.render_page_with_background(page_number, scale, true, false)
     }
 
     fn render_page_with_background(
@@ -104,6 +115,7 @@ impl ParsedPdf {
         page_number: usize,
         scale: f32,
         transparent: bool,
+        render_annotations: bool,
     ) -> Result<Raster, RenderError> {
         validate_request(page_number, scale)?;
         let pages = self.pdf.pages();
@@ -122,10 +134,12 @@ impl ParsedPdf {
             return Err(RenderError::TooLarge);
         }
         let started = Instant::now();
+        let mut interpreter = InterpreterSettings::default();
+        interpreter.render_annotations = render_annotations;
         let pixmap = hayro::render(
             page,
             &RenderCache::new(),
-            &InterpreterSettings::default(),
+            &interpreter,
             &RenderSettings {
                 x_scale: scale,
                 y_scale: scale,
@@ -139,7 +153,7 @@ impl ParsedPdf {
         if width == 0 || height == 0 || rgba.len() != width as usize * height as usize * 4 {
             return Err(RenderError::InvalidBitmap);
         }
-        if !transparent {
+        if !transparent && render_annotations {
             let annotations = self.imported_annotations[page_number - 1]
                 .get_or_init(|| imported_annotations::read(page));
             if !annotations.is_empty() {

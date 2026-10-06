@@ -2,13 +2,10 @@
 //! Hayro still renders the page body and is an independent whole-page oracle.
 //! This read-only probe is not the general imported annotation renderer.
 use crate::{
-    annotation_overlay::{
-        render_native_annotation_overlay, render_native_annotation_overlay_pixels_with_content,
-    },
-    Bitmap,
+    annotation_overlay::render_native_annotation_overlay_pixels_over_premultiplied, Bitmap,
 };
 use lopdf::{content::Content, Dictionary, Document, Object, ObjectId};
-use opds_engine_probe::ParsedPdf;
+use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::{Annotation, Kind, Rect};
 use std::sync::Arc;
 
@@ -337,16 +334,62 @@ pub fn render_native_shape_appearances_direct(
     render_shape_appearances_inner(source, page_number, 64, true)
 }
 
-fn render_shape_appearances_inner(
+/// App candidate: render the bare premultiplied PDF content once, then paint
+/// fully validated imported forms in DynLex before adding white paper.
+/// The read-only `*_direct` oracle remains separate for parity tests.
+pub fn render_native_shape_appearances_for_app(
+    pdf: &ParsedPdf,
+    source: &[u8],
+    page_number: usize,
+) -> Result<Option<Raster>, String> {
+    let Some(marks) = stage_shape_appearances(source, page_number, 64, true)? else {
+        return Ok(None);
+    };
+    paint_staged_shapes(pdf, &marks, page_number)
+}
+
+fn paint_staged_shapes(
+    pdf: &ParsedPdf,
+    marks: &[Annotation],
+    page_number: usize,
+) -> Result<Option<Raster>, String> {
+    let mut layer = pdf
+        .render_page_content_without_annotations(page_number, 1.0)
+        .map_err(|e| e.to_string())?;
+    let started = std::time::Instant::now();
+    let Some(painted) = render_native_annotation_overlay_pixels_over_premultiplied(
+        &layer.rgba,
+        layer.width,
+        layer.height,
+        (layer.page_width_pt, layer.page_height_pt),
+        marks,
+        page_number - 1,
+    )?
+    else {
+        return Ok(None);
+    };
+    layer.rgba = painted.rgba;
+    for pixel in layer.rgba.chunks_exact_mut(4) {
+        let paper = 255 - pixel[3];
+        for channel in &mut pixel[..3] {
+            *channel = channel.saturating_add(paper);
+        }
+        pixel[3] = 255;
+    }
+    layer.render_ms += started.elapsed().as_millis();
+    Ok(Some(layer))
+}
+
+fn stage_shape_appearances(
     source: &[u8],
     page_number: usize,
     max_annotations: usize,
     allow_highlights: bool,
-) -> Result<Option<Bitmap>, String> {
+) -> Result<Option<Vec<Annotation>>, String> {
     if source.len() > 2_000_000 || page_number == 0 {
         return Ok(None);
     }
-    let mut doc = Document::load_mem(source).map_err(|e| e.to_string())?;
+    let doc = Document::load_mem(source).map_err(|e| e.to_string())?;
     if doc.is_encrypted() {
         return Ok(None);
     }
@@ -434,52 +477,33 @@ fn render_shape_appearances_inner(
         }
         marks.push(mark);
     }
-    doc.get_object_mut(page_id)
-        .map_err(|e| e.to_string())?
-        .as_dict_mut()
-        .map_err(|e| e.to_string())?
-        .remove(b"Annots");
-    doc.trailer.remove(b"Prev");
-    doc.trailer.remove(b"XRefStm");
-    let mut bare_pdf = Vec::new();
-    doc.save_to(&mut bare_pdf).map_err(|e| e.to_string())?;
-    let bare = ParsedPdf::open(Arc::new(bare_pdf)).map_err(|e| e.to_string())?;
+    Ok(Some(marks))
+}
+
+fn render_shape_appearances_inner(
+    source: &[u8],
+    page_number: usize,
+    max_annotations: usize,
+    allow_highlights: bool,
+) -> Result<Option<Bitmap>, String> {
+    let Some(marks) =
+        stage_shape_appearances(source, page_number, max_annotations, allow_highlights)?
+    else {
+        return Ok(None);
+    };
     let original = ParsedPdf::open(Arc::new(source.to_vec())).map_err(|e| e.to_string())?;
-    let body = bare
-        .render_page(page_number, 1.0)
-        .map_err(|e| e.to_string())?;
+    let Some(actual) = paint_staged_shapes(&original, &marks, page_number)? else {
+        return Ok(None);
+    };
     let expected = original
         .render_page(page_number, 1.0)
         .map_err(|e| e.to_string())?;
-    let highlight = marks.iter().any(|mark| {
-        matches!(
-            mark.kind,
-            Kind::Rectangle {
-                color_rgb: [255, 226, 67]
-            }
-        )
-    });
-    let actual = if highlight {
-        let content = bare
-            .render_page_content_layer(page_number, 1.0)
-            .map_err(|e| e.to_string())?;
-        render_native_annotation_overlay_pixels_with_content(
-            &body.rgba,
-            &content.rgba,
-            body.width,
-            body.height,
-            (body.page_width_pt, body.page_height_pt),
-            &marks,
-            page_number - 1,
-        )?
-    } else {
-        render_native_annotation_overlay(&body, &marks, page_number - 1)?
-    };
-    let Some(actual) = actual else {
-        return Ok(None);
-    };
     Ok((actual.width == expected.width
         && actual.height == expected.height
         && actual.rgba == expected.rgba)
-        .then_some(actual))
+        .then_some(Bitmap {
+            width: actual.width,
+            height: actual.height,
+            rgba: actual.rgba,
+        }))
 }

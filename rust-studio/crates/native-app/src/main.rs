@@ -59,6 +59,7 @@ fn render_page_with_content_layer(
         RenderOutcome {
             raster: visible,
             used: Backend::Hayro,
+            imported_annotations_dynlex: false,
         },
         layer,
     ))
@@ -623,6 +624,7 @@ mod unsaved_annotation_tests {
                 bitmap_page_points: (0.0, 0.0),
                 bitmap_scale: 1.0,
                 bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
                 displayed_page: 0,
                 selected_annotation: None,
                 page_cache: VecDeque::new(),
@@ -665,6 +667,7 @@ struct OpenDocument {
     bitmap_page_points: (f32, f32),
     bitmap_scale: f32,
     bitmap_backend: Backend,
+    imported_annotations_dynlex: bool,
     displayed_page: usize,
     selected_annotation: Option<u64>,
     page_cache: VecDeque<CachedPage>,
@@ -696,6 +699,7 @@ struct CachedPage {
     bitmap_size: (u32, u32),
     page_points: (f32, f32),
     backend: Backend,
+    imported_annotations_dynlex: bool,
     #[cfg(feature = "dynlex-experimental")]
     content_layer: Option<Arc<Vec<u8>>>,
 }
@@ -1055,6 +1059,7 @@ impl OpenDocument {
             self.content_layer_cache.borrow_mut().take();
         }
         self.bitmap_backend = outcome.used;
+        self.imported_annotations_dynlex = outcome.imported_annotations_dynlex;
         self.bitmap_size = (raster.width, raster.height);
         self.bitmap_page_points = (raster.page_width_pt, raster.page_height_pt);
         self.bitmap_scale = scale;
@@ -1089,6 +1094,7 @@ impl OpenDocument {
             bitmap_size: self.bitmap_size,
             page_points: self.bitmap_page_points,
             backend: outcome.used,
+            imported_annotations_dynlex: outcome.imported_annotations_dynlex,
             #[cfg(feature = "dynlex-experimental")]
             content_layer,
         });
@@ -1189,6 +1195,16 @@ mod dynlex_annotation_overlay_tests {
                         });
                     }
                     let saved = pdf_save::export_annotations(&bytes, &marks).unwrap();
+                    if rotation == 90 && colored && square_first {
+                        if let Some(directory) = std::env::var_os("OPDS_IMPORTED_AP_FIXTURE_DIR") {
+                            std::fs::create_dir_all(&directory).unwrap();
+                            std::fs::write(
+                                std::path::Path::new(&directory).join("mixed-imported-ap.pdf"),
+                                &saved,
+                            )
+                            .unwrap();
+                        }
+                    }
                     let expected = ParsedPdf::open(Arc::new(saved.clone()))
                         .unwrap()
                         .render_page(1, 1.0)
@@ -1201,6 +1217,21 @@ mod dynlex_annotation_overlay_tests {
                         direct.rgba, expected.rgba,
                         "rotation={rotation}, colored={colored}, square_first={square_first}"
                     );
+                    let parsed = ParsedPdf::open(Arc::new(saved.clone())).unwrap();
+                    let once = opds_dynlex_backend::render_native_shape_appearances_for_app(
+                        &parsed, &saved, 1,
+                    )
+                    .unwrap()
+                    .expect("one content render plus DynLex imported annotations");
+                    assert_eq!(
+                        once.rgba, expected.rgba,
+                        "single render: rotation={rotation}, colored={colored}, square_first={square_first}"
+                    );
+                    let selected =
+                        render_page_selected(&parsed, &saved, 1, 1.0, Backend::Dynlex).unwrap();
+                    assert_eq!(selected.used, Backend::Hayro);
+                    assert!(selected.imported_annotations_dynlex);
+                    assert_eq!(selected.raster.rgba, expected.rgba);
                     assert!(
                         opds_dynlex_backend::render_square_appearances_direct(&saved, 1)
                             .unwrap()
@@ -1233,6 +1264,17 @@ mod dynlex_annotation_overlay_tests {
                         )
                         .unwrap()
                         .is_none());
+                        let malformed_pdf =
+                            ParsedPdf::open(Arc::new(malformed_bytes.clone())).unwrap();
+                        let fallback = render_page_selected(
+                            &malformed_pdf,
+                            &malformed_bytes,
+                            1,
+                            1.0,
+                            Backend::Dynlex,
+                        )
+                        .unwrap();
+                        assert!(!fallback.imported_annotations_dynlex);
                     }
                 }
             }
@@ -1330,6 +1372,21 @@ mod dynlex_annotation_overlay_tests {
                     direct.rgba, expected.rgba,
                     "rotation={rotation}, reverse={reverse}"
                 );
+                let parsed = ParsedPdf::open(Arc::new(saved.clone())).unwrap();
+                let once = opds_dynlex_backend::render_native_shape_appearances_for_app(
+                    &parsed, &saved, 1,
+                )
+                .unwrap()
+                .expect("one content render plus DynLex imported annotations");
+                assert_eq!(
+                    once.rgba, expected.rgba,
+                    "single render: rotation={rotation}, reverse={reverse}"
+                );
+                let selected =
+                    render_page_selected(&parsed, &saved, 1, 1.0, Backend::Dynlex).unwrap();
+                assert_eq!(selected.used, Backend::Hayro);
+                assert!(selected.imported_annotations_dynlex);
+                assert_eq!(selected.raster.rgba, expected.rgba);
                 assert!(
                     opds_dynlex_backend::render_single_square_appearance_direct(&saved, 1)
                         .unwrap()
@@ -1775,6 +1832,7 @@ mod dynlex_annotation_overlay_tests {
                 bitmap_page_points: (0.0, 0.0),
                 bitmap_scale: 1.0,
                 bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
                 displayed_page: 0,
                 selected_annotation: None,
                 page_cache: VecDeque::new(),
@@ -1887,6 +1945,7 @@ mod dynlex_annotation_overlay_tests {
             bitmap_page_points: (0.0, 0.0),
             bitmap_scale: 1.0,
             bitmap_backend: Backend::Hayro,
+            imported_annotations_dynlex: false,
             displayed_page: 0,
             selected_annotation: None,
             page_cache: VecDeque::new(),
@@ -1901,6 +1960,7 @@ mod dynlex_annotation_overlay_tests {
             RenderOutcome {
                 raster,
                 used: Backend::Hayro,
+                imported_annotations_dynlex: false,
             },
             None,
         );
@@ -1974,6 +2034,7 @@ mod dynlex_annotation_overlay_tests {
             bitmap_page_points: (0.0, 0.0),
             bitmap_scale: 1.0,
             bitmap_backend: Backend::Hayro,
+            imported_annotations_dynlex: false,
             displayed_page: 0,
             selected_annotation: None,
             page_cache: VecDeque::new(),
@@ -1988,6 +2049,7 @@ mod dynlex_annotation_overlay_tests {
             RenderOutcome {
                 raster,
                 used: Backend::Hayro,
+                imported_annotations_dynlex: false,
             },
             None,
         );
@@ -2203,6 +2265,7 @@ mod dynlex_annotation_overlay_tests {
             bitmap_page_points: (0.0, 0.0),
             bitmap_scale: 1.0,
             bitmap_backend: Backend::Hayro,
+            imported_annotations_dynlex: false,
             displayed_page: 0,
             selected_annotation: None,
             page_cache: VecDeque::new(),
@@ -2369,6 +2432,7 @@ mod dynlex_annotation_overlay_tests {
             bitmap_page_points: (0.0, 0.0),
             bitmap_scale: 1.0,
             bitmap_backend: Backend::Hayro,
+            imported_annotations_dynlex: false,
             displayed_page: 0,
             selected_annotation: None,
             page_cache: VecDeque::new(),
@@ -2383,6 +2447,7 @@ mod dynlex_annotation_overlay_tests {
             RenderOutcome {
                 raster,
                 used: Backend::Hayro,
+                imported_annotations_dynlex: false,
             },
             None,
         );
@@ -2431,6 +2496,7 @@ mod dynlex_annotation_overlay_tests {
             RenderOutcome {
                 raster: actual_base,
                 used: Backend::Hayro,
+                imported_annotations_dynlex: false,
             },
             None,
         );
@@ -3178,6 +3244,7 @@ impl App {
                 if let Some(document) = &mut self.document {
                     document.page_cache.clear();
                     document.bitmap = None;
+                    document.imported_annotations_dynlex = false;
                     #[cfg(feature = "dynlex-experimental")]
                     {
                         document.content_layer_in_flight = None;
@@ -3642,6 +3709,7 @@ impl App {
                             bitmap_page_points: (0.0, 0.0),
                             bitmap_scale: initial_scale,
                             bitmap_backend: outcome.used,
+                            imported_annotations_dynlex: outcome.imported_annotations_dynlex,
                             displayed_page: 0,
                             selected_annotation: None,
                             page_cache: VecDeque::new(),
@@ -4021,6 +4089,7 @@ impl App {
             document.bitmap_page_points = cached.page_points;
             document.bitmap_scale = scale;
             document.bitmap_backend = cached.backend;
+            document.imported_annotations_dynlex = cached.imported_annotations_dynlex;
             document.displayed_page = cached.page;
             #[cfg(feature = "dynlex-experimental")]
             {

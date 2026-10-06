@@ -1387,31 +1387,41 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 .model
                 .items()
                 .any(|item| item.page == document.displayed_page);
-            match (document.bitmap_backend, has_annotations, dynlex_annotations) {
-                (opds_dynlex_backend::Backend::Dynlex, _, true) => {
-                    "PDF: DynLex · Annotations: DynLex"
+            if document.imported_annotations_dynlex {
+                if dynlex_annotations {
+                    "PDF: Hayro · Imported AP: DynLex · Native: DynLex"
+                } else if has_annotations {
+                    "PDF: Hayro · Imported AP: DynLex · Native: Iced"
+                } else {
+                    "PDF: Hayro · Imported AP: DynLex"
                 }
-                (opds_dynlex_backend::Backend::Hayro, _, true) => {
-                    "PDF: Hayro fallback · Annotations: DynLex"
+            } else {
+                match (document.bitmap_backend, has_annotations, dynlex_annotations) {
+                    (opds_dynlex_backend::Backend::Dynlex, _, true) => {
+                        "PDF: DynLex · Annotations: DynLex"
+                    }
+                    (opds_dynlex_backend::Backend::Hayro, _, true) => {
+                        "PDF: Hayro fallback · Annotations: DynLex"
+                    }
+                    (opds_dynlex_backend::Backend::Dynlex, true, false) => {
+                        "PDF: DynLex · Annotations: Iced"
+                    }
+                    (opds_dynlex_backend::Backend::Hayro, true, false)
+                        if app.backend == opds_dynlex_backend::Backend::Dynlex =>
+                    {
+                        "PDF: Hayro fallback · Annotations: Iced"
+                    }
+                    (opds_dynlex_backend::Backend::Hayro, true, false) => {
+                        "PDF: Hayro · Annotations: Iced"
+                    }
+                    (opds_dynlex_backend::Backend::Dynlex, false, false) => "Renderer: DynLex",
+                    (opds_dynlex_backend::Backend::Hayro, false, false)
+                        if app.backend == opds_dynlex_backend::Backend::Dynlex =>
+                    {
+                        "Renderer: Hayro (DynLex fallback)"
+                    }
+                    _ => "Renderer: Hayro",
                 }
-                (opds_dynlex_backend::Backend::Dynlex, true, false) => {
-                    "PDF: DynLex · Annotations: Iced"
-                }
-                (opds_dynlex_backend::Backend::Hayro, true, false)
-                    if app.backend == opds_dynlex_backend::Backend::Dynlex =>
-                {
-                    "PDF: Hayro fallback · Annotations: Iced"
-                }
-                (opds_dynlex_backend::Backend::Hayro, true, false) => {
-                    "PDF: Hayro · Annotations: Iced"
-                }
-                (opds_dynlex_backend::Backend::Dynlex, false, false) => "Renderer: DynLex",
-                (opds_dynlex_backend::Backend::Hayro, false, false)
-                    if app.backend == opds_dynlex_backend::Backend::Dynlex =>
-                {
-                    "Renderer: Hayro (DynLex fallback)"
-                }
-                _ => "Renderer: Hayro",
             }
         })
         .unwrap_or("");

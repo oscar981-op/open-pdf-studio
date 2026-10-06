@@ -15,8 +15,8 @@ pub use appearance_stage::flatten_native_free_text_appearance;
 mod imported_appearance;
 #[cfg(feature = "kernel")]
 pub use imported_appearance::{
-    render_native_shape_appearances_direct, render_single_square_appearance_direct,
-    render_square_appearances_direct,
+    render_native_shape_appearances_direct, render_native_shape_appearances_for_app,
+    render_single_square_appearance_direct, render_square_appearances_direct,
 };
 #[cfg(feature = "kernel")]
 mod glyph_scene;
@@ -51,6 +51,9 @@ impl Default for Backend {
 pub struct RenderOutcome {
     pub raster: Raster,
     pub used: Backend,
+    /// True when the PDF body came from Hayro but imported /AP shapes came
+    /// from the validated in-process DynLex annotation compositor.
+    pub imported_annotations_dynlex: bool,
 }
 
 /// Keep Hayro operational for every page/zoom outside the verified DynLex subset.
@@ -73,10 +76,21 @@ pub fn render_with_report(
 ) -> Result<RenderOutcome, RenderError> {
     if backend == Backend::Dynlex {
         let started = std::time::Instant::now();
+        #[cfg(feature = "kernel")]
+        if scale == 1.0 && source.windows(7).any(|window| window == b"/Annots") {
+            if let Ok(Some(raster)) = render_native_shape_appearances_for_app(pdf, source, page) {
+                return Ok(RenderOutcome {
+                    used: Backend::Hayro,
+                    imported_annotations_dynlex: true,
+                    raster,
+                });
+            }
+        }
         if let Ok(Some(bitmap)) = try_render(source, page, scale) {
             let (page_width_pt, page_height_pt) = pdf.page_dimensions(page)?;
             return Ok(RenderOutcome {
                 used: Backend::Dynlex,
+                imported_annotations_dynlex: false,
                 raster: Raster {
                     width: bitmap.width,
                     height: bitmap.height,
@@ -92,6 +106,7 @@ pub fn render_with_report(
     }
     Ok(RenderOutcome {
         used: Backend::Hayro,
+        imported_annotations_dynlex: false,
         raster: pdf.render_page(page, scale)?,
     })
 }

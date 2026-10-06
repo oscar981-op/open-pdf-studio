@@ -105,14 +105,15 @@ Er is daarnaast nu een **afzonderlijke read-only proef**
 `render_single_square_appearance_direct` voor precies één geïmporteerde
 `/Square` met een door de native Save As geschreven, ongefilterde dekkende
 2pt-Form-appearance. Zij controleert de operatorvolgorde, kleur, BBox en
-kwartslagmatrix, verwijdert de appearance uit een tijdelijke kopie, laat
-Hayro alleen de pagina-inhoud tekenen en zet de Square via de DynLex
+kwartslagmatrix, laat Hayro de al geparste pagina zonder annotaties transparant
+tekenen en zet de Square via de DynLex
 OPAN-kernel erboven. Het gehele resultaat moet bytegelijk zijn aan Hayro's
 oorspronkelijke pagina **inclusief** appearance voordat de proef een bitmap
 teruggeeft. Op gewone en verschoven/gecropte pagina's met `/Rotate`
 0/90/180/270 zijn de resultaten volledig gelijk. Een onbekende appearance
-of misvormde rotatie wordt geweigerd. Deze proef is nog niet in de app-router
-opgenomen en is geen algemene `/AP`-interpretatie: Hayro blijft voor de
+of misvormde rotatie wordt geweigerd. De pariteitsoracle van deze read-only
+proef is geen onderdeel van de app-router en de route is geen algemene
+`/AP`-interpretatie: Hayro blijft voor de
 pagina-inhoud én als pariteitsoracle nodig. Ook dit is dus nog geen volledige
 DynLex-annotatielaag.
 
@@ -122,8 +123,8 @@ Squares, deels overlappend boven een gekleurde pagina, zijn in beide
 tekenvolgordes en op alle vier kwartslagen met verschoven CropBox over de
 volledige pagina bytegelijk aan Hayro. Eén ontbrekende `/AP` in de reeks
 weigert de gehele proef; de oude enkelvoudige API weigert meerdere
-annotaties. De app-router gebruikt dit nog niet en de twee Hayro-renders
-(kale pagina en oracle) maken dit een correctheidsproef, geen prestatiepad.
+annotaties. De read-only API gebruikt twee Hayro-renders (kale pagina en
+oracle); hij blijft een correctheidsproef, geen prestatiepad.
 
 `render_native_shape_appearances_direct` laat in dezelfde proef ook de
 native `/Highlight`-Form met gevalideerde `/GS0`-opacity 0,35,
@@ -134,9 +135,31 @@ Geïsoleerde Highlight, beide volgordes Square/Highlight en twee deels
 overlappende Highlights op een gekleurde bron zijn op gewone en 90°/CropBox-
 pagina's volledig RGBA-bytegelijk aan de opgeslagen PDF in Hayro. Onbekende
 appearance-resources of gewijzigde grafische staat worden geweigerd. De
-oude Square-only-API blijft Highlights weigeren. De app gebruikt deze
-nieuwe read-only route nog niet; dit is geen algemene transparantiegroep- of
-annotation-support.
+oude Square-only-API blijft Highlights weigeren. Dit is geen algemene
+transparantiegroep- of annotation-support.
+
+De opt-in app-router gebruikt nu dezelfde strikte parsing via
+`render_native_shape_appearances_for_app` op **100% zoom**. Hij verwijdert de
+gevalideerde `/Annots` niet uit de bron-PDF: Hayro rendert de al geparste
+pagina eenmaal transparant met `render_annotations=false`. Vervolgens tekent
+DynLex de geïmporteerde Square/Highlight-appearances met OPAN en wordt wit
+papier toegevoegd.
+Er is hierbij geen tweede Hayro-oracle per app-render; die blijft wel in de
+read-only regressieproef. Op de acht gekleurde/geroteerde Square-PDF's en de
+acht Square/Highlight-PDF's is de app-route over de hele pagina bytegelijk
+aan Hayro's opgeslagen appearance-render; beschadigde `/QuadPoints` vallen
+terug. De statusregel onderscheidt PDF-inhoud (Hayro) en geïmporteerde
+appearances (DynLex) van de eventuele bewerkbare native annotaties. Dit pad
+leest de annotatiestaat met lopdf bij een niet-gecachete pagina, maar herparst
+de pagina-inhoud niet. Op één gecontroleerde 300×400-fixture waren 30
+afwisselende warme procesparen bytegelijk. Met dezelfde `/usr/bin/time`-wrapper
+voor beide processen was de mediaan voor geselecteerde route/Hayro
+9,988/9,216 ms, het gepaarde mediaanverschil +0,973 ms en won de geselecteerde
+route 6/30 keer. De mediane piek-RSS was 7.268/7.160 KiB. De OS-cache is niet
+gewist en dit is geen algemene prestatiewaarde. Reproduceren met
+`dynlex-engine-poc/rgba/benchmark_native_backend.py --selected`; de
+fixture ontstaat uit de app-test met `OPDS_IMPORTED_AP_FIXTURE_DIR`. Andere
+schalen en niet-bewezen `/AP`-vormen blijven veilig Hayro.
 
 ## Geïsoleerde native Text Box-appearance
 
