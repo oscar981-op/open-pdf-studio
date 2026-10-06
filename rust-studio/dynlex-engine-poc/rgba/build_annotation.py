@@ -52,7 +52,7 @@ entry:
   %null_rgba = icmp eq ptr %rgba, null
   %null = or i1 %null_scene, %null_rgba
   %short = icmp slt i32 %scene_len, 20
-  %long = icmp sgt i32 %scene_len, 13844
+  %long = icmp sgt i32 %scene_len, 14612
   %bad_size = or i1 %short, %long
   %bad = or i1 %null, %bad_size
   br i1 %bad, label %reject, label %header
@@ -67,7 +67,9 @@ header:
   %count = load i32, ptr %count_p, align 1
   %v1 = icmp eq i32 %version, 1
   %v2 = icmp eq i32 %version, 2
-  %known_version = or i1 %v1, %v2
+  %v3 = icmp eq i32 %version, 3
+  %old_version = or i1 %v1, %v2
+  %known_version = or i1 %old_version, %v3
   %bad_version = xor i1 %known_version, true
   %bad_width_min = icmp ult i32 %width, 1
   %bad_height_min = icmp ult i32 %height, 1
@@ -75,7 +77,9 @@ header:
   %bad_height_max = icmp ugt i32 %height, 4096
   %bad_count = icmp ugt i32 %count, 576
   %expected = mul i32 %count, 24
-  %expected_len = add i32 %expected, 20
+  %records_len = add i32 %expected, 20
+  %lut_len = select i1 %v3, i32 768, i32 0
+  %expected_len = add i32 %records_len, %lut_len
   %bad_len = icmp ne i32 %scene_len, %expected_len
   %width64 = zext i32 %width to i64
   %height64 = zext i32 %height to i64

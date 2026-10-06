@@ -82,8 +82,23 @@ fractionele coördinaten, oneven afmetingen en Text Box-selectie/-bewerking blij
 veilig bij Iced. De cache vergelijkt basisbitmap, pagina en de werkelijke
 annotatie-inhoud; een edit maakt een nieuwe bitmap en verwijdert het oude
 selectiebeeld. De statusregel meldt PDF- en annotatierenderer afzonderlijk.
-De OPAN-kaderrand is 2 px binnen de rechthoek; Iced tekent een 1,5px-rand
-met antialiasing. Deze visuele selectie is dus nog niet pixelgelijk.
+Voor deze selectie gebruikt een afzonderlijke OPAN-v3-scène een 1,5px-rand:
+beide randpixels krijgen 191/255-dekking. Drie gevalideerde 256-byte-tabellen
+vertalen de bestaande sRGB-pixels naar de lineair gemengde blauwe rand; DynLex
+kiest de tabelwaarden per pixel. Alleen deze selectie-scène heeft de extra
+768 bytes, en de C-ABI controleert versie en exacte scenelengte. Een
+geselecteerde rode Rectangle krijgt uitsluitend in de viewerpreview een
+1px naar buiten verplaatst 2px-vormkader, zodat hij onder de selectie dezelfde
+positie heeft als in Iced. Het model en de printbare PDF-appearance veranderen
+niet. Bij een geïsoleerde 60×40-rechthoek in het 1200×832-releasevenster waren
+alle **44.928 zichtbare paginapixels** na uitlijnen van de vensters exact
+gelijk tussen DynLex-selectie en Iced. Dit geldt nog niet voor geselecteerde
+Highlights: de PDF-getrouwe DynLex-Highlight en de Iced-preview gebruiken
+verschillende compositie, wat op een gecontroleerde witte pagina 2.084
+pixelverschillen opleverde, ook doordat een tweede niet-geselecteerde Square
+in de Iced-preview een anders gepositioneerde rand heeft. Dit is een gemeten
+UI-limiet, geen verschil in Save As-PDF-pariteit. Selecties die een rand over
+de paginagrens zouden tekenen blijven op Iced.
 
 De 1200×832-releaseapp is met echte XTest-muisinvoer getest op
 `simple-fill-stroke.pdf`: rechthoek tekenen, een 40×30-rect selecteren,
@@ -93,6 +108,14 @@ mouse-up terug naar DynLex, zonder oude selectiebitmap. Een 57×49-rect
 bleef correct op Iced. Ctrl+scroll zoomde 100→132→100%, met Hayro/Iced-
 fallback tijdens de afwijkende zoom. Screenshots staan tijdelijk onder
 `/tmp/opds-dynlex-{even-selected,moving,moved,resizing,resized,ctrl-scroll-in,ctrl-scroll-back}.png`.
+De latere directe selectiepariteit staat tijdelijk in
+`/tmp/opds-selection-aa2-{dynlex,iced}.png`; deze vergelijking corrigeert de
+512px horizontale verschuiving die de bestaande backendwissel in het venster
+veroorzaakte.
+De Highlight-vergelijking staat tijdelijk in
+`/tmp/opds-selection-highlight-{dynlex,iced}.png`; de volgende stap is een
+afzonderlijke UI-kleurmenging voor Highlights en gecentreerde strokepreview
+voor overige rechthoeken, terwijl Save As de bestaande PDF-appearance houdt.
 Een gerichte app-unit-test controleert selectiecache en invalidatie na
 verplaatsing. De native computergebruik-koppeling bood geen vensters aan;
 deze UI-proef gebruikte XTest rechtstreeks op het X11-venster.

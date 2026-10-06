@@ -1,6 +1,6 @@
 //! First bounded DynLex paint path for native annotations over an opaque page.
-//! Editing, selection handles and unsupported annotation kinds remain with the
-//! host until their visual output is independently checked against PDF /AP.
+//! Editing gestures and unsupported annotation kinds remain with the host;
+//! selected pixel-aligned rectangles can also paint their controls here.
 use crate::Bitmap;
 use opds_engine_probe::Raster;
 use opds_native_core::annotations::Annotation;
@@ -110,12 +110,25 @@ pub(crate) fn paint_imported_commands(
 /// Reuse the caller's page allocation across ordered shape/text batches.
 #[cfg(feature = "kernel")]
 pub(crate) fn paint_imported_commands_owned(
-    mut output: Vec<u8>,
+    output: Vec<u8>,
     width: u32,
     height: u32,
     page_points: (f32, f32),
     commands: &[ImportedCommand],
 ) -> Result<Option<Bitmap>, String> {
+    paint_commands_owned(output, width, height, page_points, commands, None)
+}
+
+#[cfg(feature = "kernel")]
+fn paint_commands_owned(
+    mut output: Vec<u8>,
+    width: u32,
+    height: u32,
+    page_points: (f32, f32),
+    commands: &[ImportedCommand],
+    selection_lut: Option<&[u8; 768]>,
+) -> Result<Option<Bitmap>, String> {
+    let selection = selection_lut.is_some();
     if width == 0
         || height == 0
         || width > 4096
@@ -126,28 +139,45 @@ pub(crate) fn paint_imported_commands_owned(
         || output
             .chunks_exact(4)
             .any(|pixel| pixel[..3].iter().any(|channel| *channel > pixel[3]))
+        || (selection && output.chunks_exact(4).any(|pixel| pixel[3] != 255))
         || commands.is_empty()
         || commands.len() > 576
+        || (selection
+            && (commands[0].kind != 5 || commands.iter().skip(1).any(|entry| entry.kind != 1)))
         || commands.iter().any(|entry| {
             let [x0, y0, x1, y1] = entry.rect;
-            !matches!(entry.kind, 1..=4)
+            !(matches!(entry.kind, 1..=4) || (selection && entry.kind == 5))
                 || x0 >= x1
                 || y0 >= y1
                 || x1 > width
                 || y1 > height
                 || (matches!(entry.kind, 1 | 2) && entry.tail[3] != 255)
                 || (matches!(entry.kind, 3 | 4) && entry.tail != [89, 79, 23, 89])
+                || (selection
+                    && if entry.kind == 5 {
+                        entry.tail != [31, 136, 255, 191]
+                    } else {
+                        entry.tail != [31, 136, 255, 255]
+                    })
         })
     {
         return Ok(None);
     }
-    let mut scene = Vec::with_capacity(20 + commands.len() * 24);
+    let mut scene = Vec::with_capacity(20 + commands.len() * 24 + if selection { 768 } else { 0 });
     scene.extend_from_slice(b"OPAN");
-    for value in [2, width, height, commands.len() as u32] {
+    for value in [
+        if selection { 3 } else { 2 },
+        width,
+        height,
+        commands.len() as u32,
+    ] {
         scene.extend_from_slice(&value.to_le_bytes());
     }
     for entry in commands {
         command(&mut scene, entry.kind, entry.rect, entry.tail);
+    }
+    if let Some(lut) = selection_lut {
+        scene.extend_from_slice(lut);
     }
     // SAFETY: Rust has validated the complete scene and RGBA buffer before
     // the narrow ABI. The wrapper also checks lengths and page dimensions.
@@ -201,6 +231,38 @@ pub(crate) fn paint_opaque_imported_rectangles(
     paint_imported_commands(layer_rgba, width, height, page_points, &commands)
 }
 
+#[cfg(feature = "kernel")]
+fn selection_linear_lut() -> &'static [u8; 768] {
+    static LUT: std::sync::OnceLock<[u8; 768]> = std::sync::OnceLock::new();
+    LUT.get_or_init(|| {
+        let to_linear = |byte: u8| {
+            let value = f64::from(byte) / 255.0;
+            if value <= 0.04045 {
+                value / 12.92
+            } else {
+                ((value + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let to_srgb = |linear: f64| {
+            let value = if linear <= 0.0031308 {
+                12.92 * linear
+            } else {
+                1.055 * linear.powf(1.0 / 2.4) - 0.055
+            };
+            (value * 255.0).round().clamp(0.0, 255.0) as u8
+        };
+        let mut lut = [0_u8; 768];
+        for (channel, ink) in [31_u8, 136, 255].into_iter().enumerate() {
+            for source in 0_u16..=255 {
+                let coverage = 191.0 / 255.0;
+                let mixed = to_linear(source as u8) * (1.0 - coverage) + to_linear(ink) * coverage;
+                lut[channel * 256 + source as usize] = to_srgb(mixed);
+            }
+        }
+        lut
+    })
+}
+
 /// Draw the selected native annotation's frame and eight resize grips in the
 /// DynLex layer. Coordinates are deliberately restricted to whole pixels;
 /// the Iced overlay remains the fallback for zoomed or fractional geometry.
@@ -223,15 +285,23 @@ pub fn render_native_selection_overlay_pixels(
         };
         // The handles are six pixels wide around every corner and midpoint.
         // Require an even span so every grip has an integral six-pixel box.
-        if (x1 - x0) % 2 != 0 || (y1 - y0) % 2 != 0 {
+        if (x1 - x0) % 2 != 0
+            || (y1 - y0) % 2 != 0
+            || x0 == 0
+            || y0 == 0
+            || x1 >= width
+            || y1 >= height
+        {
             return Ok(None);
         }
         let blue = [31, 136, 255, 255];
         let mut commands = Vec::with_capacity(9);
         commands.push(ImportedCommand {
-            kind: 2,
-            rect: [x0, y0, x1, y1],
-            tail: blue,
+            // Iced centers its 1.5 px stroke on the annotation boundary:
+            // one 75%-covered pixel on either side of each integer edge.
+            kind: 5,
+            rect: [x0 - 1, y0 - 1, x1 + 1, y1 + 1],
+            tail: [31, 136, 255, 191],
         });
         for (cx, cy) in [
             (x0, y0),
@@ -255,7 +325,14 @@ pub fn render_native_selection_overlay_pixels(
                 });
             }
         }
-        paint_imported_commands(base_rgba, width, height, page_points, &commands)
+        paint_commands_owned(
+            base_rgba.to_vec(),
+            width,
+            height,
+            page_points,
+            &commands,
+            Some(selection_linear_lut()),
+        )
     }
 }
 
@@ -540,6 +617,7 @@ mod tests {
         let mut page = vec![255_u8; width * height * 4];
         // Preserve an existing colored mark beneath the selection overlay.
         page[(12 * width + 14) * 4..(12 * width + 14) * 4 + 4].copy_from_slice(&[220, 45, 30, 255]);
+        page[(7 * width + 14) * 4..(7 * width + 14) * 4 + 4].copy_from_slice(&[231, 76, 60, 255]);
         let rect = Rect {
             x: 8.0,
             y: 8.0,
@@ -569,6 +647,7 @@ mod tests {
             assert_eq!(pixel(x, y), [31, 136, 255, 255]);
         }
         assert_eq!(pixel(14, 12), [220, 45, 30, 255]);
+        assert_eq!(pixel(14, 7), [127, 124, 226, 255]);
         assert_eq!(pixel(4, 4), [255, 255, 255, 255]);
         assert!(render_native_selection_overlay_pixels(
             &page,
@@ -749,6 +828,21 @@ mod tests {
             );
             scene.resize(20 + 577 * 24, 0);
             scene[16..20].copy_from_slice(&577_u32.to_le_bytes());
+            assert_eq!(
+                super::super::opds_paint_annotations(
+                    scene.as_ptr(),
+                    scene.len() as i32,
+                    pixels.as_mut_ptr(),
+                    pixels.len() as i32,
+                ),
+                2
+            );
+            // V3 requires exactly one 768-byte selection LUT after its
+            // records. A truncated table must not reach DynLex indexing.
+            scene.truncate(20);
+            scene[4..8].copy_from_slice(&3_u32.to_le_bytes());
+            scene[16..20].copy_from_slice(&0_u32.to_le_bytes());
+            scene.resize(20 + 767, 0);
             assert_eq!(
                 super::super::opds_paint_annotations(
                     scene.as_ptr(),

@@ -724,7 +724,10 @@ impl OpenDocument {
             }
         }
         let item = self.model.get(selected)?;
-        if item.page != self.displayed_page || !matches!(&item.kind, Kind::Rectangle { .. }) {
+        let Kind::Rectangle { color_rgb } = &item.kind else {
+            return None;
+        };
+        if item.page != self.displayed_page {
             return None;
         }
         let image::Handle::Rgba {
@@ -736,8 +739,73 @@ impl OpenDocument {
         else {
             return None;
         };
+        let selected_source = if *color_rgb == [255, 226, 67] {
+            pixels.as_ref().to_vec()
+        } else {
+            // Iced centers the 2px Rectangle stroke on its bounds. The
+            // normal DynLex /AP path uses the PDF-verified inside stroke;
+            // this selected-only preview shifts that one mark outward by a
+            // pixel without changing the model or saved appearance.
+            let mut marks: Vec<_> = self
+                .model
+                .items()
+                .filter(|mark| mark.page == self.displayed_page)
+                .cloned()
+                .collect();
+            if !marks
+                .iter()
+                .all(|mark| matches!(&mark.kind, Kind::Rectangle { .. }))
+            {
+                return None;
+            }
+            let target = marks.iter_mut().find(|mark| mark.id == selected)?;
+            target.bounds.x -= 1.0;
+            target.bounds.y -= 1.0;
+            target.bounds.width += 2.0;
+            target.bounds.height += 2.0;
+            let base = self.bitmap.as_ref()?;
+            let image::Handle::Rgba { pixels: source, .. } = base else {
+                return None;
+            };
+            #[cfg(feature = "dynlex-experimental")]
+            let content = self.content_layer_cache.borrow();
+            #[cfg(feature = "dynlex-experimental")]
+            let rendered = if let Some(layer) = content
+                .as_ref()
+                .filter(|cached| cached.base == *base && cached.page == self.displayed_page)
+            {
+                opds_dynlex_backend::render_native_annotation_overlay_pixels_with_content(
+                    source.as_ref(),
+                    &layer.rgba,
+                    *width,
+                    *height,
+                    self.bitmap_page_points,
+                    &marks,
+                    self.displayed_page,
+                )
+            } else {
+                opds_dynlex_backend::render_native_annotation_overlay_pixels(
+                    source.as_ref(),
+                    *width,
+                    *height,
+                    self.bitmap_page_points,
+                    &marks,
+                    self.displayed_page,
+                )
+            };
+            #[cfg(not(feature = "dynlex-experimental"))]
+            let rendered = opds_dynlex_backend::render_native_annotation_overlay_pixels(
+                source.as_ref(),
+                *width,
+                *height,
+                self.bitmap_page_points,
+                &marks,
+                self.displayed_page,
+            );
+            rendered.ok().flatten()?.rgba
+        };
         let painted = opds_dynlex_backend::render_native_selection_overlay_pixels(
-            pixels.as_ref(),
+            &selected_source,
             *width,
             *height,
             self.bitmap_page_points,
@@ -2664,6 +2732,9 @@ mod dynlex_annotation_overlay_tests {
             panic!("selected annotation bitmap must be RGBA");
         };
         assert_eq!(&pixels[((16 * 256 + 12) * 4)..][..4], &[31, 136, 255, 255]);
+        // The selected-only centered Square stroke sits under a 75%-covered
+        // blue edge, matching Iced's linear-light blend on this red mark.
+        assert_eq!(&pixels[((15 * 256 + 17) * 4)..][..4], &[127, 124, 226, 255]);
         let mut moved = mark;
         moved.bounds.x = 60.0;
         document.model.apply(Edit::Replace(moved)).unwrap();
