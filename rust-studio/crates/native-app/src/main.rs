@@ -323,6 +323,7 @@ struct App {
     ribbon_collapsed: bool,
     annotation_tool: AnnotationTool,
     annotation_gesture_active: bool,
+    annotation_gesture_preview: Option<AnnotationGesturePreview>,
     annotation_tool_activated: bool,
     next_annotation_id: u64,
     page_scroll_offset: scrollable::AbsoluteOffset,
@@ -686,6 +687,14 @@ struct AnnotationOverlayCache {
     selected_bitmap: Option<(u64, image::Handle)>,
 }
 
+struct AnnotationGesturePreview {
+    selected: u64,
+    page: usize,
+    base: image::Handle,
+    annotations: Vec<Annotation>,
+    bitmap: image::Handle,
+}
+
 #[cfg(feature = "dynlex-experimental")]
 struct ContentLayerCache {
     base: image::Handle,
@@ -712,7 +721,7 @@ impl OpenDocument {
     }
 
     fn dynlex_selected_annotation_bitmap(&self, selected: u64) -> Option<image::Handle> {
-        let static_bitmap = self.dynlex_annotation_bitmap()?;
+        self.dynlex_annotation_bitmap()?;
         if let Some((id, bitmap)) = self
             .annotation_overlay_cache
             .borrow()
@@ -723,6 +732,22 @@ impl OpenDocument {
                 return Some(bitmap.clone());
             }
         }
+        let bounds = self.model.get(selected)?.bounds;
+        let bitmap = self.dynlex_selected_annotation_bitmap_at_bounds(selected, bounds)?;
+        if let Some(cache) = self.annotation_overlay_cache.borrow_mut().as_mut() {
+            cache.selected_bitmap = Some((selected, bitmap.clone()));
+        }
+        Some(bitmap)
+    }
+
+    /// Paint temporary gesture geometry without applying an annotation edit.
+    /// The caller owns cache validity for live previews; saved /AP is untouched.
+    fn dynlex_selected_annotation_bitmap_at_bounds(
+        &self,
+        selected: u64,
+        bounds: Rect,
+    ) -> Option<image::Handle> {
+        let static_bitmap = self.dynlex_annotation_bitmap()?;
         let item = self.model.get(selected)?;
         let Kind::Rectangle { .. } = &item.kind else {
             return None;
@@ -736,12 +761,13 @@ impl OpenDocument {
         // The selected viewer preview follows Iced's centered opaque stroke
         // and linear-light Highlight, while the static bitmap and saved /AP
         // retain the PDF-verified composition.
-        let marks: Vec<_> = self
+        let mut marks: Vec<_> = self
             .model
             .items()
             .filter(|mark| mark.page == self.displayed_page)
             .cloned()
             .collect();
+        marks.iter_mut().find(|mark| mark.id == selected)?.bounds = bounds;
         let base = self.bitmap.as_ref()?;
         let image::Handle::Rgba { pixels: source, .. } = base else {
             return None;
@@ -762,15 +788,15 @@ impl OpenDocument {
             *width,
             *height,
             self.bitmap_page_points,
-            item.bounds,
+            bounds,
         )
         .ok()
         .flatten()?;
-        let bitmap = image::Handle::from_rgba(painted.width, painted.height, painted.rgba);
-        if let Some(cache) = self.annotation_overlay_cache.borrow_mut().as_mut() {
-            cache.selected_bitmap = Some((selected, bitmap.clone()));
-        }
-        Some(bitmap)
+        Some(image::Handle::from_rgba(
+            painted.width,
+            painted.height,
+            painted.rgba,
+        ))
     }
 
     fn dynlex_annotation_bitmap(&self) -> Option<image::Handle> {
@@ -2942,6 +2968,128 @@ mod dynlex_annotation_overlay_tests {
         let _ = app.update(Message::SelectBackend(Backend::Hayro));
         assert_eq!(app.document.as_ref().unwrap().content_layer_in_flight, None);
     }
+
+    #[test]
+    fn live_gesture_preview_keeps_model_unchanged_and_rejects_stale_bitmap() {
+        let source =
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec();
+        let pdf = Arc::new(ParsedPdf::open(Arc::new(source.clone())).unwrap());
+        let raster = pdf.render_page(1, 1.0).unwrap();
+        let original = Rect {
+            x: 12.0,
+            y: 16.0,
+            width: 40.0,
+            height: 28.0,
+        };
+        let mut model = DocumentModel::new(DocumentId(91), 1).unwrap();
+        model
+            .apply(Edit::Add(Annotation {
+                id: 1,
+                page: 0,
+                bounds: original,
+                kind: Kind::Rectangle {
+                    color_rgb: [231, 76, 60],
+                },
+            }))
+            .unwrap();
+        let mut document = OpenDocument {
+            path: "fixture.pdf".into(),
+            source_bytes: Arc::new(source),
+            pdf,
+            model,
+            last_saved_annotations: Vec::new(),
+            bitmap: None,
+            annotation_overlay_cache: RefCell::new(None),
+            content_layer_cache: RefCell::new(None),
+            content_layer_in_flight: None,
+            bitmap_size: (0, 0),
+            bitmap_page_points: (0.0, 0.0),
+            bitmap_scale: 1.0,
+            bitmap_backend: Backend::Hayro,
+            imported_annotations_dynlex: false,
+            displayed_page: 0,
+            selected_annotation: Some(1),
+            page_cache: VecDeque::new(),
+            thumbnails: VecDeque::new(),
+            thumbnail_in_flight: None,
+            thumbnail_failed: HashSet::new(),
+            thumbnail_focus: 0,
+        };
+        document.cache_bitmap(
+            0,
+            1.0,
+            RenderOutcome {
+                raster,
+                used: Backend::Hayro,
+                imported_annotations_dynlex: false,
+            },
+            None,
+        );
+        let mut app = App {
+            backend: Backend::Dynlex,
+            annotation_gesture_active: true,
+            document: Some(document),
+            ..Default::default()
+        };
+        let moved = Rect {
+            x: 22.0,
+            ..original
+        };
+        let _ = app.update(Message::AnnotationGesturePreview(1, moved));
+        let document = app.document.as_ref().unwrap();
+        assert_eq!(document.model.get(1).unwrap().bounds, original);
+        let preview = app
+            .dynlex_live_gesture_bitmap(document)
+            .expect("whole-pixel move must use DynLex");
+        let image::Handle::Rgba { pixels, .. } = preview else {
+            panic!("gesture preview must be RGBA");
+        };
+        assert_eq!(&pixels[((16 * 256 + 22) * 4)..][..4], &[31, 136, 255, 255]);
+
+        let _ = app.update(Message::AnnotationGesturePreview(
+            1,
+            Rect { x: 22.5, ..moved },
+        ));
+        assert!(app
+            .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
+            .is_none());
+        let _ = app.update(Message::AnnotationGesturePreview(
+            1,
+            Rect {
+                width: 41.0,
+                ..moved
+            },
+        ));
+        assert!(app
+            .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
+            .is_none());
+        let _ = app.update(Message::AnnotationGesturePreview(1, moved));
+        assert!(app
+            .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
+            .is_some());
+        let mut edited = app.document.as_ref().unwrap().model.get(1).unwrap().clone();
+        edited.bounds.x += 2.0;
+        app.document
+            .as_mut()
+            .unwrap()
+            .model
+            .apply(Edit::Replace(edited))
+            .unwrap();
+        assert!(app
+            .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
+            .is_none());
+        let _ = app.update(Message::AnnotationGesturePreview(1, moved));
+        assert!(app
+            .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
+            .is_some());
+        app.document.as_mut().unwrap().bitmap =
+            Some(image::Handle::from_rgba(256, 192, vec![255; 256 * 192 * 4]));
+        assert!(app
+            .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
+            .is_none());
+        let _ = app.update(Message::AnnotationGestureEnded);
+        assert!(app.annotation_gesture_preview.is_none());
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -3051,6 +3199,7 @@ enum Message {
     SelectAnnotationTool(AnnotationTool),
     SelectAnnotation(Option<u64>),
     AnnotationGestureStarted,
+    AnnotationGesturePreview(u64, Rect),
     AnnotationGestureEnded,
     MoveAnnotation(u64, [f64; 2]),
     ResizeAnnotation(u64, Rect),
@@ -3070,6 +3219,41 @@ enum Message {
 }
 
 impl App {
+    fn dynlex_visible_annotation_bitmap(&self, document: &OpenDocument) -> Option<image::Handle> {
+        if self.backend != Backend::Dynlex || self.editing_text_id.is_some() {
+            return None;
+        }
+        if self.annotation_gesture_active {
+            return self.dynlex_live_gesture_bitmap(document);
+        }
+        match document.selected_annotation {
+            Some(id) => document.dynlex_selected_annotation_bitmap(id),
+            None => document.dynlex_annotation_bitmap(),
+        }
+    }
+
+    fn dynlex_live_gesture_bitmap(&self, document: &OpenDocument) -> Option<image::Handle> {
+        if !self.annotation_gesture_active
+            || self.backend != Backend::Dynlex
+            || self.editing_text_id.is_some()
+        {
+            return None;
+        }
+        let preview = self.annotation_gesture_preview.as_ref()?;
+        if preview.page != document.displayed_page
+            || document.selected_annotation != Some(preview.selected)
+            || document.bitmap.as_ref() != Some(&preview.base)
+            || !document
+                .model
+                .items()
+                .filter(|item| item.page == preview.page)
+                .eq(preview.annotations.iter())
+        {
+            return None;
+        }
+        Some(preview.bitmap.clone())
+    }
+
     fn has_unsaved_work(&self) -> bool {
         self.text_dialog || self.document.as_ref().is_some_and(OpenDocument::is_dirty)
     }
@@ -3485,6 +3669,7 @@ impl App {
                 }
                 self.backend = backend;
                 self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
                 self.backend_generation = self.backend_generation.wrapping_add(1);
                 if let Some(document) = &mut self.document {
                     document.page_cache.clear();
@@ -3537,6 +3722,7 @@ impl App {
             }
             Message::SelectAnnotationTool(tool) => {
                 self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
                 self.annotation_tool = tool;
                 self.annotation_tool_activated = true;
             }
@@ -3723,6 +3909,7 @@ impl App {
             }
             Message::SelectAnnotation(id) => {
                 self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
                 if let Some(document) = &mut self.document {
                     document.selected_annotation = id.filter(|id| {
                         document
@@ -3757,12 +3944,42 @@ impl App {
             }
             Message::AnnotationGestureStarted => {
                 self.annotation_gesture_active = true;
+                self.annotation_gesture_preview = None;
+            }
+            Message::AnnotationGesturePreview(id, bounds) => {
+                self.annotation_gesture_preview = None;
+                if self.annotation_gesture_active && self.backend == Backend::Dynlex {
+                    if let Some(document) = self.document.as_ref() {
+                        if document.selected_annotation == Some(id) {
+                            let annotations: Vec<_> = document
+                                .model
+                                .items()
+                                .filter(|item| item.page == document.displayed_page)
+                                .cloned()
+                                .collect();
+                            if let (Some(base), Some(bitmap)) = (
+                                document.bitmap.clone(),
+                                document.dynlex_selected_annotation_bitmap_at_bounds(id, bounds),
+                            ) {
+                                self.annotation_gesture_preview = Some(AnnotationGesturePreview {
+                                    selected: id,
+                                    page: document.displayed_page,
+                                    base,
+                                    annotations,
+                                    bitmap,
+                                });
+                            }
+                        }
+                    }
+                }
             }
             Message::AnnotationGestureEnded => {
                 self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
             }
             Message::MoveAnnotation(id, delta) => {
                 self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
                 if let Some(document) = &mut self.document {
                     if document.selected_annotation == Some(id)
                         && delta.iter().all(|value| value.is_finite())
@@ -3789,6 +4006,7 @@ impl App {
             }
             Message::ResizeAnnotation(id, bounds) => {
                 self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
                 if let Some(document) = &mut self.document {
                     if document.selected_annotation == Some(id) {
                         let page_width = f64::from(document.bitmap_page_points.0);

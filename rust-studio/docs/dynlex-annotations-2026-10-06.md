@@ -76,12 +76,20 @@ loopt. Bij een geselecteerde pixeluitgelijnde Rectangle/Highlight met even breed
 hoogte tekent een tweede begrensde OPAN-pass ook het blauwe kader en de acht
 6×6-formaatgrepen via DynLex. De app bewaart alleen het geselecteerde
 eindbeeld in de annotatiecache. Bij mouse-down op een annotatie of greep
-schakelt zij tijdelijk naar het Iced-canvas voor de levende verplaats- of
-vergrotingspreview; mouse-up maakt de DynLex-selectie opnieuw. Andere zoom,
+houdt Iced de pointergestures bij. Bij passende gehele coördinaten en even
+afmetingen stuurt elke muisbeweging tijdelijke grenzen naar een afzonderlijke
+DynLex-viewerpreview; het opgeslagen annotatiemodel verandert pas op mouse-up.
+Bij een ongeschikte tussenstand tekent Iced de levende preview. Andere zoom,
 fractionele coördinaten, oneven afmetingen en Text Box-selectie/-bewerking blijven
 veilig bij Iced. De cache vergelijkt basisbitmap, pagina en de werkelijke
 annotatie-inhoud; een edit maakt een nieuwe bitmap en verwijdert het oude
 selectiebeeld. De statusregel meldt PDF- en annotatierenderer afzonderlijk.
+De levende DynLex-bitmap wordt alleen getoond zolang selectie, pagina,
+basisbitmap en annotatiesnapshot overeenkomen; bij een oude async-rendering,
+andere backend of mouse-up vervalt zij. Deze tijdelijke bitmap wordt niet in
+de statische annotatiecache of Save As opgenomen. Voor elke nieuwe
+muispositie wordt nu de begrensde volledige paginabitmap opnieuw opgebouwd;
+grote pagina's hebben nog geen tegelsnelheid- of RSS-meting voor live slepen.
 Voor deze selectie gebruikt een afzonderlijke OPAN-v3-scène een 1,5px-rand:
 beide randpixels krijgen 191/255-dekking. Drie gevalideerde 256-byte-tabellen
 vertalen de bestaande sRGB-pixels naar de lineair gemengde blauwe rand; DynLex
@@ -126,6 +134,18 @@ Screenshots: `/tmp/opds-ui-preview-overlap-{dynlex,iced}.png`. Dit is nog
 geen volledige UI-pariteit en de OPAN-v4-preview is voorlopig alleen actief
 bij geselecteerde vormannotaties; andere zoom, tekst en paginaranden blijven
 veilig bij Iced.
+Een latere XTest-proef met de releaseapp op 1200×832 verplaatste een
+geselecteerde Rectangle 10×10 px en vergrootte hem daarna via de
+zuidoostgreep 10×10 px. Tijdens beide gestes bleef de status
+`Annotations: DynLex`; het paginabeeld tijdens slepen was na mouse-up
+pixelgelijk. Vervolgens werden de acht grepen achtereenvolgens elk 4 px
+verschoven; voor alle acht waren de 256×192 paginapixels vóór en ná
+mouse-up gelijk. Een overlappende geselecteerde Highlight bleef tijdens
+10×10px verplaatsing eveneens op DynLex en gaf dezelfde live/eindpixels.
+Toolbar Undo/Redo werkte; Ctrl+scroll ging 100→132→100% met Iced-fallback
+op 132%. De Hayro/Iced-route toonde nog steeds een bewegende Highlight.
+De screenshots staan tijdelijk onder `/tmp/opds-live-eight-*`,
+`/tmp/opds-live-highlight-*` en `/tmp/opds-live-dynlex-ctrl-scroll-*`.
 Een gerichte app-unit-test controleert selectiecache en invalidatie na
 verplaatsing. De native computergebruik-koppeling bood geen vensters aan;
 deze UI-proef gebruikte XTest rechtstreeks op het X11-venster.

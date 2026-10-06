@@ -248,13 +248,40 @@ impl canvas::Program<Message> for Layer<'_> {
                 if let Some(moving) = &mut state.moving {
                     if let Some(position) = position {
                         moving.current = position;
-                        return Some(canvas::Action::request_redraw().and_capture());
+                        let original = self.model.get(moving.id)?.bounds;
+                        let [dx, dy] = self.page_point(
+                            Point::new(position.x - moving.start.x, position.y - moving.start.y),
+                            bounds,
+                        );
+                        return Some(
+                            canvas::Action::publish(Message::AnnotationGesturePreview(
+                                moving.id,
+                                Rect {
+                                    x: original.x + dx,
+                                    y: original.y + dy,
+                                    ..original
+                                },
+                            ))
+                            .and_capture(),
+                        );
                     }
                 }
                 if let Some(resizing) = &mut state.resizing {
                     if let Some(position) = position {
                         resizing.current = position;
-                        return Some(canvas::Action::request_redraw().and_capture());
+                        let rect = self.resized_bounds(
+                            resizing.original,
+                            resizing.handle,
+                            position,
+                            bounds,
+                        );
+                        return Some(
+                            canvas::Action::publish(Message::AnnotationGesturePreview(
+                                resizing.id,
+                                rect,
+                            ))
+                            .and_capture(),
+                        );
                     }
                 }
                 None
