@@ -930,20 +930,20 @@ impl OpenDocument {
         while at < annotations.len() {
             if matches!(&annotations[at].kind, Kind::Text { .. }) {
                 let text = &annotations[at];
-                let origin = [text.bounds.x as u32, text.bounds.y as u32];
-                let scene =
-                    native_text_scene::stage_native_text_box_scene_at_origin(text, origin).ok()?;
+                let tiles = native_text_scene::stage_native_text_box_tiles(text).ok()?;
                 let clip = [
                     text.bounds.x as u32,
                     text.bounds.y as u32,
                     (text.bounds.x + text.bounds.width) as u32,
                     (text.bounds.y + text.bounds.height) as u32,
                 ];
-                current = opds_dynlex_backend::render_validated_glyph_scene_over_opaque_at_origin(
-                    &scene, &current, width, height, clip, origin,
-                )
-                .ok()?
-                .rgba;
+                for (scene, origin) in tiles {
+                    current = opds_dynlex_backend::render_validated_glyph_scene_over_opaque_at_origin_owned(
+                        &scene, current, width, height, clip, origin,
+                    )
+                    .ok()?
+                    .rgba;
+                }
                 at += 1;
             } else {
                 let end = annotations[at..]
@@ -1007,21 +1007,20 @@ impl OpenDocument {
         while at < annotations.len() {
             if matches!(&annotations[at].kind, Kind::Text { .. }) {
                 let text = &annotations[at];
-                let origin = [text.bounds.x as u32, text.bounds.y as u32];
-                let scene =
-                    native_text_scene::stage_native_text_box_scene_at_origin(text, origin).ok()?;
+                let tiles = native_text_scene::stage_native_text_box_tiles(text).ok()?;
                 let clip = [
                     text.bounds.x as u32,
                     text.bounds.y as u32,
                     (text.bounds.x + text.bounds.width) as u32,
                     (text.bounds.y + text.bounds.height) as u32,
                 ];
-                layer =
-                    opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied_at_origin(
-                        &scene, &layer, width, height, clip, origin,
+                for (scene, origin) in tiles {
+                    layer = opds_dynlex_backend::render_validated_glyph_scene_over_premultiplied_at_origin_owned(
+                        &scene, layer, width, height, clip, origin,
                     )
                     .ok()?
                     .rgba;
+                }
                 at += 1;
             } else {
                 let end = annotations[at..]
@@ -1105,13 +1104,14 @@ mod dynlex_annotation_overlay_tests {
 
     #[test]
     fn large_page_tiled_text_boxes_match_saved_pdf() {
-        for (rotated, content, x, y, a1) in [
+        for (rotated, content, x, y, a1, (wide, tall)) in [
             (
                 false,
                 b"0.2 0.5 0.8 rg 0 0 650 900 re f".as_slice(),
                 330.0,
                 480.0,
                 false,
+                (false, false),
             ),
             (
                 false,
@@ -1119,6 +1119,7 @@ mod dynlex_annotation_overlay_tests {
                 279.0,
                 205.0,
                 false,
+                (false, false),
             ),
             (
                 true,
@@ -1126,6 +1127,7 @@ mod dynlex_annotation_overlay_tests {
                 500.0,
                 330.0,
                 false,
+                (false, false),
             ),
             (
                 true,
@@ -1133,6 +1135,7 @@ mod dynlex_annotation_overlay_tests {
                 261.0,
                 203.0,
                 false,
+                (false, false),
             ),
             (
                 true,
@@ -1140,6 +1143,31 @@ mod dynlex_annotation_overlay_tests {
                 1800.0,
                 1200.0,
                 true,
+                (false, false),
+            ),
+            (
+                false,
+                b"0.2 0.5 0.8 rg 0 0 650 900 re f".as_slice(),
+                80.0,
+                240.0,
+                false,
+                (true, false),
+            ),
+            (
+                true,
+                b"0.2 0.5 0.8 rg 270 210 260 240 re f".as_slice(),
+                300.0,
+                150.0,
+                false,
+                (true, false),
+            ),
+            (
+                false,
+                b"0.2 0.5 0.8 rg 0 0 650 900 re f".as_slice(),
+                100.0,
+                100.0,
+                false,
+                (false, true),
             ),
         ] {
             let mut source = lopdf::Document::load_mem(include_bytes!(
@@ -1204,13 +1232,25 @@ mod dynlex_annotation_overlay_tests {
                     bounds: Rect {
                         x,
                         y,
-                        width: 120.0,
-                        height: 60.0,
+                        width: if wide {
+                            410.0
+                        } else if tall {
+                            200.0
+                        } else {
+                            120.0
+                        },
+                        height: if tall { 350.0 } else { 60.0 },
                     },
                     kind: Kind::Text {
-                        value: "ΩΩΩ".into(),
+                        value: if wide {
+                            "Ω".repeat(25)
+                        } else if tall {
+                            "ΩΩ\nΩΩ\nΩΩ\nΩΩ".into()
+                        } else {
+                            "ΩΩΩ".into()
+                        },
                         color_rgb: [0, 80, 240],
-                        font_size: 20,
+                        font_size: if tall { 72 } else { 20 },
                         align: TextAlign::Center,
                     },
                 },
@@ -1247,6 +1287,14 @@ mod dynlex_annotation_overlay_tests {
             let mut model = DocumentModel::new(DocumentId(102), 1).unwrap();
             for mark in &marks {
                 model.apply(Edit::Add(mark.clone())).unwrap();
+            }
+            if wide || tall {
+                assert!(
+                    native_text_scene::stage_native_text_box_tiles(&marks[0])
+                        .unwrap()
+                        .len()
+                        > 1
+                );
             }
             let mut document = OpenDocument {
                 path: "large-tiled-text.pdf".into(),

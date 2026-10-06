@@ -363,6 +363,78 @@ pub fn stage_native_text_box_scene_at_origin(
     mark: &Annotation,
     origin: [u32; 2],
 ) -> Result<Vec<u8>, String> {
+    let bounds = mark.bounds;
+    if bounds.x < f64::from(origin[0])
+        || bounds.y < f64::from(origin[1])
+        || bounds.x + bounds.width > f64::from(origin[0]) + 256.0
+        || bounds.y + bounds.height > f64::from(origin[1]) + 192.0
+    {
+        return Err("Text Box is outside proven glyph tile geometry".into());
+    }
+    let glyphs = collect_native_text_box_glyphs(mark)?;
+    encode_native_glyph_tile(&glyphs, origin)
+}
+
+struct NativeGlyph {
+    opm: Vec<u8>,
+    old_shift: [f64; 2],
+    bounds: [f64; 4],
+    gid: u16,
+    color_rgb: [u8; 3],
+}
+
+/// Partition a Text Box into bounded local tiles without changing PDF glyph
+/// paint order. A glyph is never split; unsupported large glyphs fall back.
+pub fn stage_native_text_box_tiles(mark: &Annotation) -> Result<Vec<(Vec<u8>, [u32; 2])>, String> {
+    let glyphs = collect_native_text_box_glyphs(mark)?;
+    let mut tiles = Vec::new();
+    let mut start = 0;
+    while start < glyphs.len() {
+        let mut end = start;
+        let mut bounds = [
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ];
+        while end < glyphs.len() && end - start < 32 {
+            let glyph = &glyphs[end];
+            let next = [
+                bounds[0].min(glyph.bounds[0]),
+                bounds[1].min(glyph.bounds[1]),
+                bounds[2].max(glyph.bounds[2]),
+                bounds[3].max(glyph.bounds[3]),
+            ];
+            let ox = next[0].floor();
+            let oy = next[1].floor();
+            if !ox.is_finite()
+                || !oy.is_finite()
+                || ox < 0.0
+                || oy < 0.0
+                || ox > f64::from(u32::MAX)
+                || oy > f64::from(u32::MAX)
+                || next[2] > ox + 256.0
+                || next[3] > oy + 192.0
+            {
+                if end == start {
+                    return Err("native glyph cannot fit a bounded tile".into());
+                }
+                break;
+            }
+            bounds = next;
+            end += 1;
+        }
+        let origin = [bounds[0].floor() as u32, bounds[1].floor() as u32];
+        tiles.push((
+            encode_native_glyph_tile(&glyphs[start..end], origin)?,
+            origin,
+        ));
+        start = end;
+    }
+    Ok(tiles)
+}
+
+fn collect_native_text_box_glyphs(mark: &Annotation) -> Result<Vec<NativeGlyph>, String> {
     let Kind::Text {
         value,
         color_rgb,
@@ -379,10 +451,8 @@ pub fn stage_native_text_box_scene_at_origin(
             .any(|v| !v.is_finite() || *v < 0.0 || v.fract() != 0.0)
         || bounds.width < 4.0
         || bounds.height < f64::from(*font_size)
-        || bounds.x < f64::from(origin[0])
-        || bounds.y < f64::from(origin[1])
-        || bounds.x + bounds.width > f64::from(origin[0]) + 256.0
-        || bounds.y + bounds.height > f64::from(origin[1]) + 192.0
+        || bounds.x + bounds.width > 4096.0
+        || bounds.y + bounds.height > 4096.0
     {
         return Err("Text Box is outside proven glyph tile geometry".into());
     }
@@ -396,8 +466,7 @@ pub fn stage_native_text_box_scene_at_origin(
     }
     let units = f64::from(face.units_per_em());
     let size = f64::from(*font_size);
-    let mut records = Vec::new();
-    let mut glyph_count = 0_usize;
+    let mut glyphs = Vec::new();
     for (index, line) in lines.iter().enumerate() {
         // Save As sums unscaled advances first, then scales the line once.
         let advance_units = line.text.chars().try_fold(0_u64, |total, ch| {
@@ -442,7 +511,7 @@ pub fn stage_native_text_box_scene_at_origin(
                     bounds.x + line_x + offset,
                     bounds.y + size + index as f64 * (size + 4.0),
                 ];
-                let (mut opm, old_shift) = text_quad_glyph::stage(
+                let (opm, old_shift) = text_quad_glyph::stage(
                     text_layout::FONT_BYTES,
                     gid.0,
                     matrix,
@@ -462,25 +531,14 @@ pub fn stage_native_text_box_scene_at_origin(
                 {
                     return Err("native glyph would require Text Box clipping".into());
                 }
-                if origin == [0, 0] {
-                    text_quad_glyph::rebase(&mut opm, old_shift, [0.0, 0.0])
-                } else {
-                    text_quad_glyph::rebase_screen_f32(&mut opm, old_shift, origin)
-                }
-                .map_err(|error| error.to_string())?;
-                let mut name = [0_u8; 32];
-                name[..5].copy_from_slice(b"OPDS0");
-                records.extend_from_slice(&name);
-                records.extend_from_slice(&gid.0.to_le_bytes()); // Identity CID
-                records.extend_from_slice(&gid.0.to_le_bytes()); // Identity GID
-                records.extend_from_slice(color_rgb);
-                records.push(0);
-                records.extend_from_slice(&(opm.len() as u32).to_le_bytes());
-                records.extend_from_slice(&opm);
-                glyph_count += 1;
-                if records.len() + 20 > 140_000 {
-                    return Err("native glyph scene exceeds bound".into());
-                }
+                let quantized_bounds = glyph.map(|value| f64::from(value as f32));
+                glyphs.push(NativeGlyph {
+                    opm,
+                    old_shift,
+                    bounds: quantized_bounds,
+                    gid: gid.0,
+                    color_rgb: *color_rgb,
+                });
             }
             // The PDF CID width is a lopdf Real (f32), not an unrounded
             // TTF advance. Match each Tj text cursor exactly.
@@ -488,14 +546,42 @@ pub fn stage_native_text_box_scene_at_origin(
             offset += f64::from(cid_width) * size / 1000.0;
         }
     }
-    // OPGS v1 is deliberately bounded to a small number of painted glyphs.
     // Spaces and blank visual lines affect placement but create no records.
-    if !(2..=32).contains(&glyph_count) {
+    if glyphs.is_empty() || glyphs.len() > 64 {
         return Err("native painted glyph count outside OPGS limit".into());
+    }
+    Ok(glyphs)
+}
+
+fn encode_native_glyph_tile(glyphs: &[NativeGlyph], origin: [u32; 2]) -> Result<Vec<u8>, String> {
+    if glyphs.is_empty() || glyphs.len() > 32 {
+        return Err("native glyph tile count outside OPGS limit".into());
+    }
+    let mut records = Vec::new();
+    for glyph in glyphs {
+        let mut opm = glyph.opm.clone();
+        if origin == [0, 0] {
+            text_quad_glyph::rebase(&mut opm, glyph.old_shift, [0.0, 0.0])
+        } else {
+            text_quad_glyph::rebase_screen_f32(&mut opm, glyph.old_shift, origin)
+        }
+        .map_err(|error| error.to_string())?;
+        let mut name = [0_u8; 32];
+        name[..5].copy_from_slice(b"OPDS0");
+        records.extend_from_slice(&name);
+        records.extend_from_slice(&glyph.gid.to_le_bytes()); // Identity CID
+        records.extend_from_slice(&glyph.gid.to_le_bytes()); // Identity GID
+        records.extend_from_slice(&glyph.color_rgb);
+        records.push(0);
+        records.extend_from_slice(&(opm.len() as u32).to_le_bytes());
+        records.extend_from_slice(&opm);
+        if records.len() + 20 > 140_000 {
+            return Err("native glyph scene exceeds bound".into());
+        }
     }
     let mut scene = Vec::with_capacity(20 + records.len());
     scene.extend_from_slice(b"OPGS");
-    for word in [1_u32, 256, 192, glyph_count as u32] {
+    for word in [1_u32, 256, 192, glyphs.len() as u32] {
         scene.extend_from_slice(&word.to_le_bytes());
     }
     scene.extend_from_slice(&records);

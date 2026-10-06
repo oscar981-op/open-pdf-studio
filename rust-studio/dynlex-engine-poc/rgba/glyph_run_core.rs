@@ -61,7 +61,7 @@ fn read_scene(bytes: &[u8]) -> Result<Vec<(Vec<u64>, [u8; 3])>, Box<dyn Error>> 
     }
     let word = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
     let count = word(16) as usize;
-    if word(4) != 1 || word(8) != 256 || word(12) != 192 || !(2..=32).contains(&count) {
+    if word(4) != 1 || word(8) != 256 || word(12) != 192 || !(1..=32).contains(&count) {
         return Err("invalid OPGS version, dimensions or glyph count".into());
     }
     let mut at = 20;
@@ -172,6 +172,17 @@ pub fn render_opgs_over_opaque_at_origin(
     render_opgs_over_page(scene, base, width, height, clip, origin, false, true)
 }
 
+pub fn render_opgs_over_opaque_at_origin_owned(
+    scene: &[u8],
+    base: Vec<u8>,
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_opgs_over_page_owned(scene, base, width, height, clip, origin, false, true)
+}
+
 /// Experimental direct drawing into a premultiplied page-content layer.
 /// The caller must compose the resulting layer over the viewer's paper.
 pub fn render_opgs_over_premultiplied(
@@ -195,9 +206,52 @@ pub fn render_opgs_over_premultiplied_at_origin(
     render_opgs_over_page(scene, base, width, height, clip, origin, true, true)
 }
 
+pub fn render_opgs_over_premultiplied_at_origin_owned(
+    scene: &[u8],
+    base: Vec<u8>,
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_opgs_over_page_owned(scene, base, width, height, clip, origin, true, true)
+}
+
 fn render_opgs_over_page(
     scene: &[u8],
     base: &[u8],
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+    premultiplied: bool,
+    tiled: bool,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let pixel_count = u64::from(width) * u64::from(height);
+    if width == 0
+        || height == 0
+        || width > if tiled { 4096 } else { 256 }
+        || height > 4096
+        || pixel_count > 6_000_000
+        || base.len() as u64 != pixel_count * 4
+    {
+        return Err("glyph page is outside bounded compositor route".into());
+    }
+    render_opgs_over_page_owned(
+        scene,
+        base.to_vec(),
+        width,
+        height,
+        clip,
+        origin,
+        premultiplied,
+        tiled,
+    )
+}
+
+fn render_opgs_over_page_owned(
+    scene: &[u8],
+    mut output: Vec<u8>,
     width: u32,
     height: u32,
     clip: [u32; 4],
@@ -214,8 +268,8 @@ fn render_opgs_over_page(
         || height == 0
         || height > 4096
         || (width as u64) * (height as u64) > 6_000_000
-        || base.len() != pixels.checked_mul(4).ok_or("glyph RGBA length overflow")?
-        || base.chunks_exact(4).any(|pixel| {
+        || output.len() != pixels.checked_mul(4).ok_or("glyph RGBA length overflow")?
+        || output.chunks_exact(4).any(|pixel| {
             if premultiplied {
                 pixel[..3].iter().any(|channel| *channel > pixel[3])
             } else {
@@ -227,15 +281,16 @@ fn render_opgs_over_page(
         || clip[2] > width
         || clip[3] > height
         || (tiled
-            && (origin[0] > clip[0]
-                || origin[1] > clip[1]
-                || clip[2] - origin[0] > 256
-                || clip[3] - origin[1] > 192))
+            && (origin[0] >= width
+                || origin[1] >= height
+                || origin[0] >= clip[2]
+                || origin[1] >= clip[3]
+                || origin[0] + 256 <= clip[0]
+                || origin[1] + 192 <= clip[1]))
         || (!tiled && (origin != [0, 0] || clip[2] > 256 || clip[3] > 192))
     {
         return Err("glyph page is outside bounded compositor route".into());
     }
-    let mut output = base.to_vec();
     let mut alpha = vec![0_u8; GLYPH_PIXELS];
     let header_len = if tiled { 44 } else { 36 };
     let mut command = vec![0_u8; header_len + GLYPH_PIXELS];

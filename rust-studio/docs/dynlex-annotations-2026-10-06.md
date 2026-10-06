@@ -251,14 +251,25 @@ geldig. De pagina mag maximaal 4096 pixels per zijde en 6 miljoen pixels
 hebben, mits de PDF-bronlaag afzonderlijk bytegewijs is gevalideerd. De
 schermcoördinaten worden vóór het aftrekken van de tegeloorsprong naar `f32`
 afgerond; anders gaf een 90°/CropBox-proef één afwijkende 8-bit-kleurbyte.
-De annotaties blijven in ID-/laagvolgorde getekend, met eigen tegel per
-Text Box. Vijf volledige Save As-/Hayro-proeven zijn RGBA-bytegelijk:
+De annotaties blijven in ID-/laagvolgorde getekend. De staging verdeelt een
+Text Box die breder of hoger is dan één tegel op glyphgrenzen over opeenvolgende
+OPGS-runs. Iedere glyph blijft heel en de tekenvolgorde blijft gelijk; een
+glyph die zelf niet in 256×192 past, valt terug. De compositor ontvangt
+steeds de volledige Text Box als clip, maar toetst ook de daadwerkelijke
+glyphdekking binnen dat vak. OPGS met één glyph is daarom geldig. De
+app-route geeft de paginabuffer aan de volgende tegel door zonder per tegel
+een volledige RGBA-kopie te maken.
+
+Acht volledige Save As-/Hayro-proeven zijn RGBA-bytegelijk:
 595×842 met twee posities, 842×595 met 90° en verschoven CropBox op twee
-posities, en een synthetische A1-achtige 2384×1684/90°-pagina. Iedere proef
-bevat twee overlappende Unicode-Text Boxes en een Highlight. Dit bewijst nog
-geen Text Box die een tegelgrens overschrijdt, geen complexe bron-PDF en geen
-echte technische A1-tekening. Die gevallen blijven bij de Iced/Hayro-route;
-volledige Text Box- en annotatiedekking zijn nog niet bewezen.
+posities, een synthetische A1-achtige 2384×1684/90°-pagina, twee brede
+Text Boxes over meerdere tegels (waarvan één 90°/CropBox) en een hoge
+vierregelige 72pt-Text Box over meerdere tegelrijen. Iedere proef bevat
+Unicode-Text Boxes en een Highlight in annotatievolgorde. Het tekstpad
+beperkt invoer nog tot 64 tekens, vier regels, 64 zichtbare glyphs en de
+bewezen ingebedde fontglyphs; complexe bron-PDF's en de echte technische
+A1-tekening blijven Iced/Hayro-fallback. Volledige Text Box- en
+annotatiedekking zijn nog niet bewezen.
 
 Gerichte reproductie vanuit `rust-studio`:
 

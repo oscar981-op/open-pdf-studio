@@ -69,6 +69,27 @@ pub fn render_validated_glyph_scene_over_opaque_at_origin(
     })
 }
 
+/// Consume the already validated opaque page to avoid a full-page copy for
+/// each successive text tile in a large annotation.
+pub fn render_validated_glyph_scene_over_opaque_at_origin_owned(
+    scene: &[u8],
+    base_rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Bitmap, String> {
+    let rgba = core::render_opgs_over_opaque_at_origin_owned(
+        scene, base_rgba, width, height, clip, origin,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(Bitmap {
+        width,
+        height,
+        rgba,
+    })
+}
+
 /// Diagnostic path: render glyphs into an already-premultiplied PDF content
 /// layer. The caller is responsible for final paper composition.
 pub fn render_validated_glyph_scene_over_premultiplied(
@@ -98,6 +119,25 @@ pub fn render_validated_glyph_scene_over_premultiplied_at_origin(
     origin: [u32; 2],
 ) -> Result<Bitmap, String> {
     let rgba = core::render_opgs_over_premultiplied_at_origin(
+        scene, base_rgba, width, height, clip, origin,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(Bitmap {
+        width,
+        height,
+        rgba,
+    })
+}
+
+pub fn render_validated_glyph_scene_over_premultiplied_at_origin_owned(
+    scene: &[u8],
+    base_rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    clip: [u32; 4],
+    origin: [u32; 2],
+) -> Result<Bitmap, String> {
+    let rgba = core::render_opgs_over_premultiplied_at_origin_owned(
         scene, base_rgba, width, height, clip, origin,
     )
     .map_err(|error| error.to_string())?;
@@ -174,6 +214,21 @@ mod tests {
             [300, 400],
         )
         .is_err());
+    }
+
+    #[test]
+    fn one_glyph_tile_is_valid_but_empty_scene_is_rejected() {
+        let source =
+            include_bytes!("../../../dynlex-engine-poc/rgba/fixtures/native-blue-omega.opgs");
+        let length = u32::from_le_bytes(source[60..64].try_into().unwrap()) as usize;
+        let mut single = source[..20 + 44 + length].to_vec();
+        single[16..20].copy_from_slice(&1_u32.to_le_bytes());
+        assert_eq!(
+            render_validated_glyph_scene(&single).unwrap().rgba.len(),
+            256 * 192 * 4
+        );
+        single[16..20].copy_from_slice(&0_u32.to_le_bytes());
+        assert!(render_validated_glyph_scene(&single).is_err());
     }
 
     #[test]
