@@ -97,9 +97,24 @@ afgewezen, omdat de
 previewfallback niet in de transparante bronlaag zit. De bestaande `/AP`
 wordt hier **nog door Hayro**, niet DynLex, gerenderd; dit is dus een bewezen
 laagvolgorde-/overgangspad en geen voltooide DynLex-importrenderer. Directe
-DynLex-rendering van geïmporteerde `/AP`, annotaties zonder `/AP`, meer
+Algemene DynLex-rendering van geïmporteerde `/AP`, annotaties zonder `/AP`, meer
 kleurmodellen, transparantiegroepen en subpixelplaatsing blijven open.
 De huidige app bevat nog geen PDFium-backend; Hayro blijft de fallback.
+
+Er is daarnaast nu een **afzonderlijke read-only proef**
+`render_single_square_appearance_direct` voor precies één geïmporteerde
+`/Square` met een door de native Save As geschreven, ongefilterde dekkende
+2pt-Form-appearance. Zij controleert de operatorvolgorde, kleur, BBox en
+kwartslagmatrix, verwijdert de appearance uit een tijdelijke kopie, laat
+Hayro alleen de pagina-inhoud tekenen en zet de Square via de DynLex
+OPAN-kernel erboven. Het gehele resultaat moet bytegelijk zijn aan Hayro's
+oorspronkelijke pagina **inclusief** appearance voordat de proef een bitmap
+teruggeeft. Op gewone en verschoven/gecropte pagina's met `/Rotate`
+0/90/180/270 zijn de resultaten volledig gelijk. Een onbekende appearance
+of misvormde rotatie wordt geweigerd. Deze proef is nog niet in de app-router
+opgenomen en is geen algemene `/AP`-interpretatie: Hayro blijft voor de
+pagina-inhoud én als pariteitsoracle nodig. Ook dit is dus nog geen volledige
+DynLex-annotatielaag.
 
 ## Geïsoleerde native Text Box-appearance
 

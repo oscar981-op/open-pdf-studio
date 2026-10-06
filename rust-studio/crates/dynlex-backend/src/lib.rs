@@ -12,6 +12,10 @@ mod appearance_stage;
 #[cfg(feature = "kernel")]
 pub use appearance_stage::flatten_native_free_text_appearance;
 #[cfg(feature = "kernel")]
+mod imported_square;
+#[cfg(feature = "kernel")]
+pub use imported_square::render_single_square_appearance_direct;
+#[cfg(feature = "kernel")]
 mod glyph_scene;
 #[cfg(feature = "kernel")]
 pub use glyph_scene::{
