@@ -3,8 +3,8 @@
 // Source: src/ui/ribbon/widgets.rs and src/ui/ribbon/mod.rs.
 // Changes: Iced 0.14 API, PDF command routing, reduced CAD-specific data dependencies.
 use super::{
-    annotation_layer, inline_text, pdf_save, AnnotationTool, App, Message, PrintDestination,
-    PrintRange, PrintSubset, RibbonTab,
+    annotation_layer, inline_text, pdf_save, AnnotationTool, App, FitMode, Message,
+    PrintDestination, PrintRange, PrintSubset, RibbonTab,
 };
 use iced::widget::{
     button, checkbox, column, container, image, mouse_area, pick_list, row, rule, scrollable, svg,
@@ -42,6 +42,30 @@ fn tool_btn_style(theme: &Theme, is_active: bool, status: button::Status) -> but
             radius: 3.0.into(),
             color: Color::TRANSPARENT,
             width: 0.0,
+        },
+        shadow: iced::Shadow::default(),
+        snap: false,
+    }
+}
+
+fn thumbnail_btn_style(is_active: bool, status: button::Status) -> button::Style {
+    let hover = matches!(status, button::Status::Hovered | button::Status::Pressed);
+    button::Style {
+        background: (is_active || hover).then_some(Background::Color(Color::from_rgba8(
+            217,
+            119,
+            6,
+            if is_active { 0.14 } else { 0.08 },
+        ))),
+        text_color: Color::from_rgb8(230, 230, 230),
+        border: Border {
+            radius: 4.0.into(),
+            color: if is_active {
+                Color::from_rgb8(217, 119, 6)
+            } else {
+                Color::TRANSPARENT
+            },
+            width: if is_active { 1.0 } else { 0.0 },
         },
         shadow: iced::Shadow::default(),
         snap: false,
@@ -385,7 +409,13 @@ fn ribbon_home(
                         84.0,
                         22.0,
                     ),
-                    labeled_tool("Fit Width", pdf_icon!("fitWidthIcon"), None, 84.0, 22.0),
+                    labeled_tool(
+                        "Fit Width",
+                        pdf_icon!("fitWidthIcon"),
+                        has_doc.then_some(Message::FitView(FitMode::Width)),
+                        84.0,
+                        22.0,
+                    ),
                 ]),
                 stack_tools(vec![
                     labeled_tool(
@@ -395,7 +425,13 @@ fn ribbon_home(
                         78.0,
                         22.0,
                     ),
-                    labeled_tool("Fit Page", pdf_icon!("fitPageIcon"), None, 78.0, 22.0),
+                    labeled_tool(
+                        "Fit Page",
+                        pdf_icon!("fitPageIcon"),
+                        has_doc.then_some(Message::FitView(FitMode::Page)),
+                        78.0,
+                        22.0,
+                    ),
                 ]),
             ],
         ),
@@ -920,28 +956,28 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 large_tool_active(
                     "Hayro",
                     DOC,
-                    (!app.busy)
+                    (!app.opening_document)
                         .then_some(Message::SelectBackend(opds_dynlex_backend::Backend::Hayro)),
                     app.backend == opds_dynlex_backend::Backend::Hayro,
                 ),
                 large_tool_active(
                     "DynLex",
                     icon_asset!("zoom_ext.svg"),
-                    (!app.busy && cfg!(feature = "dynlex-experimental"))
+                    (!app.opening_document && cfg!(feature = "dynlex-experimental"))
                         .then_some(Message::SelectBackend(opds_dynlex_backend::Backend::Dynlex)),
                     app.backend == opds_dynlex_backend::Backend::Dynlex,
                 ),
                 large_tool_active(
                     "PDFium",
                     DOC,
-                    (!app.busy && opds_dynlex_backend::pdfium_available())
+                    (!app.opening_document && opds_dynlex_backend::pdfium_available())
                         .then_some(Message::SelectBackend(opds_dynlex_backend::Backend::Pdfium)),
                     app.backend == opds_dynlex_backend::Backend::Pdfium,
                 ),
                 large_tool_active(
                     "Eigen Rust",
                     DOC,
-                    (!app.busy && opds_dynlex_backend::own_rust_available()).then_some(
+                    (!app.opening_document && opds_dynlex_backend::own_rust_available()).then_some(
                         Message::SelectBackend(opds_dynlex_backend::Backend::OwnRust),
                     ),
                     app.backend == opds_dynlex_backend::Backend::OwnRust,
@@ -1228,7 +1264,14 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 page,
                 Space::new().width(super::HORIZONTAL_PAN_MARGIN),
             ];
-            scrollable(container(page_with_pan_room).padding(24))
+            let mut page_area = mouse_area(container(page_with_pan_room).padding(24));
+            if app.keyboard_modifiers.control() {
+                page_area = page_area
+                    .on_move(|position| Message::PagePointerMoved([position.x, position.y]))
+                    .on_exit(Message::PagePointerLeft)
+                    .on_scroll(Message::PageWheel);
+            }
+            scrollable(page_area)
                 .id(iced::widget::Id::new("pdf-page-scroll"))
                 .on_scroll(Message::PageScrolled)
                 .direction(scrollable::Direction::Both {
@@ -1281,11 +1324,15 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 }
             });
             let preview: Element<'_, Message> = if let Some(handle) = handle {
-                image(handle).width(128).height(170).into()
+                image(handle)
+                    .width(super::THUMBNAIL_WIDTH)
+                    .height(super::THUMBNAIL_HEIGHT)
+                    .content_fit(iced::ContentFit::Contain)
+                    .into()
             } else {
                 container(text("Page preview").size(11))
-                    .width(128)
-                    .height(170)
+                    .width(super::THUMBNAIL_WIDTH)
+                    .height(super::THUMBNAIL_HEIGHT)
                     .align_x(iced::Center)
                     .align_y(iced::Center)
                     .style(|_| container::Style {
@@ -1302,14 +1349,15 @@ pub fn view(app: &App) -> Element<'_, Message> {
                             .align_x(iced::Center)
                             .spacing(4),
                     )
-                    .width(Fill)
+                    .width(156)
                     .height(super::THUMBNAIL_CARD_HEIGHT)
-                    .padding(7)
+                    .padding(5)
                     .on_press(Message::GoToPage(index))
-                    .style(move |t, s| tool_btn_style(t, index == page, s)),
+                    .style(move |_, status| thumbnail_btn_style(index == page, status)),
                 )
                 .width(Fill)
-                .height(super::THUMBNAIL_ROW_STEP),
+                .height(super::THUMBNAIL_ROW_STEP)
+                .align_x(iced::Center),
             );
         }
         if visible.end < count {

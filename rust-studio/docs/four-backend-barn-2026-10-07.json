@@ -1,0 +1,167 @@
+{
+  "protocol": "rotating-backend-order, same PDF and 72-dpi page 1, warm OS cache, new process per sample",
+  "probe": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/target/release/backend_probe",
+  "pdfium_library": "/home/aia02/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pypdfium2_raw/libpdfium.so",
+  "rounds": 3,
+  "fixtures": [
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Testbestanden/20260316 - Barn Relocation - 389 E Hemenway Lane - for Permit.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 1041.42,
+          "peak_rss_kib": 101388,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 1041.382,
+          "peak_rss_kib": 127632,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 385.59,
+          "peak_rss_kib": 131960,
+          "rgba_bytes": 15510528,
+          "sha256": "d27695d049bac9f23061e97646c62abb25330bcbafe500d16f26cd9f0329eb84",
+          "different_rgba_channels_vs_hayro": 1166396,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 1086.666,
+          "peak_rss_kib": 127784,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 1298.102,
+          "peak_rss_kib": 127700,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 424.324,
+          "peak_rss_kib": 131928,
+          "rgba_bytes": 15510528,
+          "sha256": "d27695d049bac9f23061e97646c62abb25330bcbafe500d16f26cd9f0329eb84",
+          "different_rgba_channels_vs_hayro": 1166396,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 1133.387,
+          "peak_rss_kib": 127536,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 1087.295,
+          "peak_rss_kib": 101300,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 421.841,
+          "peak_rss_kib": 131712,
+          "rgba_bytes": 15510528,
+          "sha256": "d27695d049bac9f23061e97646c62abb25330bcbafe500d16f26cd9f0329eb84",
+          "different_rgba_channels_vs_hayro": 1166396,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 1107.757,
+          "peak_rss_kib": 127508,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 1072.708,
+          "peak_rss_kib": 101184,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 1103.665,
+          "peak_rss_kib": 127468,
+          "rgba_bytes": 15510528,
+          "sha256": "e9a9eb7d51a23baf2672ccdd16cec425255d3b353692b3c62af47b8eab45101b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 1072.708,
+          "median_peak_rss_kib": 101300,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 1103.665,
+          "median_peak_rss_kib": 127632,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 421.841,
+          "median_peak_rss_kib": 131928,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 1166396
+        },
+        "own-rust": {
+          "median_wall_ms": 1107.757,
+          "median_peak_rss_kib": 127536,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    }
+  ]
+}

@@ -5,17 +5,29 @@ use std::{env, error::Error, fs, sync::Arc};
 fn main() -> Result<(), Box<dyn Error>> {
     let started = std::time::Instant::now();
     let args: Vec<_> = env::args_os().collect();
-    if args.len() != 3 && args.len() != 4 {
-        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--pdfium|--own-rust]".into());
+    if !(3..=5).contains(&args.len()) {
+        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--pdfium|--own-rust] [--scale=FACTOR]".into());
+    }
+    let scale: f32 = if args.len() == 5 {
+        args[4]
+            .to_str()
+            .and_then(|value| value.strip_prefix("--scale="))
+            .ok_or("expected --scale=FACTOR")?
+            .parse()?
+    } else {
+        1.0
+    };
+    if !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
+        return Err("scale must be finite and between 0.01 and 8".into());
     }
     let bytes = fs::read(&args[1])?;
     let read_done = std::time::Instant::now();
-    if args.len() == 4 {
+    if args.len() >= 4 {
         match args[3].to_str() {
             Some("--hayro") => {
                 let pdf = ParsedPdf::open(Arc::new(bytes))?;
                 let open_done = std::time::Instant::now();
-                let raster = pdf.render_page(1, 1.0)?;
+                let raster = pdf.render_page(1, scale)?;
                 let render_done = std::time::Instant::now();
                 fs::write(&args[2], raster.rgba)?;
                 let write_done = std::time::Instant::now();
@@ -41,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 let pdf = ParsedPdf::open(Arc::new(bytes.clone()))?;
                 let open_done = std::time::Instant::now();
                 let result =
-                    opds_dynlex_backend::render_with_report(&pdf, &bytes, 1, 1.0, backend)?;
+                    opds_dynlex_backend::render_with_report(&pdf, &bytes, 1, scale, backend)?;
                 let render_done = std::time::Instant::now();
                 fs::write(&args[2], result.raster.rgba)?;
                 let write_done = std::time::Instant::now();
@@ -67,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => return Err("unsupported backend flag".into()),
         }
     } else {
-        let bitmap = opds_dynlex_backend::try_render(&bytes, 1, 1.0)?
+        let bitmap = opds_dynlex_backend::try_render(&bytes, 1, scale)?
             .ok_or("PDF is outside the bounded DynLex subset")?;
         fs::write(&args[2], bitmap.rgba)?;
         eprintln!("{}x{}", bitmap.width, bitmap.height);

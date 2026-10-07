@@ -86,3 +86,21 @@ afwijkende kleurkanalen. Piek-RSS-medians en alle samples staan in de JSON.
 Deze meting omvat processtart, bestand lezen, Hayro-openpad, renderen en
 RGBA-bestand schrijven met warme OS-cache. Zij bewijst geen in-app-snelheid of
 algemeen prestatievoordeel; de vier fixtures zijn klein en gecontroleerd.
+
+Een aanvullende drie-rondeprocesproef op de echte zevenpagina-PDF
+`20260316 - Barn Relocation - 389 E Hemenway Lane - for Permit.pdf`
+staat in `four-backend-barn-2026-10-07.json`. Op pagina 1 bij 100% waren
+Hayro/DynLex/Eigen Rust alle daadwerkelijk Hayro: mediane wandtijd
+1073/1104/1108 ms. PDFium was 422 ms, maar week op 1.166.396 RGBA-kanalen
+af van Hayro; deze renders zijn dus niet pixelgelijk. Met de
+`backend_probe --scale=FACTOR`-optie is op dezelfde pagina ook de
+miniatuurschaal gemeten: Hayro had circa 0,95 s renderwerk bij 96×62 px,
+PDFium circa 0,22 s bij 97×63 px. Daarom gebruikt de native app PDFium
+voor navigatieminiaturen indien beschikbaar, met Hayro-fallback; de grote
+pagina blijft op de gekozen backend. De miniatuurcache wordt bij een
+backendwissel behouden. De UI laat de vier voorkeuren onder Settings zien en
+vermeldt in de statusregel de werkelijk gebruikte renderer. Een snelle
+rendererselectie tijdens een lopende paginarender wordt door de
+cachegeneratie beveiligd; snel opeenvolgende zoomacties worden voor de
+laatste gewenste schaal samengevoegd. De volledige app op deze echte PDF is
+nog niet pixelgelijk aan de oorspronkelijke Open PDF Studio-interface.

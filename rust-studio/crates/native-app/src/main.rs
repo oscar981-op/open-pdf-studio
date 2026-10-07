@@ -67,8 +67,10 @@ fn render_page_with_content_layer(
 
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_THUMBNAILS: usize = 12;
-const THUMBNAIL_ROW_STEP: f32 = 213.0;
-const THUMBNAIL_CARD_HEIGHT: f32 = 206.0;
+const THUMBNAIL_WIDTH: f32 = 96.0;
+const THUMBNAIL_HEIGHT: f32 = 128.0;
+const THUMBNAIL_ROW_STEP: f32 = 164.0;
+const THUMBNAIL_CARD_HEIGHT: f32 = 158.0;
 const THUMBNAIL_HEADER_HEIGHT: f32 = 30.0;
 const THUMBNAIL_WINDOW_SIZE: usize = 12;
 const BROWSER_ROW_STEP: f32 = 36.0;
@@ -79,7 +81,9 @@ fn thumbnail_scale(width: f32, height: f32) -> Result<f32, String> {
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
         return Err("Invalid PDF page dimensions".into());
     }
-    let scale = (128.0 / width).min(170.0 / height).min(1.0);
+    let scale = (THUMBNAIL_WIDTH / width)
+        .min(THUMBNAIL_HEIGHT / height)
+        .min(1.0);
     if scale < 0.01 {
         return Err("Page is too large for a thumbnail".into());
     }
@@ -220,6 +224,7 @@ fn boot() -> (App, Task<Message>) {
         app.backend = Backend::OwnRust;
     }
     app.text_font_size = DEFAULT_TEXT_FONT_SIZE;
+    app.window_size = (1200.0, 832.0);
     if let Some(path) = std::env::args().nth(1) {
         app.path_input = path;
         let task = app.update(Message::Open);
@@ -250,8 +255,20 @@ fn window_event_to_message(
     _status: iced::event::Status,
     _window: window::Id,
 ) -> Option<Message> {
-    matches!(event, iced::Event::Window(window::Event::CloseRequested))
-        .then_some(Message::CloseWindow)
+    match event {
+        iced::Event::Window(window::Event::CloseRequested) => Some(Message::CloseWindow),
+        iced::Event::Window(window::Event::Unfocused) => Some(Message::KeyboardModifiersChanged(
+            iced::keyboard::Modifiers::default(),
+        )),
+        iced::Event::Window(window::Event::Opened { size, .. })
+        | iced::Event::Window(window::Event::Resized(size)) => {
+            Some(Message::WindowResized((size.width, size.height)))
+        }
+        iced::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
+            Some(Message::KeyboardModifiersChanged(modifiers))
+        }
+        _ => None,
+    }
 }
 
 fn scroll_page_to(offset: scrollable::AbsoluteOffset) -> Task<Message> {
@@ -291,6 +308,8 @@ struct App {
     document: Option<OpenDocument>,
     next_load: u64,
     busy: bool,
+    opening_document: bool,
+    render_queued: bool,
     message: String,
     open_dialog: bool,
     confirm_discard: Option<PendingAction>,
@@ -339,6 +358,9 @@ struct App {
     next_annotation_id: u64,
     page_scroll_offset: scrollable::AbsoluteOffset,
     pending_zoom_offset: Option<scrollable::AbsoluteOffset>,
+    keyboard_modifiers: iced::keyboard::Modifiers,
+    page_pointer: Option<[f32; 2]>,
+    window_size: (f32, f32),
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -348,6 +370,45 @@ enum AnnotationTool {
     Rectangle,
     Highlight,
     Text,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FitMode {
+    Width,
+    Page,
+}
+
+fn fit_scale(
+    mode: FitMode,
+    page_size: (f32, f32),
+    window_size: (f32, f32),
+    pages_visible: bool,
+    properties_visible: bool,
+    ribbon_collapsed: bool,
+) -> Option<f64> {
+    let available_width = window_size.0
+        - if pages_visible { 200.0 } else { 0.0 }
+        - if properties_visible { 230.0 } else { 0.0 }
+        - 48.0;
+    let available_height = window_size.1
+        - 30.0 // title bar
+        - 28.0 // ribbon tabs
+        - if ribbon_collapsed { 0.0 } else { 94.0 }
+        - 28.0 // document tabs
+        - 28.0 // status bar
+        - 48.0; // page padding
+    if page_size.0 <= 0.0 || page_size.1 <= 0.0 || available_width <= 0.0 || available_height <= 0.0
+    {
+        return None;
+    }
+    let width_scale = available_width / page_size.0;
+    let scale = match mode {
+        FitMode::Width => width_scale,
+        FitMode::Page => width_scale.min(available_height / page_size.1),
+    };
+    scale
+        .is_finite()
+        .then_some(f64::from(scale).clamp(0.1, 8.0))
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -487,12 +548,15 @@ mod print_range_tests {
 
 #[cfg(test)]
 mod thumbnail_tests {
-    use super::{thumbnail_page_at_scroll, thumbnail_scale, thumbnail_window};
+    use super::{
+        thumbnail_page_at_scroll, thumbnail_scale, thumbnail_window, THUMBNAIL_HEADER_HEIGHT,
+        THUMBNAIL_HEIGHT, THUMBNAIL_ROW_STEP, THUMBNAIL_WIDTH,
+    };
 
     #[test]
     fn fits_large_landscape_and_portrait_pages_without_upscaling() {
-        assert!((thumbnail_scale(3000.0, 2000.0).unwrap() - 128.0 / 3000.0).abs() < 1e-6);
-        assert!((thumbnail_scale(600.0, 1200.0).unwrap() - 170.0 / 1200.0).abs() < 1e-6);
+        assert!((thumbnail_scale(3000.0, 2000.0).unwrap() - THUMBNAIL_WIDTH / 3000.0).abs() < 1e-6);
+        assert!((thumbnail_scale(600.0, 1200.0).unwrap() - THUMBNAIL_HEIGHT / 1200.0).abs() < 1e-6);
         assert_eq!(thumbnail_scale(50.0, 50.0).unwrap(), 1.0);
         assert!(thumbnail_scale(20000.0, 200.0).is_err());
         assert!(thumbnail_scale(f32::NAN, 100.0).is_err());
@@ -501,7 +565,10 @@ mod thumbnail_tests {
     #[test]
     fn scroll_focus_tracks_visible_thumbnail_card() {
         assert_eq!(thumbnail_page_at_scroll(0.0, 100), 0);
-        assert_eq!(thumbnail_page_at_scroll(30.0 + 213.0 * 9.0, 100), 9);
+        assert_eq!(
+            thumbnail_page_at_scroll(THUMBNAIL_HEADER_HEIGHT + THUMBNAIL_ROW_STEP * 9.0, 100),
+            9
+        );
         assert_eq!(thumbnail_page_at_scroll(100_000.0, 100), 99);
         assert_eq!(thumbnail_page_at_scroll(100.0, 0), 0);
         assert_eq!(thumbnail_window(0, 100), 0..12);
@@ -513,6 +580,22 @@ mod thumbnail_tests {
             assert!(window.contains(&focus));
             assert!(window.len() <= 12);
         }
+    }
+}
+
+#[cfg(test)]
+mod fit_view_tests {
+    use super::{fit_scale, FitMode};
+
+    #[test]
+    fn fit_uses_document_area_and_reacts_to_panels() {
+        let page = (1000.0, 1400.0);
+        let window = (1200.0, 832.0);
+        let width = fit_scale(FitMode::Width, page, window, true, true, false).unwrap();
+        let full = fit_scale(FitMode::Page, page, window, true, true, false).unwrap();
+        assert!((width - 0.722).abs() < 1e-5);
+        assert!(full < width);
+        assert!(fit_scale(FitMode::Width, page, window, false, false, false).unwrap() > width);
     }
 }
 
@@ -3179,6 +3262,12 @@ enum Message {
         Result<(String, Arc<Vec<u8>>, Arc<ParsedPdf>, f32, RenderOutcome), String>,
     ),
     Zoom(f64),
+    FitView(FitMode),
+    WindowResized((f32, f32)),
+    KeyboardModifiersChanged(iced::keyboard::Modifiers),
+    PagePointerMoved([f32; 2]),
+    PagePointerLeft,
+    PageWheel(iced::mouse::ScrollDelta),
     WheelZoom {
         amount: f32,
         anchor: [f32; 2],
@@ -3199,7 +3288,7 @@ enum Message {
         image::Handle,
         Result<Raster, String>,
     ),
-    ThumbnailRendered(u64, u64, usize, Result<Raster, String>),
+    ThumbnailRendered(u64, usize, Result<Raster, String>),
     SelectBackend(Backend),
     SelectRibbon(RibbonTab),
     ToggleRibbonCollapsed,
@@ -3672,7 +3761,7 @@ impl App {
             }
             Message::ToggleProperties => self.hide_properties = !self.hide_properties,
             Message::SelectBackend(backend) => {
-                if self.busy
+                if self.opening_document
                     || self.backend == backend
                     || (backend == Backend::Dynlex && !cfg!(feature = "dynlex-experimental"))
                     || (backend == Backend::Pdfium && !opds_dynlex_backend::pdfium_available())
@@ -3681,6 +3770,7 @@ impl App {
                     return Task::none();
                 }
                 self.backend = backend;
+                self.render_queued = false;
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
                 self.backend_generation = self.backend_generation.wrapping_add(1);
@@ -3696,13 +3786,9 @@ impl App {
                     {
                         document.content_layer_in_flight = None;
                     }
-                    document.thumbnails.clear();
-                    document.thumbnail_failed.clear();
-                    document.thumbnail_in_flight = None;
-                    return Task::batch([
-                        self.render_current_page(),
-                        self.render_nearby_thumbnail(),
-                    ]);
+                    // Thumbnails are navigation previews, independent of the
+                    // selected full-page renderer. Keep them on backend switch.
+                    return self.render_current_page();
                 }
             }
             Message::PageScrolled(viewport) => {
@@ -4148,6 +4234,8 @@ impl App {
                 let token = self.next_load;
                 let backend = self.backend;
                 self.busy = true;
+                self.opening_document = true;
+                self.render_queued = false;
                 self.message = "Opening PDF…".into();
                 return Task::perform(
                     async move {
@@ -4173,6 +4261,7 @@ impl App {
                 }
                 self.annotation_gesture_active = false;
                 self.busy = false;
+                self.opening_document = false;
                 match result {
                     Ok((path, source_bytes, pdf, initial_scale, outcome)) => {
                         let raster = &outcome.raster;
@@ -4243,10 +4332,70 @@ impl App {
                         return Task::none();
                     }
                 }
+                if self.busy {
+                    self.render_queued = true;
+                    return Task::none();
+                }
                 return self.render_current_page();
             }
-            Message::ThumbnailRendered(token, generation, page, result) => {
-                if token != self.next_load || generation != self.backend_generation {
+            Message::FitView(mode) => {
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                let page = document.model.view().page() + 1;
+                let Ok(size) = document.pdf.page_dimensions(page) else {
+                    return Task::none();
+                };
+                let Some(scale) = fit_scale(
+                    mode,
+                    size,
+                    self.window_size,
+                    !self.hide_pages,
+                    !self.hide_properties,
+                    self.ribbon_collapsed,
+                ) else {
+                    return Task::none();
+                };
+                return self.update(Message::Zoom(scale));
+            }
+            Message::WindowResized(size) => self.window_size = size,
+            Message::KeyboardModifiersChanged(modifiers) => {
+                self.keyboard_modifiers = modifiers;
+                if !modifiers.control() {
+                    self.page_pointer = None;
+                }
+            }
+            Message::PagePointerMoved(position) => self.page_pointer = Some(position),
+            Message::PagePointerLeft => self.page_pointer = None,
+            Message::PageWheel(delta) => {
+                let amount = match delta {
+                    iced::mouse::ScrollDelta::Lines { y, .. } => y,
+                    iced::mouse::ScrollDelta::Pixels { y, .. } => y / 60.0,
+                };
+                if !amount.is_finite() || amount == 0.0 {
+                    return Task::none();
+                }
+                let document_width = self.window_size.0
+                    - if self.hide_pages { 0.0 } else { 200.0 }
+                    - if self.hide_properties { 0.0 } else { 230.0 };
+                let document_height =
+                    self.window_size.1 - if self.ribbon_collapsed { 86.0 } else { 180.0 } - 28.0;
+                let anchor = self.page_pointer.map_or(
+                    [
+                        document_width.max(0.0) / 2.0,
+                        document_height.max(0.0) / 2.0,
+                    ],
+                    |position| {
+                        [
+                            (position[0] - self.page_scroll_offset.x).max(0.0),
+                            (position[1] - self.page_scroll_offset.y).max(0.0),
+                        ]
+                    },
+                );
+                return self.update(Message::WheelZoom { amount, anchor });
+            }
+            Message::ThumbnailRendered(token, page, result) => {
+                if token != self.next_load {
                     return Task::none();
                 }
                 let Some(document) = &mut self.document else {
@@ -4294,10 +4443,11 @@ impl App {
                         y: (current.y + anchor[1] * (factor - 1.0)).max(0.0),
                     });
                 }
-                let render = self.render_current_page();
                 if self.busy {
-                    return render;
+                    self.render_queued = true;
+                    return Task::none();
                 }
+                let render = self.render_current_page();
                 if let Some(offset) = self.pending_zoom_offset {
                     self.page_scroll_offset = offset;
                 }
@@ -4382,9 +4532,14 @@ impl App {
                     return Task::none();
                 };
                 if !document.model.view().accepts(ticket) {
+                    if self.render_queued {
+                        self.render_queued = false;
+                        return self.render_current_page();
+                    }
                     return Task::none();
                 }
                 self.busy = false;
+                self.render_queued = false;
                 match result {
                     Ok((outcome, _content_layer)) => {
                         let raster = &outcome.raster;
@@ -4431,6 +4586,8 @@ impl App {
                 self.page_scroll_offset = scrollable::AbsoluteOffset::default();
                 self.pending_zoom_offset = None;
                 self.busy = false;
+                self.opening_document = false;
+                self.render_queued = false;
                 self.message.clear();
             }
         }
@@ -4476,16 +4633,22 @@ impl App {
         let pdf = Arc::clone(&document.pdf);
         let source = Arc::clone(&document.source_bytes);
         let token = self.next_load;
-        let generation = self.backend_generation;
-        let backend = self.backend;
         Task::perform(
             async move {
                 let (width, height) = pdf.page_dimensions(page + 1).map_err(|e| e.to_string())?;
                 let scale = thumbnail_scale(width, height)?;
-                render_page_selected(&pdf, &source, page + 1, scale, backend)
+                // PDFium is substantially faster for complex vector-page
+                // previews. The actual document page still uses the selected
+                // renderer; if PDFium is unavailable this falls back to Hayro.
+                let preview_backend = if opds_dynlex_backend::pdfium_available() {
+                    Backend::Pdfium
+                } else {
+                    Backend::Hayro
+                };
+                render_page_selected(&pdf, &source, page + 1, scale, preview_backend)
                     .map(|outcome| outcome.raster)
             },
-            move |result| Message::ThumbnailRendered(token, generation, page, result),
+            move |result| Message::ThumbnailRendered(token, page, result),
         )
     }
 
