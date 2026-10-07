@@ -6,6 +6,7 @@ mod inline_text;
 #[cfg(feature = "dynlex-experimental")]
 mod native_text_scene;
 mod pdf_save;
+mod reader_mode;
 mod text_layout;
 mod virtual_ipp;
 use iced::widget::{image, scrollable};
@@ -364,6 +365,8 @@ struct App {
     hide_pages: bool,
     hide_properties: bool,
     show_annotation_list: bool,
+    reader_mode_active: bool,
+    reader_shutdown: ReaderShutdown,
     fullscreen: bool,
     ribbon_collapsed: bool,
     annotation_tool: AnnotationTool,
@@ -376,6 +379,21 @@ struct App {
     keyboard_modifiers: iced::keyboard::Modifiers,
     page_pointer: Option<[f32; 2]>,
     window_size: (f32, f32),
+}
+
+#[derive(Default)]
+struct ReaderShutdown {
+    position: Option<(PathBuf, reader_mode::Position)>,
+}
+
+impl Drop for ReaderShutdown {
+    fn drop(&mut self) {
+        // Some window managers close the window without delivering our
+        // CloseRequested message. Preserve the last validated view then.
+        if let Some((path, position)) = &self.position {
+            let _ = reader_mode::write(path, *position);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -3271,12 +3289,24 @@ enum Message {
     TogglePages,
     ToggleProperties,
     ToggleAnnotationList,
+    ToggleReaderMode,
     ToggleFullscreen,
     PathChanged(String),
     Open,
     Loaded(
         u64,
-        Result<(String, Arc<Vec<u8>>, Arc<ParsedPdf>, f32, RenderOutcome), String>,
+        Result<
+            (
+                String,
+                Arc<Vec<u8>>,
+                Arc<ParsedPdf>,
+                usize,
+                f32,
+                Option<reader_mode::Position>,
+                RenderOutcome,
+            ),
+            String,
+        >,
     ),
     Zoom(f64),
     FitView(FitMode),
@@ -3356,7 +3386,60 @@ mod view_panel_tests {
     }
 }
 
+#[cfg(test)]
+mod reader_shutdown_tests {
+    use super::*;
+
+    #[test]
+    fn normal_shutdown_writes_latest_opt_in_position() {
+        let pdf =
+            std::env::temp_dir().join(format!("opds-reader-shutdown-{}.pdf", std::process::id()));
+        let position = reader_mode::Position {
+            page: 3,
+            scale: 1.25,
+            scroll_top: 100.0,
+            scroll_height: 500.0,
+            single_page: true,
+        };
+        {
+            let mut guard = ReaderShutdown::default();
+            guard.position = Some((pdf.clone(), position));
+        }
+        assert_eq!(reader_mode::read(&pdf), Some(position));
+        reader_mode::clear(&pdf).unwrap();
+    }
+}
+
 impl App {
+    fn reader_position(&self) -> Option<(&Path, reader_mode::Position)> {
+        if !self.reader_mode_active {
+            return None;
+        }
+        let document = self.document.as_ref()?;
+        let scroll_height = if document.bitmap_size.1 == 0 {
+            0.0
+        } else {
+            document.bitmap_size.1 as f32 + 48.0
+        };
+        Some((
+            Path::new(&document.path),
+            reader_mode::Position {
+                page: document.model.view().page() + 1,
+                scale: document.model.view().viewport().scale(),
+                scroll_top: self.page_scroll_offset.y.max(0.0),
+                scroll_height,
+                single_page: true,
+            },
+        ))
+    }
+
+    fn persist_reader_position(&self) -> std::io::Result<()> {
+        if let Some((path, position)) = self.reader_position() {
+            reader_mode::write(path, position)?;
+        }
+        Ok(())
+    }
+
     fn dynlex_visible_annotation_bitmap(&self, document: &OpenDocument) -> Option<image::Handle> {
         if self.backend != Backend::Dynlex || self.editing_text_id.is_some() {
             return None;
@@ -3397,6 +3480,14 @@ impl App {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.update_inner(message);
+        self.reader_shutdown.position = self
+            .reader_position()
+            .map(|(path, position)| (path.to_path_buf(), position));
+        task
+    }
+
+    fn update_inner(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ShowOpen => {
                 self.open_dialog = true;
@@ -3790,7 +3881,10 @@ impl App {
                         self.allow_discard_once = true;
                         self.update(Message::Close)
                     }
-                    PendingAction::Exit => window::oldest().and_then(window::close),
+                    PendingAction::Exit => {
+                        let _ = self.persist_reader_position();
+                        window::oldest().and_then(window::close)
+                    }
                 };
             }
             Message::TogglePages => {
@@ -3808,6 +3902,31 @@ impl App {
             Message::ToggleAnnotationList => {
                 self.show_annotation_list = !self.show_annotation_list;
                 self.hide_properties = !self.show_annotation_list;
+            }
+            Message::ToggleReaderMode => {
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                if self.reader_mode_active {
+                    match reader_mode::clear(Path::new(&document.path)) {
+                        Ok(()) => {
+                            self.reader_mode_active = false;
+                            self.message = "Reader Mode disabled".into();
+                        }
+                        Err(error) => {
+                            self.message = format!("Reader Mode could not be disabled: {error}")
+                        }
+                    }
+                } else {
+                    self.reader_mode_active = true;
+                    match self.persist_reader_position() {
+                        Ok(()) => self.message = "Reader Mode enabled".into(),
+                        Err(error) => {
+                            self.reader_mode_active = false;
+                            self.message = format!("Reader Mode could not save: {error}");
+                        }
+                    }
+                }
             }
             Message::ToggleFullscreen => {
                 self.fullscreen = !self.fullscreen;
@@ -3879,6 +3998,7 @@ impl App {
                     self.confirm_discard = Some(PendingAction::Exit);
                     return Task::none();
                 }
+                let _ = self.persist_reader_position();
                 return window::oldest().and_then(window::close);
             }
             Message::SelectAnnotationTool(tool) => {
@@ -4303,12 +4423,33 @@ impl App {
                             ParsedPdf::open(Arc::clone(&bytes))
                                 .map_err(|error| error.to_string())?,
                         );
-                        let (page_width, _) =
-                            pdf.page_dimensions(1).map_err(|error| error.to_string())?;
-                        let initial_scale = (550.0 / page_width).clamp(0.1, 1.0);
-                        let outcome =
-                            render_page_selected(&pdf, &bytes, 1, initial_scale, backend)?;
-                        Ok((path, bytes, pdf, initial_scale, outcome))
+                        let saved = reader_mode::read(Path::new(&path));
+                        let initial_page = saved
+                            .map(|position| position.page.min(pdf.page_count()))
+                            .unwrap_or(1);
+                        let (page_width, _) = pdf
+                            .page_dimensions(initial_page)
+                            .map_err(|error| error.to_string())?;
+                        let initial_scale = saved
+                            .map_or((550.0 / page_width).clamp(0.1, 1.0), |position| {
+                                position.scale as f32
+                            });
+                        let outcome = render_page_selected(
+                            &pdf,
+                            &bytes,
+                            initial_page,
+                            initial_scale,
+                            backend,
+                        )?;
+                        Ok((
+                            path,
+                            bytes,
+                            pdf,
+                            initial_page,
+                            initial_scale,
+                            saved,
+                            outcome,
+                        ))
                     },
                     move |result| Message::Loaded(token, result),
                 );
@@ -4321,14 +4462,19 @@ impl App {
                 self.busy = false;
                 self.opening_document = false;
                 match result {
-                    Ok((path, source_bytes, pdf, initial_scale, outcome)) => {
+                    Ok((path, source_bytes, pdf, initial_page, initial_scale, saved, outcome)) => {
+                        let _ = self.persist_reader_position();
                         let raster = &outcome.raster;
+                        let restored_scroll_height = raster.height as f32 + 48.0;
                         let Ok(mut model) =
                             DocumentModel::new(DocumentId(token), raster.total_pages)
                         else {
                             return Task::none();
                         };
                         if model.zoom_at(f64::from(initial_scale), [0.0, 0.0]).is_err() {
+                            return Task::none();
+                        }
+                        if model.go_to_page(initial_page - 1).is_err() {
                             return Task::none();
                         }
                         self.message = format!(
@@ -4352,30 +4498,33 @@ impl App {
                             bitmap_scale: initial_scale,
                             bitmap_backend: outcome.used,
                             imported_annotations_dynlex: outcome.imported_annotations_dynlex,
-                            displayed_page: 0,
+                            displayed_page: initial_page - 1,
                             selected_annotation: None,
                             page_cache: VecDeque::new(),
                             thumbnails: VecDeque::new(),
                             thumbnail_in_flight: None,
                             thumbnail_failed: HashSet::new(),
-                            thumbnail_focus: 0,
+                            thumbnail_focus: initial_page - 1,
                         };
                         document.cache_bitmap(
-                            0,
+                            initial_page - 1,
                             initial_scale,
                             outcome,
                             #[cfg(feature = "dynlex-experimental")]
                             None,
                         );
                         self.document = Some(document);
+                        self.reader_mode_active = saved.is_some();
                         self.page_scroll_offset = scrollable::AbsoluteOffset {
                             x: HORIZONTAL_PAN_MARGIN,
-                            y: 0.0,
+                            y: saved.map_or(0.0, |position| {
+                                position.restored_scroll_top(restored_scroll_height)
+                            }),
                         };
                         self.pending_zoom_offset = None;
                         return Task::batch([
                             scroll_page_to(self.page_scroll_offset),
-                            scroll_thumbnail_to(0),
+                            scroll_thumbnail_to(initial_page - 1),
                             self.render_nearby_thumbnail(),
                         ]);
                     }
@@ -4638,8 +4787,10 @@ impl App {
                     return Task::none();
                 }
                 self.allow_discard_once = false;
+                let _ = self.persist_reader_position();
                 self.next_load += 1;
                 self.document = None;
+                self.reader_mode_active = false;
                 self.active_ribbon = RibbonTab::Home;
                 self.page_scroll_offset = scrollable::AbsoluteOffset::default();
                 self.pending_zoom_offset = None;

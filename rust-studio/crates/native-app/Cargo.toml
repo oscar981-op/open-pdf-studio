@@ -18,3 +18,4 @@ opds-dynlex-backend = { path = "../dynlex-backend" }
 opds-opdl-adapter = { path = "../opdl-adapter", optional = true }
 lopdf = { version = "=0.34.0", default-features = false, features = ["nom_parser"] }
 ttf-parser = "=0.25.1"
+serde_json = "=1.0.151"

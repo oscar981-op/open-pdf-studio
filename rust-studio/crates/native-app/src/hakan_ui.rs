@@ -1002,7 +1002,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 "Display",
                 vec![
                     large_tool("Thin Lines", DOC, None),
-                    large_tool("Reader Mode", DOC, None),
+                    large_tool_active(
+                        "Reader Mode",
+                        DOC,
+                        (has_doc && !app.opening_document).then_some(Message::ToggleReaderMode),
+                        app.reader_mode_active,
+                    ),
                 ],
             ))
             .push(group(
