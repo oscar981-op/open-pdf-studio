@@ -1,0 +1,1179 @@
+{
+  "protocol": "alternating paired new processes, warm OS cache, page 1; includes read/open/render/RGBA write; strict DynLex without fallback; unsupported has no render-time score",
+  "rounds": 15,
+  "scale": 1,
+  "cases": [
+    {
+      "pdf": "crates/dynlex-backend/tests/fixtures/simple-fill-stroke.pdf",
+      "supported": true,
+      "pairs": [
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.489,
+            "peak_rss_kib": 5152,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 6.506,
+            "peak_rss_kib": 6532,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.971,
+            "peak_rss_kib": 6560,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 5.744,
+            "peak_rss_kib": 5388,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.443,
+            "peak_rss_kib": 5484,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 6.789,
+            "peak_rss_kib": 6308,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 6.923,
+            "peak_rss_kib": 6296,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.941,
+            "peak_rss_kib": 5176,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.753,
+            "peak_rss_kib": 5396,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.609,
+            "peak_rss_kib": 6500,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 9.084,
+            "peak_rss_kib": 6228,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.798,
+            "peak_rss_kib": 5388,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.092,
+            "peak_rss_kib": 5200,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.008,
+            "peak_rss_kib": 6552,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.312,
+            "peak_rss_kib": 6560,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.142,
+            "peak_rss_kib": 5256,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.035,
+            "peak_rss_kib": 5488,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.332,
+            "peak_rss_kib": 6236,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 11.188,
+            "peak_rss_kib": 6492,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.369,
+            "peak_rss_kib": 5268,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.276,
+            "peak_rss_kib": 5184,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.015,
+            "peak_rss_kib": 6364,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.801,
+            "peak_rss_kib": 6588,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.124,
+            "peak_rss_kib": 5468,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.729,
+            "peak_rss_kib": 5404,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.094,
+            "peak_rss_kib": 6496,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 6.846,
+            "peak_rss_kib": 6236,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 6.255,
+            "peak_rss_kib": 5152,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.296,
+            "peak_rss_kib": 5508,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.109,
+            "peak_rss_kib": 6268,
+            "rgba_bytes": 196608,
+            "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+          }
+        }
+      ],
+      "all_rgba_equal": true,
+      "medians": {
+        "dynlex-strict": {
+          "wall_ms": 7.443,
+          "peak_rss_kib": 5388
+        },
+        "hayro": {
+          "wall_ms": 7.801,
+          "peak_rss_kib": 6492
+        }
+      },
+      "dynlex_wins": 10
+    },
+    {
+      "pdf": "crates/dynlex-backend/tests/fixtures/full-page-raster.pdf",
+      "supported": true,
+      "pairs": [
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.082,
+            "peak_rss_kib": 5924,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 9.658,
+            "peak_rss_kib": 6724,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.017,
+            "peak_rss_kib": 6680,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 12.73,
+            "peak_rss_kib": 5860,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.535,
+            "peak_rss_kib": 5848,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.353,
+            "peak_rss_kib": 6476,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.765,
+            "peak_rss_kib": 6432,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.464,
+            "peak_rss_kib": 6032,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.814,
+            "peak_rss_kib": 5892,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.483,
+            "peak_rss_kib": 6680,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.419,
+            "peak_rss_kib": 6504,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.973,
+            "peak_rss_kib": 5984,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.828,
+            "peak_rss_kib": 5916,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.357,
+            "peak_rss_kib": 6476,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.088,
+            "peak_rss_kib": 6556,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.24,
+            "peak_rss_kib": 5984,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.137,
+            "peak_rss_kib": 5920,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 9.689,
+            "peak_rss_kib": 6480,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.834,
+            "peak_rss_kib": 6676,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.946,
+            "peak_rss_kib": 5908,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 10.708,
+            "peak_rss_kib": 5888,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.227,
+            "peak_rss_kib": 6500,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 9.179,
+            "peak_rss_kib": 6500,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 10.498,
+            "peak_rss_kib": 5820,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.932,
+            "peak_rss_kib": 5848,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 9.748,
+            "peak_rss_kib": 6688,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.248,
+            "peak_rss_kib": 6564,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.474,
+            "peak_rss_kib": 6048,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.001,
+            "peak_rss_kib": 5920,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 10.703,
+            "peak_rss_kib": 6656,
+            "rgba_bytes": 196608,
+            "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+          }
+        }
+      ],
+      "all_rgba_equal": true,
+      "medians": {
+        "dynlex-strict": {
+          "wall_ms": 8.24,
+          "peak_rss_kib": 5916
+        },
+        "hayro": {
+          "wall_ms": 8.248,
+          "peak_rss_kib": 6556
+        }
+      },
+      "dynlex_wins": 6
+    },
+    {
+      "pdf": "crates/dynlex-backend/tests/fixtures/two-images-hybrid.pdf",
+      "supported": true,
+      "pairs": [
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.361,
+            "peak_rss_kib": 5524,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.844,
+            "peak_rss_kib": 6648,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 11.292,
+            "peak_rss_kib": 6424,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.792,
+            "peak_rss_kib": 5576,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 8.828,
+            "peak_rss_kib": 5584,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.567,
+            "peak_rss_kib": 6624,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.244,
+            "peak_rss_kib": 6660,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.691,
+            "peak_rss_kib": 5640,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 6.768,
+            "peak_rss_kib": 5640,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 10.076,
+            "peak_rss_kib": 6656,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 6.704,
+            "peak_rss_kib": 6368,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.267,
+            "peak_rss_kib": 5724,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.144,
+            "peak_rss_kib": 5584,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.565,
+            "peak_rss_kib": 6436,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 6.564,
+            "peak_rss_kib": 6652,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.227,
+            "peak_rss_kib": 5588,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.339,
+            "peak_rss_kib": 5716,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.945,
+            "peak_rss_kib": 6404,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 11.577,
+            "peak_rss_kib": 6672,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 9.124,
+            "peak_rss_kib": 5656,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 7.434,
+            "peak_rss_kib": 5620,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 9.733,
+            "peak_rss_kib": 6524,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.506,
+            "peak_rss_kib": 6544,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 10.573,
+            "peak_rss_kib": 5512,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 6.666,
+            "peak_rss_kib": 5644,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 10.339,
+            "peak_rss_kib": 6368,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 8.907,
+            "peak_rss_kib": 6620,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 6.964,
+            "peak_rss_kib": 5656,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 6.732,
+            "peak_rss_kib": 5560,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 7.365,
+            "peak_rss_kib": 6364,
+            "rgba_bytes": 196608,
+            "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e"
+          }
+        }
+      ],
+      "all_rgba_equal": true,
+      "medians": {
+        "dynlex-strict": {
+          "wall_ms": 9.124,
+          "peak_rss_kib": 5620
+        },
+        "hayro": {
+          "wall_ms": 8.244,
+          "peak_rss_kib": 6544
+        }
+      },
+      "dynlex_wins": 7
+    },
+    {
+      "pdf": "crates/dynlex-backend/tests/fixtures/clipped-real-shape-582.pdf",
+      "supported": true,
+      "pairs": [
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 57.908,
+            "peak_rss_kib": 20768,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 48.867,
+            "peak_rss_kib": 22284,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 45.579,
+            "peak_rss_kib": 22256,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 52.035,
+            "peak_rss_kib": 20640,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 47.535,
+            "peak_rss_kib": 20772,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 56.066,
+            "peak_rss_kib": 22288,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 49.725,
+            "peak_rss_kib": 22288,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 53.558,
+            "peak_rss_kib": 20832,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 45.509,
+            "peak_rss_kib": 20768,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 55.384,
+            "peak_rss_kib": 22336,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 51.398,
+            "peak_rss_kib": 22408,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 46.37,
+            "peak_rss_kib": 20736,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 54.022,
+            "peak_rss_kib": 20796,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 49.517,
+            "peak_rss_kib": 22500,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 55.038,
+            "peak_rss_kib": 22480,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 76.515,
+            "peak_rss_kib": 20768,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 51.589,
+            "peak_rss_kib": 20756,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 46.98,
+            "peak_rss_kib": 22404,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 59.985,
+            "peak_rss_kib": 22508,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 45.113,
+            "peak_rss_kib": 20636,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 54.84,
+            "peak_rss_kib": 20748,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 55.334,
+            "peak_rss_kib": 22416,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 56.276,
+            "peak_rss_kib": 22480,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 53.08,
+            "peak_rss_kib": 20804,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 54.262,
+            "peak_rss_kib": 20684,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 53.704,
+            "peak_rss_kib": 22344,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 39.307,
+            "peak_rss_kib": 22160,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 66.859,
+            "peak_rss_kib": 20700,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        },
+        {
+          "dynlex-strict": {
+            "requested": "dynlex-strict",
+            "used": "Dynlex",
+            "wall_ms": 51.166,
+            "peak_rss_kib": 20720,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          },
+          "hayro": {
+            "requested": "hayro",
+            "used": "Hayro",
+            "wall_ms": 52.129,
+            "peak_rss_kib": 22380,
+            "rgba_bytes": 8022576,
+            "sha256": "b4238d1e4689b26f9994855ad933fd86da5d1ce02840b53c856720b49d880546"
+          }
+        }
+      ],
+      "all_rgba_equal": true,
+      "medians": {
+        "dynlex-strict": {
+          "wall_ms": 53.08,
+          "peak_rss_kib": 20756
+        },
+        "hayro": {
+          "wall_ms": 52.129,
+          "peak_rss_kib": 22380
+        }
+      },
+      "dynlex_wins": 7
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/Tekst.pdf",
+      "supported": false,
+      "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/Combinatie Raster, vector, tekening images.pdf",
+      "supported": false,
+      "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/Technische tekening.pdf",
+      "supported": false,
+      "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/20260316 - Barn Relocation - 389 E Hemenway Lane - for Permit.pdf",
+      "supported": false,
+      "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    }
+  ]
+}

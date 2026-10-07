@@ -1,6 +1,8 @@
 //! Opt-in native Rust boundary for the bounded DynLex vector kernel.
 //! Unsupported PDFs return None so the host can keep its existing renderer.
 mod annotation_overlay;
+#[cfg(feature = "kernel")]
+mod lbvh;
 mod prepared;
 pub use annotation_overlay::{
     render_native_annotation_overlay, render_native_annotation_overlay_pixels,

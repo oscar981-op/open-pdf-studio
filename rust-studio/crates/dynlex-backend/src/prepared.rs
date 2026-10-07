@@ -91,8 +91,7 @@ mod scene {
     use super::super::{
         prepare_scene, render_validated_scene, validated_ordered_scene, word, Bitmap,
     };
-    const GRID: usize = 16;
-    const MAX_REFERENCES: usize = 262_144;
+    use crate::lbvh::Lbvh;
 
     /// A rectangle in output pixels, after page rotation and crop.
     #[derive(Debug, Clone, Copy)]
@@ -109,7 +108,8 @@ mod scene {
     }
     struct Vectors {
         commands: Vec<Command>,
-        bins: Option<Vec<Vec<usize>>>,
+        index: Lbvh,
+        edge_gcd: u32,
     }
 
     pub struct PreparedPage {
@@ -119,14 +119,33 @@ mod scene {
         vectors: Option<Vectors>,
     }
 
-    fn cell(coordinate: f64, extent: u32) -> usize {
-        ((coordinate * GRID as f64 / f64::from(extent)).floor() as usize).min(GRID - 1)
+    fn gcd(mut a: u32, mut b: u32) -> u32 {
+        while b != 0 {
+            (a, b) = (b, a % b);
+        }
+        a
     }
 
     // Exact integer edges only: no tolerance that silently changes AA or image sampling.
     fn scaled(value: u32, scale: f32) -> Option<u32> {
         let n = f64::from(value) * f64::from(scale);
         (n.is_finite() && n >= 0.0 && n <= 4096.0 && n.fract() == 0.0).then_some(n as u32)
+    }
+
+    #[test]
+    fn gcd_alignment_agrees_with_every_edge_at_binary_scales() {
+        for step in 1..=64 {
+            let edges = [0, step, step * 3, step * 7, step * 16];
+            let g = edges.iter().fold(0, |g, &n| gcd(g, n));
+            for numerator in 1..=512 {
+                let scale = numerator as f32 / 64.0;
+                // Dimensions are checked separately; this tests only alignment.
+                let expected = edges
+                    .iter()
+                    .all(|&n| (f64::from(n) * f64::from(scale)).fract() == 0.0);
+                assert_eq!(scaled(g, scale).is_some(), expected);
+            }
+        }
     }
 
     impl PreparedPage {
@@ -157,23 +176,16 @@ mod scene {
                     });
                 }
                 if commands.len() == count {
-                    let mut bins = vec![Vec::new(); GRID * GRID];
-                    let mut references = 0;
-                    'index: for (index, command) in commands.iter().enumerate() {
-                        let r = command.rect;
-                        for y in cell(r[1] as f64, height)..=cell(r[3] as f64, height) {
-                            for x in cell(r[0] as f64, width)..=cell(r[2] as f64, width) {
-                                references += 1;
-                                if references > MAX_REFERENCES {
-                                    break 'index;
-                                }
-                                bins[y * GRID + x].push(index);
-                            }
-                        }
-                    }
+                    let bounds: Vec<_> = commands.iter().map(|c| c.rect).collect();
+                    let index = Lbvh::build(&bounds, width, height)?;
+                    let edge_gcd = bounds
+                        .iter()
+                        .flatten()
+                        .fold(gcd(width, height), |g, &n| gcd(g, n));
                     vectors = Some(Vectors {
                         commands,
-                        bins: (references <= MAX_REFERENCES).then_some(bins),
+                        index,
+                        edge_gcd,
                     });
                 }
             }
@@ -235,39 +247,14 @@ mod scene {
             if view.width == 0 || view.height == 0 || right > width || bottom > height {
                 return Err("viewport outside page".into());
             }
-            let rects: Option<Vec<[u32; 4]>> = vectors
-                .commands
-                .iter()
-                .map(|c| {
-                    Some([
-                        scaled(c.rect[0], scale)?,
-                        scaled(c.rect[1], scale)?,
-                        scaled(c.rect[2], scale)?,
-                        scaled(c.rect[3], scale)?,
-                    ])
-                })
-                .collect();
-            let Some(rects) = rects else {
+            // Every coordinate is a multiple of this GCD. With bounded integer
+            // edges and an exact binary f32 scale, this proves alignment for all
+            // commands once per query, including commands outside the viewport.
+            if scaled(vectors.edge_gcd, scale).is_none() {
                 return Ok(None);
-            };
-            let mut candidates = vec![false; vectors.commands.len()];
-            if let Some(bins) = &vectors.bins {
-                let s = f64::from(scale);
-                for y in cell(f64::from(view.y) / s, self.height)
-                    ..=cell(f64::from(bottom) / s, self.height)
-                {
-                    for x in cell(f64::from(view.x) / s, self.width)
-                        ..=cell(f64::from(right) / s, self.width)
-                    {
-                        for &index in &bins[y * GRID + x] {
-                            candidates[index] = true;
-                        }
-                    }
-                }
-            } else {
-                candidates.fill(true);
             }
-            let mut scene = Vec::with_capacity(40 + vectors.commands.len() * 24);
+            let candidates = vectors.index.query([view.x, view.y, right, bottom], scale);
+            let mut scene = Vec::with_capacity(40 + candidates.len() * 24);
             scene.extend_from_slice(b"OPDL");
             for value in [
                 3,
@@ -284,11 +271,11 @@ mod scene {
             }
             let mut count = 0_u32;
             // Original command order is retained after spatial selection.
-            for (index, command) in vectors.commands.iter().enumerate() {
-                if !candidates[index] {
-                    continue;
-                }
-                let r = rects[index];
+            for index in candidates {
+                let command = &vectors.commands[index];
+                let r = command
+                    .rect
+                    .map(|n| scaled(n, scale).expect("GCD proved bounded aligned edges"));
                 let r = [
                     r[0].max(view.x),
                     r[1].max(view.y),

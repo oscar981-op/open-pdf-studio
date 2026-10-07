@@ -5,10 +5,10 @@ use std::{env, error::Error, fs, sync::Arc};
 fn main() -> Result<(), Box<dyn Error>> {
     let started = std::time::Instant::now();
     let args: Vec<_> = env::args_os().collect();
-    if !(3..=5).contains(&args.len()) {
-        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--pdfium|--own-rust] [--scale=FACTOR]".into());
+    if !(3..=6).contains(&args.len()) {
+        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--dynlex-strict|--pdfium|--own-rust] [--scale=FACTOR] [--page=NUMBER]".into());
     }
-    let scale: f32 = if args.len() == 5 {
+    let scale: f32 = if args.len() >= 5 {
         args[4]
             .to_str()
             .and_then(|value| value.strip_prefix("--scale="))
@@ -20,6 +20,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     if !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
         return Err("scale must be finite and between 0.01 and 8".into());
     }
+    let page: usize = if args.len() == 6 {
+        args[5]
+            .to_str()
+            .and_then(|s| s.strip_prefix("--page="))
+            .ok_or("expected --page=NUMBER")?
+            .parse()?
+    } else {
+        1
+    };
+    if page == 0 {
+        return Err("page must be >=1".into());
+    }
     let bytes = fs::read(&args[1])?;
     let read_done = std::time::Instant::now();
     if args.len() >= 4 {
@@ -27,7 +39,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Some("--hayro") => {
                 let pdf = ParsedPdf::open(Arc::new(bytes))?;
                 let open_done = std::time::Instant::now();
-                let raster = pdf.render_page(1, scale)?;
+                let raster = pdf.render_page(page, scale)?;
                 let render_done = std::time::Instant::now();
                 fs::write(&args[2], raster.rgba)?;
                 let write_done = std::time::Instant::now();
@@ -44,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 eprintln!("{}x{} Hayro", raster.width, raster.height);
             }
-            Some("--selected" | "--dynlex" | "--pdfium" | "--own-rust") => {
+            Some("--selected" | "--dynlex" | "--dynlex-strict" | "--pdfium" | "--own-rust") => {
                 let backend = match args[3].to_str() {
                     Some("--pdfium") => Backend::Pdfium,
                     Some("--own-rust") => Backend::OwnRust,
@@ -52,8 +64,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 };
                 let pdf = ParsedPdf::open(Arc::new(bytes.clone()))?;
                 let open_done = std::time::Instant::now();
-                let result =
-                    opds_dynlex_backend::render_with_report(&pdf, &bytes, 1, scale, backend)?;
+                let result = if args[3].to_str() == Some("--dynlex-strict") {
+                    opds_dynlex_backend::DynlexDocument::new(Arc::new(bytes))
+                        .render_strict(&pdf, page, scale)?
+                } else {
+                    opds_dynlex_backend::render_with_report(&pdf, &bytes, page, scale, backend)?
+                };
                 let render_done = std::time::Instant::now();
                 fs::write(&args[2], result.raster.rgba)?;
                 let write_done = std::time::Instant::now();
@@ -79,7 +95,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => return Err("unsupported backend flag".into()),
         }
     } else {
-        let bitmap = opds_dynlex_backend::try_render(&bytes, 1, scale)?
+        let bitmap = opds_dynlex_backend::try_render(&bytes, page, scale)?
             .ok_or("PDF is outside the bounded DynLex subset")?;
         fs::write(&args[2], bitmap.rgba)?;
         eprintln!("{}x{}", bitmap.width, bitmap.height);
