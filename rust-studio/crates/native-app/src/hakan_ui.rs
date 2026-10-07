@@ -744,6 +744,76 @@ fn surface(theme: &Theme) -> container::Style {
     }
 }
 
+// Keep long names on one row without splitting a UTF-8 character.
+fn document_tab_label(name: &str) -> String {
+    if name.chars().count() <= 29 {
+        name.to_owned()
+    } else {
+        name.chars().take(28).chain(std::iter::once('…')).collect()
+    }
+}
+
+fn panel_surface(_: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Color::from_rgb8(68, 68, 76).into()),
+        text_color: Some(Color::from_rgb8(250, 250, 249)),
+        ..Default::default()
+    }
+}
+
+fn panel_header(label: &'static str, close: Message) -> Element<'static, Message> {
+    container(
+        row![
+            text(label).size(12).width(Fill),
+            button(icon(CLOSE, 10.0))
+                .width(18)
+                .height(18)
+                .padding(2)
+                .on_press(close)
+                .style(|_, status| pdf_tool_style(false, status)),
+        ]
+        .align_y(iced::Center),
+    )
+    .height(28)
+    .width(Fill)
+    .padding([0, 6])
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb8(62, 62, 70).into()),
+        text_color: Some(Color::from_rgb8(250, 250, 249)),
+        ..Default::default()
+    })
+    .into()
+}
+
+fn property_row(label: &'static str, value: String) -> Element<'static, Message> {
+    container(
+        row![
+            text(label)
+                .size(11)
+                .color(Color::from_rgb8(170, 170, 180))
+                .width(68)
+                .align_x(iced::Right),
+            text(value).size(12).width(Fill),
+        ]
+        .spacing(4),
+    )
+    .padding([3, 8])
+    .width(Fill)
+    .into()
+}
+
+fn property_section(label: &'static str) -> Element<'static, Message> {
+    container(text(label).size(11))
+        .padding([4, 8])
+        .width(Fill)
+        .style(|_| container::Style {
+            background: Some(Color::from_rgb8(54, 54, 62).into()),
+            text_color: Some(Color::from_rgb8(250, 250, 249)),
+            ..Default::default()
+        })
+        .into()
+}
+
 pub fn view(app: &App) -> Element<'_, Message> {
     let has_doc = app.document.is_some();
     let (page, count, scale) = app.document.as_ref().map_or((0, 0, 1.0), |d| {
@@ -1252,28 +1322,78 @@ pub fn view(app: &App) -> Element<'_, Message> {
         background: Some(Color::from_rgb8(53, 53, 61).into()),
         ..Default::default()
     });
-    let tab = container(
-        row![
-            icon(DOC, 14.0),
+    // Match document-tabs.css: bounded single-line tab and a 2px accent.
+    // The full filename stays available on hover; the dirty dot is real state.
+    let dirty = app.document.as_ref().is_some_and(|d| d.is_dirty());
+    let tab: Element<'_, Message> = if has_doc {
+        let mut content = row![].spacing(4).align_y(iced::Center);
+        if dirty {
+            content = content.push(text("●").size(10).color(Color::from_rgb8(217, 119, 6)));
+        }
+        content = content
+            .push(
+                text(document_tab_label(&name))
+                    .size(12)
+                    .width(Fill)
+                    .wrapping(iced::widget::text::Wrapping::None),
+            )
+            .push(
+                button(icon(CLOSE, 12.0))
+                    .on_press(Message::Close)
+                    .width(16)
+                    .height(16)
+                    .padding(0)
+                    .style(|_, status| pdf_tool_style(false, status)),
+            );
+        tooltip(
+            container(column![
+                container(content)
+                    .height(26)
+                    .padding([0, 5])
+                    .align_y(iced::Center),
+                rule::horizontal(2).style(|_| rule::Style {
+                    color: Color::from_rgb8(217, 119, 6),
+                    radius: 0.0.into(),
+                    fill_mode: rule::FillMode::Full,
+                    snap: true,
+                }),
+            ])
+            .width(240)
+            .height(28)
+            .style(|_| container::Style {
+                background: Some(Color::from_rgb8(54, 54, 62).into()),
+                text_color: Some(Color::from_rgb8(250, 250, 249)),
+                ..Default::default()
+            }),
             text(name.clone()).size(12),
-            quick_access(CLOSE, "Close", has_doc.then_some(Message::Close))
+            tooltip::Position::Bottom,
+        )
+        .delay(Duration::from_millis(400))
+        .into()
+    } else {
+        container(
+            text("No documents open")
+                .size(12)
+                .color(Color::from_rgb8(153, 153, 157)),
+        )
+        .height(28)
+        .padding([0, 10])
+        .align_y(iced::Center)
+        .into()
+    };
+    let tabs = container(
+        row![
+            tab,
+            quick_access(icon_asset!("ui/plus.svg"), "Open", Some(Message::ShowOpen))
         ]
-        .spacing(8)
         .align_y(iced::Center),
     )
-    .padding([1, 8])
-    .style(|theme: &Theme| container::Style {
-        background: Some(theme.extended_palette().primary.weak.color.into()),
-        text_color: Some(theme.extended_palette().primary.weak.text),
+    .height(28)
+    .width(Fill)
+    .style(|_| container::Style {
+        background: Some(Color::from_rgb8(46, 46, 54).into()),
         ..Default::default()
     });
-    let tabs = container(row![
-        tab,
-        quick_access(icon_asset!("ui/plus.svg"), "Open", Some(Message::ShowOpen))
-    ])
-    .padding(2)
-    .width(Fill)
-    .style(surface);
     let center: Element<'_, Message> =
         if let Some(document) = app.document.as_ref().filter(|d| d.bitmap.is_some()) {
             let annotation_bitmap = app.dynlex_visible_annotation_bitmap(document);
@@ -1460,11 +1580,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
     if !app.hide_pages {
         let focus = app.document.as_ref().map_or(0, |d| d.thumbnail_focus);
         let visible = super::thumbnail_window(focus, count);
-        let mut pages = column![container(text("Thumbnails").size(12))
-            .height(22)
-            .align_y(iced::Center)]
-        .spacing(0)
-        .padding(8);
+        let mut pages = column![].spacing(0).padding(8);
         if visible.start > 0 {
             pages =
                 pages.push(Space::new().height(visible.start as f32 * super::THUMBNAIL_ROW_STEP));
@@ -1537,14 +1653,15 @@ pub fn view(app: &App) -> Element<'_, Message> {
             );
         }
         workspace = workspace.push(
-            container(
+            container(column![
+                panel_header("Thumbnails", Message::TogglePages),
                 scrollable(pages)
                     .id(iced::widget::Id::new("pdf-thumbnails"))
                     .on_scroll(Message::ThumbnailsScrolled),
-            )
+            ])
             .width(200)
             .height(Fill)
-            .style(surface),
+            .style(panel_surface),
         );
     }
     let center: Element<'_, Message> = if app.document.is_some() {
@@ -1584,7 +1701,21 @@ pub fn view(app: &App) -> Element<'_, Message> {
     } else {
         center
     };
-    workspace = workspace.push(container(center).width(Fill).height(Fill));
+    let rendered_page = app.document.as_ref().is_some_and(|d| d.bitmap.is_some());
+    workspace = workspace.push(container(center).width(Fill).height(Fill).style(move |_| {
+        container::Style {
+            // Same paper surround as Tauri pdf-viewport.js::_render().
+            background: Some(
+                if rendered_page {
+                    Color::from_rgb8(224, 224, 224)
+                } else {
+                    Color::from_rgb8(46, 46, 54)
+                }
+                .into(),
+            ),
+            ..Default::default()
+        }
+    }));
     if !app.hide_properties && app.show_annotation_list {
         let mut annotations = column![
             text("Annotations").size(12),
@@ -1626,15 +1757,50 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 .style(surface),
         );
     } else if !app.hide_properties {
+        let page_size = app
+            .document
+            .as_ref()
+            .and_then(|d| d.pdf.page_dimensions(page + 1).ok())
+            .map(|(w, h)| format!("{:.1} × {:.1} mm", w * 25.4 / 72.0, h * 25.4 / 72.0))
+            .unwrap_or_else(|| "-".into());
         let mut properties = column![
-            text("Properties").size(12),
-            text("DOCUMENT").size(10),
-            text(name).size(12),
-            text(format!("Pages   {count}")).size(12),
-            text(format!("Zoom    {:.0}%", scale * 100.0)).size(12)
+            panel_header("Properties", Message::ToggleProperties),
+            property_section("DOCUMENT"),
+            property_row(
+                "File",
+                if has_doc {
+                    name.clone()
+                } else {
+                    "No file open".into()
+                }
+            ),
+            property_row(
+                "Pages",
+                if has_doc {
+                    format!("{} / {count}", page + 1)
+                } else {
+                    "-".into()
+                }
+            ),
+            property_row("Page Size", page_size),
+            property_row("Zoom", format!("{:.0}%", scale * 100.0)),
+            property_section("ANNOTATIONS"),
+            property_row(
+                "Total",
+                app.document
+                    .as_ref()
+                    .map_or(0, |d| d.model.items().count())
+                    .to_string()
+            ),
+            property_row(
+                "On Page",
+                app.document
+                    .as_ref()
+                    .map_or(0, |d| d.model.items().filter(|a| a.page == page).count())
+                    .to_string()
+            ),
         ]
-        .padding(12)
-        .spacing(14);
+        .spacing(0);
         if let Some(annotation) = app
             .document
             .as_ref()
@@ -1652,7 +1818,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 opds_native_core::annotations::Kind::Text { .. } => "Text",
             };
             properties = properties
-                .push(text("ANNOTATION").size(10))
+                .push(property_section("SELECTED ANNOTATION"))
                 .push(text(format!("{kind} #{}", annotation.id)).size(12))
                 .push(text(format!("Page   {}", annotation.page + 1)).size(12))
                 .push(
@@ -1679,7 +1845,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
             properties = properties
                 .push(button("Delete annotation").on_press(Message::RemoveSelectedAnnotation));
         }
-        workspace = workspace.push(container(properties).width(230).height(Fill).style(surface));
+        workspace = workspace.push(
+            container(scrollable(properties))
+                .width(230)
+                .height(Fill)
+                .style(panel_surface),
+        );
     }
     let renderer_label = app
         .document

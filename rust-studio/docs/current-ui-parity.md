@@ -100,3 +100,48 @@ route is uit de viewer gehaald. Backendwissels invalidëren miniaturen en late
 asynchrone resultaten via generatiecontrole. Gecontroleerd in het echte venster
 met een ondersteunde fill/stroke-PDF en een unsupported tekst-PDF; zie
 `four-pdf-backends-2026-10-07.md`. Hayro blijft een handmatige keuze.
+
+### 8 oktober: vergelijking met de draaiende Tauri-versie
+
+De oorspronkelijke Tauri-debugapp is opnieuw naast een afzonderlijk native
+releasevenster geopend, op `simple-fill-stroke.pdf`, 100% zoom, dezelfde X11/DPI
+en 1200×832 venstergrootte. De bestaande gebruikers- en DynLex-demovensters
+bleven intact. Deze vergelijking is nadrukkelijk geen bewijs van pixelpariteit
+van de hele app.
+
+In `hakan_ui.rs` zijn concrete chromeverschillen verkleind:
+
+- De documentbalk is 28 px hoog, met `#2e2e36` achtergrond, een `#36363e`
+  actieve tab en een 2 px `#d97706` onderlijn zoals `document-tabs.css`. Een lange
+  naam duwt de sluitknop niet meer weg; de volledige naam staat in de tooltip.
+  Een stip geeft de bestaande echte niet-opgeslagen annotatiestatus weer.
+- Thumbnails heeft een vaste header en een werkende sluitknop; de titel scrolt
+  niet meer met de pagina's weg. De achtergrond volgt `--theme-panel-bg`.
+- Properties heeft compacte DOCUMENT/ANNOTATIONS-secties en uitgelijnde echte
+  bestands-, pagina-, formaat-, zoom- en annotatiegegevens. Lange inhoud is
+  scrollbaar. De header sluit het bestaande paneel via dezelfde View-actie.
+- De ruimte om de PDF gebruikt nu `#e0e0e0`, dezelfde achtergrond die Tauri's
+  `js/pdf/pdf-viewport.js` schildert. Het paginaraster en de zoomankers veranderen
+  hierdoor niet.
+
+Resterende zichtbare verschillen: de Tauri-referentie heeft een linker
+navigatie-iconenstrook, aparte tekenpalette en symbolenpalette; die zijn nog
+niet functioneel geport. Het native Properties-paneel is 230 px tegenover
+300 px in de referentie. Compacte native thumbnails blijven op de door de
+gebruiker gevraagde 96×128 px. PDF-plaatsing, lettermetriek, titlebar,
+file-tabbreedte, meerdocumenttabs en verschillende ribbonfuncties zijn nog
+ongelijk. De native tab gebruikt voorlopig maximaal 29 Unicode-tekens in de
+zichtbare naam, geen pixelgemeten CSS-ellipsis. Er zijn geen werkende functies
+geclaimd voor de ontbrekende palettes.
+
+De 78 native all-feature-tests slagen en de releasebuild slaagt. Lokale
+referentieopname: `/tmp/opds-tauri-parity-reference.png`; de afzonderlijke
+native proef is vastgelegd in `/tmp/opds-native-parity-after.png`.
+
+De schermproef bevestigt dezelfde horizontale chromegrenzen op y=30/58/152/180
+(titel, tabs, ribbon, documentbalk) in beide 1200×832-opnamen. Drie vlakke
+kleuren zijn daadwerkelijk uit de screenshots gemeten: PDF-achtergrond
+`(224,224,224)`, documentbalk `(46,46,54)` en Properties `(68,68,76)` zijn nu
+identiek. Dit zegt niets over alle overige pixels. Beide nieuwe header-×-knoppen
+zijn via XTest aangeklikt en de panelen zijn via View teruggeopend. De lokale
+vergelijking staat in `/tmp/opds-ui-parity-comparison-2026-10-08.png`.
