@@ -1050,7 +1050,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
                         Some(Message::ToggleFullscreen),
                         app.fullscreen,
                     ),
-                    large_tool("Keystrokes", DOC, None),
+                    large_tool_active(
+                        "Keystrokes",
+                        DOC,
+                        Some(Message::ToggleKeystrokes),
+                        app.keystrokes.visible,
+                    ),
                 ],
             ));
     }
@@ -1445,6 +1450,43 @@ pub fn view(app: &App) -> Element<'_, Message> {
             .style(surface),
         );
     }
+    let center: Element<'_, Message> = if app.document.is_some() {
+        let mut chips = row![].spacing(8);
+        for chip in &app.keystrokes.chips {
+            let label = if chip.count > 1 {
+                format!("{} ×{}", chip.label, chip.count)
+            } else {
+                chip.label.clone()
+            };
+            chips = chips.push(
+                container(text(label).size(20).color(Color::WHITE))
+                    .padding([8, 14])
+                    .style(|_| container::Style {
+                        background: Some(Color::from_rgba(0.08, 0.08, 0.08, 0.85).into()),
+                        border: iced::Border {
+                            color: Color::from_rgba(1.0, 1.0, 1.0, 0.25),
+                            width: 1.0,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }),
+            );
+        }
+        iced::widget::stack![
+            center,
+            container(chips)
+                .width(Fill)
+                .height(Fill)
+                .padding(16)
+                .align_x(iced::Right)
+                .align_y(iced::Bottom)
+        ]
+        .width(Fill)
+        .height(Fill)
+        .into()
+    } else {
+        center
+    };
     workspace = workspace.push(container(center).width(Fill).height(Fill));
     if !app.hide_properties && app.show_annotation_list {
         let mut annotations = column![

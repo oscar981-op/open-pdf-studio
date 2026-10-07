@@ -3,6 +3,7 @@
 mod annotation_layer;
 mod hakan_ui;
 mod inline_text;
+mod keystrokes;
 #[cfg(feature = "dynlex-experimental")]
 mod native_text_scene;
 mod pdf_save;
@@ -22,6 +23,7 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 fn render_page_selected(
     pdf: &ParsedPdf,
@@ -239,7 +241,17 @@ fn main() -> iced::Result {
     iced::application(boot, App::update, App::view)
         .title("Open PDF Studio Rust")
         .theme(theme)
-        .subscription(|_| iced::event::listen_with(window_event_to_message))
+        .subscription(|app| {
+            let window_events = iced::event::listen_with(window_event_to_message);
+            if app.keystrokes.visible {
+                iced::Subscription::batch([
+                    window_events,
+                    iced::event::listen_with(keystroke_event_to_message),
+                ])
+            } else {
+                window_events
+            }
+        })
         .exit_on_close_request(false)
         .font(include_bytes!("../../../assets/fonts/LiberationSans-Regular.ttf").as_slice())
         .window(window::Settings {
@@ -283,6 +295,34 @@ fn window_event_to_message(
         }
         _ => None,
     }
+}
+
+fn keystroke_event_to_message(
+    event: iced::Event,
+    status: iced::event::Status,
+    _window: window::Id,
+) -> Option<Message> {
+    match event {
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            repeat: false,
+            ..
+        }) => Some(Message::KeystrokePressed(
+            key,
+            modifiers,
+            status == iced::event::Status::Captured,
+        )),
+        _ => None,
+    }
+}
+
+fn keystroke_timeout(delay: Duration) -> Task<Message> {
+    // One timer at a time, even when keys are pressed rapidly. The thread-pool
+    // Iced backend does not provide a time::every subscription.
+    Task::perform(async move { std::thread::sleep(delay) }, |()| {
+        Message::KeystrokesExpired
+    })
 }
 
 fn scroll_page_to(offset: scrollable::AbsoluteOffset) -> Task<Message> {
@@ -368,6 +408,7 @@ struct App {
     reader_mode_active: bool,
     reader_shutdown: ReaderShutdown,
     fullscreen: bool,
+    keystrokes: keystrokes::Keystrokes,
     ribbon_collapsed: bool,
     annotation_tool: AnnotationTool,
     annotation_gesture_active: bool,
@@ -3291,6 +3332,9 @@ enum Message {
     ToggleAnnotationList,
     ToggleReaderMode,
     ToggleFullscreen,
+    ToggleKeystrokes,
+    KeystrokePressed(iced::keyboard::Key, iced::keyboard::Modifiers, bool),
+    KeystrokesExpired,
     PathChanged(String),
     Open,
     Loaded(
@@ -3936,6 +3980,24 @@ impl App {
                     window::Mode::Windowed
                 };
                 return window::oldest().and_then(move |id| window::set_mode(id, mode));
+            }
+            Message::ToggleKeystrokes => self.keystrokes.toggle(),
+            Message::KeystrokePressed(key, modifiers, captured) => {
+                let modal_open = self.open_dialog
+                    || self.save_dialog
+                    || self.print_dialog
+                    || self.text_dialog
+                    || self.confirm_discard.is_some();
+                if let Some(label) = keystrokes::label(&key, modifiers, captured, modal_open) {
+                    if let Some(delay) = self.keystrokes.record(label, Instant::now()) {
+                        return keystroke_timeout(delay);
+                    }
+                }
+            }
+            Message::KeystrokesExpired => {
+                if let Some(delay) = self.keystrokes.expire(Instant::now()) {
+                    return keystroke_timeout(delay);
+                }
             }
             Message::SelectBackend(backend) => {
                 if self.opening_document
