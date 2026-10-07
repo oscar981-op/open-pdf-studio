@@ -20,6 +20,7 @@ pub struct State {
     drawing: Option<(Point, Point)>,
     moving: Option<MoveState>,
     resizing: Option<ResizeState>,
+    line_endpoint: Option<LineEndpointState>,
     modifiers: keyboard::Modifiers,
 }
 
@@ -87,6 +88,12 @@ struct ResizeState {
     current: Point,
 }
 
+struct LineEndpointState {
+    id: u64,
+    start: bool,
+    current: Point,
+}
+
 impl Layer<'_> {
     fn page_point(&self, point: Point, bounds: Rectangle) -> [f64; 2] {
         [
@@ -114,6 +121,26 @@ impl Layer<'_> {
             ((point.x - grip.x).abs() <= 7.0 && (point.y - grip.y).abs() <= 7.0)
                 .then_some((item.id, handle, rect))
         })
+    }
+
+    fn selected_line_endpoint(&self, point: Point, bounds: Rectangle) -> Option<(u64, bool)> {
+        let item = self.model.get(self.selected?)?;
+        if item.page != self.page {
+            return None;
+        }
+        let Kind::Line { start, end, .. } = &item.kind else {
+            return None;
+        };
+        [(*start, true), (*end, false)]
+            .into_iter()
+            .find_map(|(endpoint, is_start)| {
+                let grip = Point::new(
+                    endpoint[0] as f32 * bounds.width / self.page_points.0,
+                    endpoint[1] as f32 * bounds.height / self.page_points.1,
+                );
+                ((point.x - grip.x).abs() <= 7.0 && (point.y - grip.y).abs() <= 7.0)
+                    .then_some((item.id, is_start))
+            })
     }
 
     fn resized_bounds(
@@ -211,6 +238,17 @@ impl canvas::Program<Message> for Layer<'_> {
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = cursor.position_in(bounds)?;
                 if self.tool == AnnotationTool::Select {
+                    if let Some((id, start)) = self.selected_line_endpoint(position, bounds) {
+                        state.line_endpoint = Some(LineEndpointState {
+                            id,
+                            start,
+                            current: position,
+                        });
+                        return Some(
+                            canvas::Action::publish(Message::AnnotationGestureStarted)
+                                .and_capture(),
+                        );
+                    }
                     if let Some((id, handle, original)) = self.selected_handle(position, bounds) {
                         state.resizing = Some(ResizeState {
                             id,
@@ -284,9 +322,29 @@ impl canvas::Program<Message> for Layer<'_> {
                         );
                     }
                 }
+                if let Some(endpoint) = &mut state.line_endpoint {
+                    if let Some(position) = position {
+                        endpoint.current = position;
+                        return Some(canvas::Action::request_redraw().and_capture());
+                    }
+                }
                 None
             }
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                if let Some(endpoint) = state.line_endpoint.take() {
+                    let position = cursor.position_in(bounds).unwrap_or(endpoint.current);
+                    let mut target = self.page_point(position, bounds);
+                    target[0] = target[0].clamp(0.0, f64::from(self.page_points.0));
+                    target[1] = target[1].clamp(0.0, f64::from(self.page_points.1));
+                    return Some(
+                        canvas::Action::publish(Message::MoveLineEndpoint(
+                            endpoint.id,
+                            endpoint.start,
+                            target,
+                        ))
+                        .and_capture(),
+                    );
+                }
                 if let Some(resizing) = state.resizing.take() {
                     let position = cursor.position_in(bounds).unwrap_or(resizing.current);
                     let rect =
@@ -424,14 +482,25 @@ impl canvas::Program<Message> for Layer<'_> {
                     } else {
                         Point::ORIGIN
                     };
-                    let from = Point::new(
+                    let mut from = Point::new(
                         start[0] as f32 * scale_x + offset.x,
                         start[1] as f32 * scale_y + offset.y,
                     );
-                    let to = Point::new(
+                    let mut to = Point::new(
                         end[0] as f32 * scale_x + offset.x,
                         end[1] as f32 * scale_y + offset.y,
                     );
+                    if let Some(endpoint) = state
+                        .line_endpoint
+                        .as_ref()
+                        .filter(|endpoint| endpoint.id == annotation.id)
+                    {
+                        if endpoint.start {
+                            from = endpoint.current;
+                        } else {
+                            to = endpoint.current;
+                        }
+                    }
                     frame.stroke(
                         &canvas::Path::line(from, to),
                         Stroke::default()
@@ -556,11 +625,17 @@ impl canvas::Program<Message> for Layer<'_> {
         if state.moving.is_some() {
             return mouse::Interaction::Grabbing;
         }
+        if state.line_endpoint.is_some() {
+            return mouse::Interaction::Grabbing;
+        }
         if let Some(resizing) = &state.resizing {
             return resizing.handle.interaction();
         }
         if self.tool == AnnotationTool::Select {
             if let Some(point) = cursor.position_in(bounds) {
+                if self.selected_line_endpoint(point, bounds).is_some() {
+                    return mouse::Interaction::Grab;
+                }
                 if let Some((_, handle, _)) = self.selected_handle(point, bounds) {
                     return handle.interaction();
                 }
@@ -609,6 +684,52 @@ pub fn view<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opds_native_core::annotations::{Annotation, Edit};
+    use opds_native_core::DocumentId;
+
+    #[test]
+    fn selected_line_grips_track_page_scale_and_ignore_other_points() {
+        let mut model = DocumentModel::new(DocumentId(1), 1).unwrap();
+        model
+            .apply(Edit::Add(Annotation {
+                id: 7,
+                page: 0,
+                bounds: Rect {
+                    x: 18.0,
+                    y: 28.0,
+                    width: 84.0,
+                    height: 54.0,
+                },
+                kind: Kind::Line {
+                    start: [20.0, 30.0],
+                    end: [100.0, 80.0],
+                    color_rgb: [231, 76, 60],
+                },
+            }))
+            .unwrap();
+        let layer = Layer {
+            model: &model,
+            page: 0,
+            selected: Some(7),
+            editing_text: None,
+            tool: AnnotationTool::Select,
+            page_points: (200.0, 150.0),
+            paint_existing: true,
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(400.0, 300.0));
+        assert_eq!(
+            layer.selected_line_endpoint(Point::new(40.0, 60.0), bounds),
+            Some((7, true))
+        );
+        assert_eq!(
+            layer.selected_line_endpoint(Point::new(200.0, 160.0), bounds),
+            Some((7, false))
+        );
+        assert_eq!(
+            layer.selected_line_endpoint(Point::new(100.0, 80.0), bounds),
+            None
+        );
+    }
 
     #[test]
     fn corner_resize_stays_on_page_and_keeps_positive_size() {

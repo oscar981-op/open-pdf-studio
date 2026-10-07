@@ -3437,6 +3437,7 @@ enum Message {
     AnnotationGesturePreview(u64, Rect),
     AnnotationGestureEnded,
     MoveAnnotation(u64, [f64; 2]),
+    MoveLineEndpoint(u64, bool, [f64; 2]),
     ResizeAnnotation(u64, Rect),
     RemoveSelectedAnnotation,
     AddAnnotation(Rect),
@@ -4394,6 +4395,45 @@ impl App {
                                 match document.model.apply(Edit::Replace(item)) {
                                     Ok(()) => self.message = "Annotation moved".into(),
                                     Err(error) => self.message = format!("Move failed: {error:?}"),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Message::MoveLineEndpoint(id, move_start, target) => {
+                self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
+                if let Some(document) = &mut self.document {
+                    if document.selected_annotation == Some(id) {
+                        if let Some(mut item) = document.model.get(id).cloned() {
+                            if item.page == document.displayed_page {
+                                if let Kind::Line { start, end, .. } = &mut item.kind {
+                                    let original = if move_start { *start } else { *end };
+                                    if move_start {
+                                        *start = target;
+                                    } else {
+                                        *end = target;
+                                    }
+                                    if target != original {
+                                        if let Some(bounds) =
+                                            line_bounds(*start, *end, document.bitmap_page_points)
+                                        {
+                                            item.bounds = bounds;
+                                            match document.model.apply(Edit::Replace(item)) {
+                                                Ok(()) => {
+                                                    self.message = "Line endpoint moved".into()
+                                                }
+                                                Err(error) => {
+                                                    self.message =
+                                                        format!("Endpoint failed: {error:?}")
+                                                }
+                                            }
+                                        } else {
+                                            self.message =
+                                                "Line endpoint outside page or too close".into();
+                                        }
+                                    }
                                 }
                             }
                         }
