@@ -401,6 +401,29 @@ fn keystroke_timeout(delay: Duration) -> Task<Message> {
     })
 }
 
+fn zoom_timeout(delay: Duration) -> Task<Message> {
+    Task::perform(async move { std::thread::sleep(delay) }, |()| {
+        Message::ZoomRenderDue
+    })
+}
+
+fn zoom_preview_size(size: (u32, u32), rendered_scale: f32, wanted_scale: f64) -> (u32, u32) {
+    if size.0 == 0
+        || size.1 == 0
+        || !rendered_scale.is_finite()
+        || rendered_scale <= 0.0
+        || !wanted_scale.is_finite()
+    {
+        return size;
+    }
+    let factor = wanted_scale / f64::from(rendered_scale);
+    if !factor.is_finite() || factor <= 0.0 {
+        return size;
+    }
+    let scaled = |length: u32| (f64::from(length) * factor).round().clamp(1.0, 32_768.0) as u32;
+    (scaled(size.0), scaled(size.1))
+}
+
 fn scroll_page_to(offset: scrollable::AbsoluteOffset) -> Task<Message> {
     iced::widget::operation::scroll_to(iced::widget::Id::new("pdf-page-scroll"), offset)
 }
@@ -440,6 +463,8 @@ struct App {
     busy: bool,
     opening_document: bool,
     render_queued: bool,
+    zoom_render_due: Option<Instant>,
+    zoom_timer_active: bool,
     message: String,
     open_dialog: bool,
     confirm_discard: Option<PendingAction>,
@@ -738,7 +763,8 @@ mod thumbnail_tests {
 
 #[cfg(test)]
 mod fit_view_tests {
-    use super::{fit_scale, FitMode};
+    use super::{fit_scale, zoom_preview_size, App, FitMode, Message};
+    use std::time::{Duration, Instant};
 
     #[test]
     fn fit_uses_document_area_and_reacts_to_panels() {
@@ -749,6 +775,85 @@ mod fit_view_tests {
         assert!((width - 0.722).abs() < 1e-5);
         assert!(full < width);
         assert!(fit_scale(FitMode::Width, page, window, false, false, false).unwrap() > width);
+    }
+
+    #[test]
+    fn pending_zoom_stretches_existing_bitmap_without_a_new_raster() {
+        assert_eq!(zoom_preview_size((1000, 800), 1.0, 1.25), (1250, 1000));
+        assert_eq!(zoom_preview_size((1000, 800), 0.5, 0.25), (500, 400));
+        assert_eq!(zoom_preview_size((1000, 800), 0.0, 1.25), (1000, 800));
+        assert_eq!(zoom_preview_size((0, 0), 1.0, 1.25), (0, 0));
+    }
+
+    #[test]
+    fn repeated_zoom_requests_keep_only_the_latest_render_deadline() {
+        let mut app = App::default();
+        let _ = app.schedule_zoom_render();
+        let first = app.zoom_render_due.unwrap();
+        let _ = app.schedule_zoom_render();
+        assert!(app.zoom_timer_active);
+        assert!(app.zoom_render_due.unwrap() >= first);
+        app.zoom_render_due = Some(Instant::now() - Duration::from_millis(1));
+        let _ = app.update(Message::ZoomRenderDue);
+        assert!(!app.zoom_timer_active);
+        assert!(app.zoom_render_due.is_none());
+    }
+}
+
+#[cfg(test)]
+mod zoom_interaction_tests {
+    use super::*;
+
+    #[test]
+    fn stale_render_clears_busy_until_debounced_zoom_starts() {
+        let bytes = Arc::new(
+            include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let model = DocumentModel::new(DocumentId(1), pdf.page_count()).unwrap();
+        let stale_ticket = model.view().ticket();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "fixture.pdf".into(),
+                source_bytes: bytes,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: None,
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            busy: true,
+            ..App::default()
+        };
+        let _ = app.update(Message::Zoom(1.25));
+        assert!(app.zoom_timer_active);
+        assert!(!app.render_queued);
+        let _ = app.update(Message::Rendered(
+            0,
+            stale_ticket,
+            Err("obsolete render".into()),
+        ));
+        assert!(!app.busy);
+        app.zoom_render_due = Some(Instant::now() - Duration::from_millis(1));
+        let _ = app.update(Message::ZoomRenderDue);
+        assert!(app.busy);
+        assert!(app.zoom_render_due.is_none());
     }
 }
 
@@ -3463,6 +3568,7 @@ enum Message {
         amount: f32,
         anchor: [f32; 2],
     },
+    ZoomRenderDue,
     PageScrolled(scrollable::Viewport),
     ThumbnailsScrolled(scrollable::Viewport),
     GoToPage(usize),
@@ -3563,10 +3669,15 @@ impl App {
             return None;
         }
         let document = self.document.as_ref()?;
-        let scroll_height = if document.bitmap_size.1 == 0 {
+        let preview_size = zoom_preview_size(
+            document.bitmap_size,
+            document.bitmap_scale,
+            document.model.view().viewport().scale(),
+        );
+        let scroll_height = if preview_size.1 == 0 {
             0.0
         } else {
-            document.bitmap_size.1 as f32 + 48.0
+            preview_size.1 as f32 + 48.0
         };
         Some((
             Path::new(&document.path),
@@ -4113,6 +4224,7 @@ impl App {
                 }
                 self.backend = backend;
                 self.render_queued = false;
+                self.zoom_render_due = None;
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
                 self.backend_generation = self.backend_generation.wrapping_add(1);
@@ -4699,6 +4811,7 @@ impl App {
                 self.busy = true;
                 self.opening_document = true;
                 self.render_queued = false;
+                self.zoom_render_due = None;
                 self.message = "Opening PDF…".into();
                 return Task::perform(
                     async move {
@@ -4823,12 +4936,10 @@ impl App {
                     if document.model.zoom_at(scale, [0.0, 0.0]).is_err() {
                         return Task::none();
                     }
-                }
-                if self.busy {
-                    self.render_queued = true;
+                } else {
                     return Task::none();
                 }
-                return self.render_current_page();
+                return self.schedule_zoom_render();
             }
             Message::FitView(mode) => {
                 let Some(document) = &self.document else {
@@ -4929,17 +5040,15 @@ impl App {
                         return Task::none();
                     }
                     let current = self.page_scroll_offset;
-                    let factor = (next / f64::from(document.bitmap_scale)) as f32;
+                    let factor = (next / scale) as f32;
                     self.pending_zoom_offset = Some(scrollable::AbsoluteOffset {
                         x: (current.x + anchor[0] * (factor - 1.0)).max(0.0),
                         y: (current.y + anchor[1] * (factor - 1.0)).max(0.0),
                     });
-                }
-                if self.busy {
-                    self.render_queued = true;
+                } else {
                     return Task::none();
                 }
-                let render = self.render_current_page();
+                let render = self.schedule_zoom_render();
                 if let Some(offset) = self.pending_zoom_offset {
                     self.page_scroll_offset = offset;
                 }
@@ -4950,9 +5059,29 @@ impl App {
                         .map_or_else(Task::none, scroll_page_to),
                 ]);
             }
+            Message::ZoomRenderDue => {
+                self.zoom_timer_active = false;
+                let Some(due) = self.zoom_render_due else {
+                    return Task::none();
+                };
+                if let Some(remaining) = due.checked_duration_since(Instant::now()) {
+                    self.zoom_timer_active = true;
+                    return zoom_timeout(remaining);
+                }
+                self.zoom_render_due = None;
+                if self.document.is_none() {
+                    return Task::none();
+                }
+                if self.busy {
+                    self.render_queued = true;
+                    return Task::none();
+                }
+                return self.render_current_page();
+            }
             Message::GoToPage(page) => {
                 self.annotation_gesture_active = false;
                 self.pending_zoom_offset = None;
+                self.zoom_render_due = None;
                 if let Some(document) = &mut self.document {
                     if document.model.go_to_page(page).is_err() {
                         return Task::none();
@@ -5024,6 +5153,7 @@ impl App {
                     return Task::none();
                 };
                 if !document.model.view().accepts(ticket) {
+                    self.busy = false;
                     if self.render_queued {
                         self.render_queued = false;
                         return self.render_current_page();
@@ -5082,6 +5212,7 @@ impl App {
                 self.busy = false;
                 self.opening_document = false;
                 self.render_queued = false;
+                self.zoom_render_due = None;
                 self.message.clear();
             }
         }
@@ -5223,6 +5354,34 @@ impl App {
         }
         #[cfg(not(feature = "dynlex-experimental"))]
         Task::none()
+    }
+
+    fn schedule_zoom_render(&mut self) -> Task<Message> {
+        self.render_queued = false;
+        if self.document.as_ref().is_some_and(|document| {
+            let view = document.model.view();
+            let scale_bits = (view.viewport().scale() as f32).to_bits();
+            document
+                .page_cache
+                .iter()
+                .any(|item| item.page == view.page() && item.scale_bits == scale_bits)
+        }) {
+            self.zoom_render_due = None;
+            return self.render_current_page();
+        }
+        self.zoom_render_due = Some(Instant::now() + Duration::from_millis(160));
+        if let Some(document) = &self.document {
+            self.message = format!(
+                "Zoom {:.0}% • sharpening…",
+                document.model.view().viewport().scale() * 100.0
+            );
+        }
+        if self.zoom_timer_active {
+            Task::none()
+        } else {
+            self.zoom_timer_active = true;
+            zoom_timeout(Duration::from_millis(160))
+        }
     }
 
     fn render_current_page(&mut self) -> Task<Message> {

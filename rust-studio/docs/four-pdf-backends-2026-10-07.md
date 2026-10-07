@@ -30,6 +30,10 @@ klikbaar als de library daadwerkelijk is geladen. Geef zo nodig een expliciet
 pad met `OPDS_PDFIUM_LIBRARY=/absoluut/pad/libpdfium.so`. Het project bundelt
 geen PDFium-binary. De PDFium Rust-grens serialiseert C-ABI-aanroepen,
 valideert invoer- en bitmaplimieten, en zet PDFiums BGRA-uitvoer om naar RGBA.
+Naast de Settings-ribbon staat nu altijd een compacte **Kernel**-keuzelijst
+linksonder in de statusbalk. Zij toont Hayro en alleen daadwerkelijk beschikbare
+optionele kernels. De keuze is de voorkeur; de statusregel meldt afzonderlijk
+welke renderer het zichtbare PDF-beeld of de annotaties werkelijk heeft gemaakt.
 
 De vier routes delen de bestaande cachegeneratie en negeren late renderresultaten
 na een backendwissel. De app herstelt de opgeslagen pagina-scrollpositie nadat
@@ -102,5 +106,8 @@ backendwissel behouden. De UI laat de vier voorkeuren onder Settings zien en
 vermeldt in de statusregel de werkelijk gebruikte renderer. Een snelle
 rendererselectie tijdens een lopende paginarender wordt door de
 cachegeneratie beveiligd; snel opeenvolgende zoomacties worden voor de
-laatste gewenste schaal samengevoegd. De volledige app op deze echte PDF is
+laatste gewenste schaal samengevoegd. Sinds 8 oktober schaalt de vorige bitmap
+direct mee tijdens Ctrl+scroll en begint de scherpe render pas na 160 ms
+zonder nieuwe zoomactie. Dit versnelt de interactie; het maakt de uiteindelijke
+Hayro-render van de complexe pagina niet op zichzelf sneller. De volledige app op deze echte PDF is
 nog niet pixelgelijk aan de oorspronkelijke Open PDF Studio-interface.

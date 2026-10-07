@@ -1,0 +1,723 @@
+{
+  "protocol": "rotating-backend-order, same PDF and page 1, warm OS cache, new process per sample",
+  "probe": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/target/release/backend_probe",
+  "pdfium_library": "/home/aia02/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pypdfium2_raw/libpdfium.so",
+  "rounds": 2,
+  "scale": 0.25,
+  "fixtures": [
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/crates/dynlex-backend/tests/fixtures/full-page-raster.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 31.727,
+          "peak_rss_kib": 6024,
+          "rgba_bytes": 12288,
+          "sha256": "80e42e08e8d482f154d7fdadda05acfb9f6bb8585654565996f9cef0eed059ff",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 9.178,
+          "peak_rss_kib": 6104,
+          "rgba_bytes": 12288,
+          "sha256": "80e42e08e8d482f154d7fdadda05acfb9f6bb8585654565996f9cef0eed059ff",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.804,
+          "peak_rss_kib": 7328,
+          "rgba_bytes": 12288,
+          "sha256": "3c68e28a7c43c2a8b23fba831a400d355116e375ba3193fe18271ff10bd651ec",
+          "different_rgba_channels_vs_hayro": 8588,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 8.395,
+          "peak_rss_kib": 6500,
+          "rgba_bytes": 12288,
+          "sha256": "80e42e08e8d482f154d7fdadda05acfb9f6bb8585654565996f9cef0eed059ff",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 8.344,
+          "peak_rss_kib": 6244,
+          "rgba_bytes": 12288,
+          "sha256": "80e42e08e8d482f154d7fdadda05acfb9f6bb8585654565996f9cef0eed059ff",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.879,
+          "peak_rss_kib": 7260,
+          "rgba_bytes": 12288,
+          "sha256": "3c68e28a7c43c2a8b23fba831a400d355116e375ba3193fe18271ff10bd651ec",
+          "different_rgba_channels_vs_hayro": 8588,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 8.287,
+          "peak_rss_kib": 6300,
+          "rgba_bytes": 12288,
+          "sha256": "80e42e08e8d482f154d7fdadda05acfb9f6bb8585654565996f9cef0eed059ff",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.837,
+          "peak_rss_kib": 6120,
+          "rgba_bytes": 12288,
+          "sha256": "80e42e08e8d482f154d7fdadda05acfb9f6bb8585654565996f9cef0eed059ff",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 19.282,
+          "median_peak_rss_kib": 6072.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 8.761,
+          "median_peak_rss_kib": 6174.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 8.341,
+          "median_peak_rss_kib": 7294.0,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 8588
+        },
+        "own-rust": {
+          "median_wall_ms": 8.341,
+          "median_peak_rss_kib": 6400.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    },
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/crates/dynlex-backend/tests/fixtures/simple-fill-stroke.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.398,
+          "peak_rss_kib": 5856,
+          "rgba_bytes": 12288,
+          "sha256": "d869b3de82ecfbc9efd57f1b9be60e0080b4cbf958f7ba000d10872e2e646900",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 7.545,
+          "peak_rss_kib": 5976,
+          "rgba_bytes": 12288,
+          "sha256": "d869b3de82ecfbc9efd57f1b9be60e0080b4cbf958f7ba000d10872e2e646900",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 6.187,
+          "peak_rss_kib": 6908,
+          "rgba_bytes": 12288,
+          "sha256": "59821821e05846c765755e23b9d06da116cc7f382f8a03fb8a11b05c133abaa1",
+          "different_rgba_channels_vs_hayro": 68,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 5.34,
+          "peak_rss_kib": 5908,
+          "rgba_bytes": 12288,
+          "sha256": "d869b3de82ecfbc9efd57f1b9be60e0080b4cbf958f7ba000d10872e2e646900",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 7.358,
+          "peak_rss_kib": 6000,
+          "rgba_bytes": 12288,
+          "sha256": "d869b3de82ecfbc9efd57f1b9be60e0080b4cbf958f7ba000d10872e2e646900",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.962,
+          "peak_rss_kib": 7016,
+          "rgba_bytes": 12288,
+          "sha256": "59821821e05846c765755e23b9d06da116cc7f382f8a03fb8a11b05c133abaa1",
+          "different_rgba_channels_vs_hayro": 68,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 7.396,
+          "peak_rss_kib": 5984,
+          "rgba_bytes": 12288,
+          "sha256": "d869b3de82ecfbc9efd57f1b9be60e0080b4cbf958f7ba000d10872e2e646900",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.787,
+          "peak_rss_kib": 5948,
+          "rgba_bytes": 12288,
+          "sha256": "d869b3de82ecfbc9efd57f1b9be60e0080b4cbf958f7ba000d10872e2e646900",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 8.092,
+          "median_peak_rss_kib": 5902.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 7.451,
+          "median_peak_rss_kib": 5988.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 7.075,
+          "median_peak_rss_kib": 6962.0,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 68
+        },
+        "own-rust": {
+          "median_wall_ms": 6.368,
+          "median_peak_rss_kib": 5946.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    },
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/crates/dynlex-backend/tests/fixtures/placed-hybrid.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.411,
+          "peak_rss_kib": 6176,
+          "rgba_bytes": 12288,
+          "sha256": "3af737cf5567d31ce5b339da4f5ee92cfd96271deb9ec8c438396f7aa0c76785",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 6.081,
+          "peak_rss_kib": 6080,
+          "rgba_bytes": 12288,
+          "sha256": "3af737cf5567d31ce5b339da4f5ee92cfd96271deb9ec8c438396f7aa0c76785",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.871,
+          "peak_rss_kib": 6904,
+          "rgba_bytes": 12288,
+          "sha256": "b4f6993155d467e820b07210888cc8c6e55535d22327ee68ef575dfd76b6af27",
+          "different_rgba_channels_vs_hayro": 865,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 6.866,
+          "peak_rss_kib": 6088,
+          "rgba_bytes": 12288,
+          "sha256": "3af737cf5567d31ce5b339da4f5ee92cfd96271deb9ec8c438396f7aa0c76785",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 6.562,
+          "peak_rss_kib": 6064,
+          "rgba_bytes": 12288,
+          "sha256": "3af737cf5567d31ce5b339da4f5ee92cfd96271deb9ec8c438396f7aa0c76785",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.226,
+          "peak_rss_kib": 6984,
+          "rgba_bytes": 12288,
+          "sha256": "b4f6993155d467e820b07210888cc8c6e55535d22327ee68ef575dfd76b6af27",
+          "different_rgba_channels_vs_hayro": 865,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 6.915,
+          "peak_rss_kib": 6120,
+          "rgba_bytes": 12288,
+          "sha256": "3af737cf5567d31ce5b339da4f5ee92cfd96271deb9ec8c438396f7aa0c76785",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 5.69,
+          "peak_rss_kib": 5920,
+          "rgba_bytes": 12288,
+          "sha256": "3af737cf5567d31ce5b339da4f5ee92cfd96271deb9ec8c438396f7aa0c76785",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 6.55,
+          "median_peak_rss_kib": 6048.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 6.322,
+          "median_peak_rss_kib": 6072.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 9.049,
+          "median_peak_rss_kib": 6944.0,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 865
+        },
+        "own-rust": {
+          "median_wall_ms": 6.89,
+          "median_peak_rss_kib": 6104.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    },
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Originele bestanden/Tekst.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 48.938,
+          "peak_rss_kib": 19020,
+          "rgba_bytes": 124320,
+          "sha256": "477845ab2e363f185ff1565f581163946ed675264420efa8938ca629877b8695",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 41.909,
+          "peak_rss_kib": 19208,
+          "rgba_bytes": 124320,
+          "sha256": "477845ab2e363f185ff1565f581163946ed675264420efa8938ca629877b8695",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 48.366,
+          "peak_rss_kib": 21444,
+          "rgba_bytes": 125756,
+          "sha256": "1f4284215ea8bee14e84bbdeb59bede76f4bd4e3e2be202bb6c1ec2d65e34c26",
+          "different_rgba_channels_vs_hayro": 29800,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 41.691,
+          "peak_rss_kib": 19252,
+          "rgba_bytes": 124320,
+          "sha256": "477845ab2e363f185ff1565f581163946ed675264420efa8938ca629877b8695",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 50.99,
+          "peak_rss_kib": 19120,
+          "rgba_bytes": 124320,
+          "sha256": "477845ab2e363f185ff1565f581163946ed675264420efa8938ca629877b8695",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 57.074,
+          "peak_rss_kib": 21352,
+          "rgba_bytes": 125756,
+          "sha256": "1f4284215ea8bee14e84bbdeb59bede76f4bd4e3e2be202bb6c1ec2d65e34c26",
+          "different_rgba_channels_vs_hayro": 29800,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 45.795,
+          "peak_rss_kib": 19320,
+          "rgba_bytes": 124320,
+          "sha256": "477845ab2e363f185ff1565f581163946ed675264420efa8938ca629877b8695",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 48.559,
+          "peak_rss_kib": 19096,
+          "rgba_bytes": 124320,
+          "sha256": "477845ab2e363f185ff1565f581163946ed675264420efa8938ca629877b8695",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 48.748,
+          "median_peak_rss_kib": 19058.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 46.45,
+          "median_peak_rss_kib": 19164.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 52.72,
+          "median_peak_rss_kib": 21398.0,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 29800
+        },
+        "own-rust": {
+          "median_wall_ms": 43.743,
+          "median_peak_rss_kib": 19286.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    },
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Originele bestanden/Combinatie Raster, vector, tekening images.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 783.375,
+          "peak_rss_kib": 18212,
+          "rgba_bytes": 500148,
+          "sha256": "230ef806a0bd338ea19449e6d7f729d2fe76df5b87c11e652594185232d90bec",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 729.599,
+          "peak_rss_kib": 18892,
+          "rgba_bytes": 500148,
+          "sha256": "230ef806a0bd338ea19449e6d7f729d2fe76df5b87c11e652594185232d90bec",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 122.496,
+          "peak_rss_kib": 39892,
+          "rgba_bytes": 501832,
+          "sha256": "22c2e0b5a05a638ff37c152fdd36ec49eb44d21f95fdf981b6bdb5be3110e1ca",
+          "different_rgba_channels_vs_hayro": 62494,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 726.011,
+          "peak_rss_kib": 19016,
+          "rgba_bytes": 500148,
+          "sha256": "230ef806a0bd338ea19449e6d7f729d2fe76df5b87c11e652594185232d90bec",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 723.389,
+          "peak_rss_kib": 19028,
+          "rgba_bytes": 500148,
+          "sha256": "230ef806a0bd338ea19449e6d7f729d2fe76df5b87c11e652594185232d90bec",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 117.646,
+          "peak_rss_kib": 39632,
+          "rgba_bytes": 501832,
+          "sha256": "22c2e0b5a05a638ff37c152fdd36ec49eb44d21f95fdf981b6bdb5be3110e1ca",
+          "different_rgba_channels_vs_hayro": 62494,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 772.719,
+          "peak_rss_kib": 19108,
+          "rgba_bytes": 500148,
+          "sha256": "230ef806a0bd338ea19449e6d7f729d2fe76df5b87c11e652594185232d90bec",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 744.091,
+          "peak_rss_kib": 18372,
+          "rgba_bytes": 500148,
+          "sha256": "230ef806a0bd338ea19449e6d7f729d2fe76df5b87c11e652594185232d90bec",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 763.733,
+          "median_peak_rss_kib": 18292.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 726.494,
+          "median_peak_rss_kib": 18960.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 120.071,
+          "median_peak_rss_kib": 39762.0,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 62494
+        },
+        "own-rust": {
+          "median_wall_ms": 749.365,
+          "median_peak_rss_kib": 19062.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    },
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Testbestanden/20260316 - Barn Relocation - 389 E Hemenway Lane - for Permit.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 996.92,
+          "peak_rss_kib": 97568,
+          "rgba_bytes": 969408,
+          "sha256": "59abeb8c1134a2a2291ff5645c63e077a5ef1d2094bdbe6ffdc8f1a8bbcb7a50",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 1003.291,
+          "peak_rss_kib": 123720,
+          "rgba_bytes": 969408,
+          "sha256": "59abeb8c1134a2a2291ff5645c63e077a5ef1d2094bdbe6ffdc8f1a8bbcb7a50",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 271.451,
+          "peak_rss_kib": 101604,
+          "rgba_bytes": 969408,
+          "sha256": "0f4efc05d014e1090e5e23e7301d2e1131cf2a0eb91711a6a414776afbf9b66a",
+          "different_rgba_channels_vs_hayro": 133591,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 962.496,
+          "peak_rss_kib": 123860,
+          "rgba_bytes": 969408,
+          "sha256": "59abeb8c1134a2a2291ff5645c63e077a5ef1d2094bdbe6ffdc8f1a8bbcb7a50",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Hayro",
+          "wall_ms": 1016.789,
+          "peak_rss_kib": 123672,
+          "rgba_bytes": 969408,
+          "sha256": "59abeb8c1134a2a2291ff5645c63e077a5ef1d2094bdbe6ffdc8f1a8bbcb7a50",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 282.18,
+          "peak_rss_kib": 101600,
+          "rgba_bytes": 969408,
+          "sha256": "0f4efc05d014e1090e5e23e7301d2e1131cf2a0eb91711a6a414776afbf9b66a",
+          "different_rgba_channels_vs_hayro": 133591,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "Hayro",
+          "wall_ms": 988.544,
+          "peak_rss_kib": 123784,
+          "rgba_bytes": 969408,
+          "sha256": "59abeb8c1134a2a2291ff5645c63e077a5ef1d2094bdbe6ffdc8f1a8bbcb7a50",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 959.338,
+          "peak_rss_kib": 97720,
+          "rgba_bytes": 969408,
+          "sha256": "59abeb8c1134a2a2291ff5645c63e077a5ef1d2094bdbe6ffdc8f1a8bbcb7a50",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 978.129,
+          "median_peak_rss_kib": 97644.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 1010.04,
+          "median_peak_rss_kib": 123696.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 276.816,
+          "median_peak_rss_kib": 101602.0,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 133591
+        },
+        "own-rust": {
+          "median_wall_ms": 975.52,
+          "median_peak_rss_kib": 123822.0,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    }
+  ]
+}

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import statistics
 import subprocess
@@ -22,12 +23,14 @@ from pathlib import Path
 BACKENDS = ("hayro", "dynlex", "pdfium", "own-rust")
 
 
-def run_one(probe: Path, pdf: Path, backend: str, directory: Path, env: dict[str, str]) -> dict:
+def run_one(
+    probe: Path, pdf: Path, backend: str, scale: float, directory: Path, env: dict[str, str]
+) -> dict:
     rgba = directory / f"{backend}.rgba"
     time_file = directory / f"{backend}.rss"
     started = time.perf_counter_ns()
     process = subprocess.run(
-        ["/usr/bin/time", "-f", "%M", "-o", str(time_file), str(probe), str(pdf), str(rgba), f"--{backend}"],
+        ["/usr/bin/time", "-f", "%M", "-o", str(time_file), str(probe), str(pdf), str(rgba), f"--{backend}", f"--scale={scale}"],
         env=env,
         text=True,
         capture_output=True,
@@ -55,19 +58,23 @@ def main() -> None:
     parser.add_argument("--probe", type=Path, default=Path("target/release/backend_probe"))
     parser.add_argument("--pdfium-library", type=Path, required=True)
     parser.add_argument("--rounds", type=int, default=15)
+    parser.add_argument("--scale", type=float, default=1.0, help="72-dpi render scale (0.01..8)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("pdfs", type=Path, nargs="+")
     args = parser.parse_args()
     if not 1 <= args.rounds <= 100:
         parser.error("rounds must be 1..100")
+    if not math.isfinite(args.scale) or not 0.01 <= args.scale <= 8.0:
+        parser.error("scale must be finite and 0.01..8")
     probe = args.probe.resolve(strict=True)
     library = args.pdfium_library.resolve(strict=True)
     env = dict(os.environ, OPDS_PDFIUM_LIBRARY=str(library))
     report = {
-        "protocol": "rotating-backend-order, same PDF and 72-dpi page 1, warm OS cache, new process per sample",
+        "protocol": "rotating-backend-order, same PDF and page 1, warm OS cache, new process per sample",
         "probe": str(probe),
         "pdfium_library": str(library),
         "rounds": args.rounds,
+        "scale": args.scale,
         "fixtures": [],
     }
     for pdf_arg in args.pdfs:
@@ -78,7 +85,7 @@ def main() -> None:
             directory = Path(temp)
             for round_number in range(args.rounds):
                 order = BACKENDS[round_number % len(BACKENDS) :] + BACKENDS[: round_number % len(BACKENDS)]
-                results = [run_one(probe, pdf, backend, directory, env) for backend in order]
+                results = [run_one(probe, pdf, backend, args.scale, directory, env) for backend in order]
                 reference = next(row["rgba"] for row in results if row["requested"] == "hayro")
                 for row in results:
                     data = row.pop("rgba")

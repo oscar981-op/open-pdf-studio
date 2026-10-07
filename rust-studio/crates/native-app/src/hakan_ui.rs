@@ -11,12 +11,58 @@ use iced::widget::{
     text, text_editor, text_input, tooltip, Space,
 };
 use iced::{Background, Border, Color, Element, Fill, Padding, Theme};
+use opds_dynlex_backend::Backend;
 use opds_native_core::annotations::TextAlign;
 use std::time::Duration;
 
 pub const ROW_H: f32 = 26.0;
 const LARGE_W: f32 = ROW_H * 2.2;
 const PDF_RIBBON_H: f32 = 94.0;
+
+fn kernel_name(backend: Backend) -> &'static str {
+    match backend {
+        Backend::Hayro => "Hayro",
+        Backend::Dynlex => "DynLex",
+        Backend::Pdfium => "PDFium",
+        Backend::OwnRust => "Eigen Rust",
+    }
+}
+
+fn available_kernels() -> Vec<&'static str> {
+    let mut kernels = vec!["Hayro"];
+    if cfg!(feature = "dynlex-experimental") {
+        kernels.push("DynLex");
+    }
+    if opds_dynlex_backend::pdfium_available() {
+        kernels.push("PDFium");
+    }
+    if opds_dynlex_backend::own_rust_available() {
+        kernels.push("Eigen Rust");
+    }
+    kernels
+}
+
+fn kernel_from_name(name: &str) -> Backend {
+    match name {
+        "DynLex" => Backend::Dynlex,
+        "PDFium" => Backend::Pdfium,
+        "Eigen Rust" => Backend::OwnRust,
+        _ => Backend::Hayro,
+    }
+}
+
+#[cfg(test)]
+mod kernel_choice_tests {
+    use super::*;
+
+    #[test]
+    fn visible_kernel_choices_round_trip_to_the_selected_backend() {
+        for name in available_kernels() {
+            assert_eq!(kernel_name(kernel_from_name(name)), name);
+        }
+        assert!(available_kernels().contains(&"Hayro"));
+    }
+}
 
 fn tool_btn_style(theme: &Theme, is_active: bool, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
@@ -1235,7 +1281,17 @@ pub fn view(app: &App) -> Element<'_, Message> {
             let handle = annotation_bitmap
                 .or_else(|| document.bitmap.clone())
                 .expect("filtered above");
-            let (width, height) = document.bitmap_size;
+            // Stretch the last verified bitmap immediately while a new PDF
+            // raster is pending. The final render replaces it at full detail.
+            let (width, height) = if document.displayed_page == document.model.view().page() {
+                super::zoom_preview_size(
+                    document.bitmap_size,
+                    document.bitmap_scale,
+                    document.model.view().viewport().scale(),
+                )
+            } else {
+                document.bitmap_size
+            };
             let mut page: Element<'_, Message> = iced::widget::stack![
                 image(handle).width(width as f32).height(height as f32),
                 annotation_layer::view(
@@ -1246,7 +1302,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     app.annotation_tool,
                     app.annotation_tool_epoch,
                     document.bitmap_page_points,
-                    document.bitmap_size,
+                    (width, height),
                     !dynlex_annotations
                 )
             ]
@@ -1672,8 +1728,17 @@ pub fn view(app: &App) -> Element<'_, Message> {
         .unwrap_or("");
     let status = container(
         row![
-            text(&app.message).size(11),
+            text("Kernel").size(11),
+            pick_list(
+                available_kernels(),
+                Some(kernel_name(app.backend)),
+                |name| Message::SelectBackend(kernel_from_name(name)),
+            )
+            .width(108)
+            .text_size(11)
+            .padding([2, 6]),
             text(renderer_label).size(11),
+            text(&app.message).size(11),
             quick_access(
                 icon_asset!("ui/undo.svg"),
                 "Undo",
