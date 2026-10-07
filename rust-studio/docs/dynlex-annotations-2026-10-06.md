@@ -11,6 +11,16 @@ previewfallback. PDF Save As schrijft de native annotaties als printbare
 `/AP`-streams. Deze paden zijn nog niet door één DynLex-annotatierenderer
 vervangen.
 
+De native DynLex-annotatieroute accepteert nu ook uitsluitend dekkende,
+pixeluitgelijnde horizontale of verticale 2pt-Line-appearances, minimaal vier
+pixels lang en volledig binnen de pagina. Rust valideert beide eindpunten en
+zet de bewezen lijnstrook als geordende OPAN-vulopdracht door naar de bestaande
+DynLex-kernel. Zestien PDF-verificaties (vier kwartslagrotaties × twee
+lijnrichtingen × witte/gekleurde ondergrond) zijn over de volledige RGBA-pagina
+bytegelijk aan Hayro. Diagonale en fractionele lijnen, Polyline en overige
+onbewezen vormen keren zonder gedeeltelijke DynLex-uitvoer terug naar de Iced-
+overlay. Dit maakt de hele annotatielaag nog niet DynLex-native.
+
 De opt-in `opds-dynlex-backend::render_native_annotation_overlay` gebruikt nu
 een **afzonderlijke in-process DynLex-kernel**. Een versieerbare OPAN-v1-lijst
 bevat alleen gevalideerde pixeluitgelijnde native Square- en

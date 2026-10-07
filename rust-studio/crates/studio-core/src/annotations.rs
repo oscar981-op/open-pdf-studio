@@ -32,6 +32,10 @@ pub enum Kind {
         end: [f64; 2],
         color_rgb: [u8; 3],
     },
+    Polyline {
+        points: Vec<[f64; 2]>,
+        color_rgb: [u8; 3],
+    },
     Text {
         value: String,
         color_rgb: [u8; 3],
@@ -51,6 +55,19 @@ pub enum TextAlign {
 pub const TEXT_FONT_SIZES: [u16; 16] =
     [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72];
 pub const DEFAULT_TEXT_FONT_SIZE: u16 = 16;
+pub const MAX_POLYLINE_POINTS: usize = 64;
+
+fn distance_to_segment(point: [f64; 2], start: [f64; 2], end: [f64; 2]) -> f64 {
+    let dx = end[0] - start[0];
+    let dy = end[1] - start[1];
+    let length_squared = dx * dx + dy * dy;
+    if !length_squared.is_finite() || length_squared == 0.0 {
+        return f64::INFINITY;
+    }
+    let t = (((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length_squared)
+        .clamp(0.0, 1.0);
+    (point[0] - start[0] - t * dx).hypot(point[1] - start[1] - t * dy)
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Annotation {
@@ -141,17 +158,12 @@ impl DocumentModel {
             }
             match &annotation.kind {
                 Kind::Line { start, end, .. } => {
-                    let dx = end[0] - start[0];
-                    let dy = end[1] - start[1];
-                    let length_squared = dx * dx + dy * dy;
-                    let t = (((point[0] - start[0]) * dx + (point[1] - start[1]) * dy)
-                        / length_squared)
-                        .clamp(0.0, 1.0);
-                    let distance = ((point[0] - start[0] - t * dx).powi(2)
-                        + (point[1] - start[1] - t * dy).powi(2))
-                    .sqrt();
-                    (distance <= tolerance + 1.0).then_some(*id)
+                    (distance_to_segment(point, *start, *end) <= tolerance + 1.0).then_some(*id)
                 }
+                Kind::Polyline { points, .. } => points
+                    .windows(2)
+                    .any(|pair| distance_to_segment(point, pair[0], pair[1]) <= tolerance + 1.0)
+                    .then_some(*id),
                 _ => Some(*id),
             }
         })
@@ -222,6 +234,22 @@ impl DocumentModel {
                         || point[1] < item.bounds.y
                         || point[1] > item.bounds.y + item.bounds.height
                 })
+            {
+                return Err(EditError::InvalidGeometry);
+            }
+        }
+        if let Kind::Polyline { points, .. } = &item.kind {
+            if !(2..=MAX_POLYLINE_POINTS).contains(&points.len())
+                || points.iter().any(|point| {
+                    !point.iter().all(|value| value.is_finite())
+                        || point[0] < item.bounds.x
+                        || point[0] > item.bounds.x + item.bounds.width
+                        || point[1] < item.bounds.y
+                        || point[1] > item.bounds.y + item.bounds.height
+                })
+                || points
+                    .windows(2)
+                    .any(|pair| (pair[0][0] - pair[1][0]).hypot(pair[0][1] - pair[1][1]) < 1.0)
             {
                 return Err(EditError::InvalidGeometry);
             }
@@ -398,6 +426,38 @@ mod tests {
         invalid.id = 9;
         if let Kind::Line { end, .. } = &mut invalid.kind {
             *end = [115.0, 100.0];
+        }
+        assert_eq!(
+            doc.apply(Edit::Add(invalid)),
+            Err(EditError::InvalidGeometry)
+        );
+    }
+
+    #[test]
+    fn polyline_hit_test_checks_each_segment_and_rejects_invalid_points() {
+        let mut doc = DocumentModel::new(DocumentId(4), 1).unwrap();
+        let polyline = Annotation {
+            id: 9,
+            page: 0,
+            bounds: Rect {
+                x: 8.0,
+                y: 8.0,
+                width: 104.0,
+                height: 104.0,
+            },
+            kind: Kind::Polyline {
+                points: vec![[10.0, 10.0], [110.0, 10.0], [110.0, 110.0]],
+                color_rgb: [231, 76, 60],
+            },
+        };
+        doc.apply(Edit::Add(polyline.clone())).unwrap();
+        assert_eq!(doc.hit_test(0, [50.0, 11.0], 2.0), Some(9));
+        assert_eq!(doc.hit_test(0, [109.0, 50.0], 2.0), Some(9));
+        assert_eq!(doc.hit_test(0, [50.0, 50.0], 2.0), None);
+        let mut invalid = polyline;
+        invalid.id = 10;
+        if let Kind::Polyline { points, .. } = &mut invalid.kind {
+            points.push([110.0, 110.0]);
         }
         assert_eq!(
             doc.apply(Edit::Add(invalid)),

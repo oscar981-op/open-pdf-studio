@@ -97,6 +97,9 @@ impl DocumentView {
         })
     }
     /// Pages are zero-based in the domain model; UI labels add one.
+    pub fn document_id(&self) -> DocumentId {
+        self.id
+    }
     pub fn page_count(&self) -> usize {
         self.page_count
     }

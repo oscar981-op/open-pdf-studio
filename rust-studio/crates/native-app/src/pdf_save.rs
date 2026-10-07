@@ -3,7 +3,9 @@
 //! through the visible CropBox and quarter-turn page rotation.
 use super::text_layout;
 use lopdf::{Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream, StringFormat};
-use opds_native_core::annotations::{Annotation, Kind, TextAlign, TEXT_FONT_SIZES};
+use opds_native_core::annotations::{
+    Annotation, Kind, TextAlign, MAX_POLYLINE_POINTS, TEXT_FONT_SIZES,
+};
 use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
 use std::io::Write;
@@ -445,6 +447,46 @@ fn annotation_object(
                 b.y + b.height - end[1],
             )
             .into_bytes()
+        }
+        Kind::Polyline { points, color_rgb } => {
+            if !(2..=MAX_POLYLINE_POINTS).contains(&points.len())
+                || points.iter().any(|point| {
+                    !point.iter().all(|value| value.is_finite())
+                        || point[0] < b.x
+                        || point[0] > b.x + b.width
+                        || point[1] < b.y
+                        || point[1] > b.y + b.height
+                })
+                || points
+                    .windows(2)
+                    .any(|pair| (pair[0][0] - pair[1][0]).hypot(pair[0][1] - pair[1][1]) < 1.0)
+            {
+                return Err("Invalid polyline points".into());
+            }
+            let vertices: Vec<f64> = points
+                .iter()
+                .flat_map(|point| display_to_pdf(crop, rotation, point[0], point[1]))
+                .collect();
+            let rgb = color_rgb.map(|value| f64::from(value) / 255.0);
+            dictionary.set("Subtype", Object::Name(b"PolyLine".to_vec()));
+            dictionary.set("Vertices", array(&vertices));
+            dictionary.set("C", array(&rgb));
+            let mut border = Dictionary::new();
+            border.set("W", number(2.0));
+            dictionary.set("BS", border);
+            let mut content = format!("q {:.3} {:.3} {:.3} RG 2 w 0 J 0 j", rgb[0], rgb[1], rgb[2]);
+            for (index, point) in points.iter().enumerate() {
+                write!(
+                    content,
+                    " {:.3} {:.3} {}",
+                    point[0] - b.x,
+                    b.y + b.height - point[1],
+                    if index == 0 { "m" } else { "l" },
+                )
+                .map_err(|error| error.to_string())?;
+            }
+            content.push_str(" S Q");
+            content.into_bytes()
         }
         Kind::Text {
             value,
@@ -947,6 +989,79 @@ mod tests {
                 format!(
                     "0.906 0.298 0.235 RG 2 w 0 J {} {} m {} {} l S",
                     pdf_start[0], pdf_start[1], pdf_end[0], pdf_end[1]
+                )
+                .into_bytes(),
+            );
+            let actual = ParsedPdf::open(std::sync::Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let expected = ParsedPdf::open(std::sync::Arc::new(reference))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            assert_eq!(actual.rgba, expected.rgba, "rotation {rotation}");
+        }
+    }
+
+    #[test]
+    fn polyline_appearance_matches_direct_pdf_path_on_rotated_pages() {
+        use opds_engine_probe::ParsedPdf;
+
+        fn pdf(rotation: i64, content: Vec<u8>) -> Vec<u8> {
+            let mut doc = Document::with_version("1.4");
+            let pages = doc.new_object_id();
+            let stream = doc.add_object(Stream::new(Dictionary::new(), content));
+            let page = doc.add_object(dictionary! {
+                "Type" => "Page", "Parent" => pages, "Contents" => stream,
+                "MediaBox" => vec![0.into(), 0.into(), 200.into(), 150.into()],
+                "Rotate" => rotation,
+            });
+            doc.objects.insert(
+                pages,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1,
+                }),
+            );
+            let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+            doc.trailer.set("Root", Object::Reference(catalog));
+            let mut output = Vec::new();
+            doc.save_to(&mut output).unwrap();
+            output
+        }
+
+        for rotation in [0_u16, 90, 180, 270] {
+            let source = pdf(i64::from(rotation), Vec::new());
+            let points = vec![[20.0, 30.0], [100.0, 70.0], [120.0, 40.0]];
+            let annotation = Annotation {
+                id: 1,
+                page: 0,
+                bounds: Rect {
+                    x: 18.0,
+                    y: 28.0,
+                    width: 104.0,
+                    height: 44.0,
+                },
+                kind: Kind::Polyline {
+                    points: points.clone(),
+                    color_rgb: [231, 76, 60],
+                },
+            };
+            let saved = export_annotations(&source, &[annotation]).unwrap();
+            let pdf_points: Vec<_> = points
+                .iter()
+                .map(|point| display_to_pdf([0.0, 0.0, 200.0, 150.0], rotation, point[0], point[1]))
+                .collect();
+            let reference = pdf(
+                i64::from(rotation),
+                format!(
+                    "0.906 0.298 0.235 RG 2 w 0 J 0 j {} {} m {} {} l {} {} l S",
+                    pdf_points[0][0],
+                    pdf_points[0][1],
+                    pdf_points[1][0],
+                    pdf_points[1][1],
+                    pdf_points[2][0],
+                    pdf_points[2][1],
                 )
                 .into_bytes(),
             );

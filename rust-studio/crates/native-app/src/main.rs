@@ -15,7 +15,8 @@ use iced::{color, window, Element, Task, Theme};
 use opds_dynlex_backend::{Backend, RenderOutcome};
 use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::{
-    Annotation, DocumentModel, Edit, Kind, Rect, TextAlign, DEFAULT_TEXT_FONT_SIZE, TEXT_FONT_SIZES,
+    Annotation, DocumentModel, Edit, Kind, Rect, TextAlign, DEFAULT_TEXT_FONT_SIZE,
+    MAX_POLYLINE_POINTS, TEXT_FONT_SIZES,
 };
 use opds_native_core::{DocumentId, RenderTicket};
 use std::cell::RefCell;
@@ -111,6 +112,55 @@ fn line_bounds(start: [f64; 2], end: [f64; 2], page: (f32, f32)) -> Option<Rect>
     let top = (start[1].min(end[1]) - 2.0).max(0.0);
     let right = (start[0].max(end[0]) + 2.0).min(size[0]);
     let bottom = (start[1].max(end[1]) + 2.0).min(size[1]);
+    (right > left && bottom > top).then_some(Rect {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    })
+}
+
+fn polyline_bounds(points: &[[f64; 2]], page: (f32, f32)) -> Option<Rect> {
+    let size = [f64::from(page.0), f64::from(page.1)];
+    if !(2..=MAX_POLYLINE_POINTS).contains(&points.len())
+        || !size.iter().all(|value| value.is_finite() && *value > 0.0)
+        || points.iter().any(|point| {
+            !point.iter().all(|value| value.is_finite())
+                || point[0] < 0.0
+                || point[1] < 0.0
+                || point[0] > size[0]
+                || point[1] > size[1]
+        })
+        || points
+            .windows(2)
+            .any(|pair| (pair[0][0] - pair[1][0]).hypot(pair[0][1] - pair[1][1]) < 1.0)
+    {
+        return None;
+    }
+    let left = (points
+        .iter()
+        .map(|point| point[0])
+        .fold(f64::INFINITY, f64::min)
+        - 2.0)
+        .max(0.0);
+    let top = (points
+        .iter()
+        .map(|point| point[1])
+        .fold(f64::INFINITY, f64::min)
+        - 2.0)
+        .max(0.0);
+    let right = (points
+        .iter()
+        .map(|point| point[0])
+        .fold(f64::NEG_INFINITY, f64::max)
+        + 2.0)
+        .min(size[0]);
+    let bottom = (points
+        .iter()
+        .map(|point| point[1])
+        .fold(f64::NEG_INFINITY, f64::max)
+        + 2.0)
+        .min(size[1]);
     (right > left && bottom > top).then_some(Rect {
         x: left,
         y: top,
@@ -437,6 +487,7 @@ struct App {
     keystrokes: keystrokes::Keystrokes,
     ribbon_collapsed: bool,
     annotation_tool: AnnotationTool,
+    annotation_tool_epoch: u64,
     annotation_gesture_active: bool,
     annotation_gesture_preview: Option<AnnotationGesturePreview>,
     annotation_tool_activated: bool,
@@ -469,6 +520,7 @@ enum AnnotationTool {
     Select,
     Rectangle,
     Line,
+    Polyline,
     Highlight,
     Text,
 }
@@ -859,6 +911,10 @@ mod unsaved_annotation_tests {
         assert!(app.document.is_some());
         let _ = app.update(Message::CancelDiscard);
         assert!(app.document.is_some());
+        let _ = app.update(Message::CloseWindow);
+        assert!(matches!(app.confirm_discard, Some(PendingAction::Exit)));
+        assert!(app.document.is_some());
+        let _ = app.update(Message::CancelDiscard);
         let _ = app.update(Message::Close);
         let _ = app.update(Message::ConfirmDiscard);
         assert!(app.document.is_none());
@@ -3442,6 +3498,7 @@ enum Message {
     RemoveSelectedAnnotation,
     AddAnnotation(Rect),
     AddLine([f64; 2], [f64; 2]),
+    AddPolyline(Vec<[f64; 2]>),
     TextEdited(iced::widget::text_editor::Action),
     TextPointer(iced::advanced::text::editor::Cursor, bool),
     SetTextColor([u8; 3]),
@@ -4113,7 +4170,11 @@ impl App {
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
                 self.annotation_tool = tool;
+                self.annotation_tool_epoch = self.annotation_tool_epoch.wrapping_add(1);
                 self.annotation_tool_activated = true;
+                if tool == AnnotationTool::Polyline {
+                    self.message = "Polyline: click vertices; double-click, Enter or right-click to finish; Esc cancels".into();
+                }
             }
             Message::TextEdited(action) => self.text_draft.perform(action),
             Message::TextPointer(cursor, focus) => {
@@ -4391,6 +4452,14 @@ impl App {
                                     point[1] += dy;
                                 }
                             }
+                            if let Kind::Polyline { points, .. } = &mut item.kind {
+                                let dx = item.bounds.x - previous.x;
+                                let dy = item.bounds.y - previous.y;
+                                for point in points {
+                                    point[0] += dx;
+                                    point[1] += dy;
+                                }
+                            }
                             if item.bounds != previous {
                                 match document.model.apply(Edit::Replace(item)) {
                                     Ok(()) => self.message = "Annotation moved".into(),
@@ -4454,7 +4523,7 @@ impl App {
                         {
                             self.message = "Resize outside page".into();
                         } else if let Some(mut item) = document.model.get(id).cloned() {
-                            if matches!(item.kind, Kind::Line { .. }) {
+                            if matches!(item.kind, Kind::Line { .. } | Kind::Polyline { .. }) {
                                 return Task::none();
                             }
                             if item.page == document.displayed_page && item.bounds != bounds {
@@ -4504,6 +4573,7 @@ impl App {
                     let color_rgb = match self.annotation_tool {
                         AnnotationTool::Rectangle => [231, 76, 60],
                         AnnotationTool::Line => return Task::none(),
+                        AnnotationTool::Polyline => return Task::none(),
                         AnnotationTool::Highlight => [255, 226, 67],
                         AnnotationTool::Select => return Task::none(),
                         AnnotationTool::Text => unreachable!("handled above"),
@@ -4549,6 +4619,34 @@ impl App {
                             self.message = "Line added".into();
                         }
                         Err(error) => self.message = format!("Line failed: {error:?}"),
+                    }
+                }
+            }
+            Message::AddPolyline(points) => {
+                if self.annotation_tool != AnnotationTool::Polyline {
+                    return Task::none();
+                }
+                if let Some(document) = &mut self.document {
+                    let Some(bounds) = polyline_bounds(&points, document.bitmap_page_points) else {
+                        self.message = "Invalid polyline geometry".into();
+                        return Task::none();
+                    };
+                    let item = Annotation {
+                        id: self.next_annotation_id,
+                        page: document.displayed_page,
+                        bounds,
+                        kind: Kind::Polyline {
+                            points,
+                            color_rgb: [231, 76, 60],
+                        },
+                    };
+                    match document.model.apply(Edit::Add(item)) {
+                        Ok(()) => {
+                            document.selected_annotation = Some(self.next_annotation_id);
+                            self.next_annotation_id += 1;
+                            self.message = "Polyline added".into();
+                        }
+                        Err(error) => self.message = format!("Polyline failed: {error:?}"),
                     }
                 }
             }

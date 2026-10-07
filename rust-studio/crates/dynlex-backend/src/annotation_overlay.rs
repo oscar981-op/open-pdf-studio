@@ -94,6 +94,57 @@ fn native_commands_for_rect(
     result
 }
 
+#[cfg(feature = "kernel")]
+fn native_line_command(mark: &Annotation, width: u32, height: u32) -> Option<ImportedCommand> {
+    let Kind::Line {
+        start,
+        end,
+        color_rgb,
+    } = &mark.kind
+    else {
+        return None;
+    };
+    if ![
+        mark.bounds.x,
+        mark.bounds.y,
+        mark.bounds.width,
+        mark.bounds.height,
+    ]
+    .into_iter()
+    .all(f64::is_finite)
+        || mark.bounds.width <= 0.0
+        || mark.bounds.height <= 0.0
+        || !(mark.bounds.x + mark.bounds.width).is_finite()
+        || !(mark.bounds.y + mark.bounds.height).is_finite()
+        || [start, end].iter().any(|point| {
+            point[0] < mark.bounds.x
+                || point[0] > mark.bounds.x + mark.bounds.width
+                || point[1] < mark.bounds.y
+                || point[1] > mark.bounds.y + mark.bounds.height
+        })
+    {
+        return None;
+    }
+    let [x0, y0, x1, y1] = [
+        whole(start[0], width)?,
+        whole(start[1], height)?,
+        whole(end[0], width)?,
+        whole(end[1], height)?,
+    ];
+    let rect = if y0 == y1 && x0.abs_diff(x1) >= 4 && y0 > 0 && y0 < height {
+        [x0.min(x1), y0 - 1, x0.max(x1), y0 + 1]
+    } else if x0 == x1 && y0.abs_diff(y1) >= 4 && x0 > 0 && x0 < width {
+        [x0 - 1, y0.min(y1), x0 + 1, y0.max(y1)]
+    } else {
+        return None;
+    };
+    Some(ImportedCommand {
+        kind: 1,
+        rect,
+        tail: [color_rgb[0], color_rgb[1], color_rgb[2], 255],
+    })
+}
+
 /// Paint a fully staged OPAN list in one DynLex call. Both imported `/AP`
 /// forms and preview-only marks use this validated boundary.
 #[cfg(feature = "kernel")]
@@ -679,10 +730,14 @@ fn render_native_annotation_overlay_pixels_inner(
         if marks.is_empty() || marks.len() > 64 {
             return Ok(None);
         }
-        let mut rectangles = Vec::with_capacity(marks.len());
+        let mut commands = Vec::with_capacity(marks.len() * 9);
         for mark in marks {
             let Kind::Rectangle { color_rgb } = &mark.kind else {
-                return Ok(None);
+                let Some(line) = native_line_command(mark, width, height) else {
+                    return Ok(None);
+                };
+                commands.push(line);
+                continue;
             };
             let Some(bounds) = pixel_rect(mark.bounds, width, height) else {
                 return Ok(None);
@@ -721,11 +776,7 @@ fn render_native_annotation_overlay_pixels_inner(
                     }
                 }
             }
-            rectangles.push((bounds, *color_rgb));
-        }
-        let mut commands = Vec::with_capacity(rectangles.len() * 9);
-        for (bounds, color) in rectangles {
-            commands.extend(native_commands_for_rect(bounds, color));
+            commands.extend(native_commands_for_rect(bounds, *color_rgb));
         }
         let command_count = commands.len() as u32;
         let mut scene = Vec::with_capacity(20 + commands.len() * 24);
@@ -774,6 +825,210 @@ fn render_native_annotation_overlay_pixels_inner(
 #[cfg(all(test, feature = "kernel"))]
 mod tests {
     use super::*;
+    use lopdf::{dictionary, Dictionary, Document, Object, Stream};
+    use opds_engine_probe::ParsedPdf;
+    use std::sync::Arc;
+
+    #[test]
+    fn aligned_native_line_matches_hayro_on_rotated_colored_pages() {
+        fn pdf(rotation: i64, colored: bool, line: Option<([f64; 2], [f64; 2])>) -> Vec<u8> {
+            let mut doc = Document::with_version("1.4");
+            let pages = doc.new_object_id();
+            let mut content = if colored {
+                "0.2 0.4 0.6 rg 0 0 64 48 re f\n".to_owned()
+            } else {
+                String::new()
+            };
+            if let Some((start, end)) = line {
+                content.push_str(&format!(
+                    "0.906 0.298 0.235 RG 2 w 0 J {} {} m {} {} l S",
+                    start[0], start[1], end[0], end[1]
+                ));
+            }
+            let stream = doc.add_object(Stream::new(Dictionary::new(), content.into_bytes()));
+            let page = doc.add_object(dictionary! {
+                "Type" => "Page", "Parent" => pages, "Contents" => stream,
+                "MediaBox" => vec![0.into(), 0.into(), 64.into(), 48.into()],
+                "Rotate" => rotation,
+            });
+            doc.objects.insert(
+                pages,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1,
+                }),
+            );
+            let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+            doc.trailer.set("Root", Object::Reference(catalog));
+            let mut output = Vec::new();
+            doc.save_to(&mut output).unwrap();
+            output
+        }
+
+        for rotation in [0_i64, 90, 180, 270] {
+            let page_size = if rotation == 90 || rotation == 270 {
+                (48_u32, 64_u32)
+            } else {
+                (64_u32, 48_u32)
+            };
+            for colored in [false, true] {
+                for (start, end) in [([8.0, 16.0], [36.0, 16.0]), ([20.0, 8.0], [20.0, 36.0])] {
+                    let convert = |point: [f64; 2]| match rotation {
+                        0 => [point[0], 48.0 - point[1]],
+                        90 => [point[1], point[0]],
+                        180 => [64.0 - point[0], point[1]],
+                        270 => [64.0 - point[1], 48.0 - point[0]],
+                        _ => unreachable!(),
+                    };
+                    let base = ParsedPdf::open(Arc::new(pdf(rotation, colored, None)))
+                        .unwrap()
+                        .render_page(1, 1.0)
+                        .unwrap();
+                    let expected = ParsedPdf::open(Arc::new(pdf(
+                        rotation,
+                        colored,
+                        Some((convert(start), convert(end))),
+                    )))
+                    .unwrap()
+                    .render_page(1, 1.0)
+                    .unwrap();
+                    let annotation = Annotation {
+                        id: 1,
+                        page: 0,
+                        bounds: Rect {
+                            x: start[0].min(end[0]) - 2.0,
+                            y: start[1].min(end[1]) - 2.0,
+                            width: (start[0] - end[0]).abs() + 4.0,
+                            height: (start[1] - end[1]).abs() + 4.0,
+                        },
+                        kind: Kind::Line {
+                            start,
+                            end,
+                            color_rgb: [231, 76, 60],
+                        },
+                    };
+                    let actual = render_native_annotation_overlay_pixels(
+                        &base.rgba,
+                        page_size.0,
+                        page_size.1,
+                        (page_size.0 as f32, page_size.1 as f32),
+                        &[annotation],
+                        0,
+                    )
+                    .unwrap()
+                    .unwrap();
+                    assert_eq!(
+                        actual.rgba, expected.rgba,
+                        "rotation {rotation}, colored {colored}, {start:?} to {end:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unproven_native_paths_keep_host_fallback() {
+        let white = vec![255_u8; 64 * 48 * 4];
+        let annotation = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 6.0,
+                y: 6.0,
+                width: 36.0,
+                height: 26.0,
+            },
+            kind: Kind::Line {
+                start: [8.0, 8.0],
+                end: [40.0, 30.0],
+                color_rgb: [231, 76, 60],
+            },
+        };
+        assert!(render_native_annotation_overlay_pixels(
+            &white,
+            64,
+            48,
+            (64.0, 48.0),
+            &[annotation.clone()],
+            0,
+        )
+        .unwrap()
+        .is_none());
+        let mut fractional = annotation.clone();
+        fractional.kind = Kind::Line {
+            start: [8.5, 16.0],
+            end: [40.0, 16.0],
+            color_rgb: [231, 76, 60],
+        };
+        assert!(render_native_annotation_overlay_pixels(
+            &white,
+            64,
+            48,
+            (64.0, 48.0),
+            &[fractional],
+            0,
+        )
+        .unwrap()
+        .is_none());
+        let mut polyline = annotation;
+        polyline.kind = Kind::Polyline {
+            points: vec![[8.0, 8.0], [40.0, 8.0], [40.0, 30.0]],
+            color_rgb: [231, 76, 60],
+        };
+        assert!(render_native_annotation_overlay_pixels(
+            &white,
+            64,
+            48,
+            (64.0, 48.0),
+            &[polyline],
+            0,
+        )
+        .unwrap()
+        .is_none());
+    }
+
+    #[test]
+    fn aligned_line_preserves_order_with_existing_square() {
+        let white = vec![255_u8; 64 * 48 * 4];
+        let square = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 8.0,
+                y: 8.0,
+                width: 30.0,
+                height: 20.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [0, 0, 255],
+            },
+        };
+        let line = Annotation {
+            id: 2,
+            page: 0,
+            bounds: Rect {
+                x: 2.0,
+                y: 6.0,
+                width: 44.0,
+                height: 4.0,
+            },
+            kind: Kind::Line {
+                start: [4.0, 8.0],
+                end: [44.0, 8.0],
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let render = |marks: &[Annotation]| {
+            render_native_annotation_overlay_pixels(&white, 64, 48, (64.0, 48.0), marks, 0)
+                .unwrap()
+                .unwrap()
+                .rgba
+        };
+        let line_last = render(&[square.clone(), line.clone()]);
+        let square_last = render(&[line, square]);
+        let at = (8 * 64 + 8) * 4;
+        assert_eq!(&line_last[at..at + 4], &[231, 76, 60, 255]);
+        assert_eq!(&square_last[at..at + 4], &[0, 0, 255, 255]);
+    }
 
     #[test]
     fn ui_preview_centers_rectangle_and_blends_highlight_without_touching_pdf_path() {

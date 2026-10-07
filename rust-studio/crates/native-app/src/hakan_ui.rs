@@ -943,7 +943,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Line)),
                     app.annotation_tool == AnnotationTool::Line,
                 ),
-                large_tool("Polyline", icon_asset!("polyline.svg"), None),
+                large_tool_active(
+                    "Polyline",
+                    icon_asset!("polyline.svg"),
+                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Polyline)),
+                    app.annotation_tool == AnnotationTool::Polyline,
+                ),
                 large_tool_active(
                     "Rectangle",
                     icon_asset!("shapes/rect.svg"),
@@ -1239,6 +1244,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     document.selected_annotation,
                     app.editing_text_id,
                     app.annotation_tool,
+                    app.annotation_tool_epoch,
                     document.bitmap_page_points,
                     document.bitmap_size,
                     !dynlex_annotations
@@ -1512,6 +1518,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     }
                     opds_native_core::annotations::Kind::Rectangle { .. } => "Rectangle",
                     opds_native_core::annotations::Kind::Line { .. } => "Line",
+                    opds_native_core::annotations::Kind::Polyline { .. } => "Polyline",
                     opds_native_core::annotations::Kind::Text { .. } => "Text Box",
                 };
                 let selected = document.selected_annotation == Some(annotation.id);
@@ -1555,6 +1562,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 }
                 opds_native_core::annotations::Kind::Rectangle { .. } => "Rectangle",
                 opds_native_core::annotations::Kind::Line { .. } => "Line",
+                opds_native_core::annotations::Kind::Polyline { .. } => "Polyline",
                 opds_native_core::annotations::Kind::Text { .. } => "Text",
             };
             properties = properties
