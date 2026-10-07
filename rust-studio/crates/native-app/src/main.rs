@@ -267,6 +267,19 @@ fn window_event_to_message(
         iced::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
             Some(Message::KeyboardModifiersChanged(modifiers))
         }
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key,
+            modifiers,
+            repeat: false,
+            ..
+        }) if matches!(
+            key,
+            iced::keyboard::Key::Named(iced::keyboard::key::Named::F11)
+        ) || (modifiers.control()
+            && matches!(key, iced::keyboard::Key::Character(ref c) if c.eq_ignore_ascii_case("l"))) =>
+        {
+            Some(Message::ToggleFullscreen)
+        }
         _ => None,
     }
 }
@@ -350,6 +363,8 @@ struct App {
     text_scroll_offset: Option<scrollable::AbsoluteOffset>,
     hide_pages: bool,
     hide_properties: bool,
+    show_annotation_list: bool,
+    fullscreen: bool,
     ribbon_collapsed: bool,
     annotation_tool: AnnotationTool,
     annotation_gesture_active: bool,
@@ -3255,6 +3270,8 @@ enum Message {
     CancelDiscard,
     TogglePages,
     ToggleProperties,
+    ToggleAnnotationList,
+    ToggleFullscreen,
     PathChanged(String),
     Open,
     Loaded(
@@ -3316,6 +3333,27 @@ enum Message {
     Undo,
     Redo,
     Close,
+}
+
+#[cfg(test)]
+mod view_panel_tests {
+    use super::*;
+
+    #[test]
+    fn annotation_list_and_properties_are_exclusive() {
+        let mut app = App::default();
+        assert!(!app.hide_properties);
+        let _ = app.update(Message::ToggleAnnotationList);
+        assert!(app.show_annotation_list);
+        assert!(!app.hide_properties);
+        let _ = app.update(Message::ToggleProperties);
+        assert!(!app.show_annotation_list);
+        assert!(!app.hide_properties);
+        let _ = app.update(Message::ToggleAnnotationList);
+        let _ = app.update(Message::ToggleAnnotationList);
+        assert!(!app.show_annotation_list);
+        assert!(app.hide_properties);
+    }
 }
 
 impl App {
@@ -3759,7 +3797,27 @@ impl App {
                 self.hide_pages = !self.hide_pages;
                 return self.render_nearby_thumbnail();
             }
-            Message::ToggleProperties => self.hide_properties = !self.hide_properties,
+            Message::ToggleProperties => {
+                if self.show_annotation_list {
+                    self.show_annotation_list = false;
+                    self.hide_properties = false;
+                } else {
+                    self.hide_properties = !self.hide_properties;
+                }
+            }
+            Message::ToggleAnnotationList => {
+                self.show_annotation_list = !self.show_annotation_list;
+                self.hide_properties = !self.show_annotation_list;
+            }
+            Message::ToggleFullscreen => {
+                self.fullscreen = !self.fullscreen;
+                let mode = if self.fullscreen {
+                    window::Mode::Fullscreen
+                } else {
+                    window::Mode::Windowed
+                };
+                return window::oldest().and_then(move |id| window::set_mode(id, mode));
+            }
             Message::SelectBackend(backend) => {
                 if self.opening_document
                     || self.backend == backend

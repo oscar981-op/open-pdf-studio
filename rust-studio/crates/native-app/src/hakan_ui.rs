@@ -923,7 +923,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
             })
             .collect(),
         ));
-    } else {
+    } else if app.active_ribbon != RibbonTab::View {
         groups = groups.push(group(
             "Document",
             vec![
@@ -985,9 +985,73 @@ pub fn view(app: &App) -> Element<'_, Message> {
             ],
         ));
     }
+    if app.active_ribbon == RibbonTab::View {
+        groups = groups
+            .push(group(
+                "Page Display",
+                vec![
+                    large_tool_active("Single", DOC, None, has_doc),
+                    large_tool("Continuous", DOC, None),
+                    large_tool("Book", DOC, None),
+                    large_tool("Facing", DOC, None),
+                    large_tool("Rotate Left", PREV, None),
+                    large_tool("Rotate Right", NEXT, None),
+                ],
+            ))
+            .push(group(
+                "Display",
+                vec![
+                    large_tool("Thin Lines", DOC, None),
+                    large_tool("Reader Mode", DOC, None),
+                ],
+            ))
+            .push(group(
+                "Panels",
+                vec![
+                    large_tool_active(
+                        "Navigation",
+                        DOC,
+                        has_doc.then_some(Message::TogglePages),
+                        !app.hide_pages,
+                    ),
+                    large_tool_active(
+                        "Properties",
+                        icon_asset!("properties.svg"),
+                        has_doc.then_some(Message::ToggleProperties),
+                        !app.hide_properties && !app.show_annotation_list,
+                    ),
+                    large_tool_active(
+                        "Annotations",
+                        DOC,
+                        has_doc.then_some(Message::ToggleAnnotationList),
+                        app.show_annotation_list,
+                    ),
+                    large_tool("Element Visibility", DOC, None),
+                    large_tool("Annotation Layers", DOC, None),
+                    large_tool("Toolpalette", DOC, None),
+                ],
+            ))
+            .push(group("Appearance", vec![large_tool("Theme", DOC, None)]))
+            .push(group(
+                "Compare",
+                vec![large_tool("Compare PDFs", DOC, None)],
+            ))
+            .push(group(
+                "Window",
+                vec![
+                    large_tool_active(
+                        "Fullscreen",
+                        icon_asset!("zoom_ext.svg"),
+                        Some(Message::ToggleFullscreen),
+                        app.fullscreen,
+                    ),
+                    large_tool("Keystrokes", DOC, None),
+                ],
+            ));
+    }
     if !matches!(
         app.active_ribbon,
-        RibbonTab::Home | RibbonTab::Comment | RibbonTab::Format
+        RibbonTab::Home | RibbonTab::Comment | RibbonTab::Format | RibbonTab::View
     ) {
         groups = groups
             .push(group(
@@ -1377,7 +1441,45 @@ pub fn view(app: &App) -> Element<'_, Message> {
         );
     }
     workspace = workspace.push(container(center).width(Fill).height(Fill));
-    if !app.hide_properties {
+    if !app.hide_properties && app.show_annotation_list {
+        let mut annotations = column![
+            text("Annotations").size(12),
+            text(format!("Page {}", page + 1)).size(10),
+        ]
+        .padding(12)
+        .spacing(8);
+        let mut count = 0;
+        if let Some(document) = &app.document {
+            for annotation in document.model.items().filter(|item| item.page == page) {
+                count += 1;
+                let kind = match &annotation.kind {
+                    opds_native_core::annotations::Kind::Rectangle { color_rgb }
+                        if *color_rgb == [255, 226, 67] =>
+                    {
+                        "Highlight"
+                    }
+                    opds_native_core::annotations::Kind::Rectangle { .. } => "Rectangle",
+                    opds_native_core::annotations::Kind::Text { .. } => "Text Box",
+                };
+                let selected = document.selected_annotation == Some(annotation.id);
+                annotations = annotations.push(
+                    button(text(format!("{kind} #{}", annotation.id)).size(12))
+                        .on_press(Message::SelectAnnotation(Some(annotation.id)))
+                        .style(move |_, status| pdf_tool_style(selected, status))
+                        .width(Fill),
+                );
+            }
+        }
+        if count == 0 {
+            annotations = annotations.push(text("No annotations on this page").size(11));
+        }
+        workspace = workspace.push(
+            container(scrollable(annotations))
+                .width(230)
+                .height(Fill)
+                .style(surface),
+        );
+    } else if !app.hide_properties {
         let mut properties = column![
             text("Properties").size(12),
             text("DOCUMENT").size(10),
