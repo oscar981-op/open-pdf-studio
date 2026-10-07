@@ -208,6 +208,17 @@ fn boot() -> (App, Task<Message>) {
     {
         app.backend = Backend::Dynlex;
     }
+    if cfg!(feature = "pdfium-experimental")
+        && opds_dynlex_backend::pdfium_available()
+        && std::env::var("OPDS_RENDER_BACKEND").ok().as_deref() == Some("pdfium")
+    {
+        app.backend = Backend::Pdfium;
+    }
+    if cfg!(feature = "own-rust-experimental")
+        && std::env::var("OPDS_RENDER_BACKEND").ok().as_deref() == Some("own-rust")
+    {
+        app.backend = Backend::OwnRust;
+    }
     app.text_font_size = DEFAULT_TEXT_FONT_SIZE;
     if let Some(path) = std::env::args().nth(1) {
         app.path_input = path;
@@ -3664,6 +3675,8 @@ impl App {
                 if self.busy
                     || self.backend == backend
                     || (backend == Backend::Dynlex && !cfg!(feature = "dynlex-experimental"))
+                    || (backend == Backend::Pdfium && !opds_dynlex_backend::pdfium_available())
+                    || (backend == Backend::OwnRust && !opds_dynlex_backend::own_rust_available())
                 {
                     return Task::none();
                 }

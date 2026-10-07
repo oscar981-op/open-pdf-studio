@@ -8,6 +8,8 @@ build = "build.rs"
 
 [features]
 kernel = []
+pdfium = ["dep:opds-pdfium-backend"]
+own-rust = ["dep:opds-rust-kernel"]
 
 [dependencies]
 opds-opdl-adapter = { path = "../opdl-adapter" }
@@ -15,3 +17,5 @@ opds-engine-probe = { path = "../engine-probe" }
 opds-native-core = { path = "../studio-core" }
 lopdf = { version = "=0.34.0", default-features = false, features = ["nom_parser"] }
 miniz_oxide = "=0.8.9"
+opds-pdfium-backend = { path = "../pdfium-backend", optional = true }
+opds-rust-kernel = { path = "../rust-kernel", optional = true }

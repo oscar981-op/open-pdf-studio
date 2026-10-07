@@ -931,6 +931,21 @@ pub fn view(app: &App) -> Element<'_, Message> {
                         .then_some(Message::SelectBackend(opds_dynlex_backend::Backend::Dynlex)),
                     app.backend == opds_dynlex_backend::Backend::Dynlex,
                 ),
+                large_tool_active(
+                    "PDFium",
+                    DOC,
+                    (!app.busy && opds_dynlex_backend::pdfium_available())
+                        .then_some(Message::SelectBackend(opds_dynlex_backend::Backend::Pdfium)),
+                    app.backend == opds_dynlex_backend::Backend::Pdfium,
+                ),
+                large_tool_active(
+                    "Eigen Rust",
+                    DOC,
+                    (!app.busy && opds_dynlex_backend::own_rust_available()).then_some(
+                        Message::SelectBackend(opds_dynlex_backend::Backend::OwnRust),
+                    ),
+                    app.backend == opds_dynlex_backend::Backend::OwnRust,
+                ),
             ],
         ));
     }
@@ -1401,14 +1416,42 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     {
                         "PDF: Hayro fallback · Annotations: Iced"
                     }
+                    (opds_dynlex_backend::Backend::Hayro, true, false)
+                        if app.backend == opds_dynlex_backend::Backend::Pdfium =>
+                    {
+                        "PDF: Hayro (PDFium fallback) · Annotations: Iced"
+                    }
+                    (opds_dynlex_backend::Backend::Hayro, true, false)
+                        if app.backend == opds_dynlex_backend::Backend::OwnRust =>
+                    {
+                        "PDF: Hayro (Eigen Rust fallback) · Annotations: Iced"
+                    }
                     (opds_dynlex_backend::Backend::Hayro, true, false) => {
                         "PDF: Hayro · Annotations: Iced"
                     }
                     (opds_dynlex_backend::Backend::Dynlex, false, false) => "Renderer: DynLex",
+                    (opds_dynlex_backend::Backend::Pdfium, true, false) => {
+                        "PDF: PDFium · Annotations: Iced"
+                    }
+                    (opds_dynlex_backend::Backend::Pdfium, false, false) => "Renderer: PDFium",
+                    (opds_dynlex_backend::Backend::OwnRust, true, false) => {
+                        "PDF: Eigen Rust · Annotations: Iced"
+                    }
+                    (opds_dynlex_backend::Backend::OwnRust, false, false) => "Renderer: Eigen Rust",
                     (opds_dynlex_backend::Backend::Hayro, false, false)
                         if app.backend == opds_dynlex_backend::Backend::Dynlex =>
                     {
                         "Renderer: Hayro (DynLex fallback)"
+                    }
+                    (opds_dynlex_backend::Backend::Hayro, _, false)
+                        if app.backend == opds_dynlex_backend::Backend::Pdfium =>
+                    {
+                        "Renderer: Hayro (PDFium fallback)"
+                    }
+                    (opds_dynlex_backend::Backend::Hayro, _, false)
+                        if app.backend == opds_dynlex_backend::Backend::OwnRust =>
+                    {
+                        "Renderer: Hayro (Eigen Rust fallback)"
                     }
                     _ => "Renderer: Hayro",
                 }

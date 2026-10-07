@@ -43,6 +43,25 @@ use opds_opdl_adapter::{
 pub enum Backend {
     Hayro,
     Dynlex,
+    Pdfium,
+    OwnRust,
+}
+
+/// PDFium is loaded dynamically only for the opt-in feature. A missing
+/// library leaves the native viewer on its existing Hayro route.
+pub fn pdfium_available() -> bool {
+    #[cfg(feature = "pdfium")]
+    {
+        opds_pdfium_backend::available()
+    }
+    #[cfg(not(feature = "pdfium"))]
+    {
+        false
+    }
+}
+
+pub fn own_rust_available() -> bool {
+    cfg!(feature = "own-rust")
 }
 
 impl Default for Backend {
@@ -78,6 +97,32 @@ pub fn render_with_report(
     scale: f32,
     backend: Backend,
 ) -> Result<RenderOutcome, RenderError> {
+    #[cfg(feature = "own-rust")]
+    if backend == Backend::OwnRust {
+        if let Ok(raster) = opds_rust_kernel::render(source, page, scale) {
+            return Ok(RenderOutcome {
+                raster,
+                used: Backend::OwnRust,
+                imported_annotations_dynlex: false,
+            });
+        }
+    }
+    #[cfg(feature = "pdfium")]
+    if backend == Backend::Pdfium {
+        if let Ok(raster) = opds_pdfium_backend::render(source, page, scale) {
+            if let Ok((width, height)) = pdf.page_dimensions(page) {
+                if (raster.page_width_pt - width).abs() <= 0.01
+                    && (raster.page_height_pt - height).abs() <= 0.01
+                {
+                    return Ok(RenderOutcome {
+                        raster,
+                        used: Backend::Pdfium,
+                        imported_annotations_dynlex: false,
+                    });
+                }
+            }
+        }
+    }
     if backend == Backend::Dynlex {
         let started = std::time::Instant::now();
         #[cfg(feature = "kernel")]
@@ -670,6 +715,39 @@ mod tests {
         let hayro = pdf.render_page(1, 1.0).unwrap();
         assert_eq!(direct.rgba, routed.rgba);
         assert_eq!(routed.rgba, hayro.rgba);
+    }
+
+    #[cfg(feature = "own-rust")]
+    #[test]
+    fn own_rust_backend_is_distinct_and_falls_back_outside_its_subset() {
+        let bytes = include_bytes!("../tests/fixtures/simple-fill-stroke.pdf").to_vec();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::OwnRust).unwrap();
+        assert_eq!(selected.used, Backend::OwnRust);
+        assert_eq!(selected.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
+        let fallback = render_with_report(&pdf, &bytes, 1, 1.25, Backend::OwnRust).unwrap();
+        assert_eq!(fallback.used, Backend::Hayro);
+        assert_eq!(fallback.raster.rgba, pdf.render_page(1, 1.25).unwrap().rgba);
+    }
+
+    #[cfg(feature = "pdfium")]
+    #[test]
+    fn pdfium_backend_reports_the_renderer_actually_used() {
+        let bytes = include_bytes!("../tests/fixtures/simple-fill-stroke.pdf").to_vec();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Pdfium).unwrap();
+        assert_eq!(
+            selected.used,
+            if pdfium_available() {
+                Backend::Pdfium
+            } else {
+                Backend::Hayro
+            }
+        );
+        assert_eq!(
+            selected.raster.rgba.len(),
+            selected.raster.width as usize * selected.raster.height as usize * 4
+        );
     }
 
     #[cfg(feature = "kernel")]

@@ -2157,6 +2157,8 @@ dependencies = [
  "opds-engine-probe",
  "opds-native-core",
  "opds-opdl-adapter",
+ "opds-pdfium-backend",
+ "opds-rust-kernel",
 ]
 
 [[package]]
@@ -2199,6 +2201,23 @@ dependencies = [
  "pic-scale",
  "skrifa 0.42.1",
  "ttf-parser",
+]
+
+[[package]]
+name = "opds-pdfium-backend"
+version = "0.1.0"
+dependencies = [
+ "libloading",
+ "opds-engine-probe",
+]
+
+[[package]]
+name = "opds-rust-kernel"
+version = "0.1.0"
+dependencies = [
+ "lopdf",
+ "opds-engine-probe",
+ "opds-opdl-adapter",
 ]
 
 [[package]]

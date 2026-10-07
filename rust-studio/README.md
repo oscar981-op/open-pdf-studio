@@ -1,6 +1,6 @@
 # Open PDF Studio — native Rust subproject
 
-Een afzonderlijke herbouw naast de bestaande applicatie. Branch: `feat/rust-native`, gestart vanaf commit `2b2b3bb6` van de bestaande app. Het subproject heeft een eigen Cargo-workspace en lockfile; bouwen hiervan haalt geen Tauri-, JavaScript- of PDFium-afhankelijkheden binnen.
+Een afzonderlijke herbouw naast de bestaande applicatie. Branch: `feat/rust-native`, gestart vanaf commit `2b2b3bb6` van de bestaande app. Het subproject heeft een eigen Cargo-workspace en lockfile; de standaardbuild haalt geen Tauri-, JavaScript- of PDFium-binary binnen. PDFium is uitsluitend via een optionele Rust-FFI-backend te laden.
 
 ## Doel en huidige status
 
@@ -35,6 +35,7 @@ Gebruik voor interactie altijd de release-build: de debug-build rendert zware PD
 - [Eerste native Print-pad en vergelijking](docs/print-2026-10-01.md)
 - [Preview van geïmporteerde annotaties zonder appearance](docs/imported-annotations-2026-10-01.md)
 - [Eerste begrensde DynLex-compositor voor native annotaties](docs/dynlex-annotations-2026-10-06.md)
+- [Vier optionele PDF-renderkeuzes en hun huidige grenzen](docs/four-pdf-backends-2026-10-07.md)
 
 ## Lokale werkmappen
 
@@ -49,3 +50,8 @@ De native Rust-app kan met `dynlex-experimental` een in-process DynLex-
 kernel voor een kleine gevalideerde PDF-deelset gebruiken; alle overige
 pagina's blijven via Hayro renderen. Zie
 [backend en beperkingen](docs/dynlex-native-backend-2026-10-05.md).
+
+De Settings-ribbon kan daarnaast een optioneel dynamisch geladen PDFium
+via Rust-FFI en een afzonderlijke pure-Rust-proefkernel tonen. Beide zijn
+experimenteel en vallen buiten hun bewezen deelset terug op Hayro; zie
+[vier renderkeuzes](docs/four-pdf-backends-2026-10-07.md).
