@@ -89,3 +89,14 @@ bleef tijdens de proef open. De annotatiecanvas-test borgt dat deze laag geen
 eigen Ctrl+wheel-zoom meer publiceert. Alle 76 native tests en workspace-tests
 met alle features slagen; de bestaande DynLex-verifier blijft bytegelijk op
 47 PDF-pagina's/4.964.352 pixels plus drie v4-pagina's/147.456 pixels.
+
+
+### 8 oktober: expliciet DynLex-only
+
+De native DynLex-selectie gebruikt geen Hayro-fallback voor pagina's of
+miniaturen. Unsupported pagina/zoom wordt zichtbaar gemeld; een oude bitmap
+wordt niet als nieuw resultaat getoond. Ook de gemengde Hayro-body/DynLex-AP
+route is uit de viewer gehaald. Backendwissels invalidëren miniaturen en late
+asynchrone resultaten via generatiecontrole. Gecontroleerd in het echte venster
+met een ondersteunde fill/stroke-PDF en een unsupported tekst-PDF; zie
+`four-pdf-backends-2026-10-07.md`. Hayro blijft een handmatige keuze.

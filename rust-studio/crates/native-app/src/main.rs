@@ -34,11 +34,15 @@ fn render_page_selected(
     scale: f32,
     backend: Backend,
 ) -> Result<RenderOutcome, String> {
+    if backend == Backend::Dynlex {
+        return opds_dynlex_backend::DynlexDocument::new(Arc::new(source.to_vec()))
+            .render_strict(pdf, page, scale);
+    }
     opds_dynlex_backend::render_with_report(pdf, source, page, scale, backend)
         .map_err(|error| error.to_string())
 }
 
-#[cfg(feature = "dynlex-experimental")]
+#[cfg(all(test, feature = "dynlex-experimental"))]
 /// Only call after `eligible_mixed_page` has proved that the source uses
 /// normal opaque paints without resources, groups, or imported annotations.
 /// The visible page is reconstructed from Hayro's premultiplied content.
@@ -1685,6 +1689,18 @@ mod dynlex_annotation_overlay_tests {
     use super::*;
     use lopdf::dictionary;
 
+    // Historical mixed-renderer compositor oracle, not the strict UI route.
+    fn render_legacy_mixed_oracle(
+        pdf: &ParsedPdf,
+        source: &[u8],
+        page: usize,
+        scale: f32,
+        backend: Backend,
+    ) -> Result<RenderOutcome, String> {
+        opds_dynlex_backend::render_with_report(pdf, source, page, scale, backend)
+            .map_err(|e| e.to_string())
+    }
+
     #[test]
     fn imported_ap_and_missing_ap_share_one_ordered_dynlex_scene() {
         for rotation in [0, 90, 180, 270] {
@@ -1806,7 +1822,8 @@ mod dynlex_annotation_overlay_tests {
                 }
                 let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
                 let expected = pdf.render_page(1, 1.0).unwrap();
-                let selected = render_page_selected(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                let selected =
+                    render_legacy_mixed_oracle(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
                 assert_eq!(selected.used, Backend::Hayro);
                 assert!(
                     selected.imported_annotations_dynlex,
@@ -1831,7 +1848,7 @@ mod dynlex_annotation_overlay_tests {
                     let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
                     let expected = pdf.render_page(1, 1.0).unwrap();
                     let selected =
-                        render_page_selected(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+                        render_legacy_mixed_oracle(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
                     assert!(!selected.imported_annotations_dynlex);
                     assert_eq!(selected.raster.rgba, expected.rgba);
                 }
@@ -1959,7 +1976,8 @@ mod dynlex_annotation_overlay_tests {
                         "single render: rotation={rotation}, colored={colored}, square_first={square_first}"
                     );
                     let selected =
-                        render_page_selected(&parsed, &saved, 1, 1.0, Backend::Dynlex).unwrap();
+                        render_legacy_mixed_oracle(&parsed, &saved, 1, 1.0, Backend::Dynlex)
+                            .unwrap();
                     assert_eq!(selected.used, Backend::Hayro);
                     assert!(selected.imported_annotations_dynlex);
                     assert_eq!(selected.raster.rgba, expected.rgba);
@@ -1997,7 +2015,7 @@ mod dynlex_annotation_overlay_tests {
                         .is_none());
                         let malformed_pdf =
                             ParsedPdf::open(Arc::new(malformed_bytes.clone())).unwrap();
-                        let fallback = render_page_selected(
+                        let fallback = render_legacy_mixed_oracle(
                             &malformed_pdf,
                             &malformed_bytes,
                             1,
@@ -2114,7 +2132,7 @@ mod dynlex_annotation_overlay_tests {
                     "single render: rotation={rotation}, reverse={reverse}"
                 );
                 let selected =
-                    render_page_selected(&parsed, &saved, 1, 1.0, Backend::Dynlex).unwrap();
+                    render_legacy_mixed_oracle(&parsed, &saved, 1, 1.0, Backend::Dynlex).unwrap();
                 assert_eq!(selected.used, Backend::Hayro);
                 assert!(selected.imported_annotations_dynlex);
                 assert_eq!(selected.raster.rgba, expected.rgba);
@@ -2797,7 +2815,7 @@ mod dynlex_annotation_overlay_tests {
             document: Some(document),
             ..Default::default()
         };
-        let _task = app.render_content_layer_if_needed();
+        let _task = app.render_legacy_content_layer_oracle();
         assert_eq!(
             app.document.as_ref().unwrap().content_layer_in_flight,
             Some(ticket)
@@ -3268,7 +3286,7 @@ mod dynlex_annotation_overlay_tests {
             document: Some(document),
             ..Default::default()
         };
-        let _task = app.render_content_layer_if_needed();
+        let _task = app.render_legacy_content_layer_oracle();
         assert_eq!(
             app.document.as_ref().unwrap().content_layer_in_flight,
             Some(ticket)
@@ -3670,7 +3688,7 @@ enum Message {
                 usize,
                 f32,
                 Option<reader_mode::Position>,
-                RenderOutcome,
+                Result<RenderOutcome, String>,
             ),
             String,
         >,
@@ -3692,7 +3710,7 @@ enum Message {
         RenderTicket,
         Result<(RenderOutcome, Option<Raster>), String>,
     ),
-    #[cfg(feature = "dynlex-experimental")]
+    #[cfg(all(test, feature = "dynlex-experimental"))]
     ContentLayerRendered(
         u64,
         u64,
@@ -3700,7 +3718,7 @@ enum Message {
         image::Handle,
         Result<Raster, String>,
     ),
-    ThumbnailRendered(u64, usize, Result<Raster, String>),
+    ThumbnailRendered(u64, u64, usize, Result<Raster, String>),
     SelectBackend(Backend),
     SelectRibbon(RibbonTab),
     ToggleRibbonCollapsed,
@@ -4337,6 +4355,7 @@ impl App {
                 {
                     return Task::none();
                 }
+                let previous_backend = self.backend;
                 self.backend = backend;
                 self.render_queued = false;
                 self.zoom_render_due = None;
@@ -4355,9 +4374,15 @@ impl App {
                     {
                         document.content_layer_in_flight = None;
                     }
-                    // Thumbnails are navigation previews, independent of the
-                    // selected full-page renderer. Keep them on backend switch.
-                    return self.render_current_page();
+                    if backend == Backend::Dynlex || previous_backend == Backend::Dynlex {
+                        document.thumbnails.clear();
+                        document.thumbnail_failed.clear();
+                    }
+                    document.thumbnail_in_flight = None;
+                    return Task::batch([
+                        self.render_current_page(),
+                        self.render_nearby_thumbnail(),
+                    ]);
                 }
             }
             Message::PageScrolled(viewport) => {
@@ -4943,17 +4968,20 @@ impl App {
                         let (page_width, _) = pdf
                             .page_dimensions(initial_page)
                             .map_err(|error| error.to_string())?;
-                        let initial_scale = saved
-                            .map_or((550.0 / page_width).clamp(0.1, 1.0), |position| {
+                        let initial_scale = if backend == Backend::Dynlex {
+                            1.0
+                        } else {
+                            saved.map_or((550.0 / page_width).clamp(0.1, 1.0), |position| {
                                 position.scale as f32
-                            });
+                            })
+                        };
                         let outcome = render_page_selected(
                             &pdf,
                             &bytes,
                             initial_page,
                             initial_scale,
                             backend,
-                        )?;
+                        );
                         Ok((
                             path,
                             bytes,
@@ -4977,10 +5005,10 @@ impl App {
                 match result {
                     Ok((path, source_bytes, pdf, initial_page, initial_scale, saved, outcome)) => {
                         let _ = self.persist_reader_position();
-                        let raster = &outcome.raster;
-                        let restored_scroll_height = raster.height as f32 + 48.0;
-                        let Ok(mut model) =
-                            DocumentModel::new(DocumentId(token), raster.total_pages)
+                        let restored_scroll_height = outcome
+                            .as_ref()
+                            .map_or(48.0, |outcome| outcome.raster.height as f32 + 48.0);
+                        let Ok(mut model) = DocumentModel::new(DocumentId(token), pdf.page_count())
                         else {
                             return Task::none();
                         };
@@ -4990,10 +5018,15 @@ impl App {
                         if model.go_to_page(initial_page - 1).is_err() {
                             return Task::none();
                         }
-                        self.message = format!(
-                            "{} pages • {}×{} px",
-                            raster.total_pages, raster.width, raster.height
-                        );
+                        self.message = match &outcome {
+                            Ok(outcome) => format!(
+                                "{} pages • {}×{} px",
+                                pdf.page_count(),
+                                outcome.raster.width,
+                                outcome.raster.height
+                            ),
+                            Err(error) => error.clone(),
+                        };
                         let mut document = OpenDocument {
                             path,
                             source_bytes,
@@ -5010,8 +5043,8 @@ impl App {
                             bitmap_size: (0, 0),
                             bitmap_page_points: (0.0, 0.0),
                             bitmap_scale: initial_scale,
-                            bitmap_backend: outcome.used,
-                            imported_annotations_dynlex: outcome.imported_annotations_dynlex,
+                            bitmap_backend: self.backend,
+                            imported_annotations_dynlex: false,
                             displayed_page: initial_page - 1,
                             selected_annotation: None,
                             page_cache: VecDeque::new(),
@@ -5020,13 +5053,15 @@ impl App {
                             thumbnail_failed: HashSet::new(),
                             thumbnail_focus: initial_page - 1,
                         };
-                        document.cache_bitmap(
-                            initial_page - 1,
-                            initial_scale,
-                            outcome,
-                            #[cfg(feature = "dynlex-experimental")]
-                            None,
-                        );
+                        if let Ok(outcome) = outcome {
+                            document.cache_bitmap(
+                                initial_page - 1,
+                                initial_scale,
+                                outcome,
+                                #[cfg(feature = "dynlex-experimental")]
+                                None,
+                            );
+                        }
                         self.document = Some(document);
                         self.reader_mode_active = saved.is_some();
                         self.page_scroll_offset = scrollable::AbsoluteOffset {
@@ -5082,8 +5117,8 @@ impl App {
             Message::KeyboardModifiersChanged(modifiers) => {
                 self.keyboard_modifiers = modifiers;
             }
-            Message::ThumbnailRendered(token, page, result) => {
-                if token != self.next_load {
+            Message::ThumbnailRendered(token, generation, page, result) => {
+                if token != self.next_load || generation != self.backend_generation {
                     return Task::none();
                 }
                 let Some(document) = &mut self.document else {
@@ -5205,7 +5240,7 @@ impl App {
                     scroll_thumbnail_to(page),
                 ]);
             }
-            #[cfg(feature = "dynlex-experimental")]
+            #[cfg(all(test, feature = "dynlex-experimental"))]
             Message::ContentLayerRendered(token, generation, ticket, base, result) => {
                 if token != self.next_load || generation != self.backend_generation {
                     return Task::none();
@@ -5295,6 +5330,10 @@ impl App {
                     }
                     Err(error) => {
                         self.pending_zoom_offset = None;
+                        if self.backend == Backend::Dynlex {
+                            document.bitmap = None;
+                            document.annotation_overlay_cache.borrow_mut().take();
+                        }
                         self.message = format!("Render failed: {error}");
                     }
                 }
@@ -5341,8 +5380,15 @@ impl App {
         let pdf = Arc::clone(&document.pdf);
         let source = Arc::clone(&document.source_bytes);
         let token = self.next_load;
+        let generation = self.backend_generation;
+        let selected_backend = self.backend;
         Task::perform(
             async move {
+                if selected_backend == Backend::Dynlex {
+                    // Native DynLex pixels; Iced only scales this navigation image.
+                    return render_page_selected(&pdf, &source, page + 1, 1.0, Backend::Dynlex)
+                        .map(|outcome| outcome.raster);
+                }
                 let (width, height) = pdf.page_dimensions(page + 1).map_err(|e| e.to_string())?;
                 let scale = thumbnail_scale(width, height)?;
                 // PDFium is substantially faster for complex vector-page
@@ -5356,12 +5402,18 @@ impl App {
                 render_page_selected(&pdf, &source, page + 1, scale, preview_backend)
                     .map(|outcome| outcome.raster)
             },
-            move |result| Message::ThumbnailRendered(token, page, result),
+            move |result| Message::ThumbnailRendered(token, generation, page, result),
         )
     }
 
     fn render_content_layer_if_needed(&mut self) -> Task<Message> {
-        #[cfg(feature = "dynlex-experimental")]
+        // Strict DynLex never asks Hayro for a transparent page body.
+        Task::none()
+    }
+
+    #[cfg(all(test, feature = "dynlex-experimental"))]
+    fn render_legacy_content_layer_oracle(&mut self) -> Task<Message> {
+        #[cfg(all(test, feature = "dynlex-experimental"))]
         {
             if self.backend != Backend::Dynlex {
                 return Task::none();
@@ -5435,7 +5487,7 @@ impl App {
                 },
             );
         }
-        #[cfg(not(feature = "dynlex-experimental"))]
+        #[cfg(not(all(test, feature = "dynlex-experimental")))]
         Task::none()
     }
 
@@ -5516,45 +5568,13 @@ impl App {
         };
         let generation = self.backend_generation;
         let backend = self.backend;
-        #[cfg(feature = "dynlex-experimental")]
-        let text_count = document
-            .model
-            .items()
-            .filter(|item| item.page + 1 == page && matches!(item.kind, Kind::Text { .. }))
-            .take(65)
-            .count();
-        #[cfg(feature = "dynlex-experimental")]
-        let wants_content_layer =
-            backend == Backend::Dynlex && scale == 1.0 && (1..=64).contains(&text_count);
         self.busy = true;
         self.message = format!("Rendering page {page} at {:.0}%…", scale * 100.0);
         Task::perform(
             async move {
-                #[cfg(feature = "dynlex-experimental")]
-                if wants_content_layer {
-                    if let Ok((width, height)) = pdf.page_dimensions(page) {
-                        if width.fract() == 0.0
-                            && height.fract() == 0.0
-                            && width > 0.0
-                            && width <= 256.0
-                            && height > 0.0
-                            && height <= 4096.0
-                            && native_text_scene::eligible_mixed_page(
-                                &source,
-                                page - 1,
-                                width as u32,
-                                height as u32,
-                            )
-                        {
-                            let (outcome, layer) =
-                                render_page_with_content_layer(&pdf, page, scale)?;
-                            return Ok((outcome, Some(layer)));
-                        }
-                    }
-                }
                 let rendered = if let Some(document) = dynlex_document {
                     document
-                        .render_with_report(&pdf, page, scale, backend)
+                        .render_strict(&pdf, page, scale)
                         .map_err(|error| error.to_string())
                 } else {
                     render_page_selected(&pdf, &source, page, scale, backend)
@@ -5599,6 +5619,12 @@ impl App {
         self.print_preview_revision = self.print_preview_revision.wrapping_add(1);
         let revision = self.print_preview_revision;
         self.print_preview = None;
+        if self.backend == Backend::Dynlex {
+            self.print_preview_error =
+                "Print preview is not supported by DynLex yet. Select another renderer manually."
+                    .into();
+            return Task::none();
+        }
         let Some(document) = &self.document else {
             return Task::none();
         };
@@ -5631,5 +5657,91 @@ impl App {
 
     fn view(&self) -> Element<'_, Message> {
         hakan_ui::view(self)
+    }
+}
+
+#[cfg(all(test, feature = "dynlex-experimental"))]
+mod strict_dynlex_tests {
+    use super::*;
+
+    #[test]
+    fn selected_dynlex_is_strict_for_supported_text_and_zoom() {
+        let bytes =
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        let outcome = render_page_selected(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+        assert_eq!(outcome.used, Backend::Dynlex);
+        assert!(!outcome.imported_annotations_dynlex);
+        assert_eq!(outcome.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
+        assert!(render_page_selected(&pdf, &bytes, 1, 1.25, Backend::Dynlex).is_err());
+        let bytes =
+            include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec();
+        let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+        assert!(render_page_selected(&pdf, &bytes, 1, 1.0, Backend::Dynlex).is_err());
+        assert!(render_page_selected(&pdf, &bytes, 1, 1.0, Backend::Hayro).is_ok());
+        let cache = opds_dynlex_backend::DynlexDocument::new(Arc::new(bytes));
+        assert!(cache.render_strict(&pdf, 1, 1.0).is_err());
+    }
+
+    #[test]
+    fn unsupported_open_stays_navigable_and_switch_drops_foreign_pixels() {
+        let source = Arc::new(
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(source.clone()).unwrap());
+        let mut app = App {
+            backend: Backend::Dynlex,
+            next_load: 7,
+            ..Default::default()
+        };
+        let _ = app.update(Message::Loaded(
+            7,
+            Ok((
+                "test.pdf".into(),
+                source.clone(),
+                pdf.clone(),
+                1,
+                1.0,
+                None,
+                Err("Unsupported DynLex page".into()),
+            )),
+        ));
+        assert!(app.document.as_ref().unwrap().bitmap.is_none());
+        assert_eq!(app.message, "Unsupported DynLex page");
+        let _ = app.update(Message::SelectBackend(Backend::Hayro));
+        let outcome = render_page_selected(&pdf, &source, 1, 1.0, Backend::Hayro).unwrap();
+        let doc = app.document.as_mut().unwrap();
+        doc.cache_bitmap(0, 1.0, outcome, None);
+        doc.thumbnails.push_back((0, doc.bitmap.clone().unwrap()));
+        let old_generation = app.backend_generation;
+        let _ = app.update(Message::SelectBackend(Backend::Dynlex));
+        let doc = app.document.as_ref().unwrap();
+        assert!(doc.bitmap.is_none());
+        assert!(doc.thumbnails.is_empty());
+        assert!(doc.page_cache.is_empty());
+        let _ = app.update(Message::ThumbnailRendered(
+            7,
+            old_generation,
+            0,
+            Ok(pdf.render_page(1, 1.0).unwrap()),
+        ));
+        assert!(app.document.as_ref().unwrap().thumbnails.is_empty());
+        // A failed zoom must clear the prior (even genuine DynLex) page image.
+        let outcome = render_page_selected(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
+        let doc = app.document.as_mut().unwrap();
+        doc.cache_bitmap(0, 1.0, outcome, None);
+        let ticket = doc.model.view().ticket();
+        let _ = app.update(Message::Rendered(
+            app.backend_generation,
+            ticket,
+            Err("unsupported zoom".into()),
+        ));
+        assert!(app.document.as_ref().unwrap().bitmap.is_none());
+        assert!(app
+            .document
+            .as_ref()
+            .unwrap()
+            .content_layer_in_flight
+            .is_none());
     }
 }

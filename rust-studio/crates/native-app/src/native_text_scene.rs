@@ -225,6 +225,7 @@ pub fn verified_premultiplied_page_layer(
 /// An async content render can prove opacity under a colored Highlight only
 /// for this small, independently classified source subset. The compositor
 /// still checks every covered source pixel after the render completes.
+#[cfg(test)]
 pub fn eligible_annotation_content_layer(
     source_pdf: &[u8],
     page: usize,

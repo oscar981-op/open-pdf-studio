@@ -42,6 +42,35 @@ impl DynlexDocument {
         }
     }
 
+    /// Strict native viewer route: never invokes another rasterizer, including
+    /// the mixed Hayro-body/DynLex-annotation appearance route.
+    pub fn render_strict(
+        &self,
+        pdf: &ParsedPdf,
+        page: usize,
+        scale: f32,
+    ) -> Result<RenderOutcome, String> {
+        let started = std::time::Instant::now();
+        let bitmap = self.try_render(page, scale)?
+            .ok_or_else(|| "DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.".to_string())?;
+        let (page_width_pt, page_height_pt) =
+            pdf.page_dimensions(page).map_err(|e| e.to_string())?;
+        Ok(RenderOutcome {
+            used: Backend::Dynlex,
+            imported_annotations_dynlex: false,
+            raster: opds_engine_probe::Raster {
+                width: bitmap.width,
+                height: bitmap.height,
+                rgba: bitmap.rgba,
+                page_width_pt,
+                page_height_pt,
+                total_pages: pdf.page_count(),
+                parse_ms: 0,
+                render_ms: started.elapsed().as_millis(),
+            },
+        })
+    }
+
     /// The source belongs to this cache; callers cannot accidentally reuse a
     /// prepared scene for different PDF bytes. The host owns the matching metadata.
     pub fn render_with_report(

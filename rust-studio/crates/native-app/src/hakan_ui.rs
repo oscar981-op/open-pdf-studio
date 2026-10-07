@@ -1424,6 +1424,23 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     }),
                 app.keyboard_modifiers.control(),
             )
+        } else if app.document.is_some() {
+            container(
+                column![
+                    text(if app.busy {
+                        "Rendering…"
+                    } else {
+                        "No rendered page"
+                    })
+                    .size(22),
+                    text(&app.message).size(14),
+                    text("Select a renderer at the bottom left.").size(14),
+                ]
+                .spacing(16)
+                .max_width(600),
+            )
+            .center(Fill)
+            .into()
         } else {
             container(
                 column![
@@ -1471,17 +1488,30 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     .content_fit(iced::ContentFit::Contain)
                     .into()
             } else {
-                container(text("Page preview").size(11))
-                    .width(super::THUMBNAIL_WIDTH)
-                    .height(super::THUMBNAIL_HEIGHT)
-                    .align_x(iced::Center)
-                    .align_y(iced::Center)
-                    .style(|_| container::Style {
-                        background: Some(Color::from_rgb8(238, 238, 238).into()),
-                        text_color: Some(Color::from_rgb8(100, 100, 100)),
-                        ..Default::default()
-                    })
-                    .into()
+                container(
+                    text(
+                        if app
+                            .document
+                            .as_ref()
+                            .is_some_and(|d| d.thumbnail_failed.contains(&index))
+                        {
+                            "Unsupported preview"
+                        } else {
+                            "Page preview"
+                        },
+                    )
+                    .size(11),
+                )
+                .width(super::THUMBNAIL_WIDTH)
+                .height(super::THUMBNAIL_HEIGHT)
+                .align_x(iced::Center)
+                .align_y(iced::Center)
+                .style(|_| container::Style {
+                    background: Some(Color::from_rgb8(238, 238, 238).into()),
+                    text_color: Some(Color::from_rgb8(100, 100, 100)),
+                    ..Default::default()
+                })
+                .into()
             };
             pages = pages.push(
                 container(
@@ -1655,6 +1685,13 @@ pub fn view(app: &App) -> Element<'_, Message> {
         .document
         .as_ref()
         .map(|document| {
+            if document.bitmap.is_none() {
+                return if app.backend == opds_dynlex_backend::Backend::Dynlex {
+                    "DynLex only · no fallback"
+                } else {
+                    "No rendered page"
+                };
+            }
             let dynlex_annotations = app.dynlex_visible_annotation_bitmap(document).is_some();
             let has_annotations = document
                 .model

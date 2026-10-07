@@ -1,3 +1,34 @@
+## DynLex zonder fallback — 8 oktober 2026
+
+Op expliciet verzoek van de gebruiker is de **native DynLex-keuze strikt**.
+`DynlexDocument::render_strict` levert uitsluitend een DynLex-bitmap of een fout.
+De pagina- en miniatuurroutes roepen geen Hayro-renderer aan wanneer DynLex
+gekozen is. De eerdere combinatie Hayro-paginabody/DynLex-appearances wordt
+niet meer vanuit de viewer gebruikt. Hayro blijft apart handmatig selecteerbaar;
+de legacy fallback-API blijft bestaan voor diagnostiek en andere callers.
+De bron-PDF wordt nog via de bestaande Hayro-gebaseerde `ParsedPdf` geopend
+voor metadata; dit is geen volledig Hayro-vrije parser/build.
+
+Bij openen start DynLex op 100%. Unsupported pagina's blijven als document
+navigeerbaar, met een centrale foutmelding en zonder vervangende bitmap.
+Miniaturen worden bij DynLex op 100% door DynLex gerenderd en door de UI als
+navigatiebeeld verkleind. Unsupported miniaturen tonen een expliciete placeholder.
+Wisselen van/naar DynLex wist de betrokken miniatuurcache; een generatietoken
+weert late resultaten van de vorige renderer. Een mislukte zoom wist het oude
+paginabeeld. De afdrukvoorbeeldroute geeft bij DynLex expliciet unsupported,
+aangezien die nog geen eigen DynLex-route heeft. Opslaan/PDF-export is hiervan
+onafhankelijk en er is geen fysieke printer getest.
+
+Een echte 1200×832-vensterproef toonde `simple-fill-stroke.pdf` op 100% met
+`Renderer: DynLex`, inclusief miniatuur. `tekstrotatie-extern.pdf` toonde
+`DynLex only · no fallback`, een lege documentweergave met uitleg en
+`Unsupported preview`. Tests controleren directe en gecachte afwijzing,
+handmatige Hayro-selectie, het wissen van vreemde pixels, late miniaturen en
+het wissen van een vorige bitmap na een mislukte render. Historische gemengde
+annotatieproeven zijn expliciet diagnostische oracles, niet de huidige UI-route.
+Dit vergroot de objectdekking niet: complexe PDF's, tekst en veel zoomstanden
+kunnen nu bewust geen DynLex-beeld tonen. Geen claim van volledige dekking.
+
 # Vier PDF-renderkeuzes in de native Rust-app
 
 De Settings-ribbon heeft nu vier expliciete voorkeuren. De statusregel noemt
