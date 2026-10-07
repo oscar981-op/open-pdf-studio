@@ -755,3 +755,13 @@ Fractionele verschuiving, schaal, tweede `cm`, een buiten de BBox geschoven rand
 PDF-decimalen die lopdf voortijdig naar f32 afrondt, worden vóór de
 DynLex-aanroep afgewezen; de app valt dan zonder gedeeltelijke bitmap terug.
 Algemene affiene CTM, Form-tekst en transparantie blijven open.
+
+**DeviceGray in begrensde Forms.** Dezelfde geordende `/AP/N`-route
+herkent nu ook de PDF-operatoren `g` en `G` voor dekkende grijze vulling en
+rand. Een kanaalwaarde moet precies overeenkomen met een naar drie decimalen
+afgedrukte 8-bit grijswaarde; twijfelachtige fracties zoals `0.5` vallen
+volledig op Hayro terug. Een gecontroleerde Form met grijze vulling, witte
+rand en zwarte overlappende vulling is op 0/90/180/270° met CropBox over de
+hele pagina RGBA-bytegelijk aan Hayro. Ongeldige waarden en extra operanden
+worden vóór het schilderen afgewezen. Dit vergroot de ondersteunde
+annotatie-graphicsstate, maar bewijst geen algemene kleur- of Form-dekking.

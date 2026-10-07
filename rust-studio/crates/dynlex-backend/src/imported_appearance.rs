@@ -751,7 +751,7 @@ fn parse_bounded_opaque_form(
         let numeric_count = match operation.operator.as_str() {
             "q" | "Q" | "h" | "f" | "F" | "f*" | "S" | "s" | "B" | "B*" | "b" | "b*" | "W"
             | "W*" | "n" => 0,
-            "w" | "Do" => 1,
+            "w" | "Do" | "g" | "G" => 1,
             "m" | "l" => 2,
             "rg" | "RG" => 3,
             "re" => 4,
@@ -828,6 +828,18 @@ fn parse_bounded_opaque_form(
             .collect::<Option<Vec<_>>>()?
             .try_into()
             .ok()
+    };
+    let parse_gray = |value: &Object| -> Option<[u8; 3]> {
+        let value = number(value)?;
+        if !(0.0..=1.0).contains(&value) {
+            return None;
+        }
+        let channel = (value * 255.0).round();
+        let printed = (channel / 255.0 * 1000.0).round() / 1000.0;
+        if (value - printed).abs() > 0.000_001 {
+            return None;
+        }
+        Some([channel as u8; 3])
     };
     let rect_command = |path: [f64; 4], stroke: bool, color: [u8; 3], clip| {
         let [x, y, width, height] = path;
@@ -976,6 +988,17 @@ fn parse_bounded_opaque_form(
                 }
                 let color = parse_color(&operation.operands)?;
                 if operation.operator == "rg" {
+                    state.fill = Some(color);
+                } else {
+                    state.stroke = Some(color);
+                }
+            }
+            "g" | "G" => {
+                if stack.is_empty() || pending_path.is_some() {
+                    return None;
+                }
+                let color = parse_gray(operation.operands.first()?)?;
+                if operation.operator == "g" {
                     state.fill = Some(color);
                 } else {
                     state.stroke = Some(color);
@@ -2626,6 +2649,62 @@ mod missing_appearance_tests {
                     "rotation={rotation}, compressed={compressed}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn gray_form_fills_and_strokes_match_hayro_on_rotated_crop() {
+        for rotation in [0, 90, 180, 270] {
+            let bytes = stamp_with_form_content(
+                rotation,
+                b"q 0.502 g 0 0 40 30 re f \
+                  q 1 G 2 w 1 1 38 28 re S Q \
+                  0 g 4 4 8 8 re f Q",
+            );
+            let doc = Document::load_mem(&bytes).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+            assert_eq!(
+                parse_bounded_opaque_form(
+                    &doc,
+                    doc.get_page_annotations(page_id).unwrap()[0],
+                    crop,
+                    turn,
+                )
+                .unwrap()
+                .len(),
+                3
+            );
+            let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert!(selected.imported_annotations_dynlex);
+            assert_eq!(selected.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
+        }
+    }
+
+    #[test]
+    fn gray_form_rejects_unproven_values_and_operands() {
+        for content in [
+            b"q 0.5 g 0 0 40 30 re f Q".as_slice(),
+            b"q -0.1 g 0 0 40 30 re f Q".as_slice(),
+            b"q 1.1 G 2 w 1 1 38 28 re S Q".as_slice(),
+            b"q 0 1 g 0 0 40 30 re f Q".as_slice(),
+        ] {
+            let bytes = stamp_with_form_content(90, content);
+            let doc = Document::load_mem(&bytes).unwrap();
+            let page_id = *doc.get_pages().get(&1).unwrap();
+            let (_, crop, turn) = page_geometry(&doc, 1).unwrap();
+            assert!(parse_bounded_opaque_form(
+                &doc,
+                doc.get_page_annotations(page_id).unwrap()[0],
+                crop,
+                turn,
+            )
+            .is_none());
+            let pdf = ParsedPdf::open(Arc::new(bytes.clone())).unwrap();
+            let selected = render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert!(!selected.imported_annotations_dynlex);
+            assert_eq!(selected.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
         }
     }
 
