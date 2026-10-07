@@ -60,3 +60,32 @@ De View-knop **Keystrokes** toont nu tijdelijke toetsenlabels rechtsonder binnen
 De Drawing-knop **Line** maakt nu een echte native lijnannotatie met twee PDF-pagina-eindpunten. De overlay toont de lijn, geselecteerde eindpunten en een live sleepvoorbeeld; selecteren, verplaatsen, Undo/Redo en Save As gebruiken hetzelfde annotatiemodel als Rectangle. Save As schrijft `/Subtype /Line`, `/L` en een expliciete `/AP`-lijn. Een onafhankelijke PDF-lijninhoud is bij 0/90/180/270° over de volledige RGBA-pagina pixelgelijk aan de opgeslagen annotatie. In een echt 1200×832-venster is de lijn op een PDF getekend en geselecteerd; Save As leverde een geldige eenpagina-PDF met `/Subtype /Line` en de verwachte eindpunten. Beide blauwe eindpuntgrepen zijn nu afzonderlijk versleepbaar op de pagina; de paginageometrie, hit-test en Save As volgen de gewijzigde eindpunten. Een live X11-proef verplaatste een eindpunt, liet Undo de oude positie terugzetten en Redo de nieuwe positie herstellen. Daarna schreef Save As de gewijzigde `/L[71 133 201 43]` in een geldige 256×192-PDF. Bestaande geïmporteerde Line-annotaties bewerken is nog niet ondersteund; deze knop bewijst geen volledige Drawing- of annotatiepariteit.
 
 De Drawing-knop **Polyline** plaatst hoekpunten per muisklik en toont tijdens het plaatsen alle segmenten plus een lijn naar de aanwijzer. Dubbelklik, Enter of rechtermuisklik rondt af; Esc annuleert. Een pad bevat 2–64 punten; ongeldige of opeenvolgend te korte segmenten worden geweigerd. Het Rust-model gebruikt lijnspecifieke hit-testing, verplaatsen en Undo/Redo. Save As schrijft een echte `/Subtype /PolyLine`, `/Vertices` en een printbare `/AP`. De opgeslagen appearance is bij 0/90/180/270° over de volledige RGBA-pagina bytegelijk aan een onafhankelijk PDF-pad. In een echt 1200×832-venster zijn drie punten geplaatst, met dubbelklik afgerond, geselecteerd en verplaatst; Save As leverde een geldige 256×192-PDF met de verplaatste vertices. Afzonderlijke hoekpunten bewerken en geïmporteerde PolyLine-annotaties bewerken blijven open.
+
+Op 8 oktober zijn twee gemelde fouten hersteld. Ctrl+scroll wordt aan de
+buitenkant van de document-scrollcontainer afgehandeld; het muispunt wordt
+op het event zelf gemeten in vaste viewportcoördinaten. Daarmee blijven
+snelle events vóór de volgende layout hetzelfde PDF-punt volgen. De vorige
+combinatie van bewaarde inhoudscoördinaten en viewportcoördinaten kon drift
+geven. Ook verticaal is nu 512 px panruimte beschikbaar, zodat een kleine
+pagina tijdens zoomen rond de aanwijzer kan bewegen. De eerste plaatsing
+compenseert die marge; Reader Mode slaat alleen de document-scrollpositie
+op. De weergavemaat komt uit pagina-afmetingen en zoom, onafhankelijk van
+afronding in een tijdelijk of definitief raster.
+
+De miniaturenplanner vult de volledige virtuele reeks van maximaal twaalf
+kaarten, eerst vanaf de zichtbare focus naar beneden en daarna naar boven.
+Eerder vroeg hij maar twee buren op: onderaan konden de laatste zichtbare
+pagina's daardoor nooit aan de beurt komen. Bij cacheverdringing gaan eerst
+kaarten buiten de huidige reeks weg. In het echte 1200×832-venster op Barn
+Relocation zijn na scrollen naar onderen ook pagina's 4, 5, 6 en 7 gevuld.
+
+In de laatste X11-regressie op de 256×192-fixture bleef het gekozen punt
+onder de cursor bij in-/uitzoomen behouden. De rode rechthoek had vóór en
+na de volledige zoomcyclus exact dezelfde schermbegrenzing
+`[294,398]–[343,427]`. De extra wiel-events uit XTest zijn hierbij als echte
+ontvangen events verwerkt; er wordt geen aanname gedaan dat één synthetische
+press/release precies één event oplevert. Het oorspronkelijke gebruikersvenster
+bleef tijdens de proef open. De annotatiecanvas-test borgt dat deze laag geen
+eigen Ctrl+wheel-zoom meer publiceert. Alle 76 native tests en workspace-tests
+met alle features slagen; de bestaande DynLex-verifier blijft bytegelijk op
+47 PDF-pagina's/4.964.352 pixels plus drie v4-pagina's/147.456 pixels.

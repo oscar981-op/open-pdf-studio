@@ -1,0 +1,537 @@
+{
+  "protocol": "30 alternating in-process warm pairs; fresh prepare+render versus cached render; full Hayro byte comparison outside timings; process RSS includes both methods and Hayro reference",
+  "fixtures": [
+    {
+      "scale": 1,
+      "rgba_bytes": 196608,
+      "initial_ms": 0.498548,
+      "all_pixels_equal": true,
+      "pairs": [
+        {
+          "fresh_ms": 0.279905,
+          "reused_ms": 0.033451
+        },
+        {
+          "fresh_ms": 0.111911,
+          "reused_ms": 0.03759
+        },
+        {
+          "fresh_ms": 0.092681,
+          "reused_ms": 0.039631
+        },
+        {
+          "fresh_ms": 0.088442,
+          "reused_ms": 0.051991
+        },
+        {
+          "fresh_ms": 0.069231,
+          "reused_ms": 0.031001
+        },
+        {
+          "fresh_ms": 0.068961,
+          "reused_ms": 0.0309
+        },
+        {
+          "fresh_ms": 0.068611,
+          "reused_ms": 0.03119
+        },
+        {
+          "fresh_ms": 0.068181,
+          "reused_ms": 0.03095
+        },
+        {
+          "fresh_ms": 0.06767,
+          "reused_ms": 0.03093
+        },
+        {
+          "fresh_ms": 0.068161,
+          "reused_ms": 0.030881
+        },
+        {
+          "fresh_ms": 0.067911,
+          "reused_ms": 0.031071
+        },
+        {
+          "fresh_ms": 0.069581,
+          "reused_ms": 0.046541
+        },
+        {
+          "fresh_ms": 0.069941,
+          "reused_ms": 0.033101
+        },
+        {
+          "fresh_ms": 0.070761,
+          "reused_ms": 0.033421
+        },
+        {
+          "fresh_ms": 0.068631,
+          "reused_ms": 0.032141
+        },
+        {
+          "fresh_ms": 0.069521,
+          "reused_ms": 0.032301
+        },
+        {
+          "fresh_ms": 0.068881,
+          "reused_ms": 0.032451
+        },
+        {
+          "fresh_ms": 0.068801,
+          "reused_ms": 0.031861
+        },
+        {
+          "fresh_ms": 0.069141,
+          "reused_ms": 0.031861
+        },
+        {
+          "fresh_ms": 0.070471,
+          "reused_ms": 0.03209
+        },
+        {
+          "fresh_ms": 0.069261,
+          "reused_ms": 0.031961
+        },
+        {
+          "fresh_ms": 0.069341,
+          "reused_ms": 0.031691
+        },
+        {
+          "fresh_ms": 0.068311,
+          "reused_ms": 0.032481
+        },
+        {
+          "fresh_ms": 0.070141,
+          "reused_ms": 0.0319
+        },
+        {
+          "fresh_ms": 0.068821,
+          "reused_ms": 0.03199
+        },
+        {
+          "fresh_ms": 0.069431,
+          "reused_ms": 0.03199
+        },
+        {
+          "fresh_ms": 0.084921,
+          "reused_ms": 0.041161
+        },
+        {
+          "fresh_ms": 0.090991,
+          "reused_ms": 0.056281
+        },
+        {
+          "fresh_ms": 0.088731,
+          "reused_ms": 0.041441
+        },
+        {
+          "fresh_ms": 0.077381,
+          "reused_ms": 0.040961
+        }
+      ],
+      "pdf": "simple-fill-stroke.pdf",
+      "process_peak_rss_kib": 6720,
+      "fresh_median_ms": 0.069386,
+      "reused_median_ms": 0.032115500000000005,
+      "reused_wins": 30
+    },
+    {
+      "scale": 2,
+      "rgba_bytes": 786432,
+      "initial_ms": 1.29126,
+      "all_pixels_equal": true,
+      "pairs": [
+        {
+          "fresh_ms": 0.789723,
+          "reused_ms": 0.147392
+        },
+        {
+          "fresh_ms": 0.187114,
+          "reused_ms": 0.122892
+        },
+        {
+          "fresh_ms": 0.155553,
+          "reused_ms": 0.130602
+        },
+        {
+          "fresh_ms": 0.165712,
+          "reused_ms": 0.104862
+        },
+        {
+          "fresh_ms": 0.145862,
+          "reused_ms": 0.107582
+        },
+        {
+          "fresh_ms": 0.187623,
+          "reused_ms": 0.101232
+        },
+        {
+          "fresh_ms": 0.200373,
+          "reused_ms": 0.132642
+        },
+        {
+          "fresh_ms": 0.196973,
+          "reused_ms": 0.133282
+        },
+        {
+          "fresh_ms": 0.197924,
+          "reused_ms": 0.110802
+        },
+        {
+          "fresh_ms": 0.155462,
+          "reused_ms": 0.104301
+        },
+        {
+          "fresh_ms": 0.137102,
+          "reused_ms": 0.123302
+        },
+        {
+          "fresh_ms": 0.157383,
+          "reused_ms": 0.109582
+        },
+        {
+          "fresh_ms": 0.153932,
+          "reused_ms": 0.106652
+        },
+        {
+          "fresh_ms": 0.203033,
+          "reused_ms": 0.132562
+        },
+        {
+          "fresh_ms": 0.137852,
+          "reused_ms": 0.108032
+        },
+        {
+          "fresh_ms": 0.139292,
+          "reused_ms": 0.106242
+        },
+        {
+          "fresh_ms": 0.133162,
+          "reused_ms": 0.102802
+        },
+        {
+          "fresh_ms": 0.141292,
+          "reused_ms": 0.100581
+        },
+        {
+          "fresh_ms": 0.133762,
+          "reused_ms": 0.106132
+        },
+        {
+          "fresh_ms": 0.149153,
+          "reused_ms": 0.101762
+        },
+        {
+          "fresh_ms": 0.137143,
+          "reused_ms": 0.106252
+        },
+        {
+          "fresh_ms": 0.142713,
+          "reused_ms": 0.235824
+        },
+        {
+          "fresh_ms": 0.135282,
+          "reused_ms": 0.154372
+        },
+        {
+          "fresh_ms": 0.142842,
+          "reused_ms": 0.102201
+        },
+        {
+          "fresh_ms": 0.132712,
+          "reused_ms": 0.106782
+        },
+        {
+          "fresh_ms": 0.149043,
+          "reused_ms": 0.099722
+        },
+        {
+          "fresh_ms": 0.135263,
+          "reused_ms": 0.103732
+        },
+        {
+          "fresh_ms": 0.141023,
+          "reused_ms": 0.100072
+        },
+        {
+          "fresh_ms": 0.134642,
+          "reused_ms": 0.102301
+        },
+        {
+          "fresh_ms": 0.136992,
+          "reused_ms": 0.111201
+        }
+      ],
+      "pdf": "simple-fill-stroke.pdf",
+      "process_peak_rss_kib": 9040,
+      "fresh_median_ms": 0.14435199999999998,
+      "reused_median_ms": 0.106717,
+      "reused_wins": 28
+    },
+    {
+      "scale": 1,
+      "rgba_bytes": 196608,
+      "initial_ms": 1.28283,
+      "all_pixels_equal": true,
+      "pairs": [
+        {
+          "fresh_ms": 0.868534,
+          "reused_ms": 0.314715
+        },
+        {
+          "fresh_ms": 0.63825,
+          "reused_ms": 0.261134
+        },
+        {
+          "fresh_ms": 0.634911,
+          "reused_ms": 0.336655
+        },
+        {
+          "fresh_ms": 0.580109,
+          "reused_ms": 0.269704
+        },
+        {
+          "fresh_ms": 0.580589,
+          "reused_ms": 0.243984
+        },
+        {
+          "fresh_ms": 0.380616,
+          "reused_ms": 0.165203
+        },
+        {
+          "fresh_ms": 0.421126,
+          "reused_ms": 0.213423
+        },
+        {
+          "fresh_ms": 0.372946,
+          "reused_ms": 0.163742
+        },
+        {
+          "fresh_ms": 0.414237,
+          "reused_ms": 0.226413
+        },
+        {
+          "fresh_ms": 0.394306,
+          "reused_ms": 0.164343
+        },
+        {
+          "fresh_ms": 0.420817,
+          "reused_ms": 0.206453
+        },
+        {
+          "fresh_ms": 0.451317,
+          "reused_ms": 0.164803
+        },
+        {
+          "fresh_ms": 0.436527,
+          "reused_ms": 0.203333
+        },
+        {
+          "fresh_ms": 0.429227,
+          "reused_ms": 0.163693
+        },
+        {
+          "fresh_ms": 0.61569,
+          "reused_ms": 0.218774
+        },
+        {
+          "fresh_ms": 0.491418,
+          "reused_ms": 0.164043
+        },
+        {
+          "fresh_ms": 0.456158,
+          "reused_ms": 0.219453
+        },
+        {
+          "fresh_ms": 0.448237,
+          "reused_ms": 0.228984
+        },
+        {
+          "fresh_ms": 0.447957,
+          "reused_ms": 0.215034
+        },
+        {
+          "fresh_ms": 0.463818,
+          "reused_ms": 0.185723
+        },
+        {
+          "fresh_ms": 0.477128,
+          "reused_ms": 0.216813
+        },
+        {
+          "fresh_ms": 0.443357,
+          "reused_ms": 0.164383
+        },
+        {
+          "fresh_ms": 0.472787,
+          "reused_ms": 0.245414
+        },
+        {
+          "fresh_ms": 0.490338,
+          "reused_ms": 0.174563
+        },
+        {
+          "fresh_ms": 0.433497,
+          "reused_ms": 0.206933
+        },
+        {
+          "fresh_ms": 0.431217,
+          "reused_ms": 0.168153
+        },
+        {
+          "fresh_ms": 0.412506,
+          "reused_ms": 0.217024
+        },
+        {
+          "fresh_ms": 0.387626,
+          "reused_ms": 0.166632
+        },
+        {
+          "fresh_ms": 0.427407,
+          "reused_ms": 0.209113
+        },
+        {
+          "fresh_ms": 0.421656,
+          "reused_ms": 0.169522
+        }
+      ],
+      "pdf": "full-page-raster.pdf",
+      "process_peak_rss_kib": 7532,
+      "fresh_median_ms": 0.44565699999999997,
+      "reused_median_ms": 0.208023,
+      "reused_wins": 30
+    },
+    {
+      "scale": 1,
+      "rgba_bytes": 196608,
+      "initial_ms": 1.875251,
+      "all_pixels_equal": true,
+      "pairs": [
+        {
+          "fresh_ms": 1.414283,
+          "reused_ms": 0.578409
+        },
+        {
+          "fresh_ms": 1.511205,
+          "reused_ms": 0.695202
+        },
+        {
+          "fresh_ms": 0.779703,
+          "reused_ms": 0.277304
+        },
+        {
+          "fresh_ms": 0.476187,
+          "reused_ms": 0.206193
+        },
+        {
+          "fresh_ms": 0.483548,
+          "reused_ms": 0.257275
+        },
+        {
+          "fresh_ms": 0.444487,
+          "reused_ms": 0.204653
+        },
+        {
+          "fresh_ms": 0.466758,
+          "reused_ms": 0.259895
+        },
+        {
+          "fresh_ms": 0.456027,
+          "reused_ms": 0.205233
+        },
+        {
+          "fresh_ms": 0.483328,
+          "reused_ms": 0.262214
+        },
+        {
+          "fresh_ms": 0.650971,
+          "reused_ms": 0.245904
+        },
+        {
+          "fresh_ms": 0.6198,
+          "reused_ms": 0.275094
+        },
+        {
+          "fresh_ms": 0.533548,
+          "reused_ms": 0.213834
+        },
+        {
+          "fresh_ms": 0.527599,
+          "reused_ms": 0.279384
+        },
+        {
+          "fresh_ms": 0.500648,
+          "reused_ms": 0.209774
+        },
+        {
+          "fresh_ms": 0.516029,
+          "reused_ms": 0.266715
+        },
+        {
+          "fresh_ms": 0.501678,
+          "reused_ms": 0.222914
+        },
+        {
+          "fresh_ms": 0.550738,
+          "reused_ms": 0.254074
+        },
+        {
+          "fresh_ms": 0.530629,
+          "reused_ms": 0.209753
+        },
+        {
+          "fresh_ms": 0.521328,
+          "reused_ms": 0.275924
+        },
+        {
+          "fresh_ms": 0.494768,
+          "reused_ms": 0.224263
+        },
+        {
+          "fresh_ms": 0.472627,
+          "reused_ms": 0.259834
+        },
+        {
+          "fresh_ms": 0.431027,
+          "reused_ms": 0.248894
+        },
+        {
+          "fresh_ms": 0.479817,
+          "reused_ms": 0.242584
+        },
+        {
+          "fresh_ms": 0.411327,
+          "reused_ms": 0.204133
+        },
+        {
+          "fresh_ms": 0.464477,
+          "reused_ms": 0.251694
+        },
+        {
+          "fresh_ms": 0.414387,
+          "reused_ms": 0.204243
+        },
+        {
+          "fresh_ms": 0.446147,
+          "reused_ms": 0.264665
+        },
+        {
+          "fresh_ms": 0.405817,
+          "reused_ms": 0.201213
+        },
+        {
+          "fresh_ms": 0.454598,
+          "reused_ms": 0.241444
+        },
+        {
+          "fresh_ms": 0.412736,
+          "reused_ms": 0.198253
+        }
+      ],
+      "pdf": "two-images-hybrid.pdf",
+      "process_peak_rss_kib": 7432,
+      "fresh_median_ms": 0.483438,
+      "reused_median_ms": 0.247399,
+      "reused_wins": 30
+    }
+  ]
+}

@@ -10,6 +10,7 @@ mod pdf_save;
 mod reader_mode;
 mod text_layout;
 mod virtual_ipp;
+mod zoom_area;
 use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};
 use opds_dynlex_backend::{Backend, RenderOutcome};
@@ -80,6 +81,8 @@ const THUMBNAIL_WINDOW_SIZE: usize = 12;
 const BROWSER_ROW_STEP: f32 = 36.0;
 const BROWSER_WINDOW_SIZE: usize = 20;
 const HORIZONTAL_PAN_MARGIN: f32 = 512.0;
+const VERTICAL_PAN_MARGIN: f32 = 512.0;
+const PAGE_PADDING: f32 = 24.0;
 
 fn thumbnail_scale(width: f32, height: f32) -> Result<f32, String> {
     if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
@@ -407,21 +410,71 @@ fn zoom_timeout(delay: Duration) -> Task<Message> {
     })
 }
 
-fn zoom_preview_size(size: (u32, u32), rendered_scale: f32, wanted_scale: f64) -> (u32, u32) {
-    if size.0 == 0
-        || size.1 == 0
-        || !rendered_scale.is_finite()
-        || rendered_scale <= 0.0
+fn zoom_preview_size(
+    page_points: (f32, f32),
+    fallback: (u32, u32),
+    wanted_scale: f64,
+) -> (u32, u32) {
+    if fallback.0 == 0
+        || fallback.1 == 0
         || !wanted_scale.is_finite()
+        || wanted_scale <= 0.0
+        || !page_points.0.is_finite()
+        || !page_points.1.is_finite()
+        || page_points.0 <= 0.0
+        || page_points.1 <= 0.0
     {
-        return size;
+        return fallback;
     }
-    let factor = wanted_scale / f64::from(rendered_scale);
-    if !factor.is_finite() || factor <= 0.0 {
-        return size;
+    // Page geometry determines display size independently of the pending or
+    // final raster dimensions. Otherwise rounding when a sharp bitmap arrives
+    // moves the anchor and accumulates drift over repeated zoom-in/out cycles.
+    let scaled = |length: f32| (length * wanted_scale as f32).floor().clamp(1.0, 32_768.0) as u32;
+    (scaled(page_points.0), scaled(page_points.1))
+}
+
+// The wheel handler converts its viewport anchor to a PDF-image-local point.
+// Use rounded preview dimensions so repeated events do not accumulate drift.
+fn zoom_scroll_offset(
+    current: scrollable::AbsoluteOffset,
+    anchor: [f32; 2],
+    old: (u32, u32),
+    new: (u32, u32),
+) -> scrollable::AbsoluteOffset {
+    let axis = |offset: f32, point: f32, before: u32, after: u32| {
+        if before == 0 {
+            offset
+        } else {
+            (offset + point * (after as f32 / before as f32 - 1.0)).max(0.0)
+        }
+    };
+    scrollable::AbsoluteOffset {
+        x: axis(current.x, anchor[0], old.0, new.0),
+        y: axis(current.y, anchor[1], old.1, new.1),
     }
-    let scaled = |length: u32| (f64::from(length) * factor).round().clamp(1.0, 32_768.0) as u32;
-    (scaled(size.0), scaled(size.1))
+}
+
+fn thumbnail_candidates(focus: usize, count: usize) -> impl Iterator<Item = usize> {
+    let window = thumbnail_window(focus, count);
+    let focus = focus.clamp(window.start, window.end.saturating_sub(1).max(window.start));
+    (focus..window.end).chain((window.start..focus).rev())
+}
+
+fn next_thumbnail(document: &OpenDocument) -> Option<usize> {
+    let window = thumbnail_window(document.thumbnail_focus, document.pdf.page_count());
+    // Fill the complete virtual window, not only two neighbours of its first
+    // visible row: at the bottom those neighbours omit the final pages.
+    if window.is_empty() {
+        return None;
+    }
+    thumbnail_candidates(document.thumbnail_focus, document.pdf.page_count()).find(|&page| {
+        !(page == document.displayed_page && document.bitmap.is_some())
+            && !document
+                .thumbnails
+                .iter()
+                .any(|(cached, _)| *cached == page)
+            && !document.thumbnail_failed.contains(&page)
+    })
 }
 
 fn scroll_page_to(offset: scrollable::AbsoluteOffset) -> Task<Message> {
@@ -520,7 +573,6 @@ struct App {
     page_scroll_offset: scrollable::AbsoluteOffset,
     pending_zoom_offset: Option<scrollable::AbsoluteOffset>,
     keyboard_modifiers: iced::keyboard::Modifiers,
-    page_pointer: Option<[f32; 2]>,
     window_size: (f32, f32),
 }
 
@@ -779,10 +831,19 @@ mod fit_view_tests {
 
     #[test]
     fn pending_zoom_stretches_existing_bitmap_without_a_new_raster() {
-        assert_eq!(zoom_preview_size((1000, 800), 1.0, 1.25), (1250, 1000));
-        assert_eq!(zoom_preview_size((1000, 800), 0.5, 0.25), (500, 400));
-        assert_eq!(zoom_preview_size((1000, 800), 0.0, 1.25), (1000, 800));
-        assert_eq!(zoom_preview_size((0, 0), 1.0, 1.25), (0, 0));
+        assert_eq!(
+            zoom_preview_size((1000.0, 800.0), (1000, 800), 1.25),
+            (1250, 1000)
+        );
+        assert_eq!(
+            zoom_preview_size((2000.0, 1600.0), (1000, 800), 0.25),
+            (500, 400)
+        );
+        assert_eq!(
+            zoom_preview_size((0.0, 0.0), (1000, 800), 1.25),
+            (1000, 800)
+        );
+        assert_eq!(zoom_preview_size((1000.0, 800.0), (0, 0), 1.25), (0, 0));
     }
 
     #[test]
@@ -805,6 +866,54 @@ mod zoom_interaction_tests {
     use super::*;
 
     #[test]
+    fn pointer_stays_fixed_with_pan_margins_and_scrolled_page() {
+        for (offset, point, old, new) in [
+            ([512.0, 512.0], [40.0, 140.0], (256, 192), (294, 221)),
+            ([812.0, 912.0], [640.0, 720.0], (1000, 1400), (1150, 1610)),
+            ([812.0, 912.0], [640.0, 720.0], (1000, 1400), (500, 700)),
+        ] {
+            let next = zoom_scroll_offset(
+                scrollable::AbsoluteOffset {
+                    x: offset[0],
+                    y: offset[1],
+                },
+                point,
+                old,
+                new,
+            );
+            let before = [
+                HORIZONTAL_PAN_MARGIN + PAGE_PADDING + point[0] - offset[0],
+                VERTICAL_PAN_MARGIN + PAGE_PADDING + point[1] - offset[1],
+            ];
+            let after = [
+                HORIZONTAL_PAN_MARGIN + PAGE_PADDING + point[0] * new.0 as f32 / old.0 as f32
+                    - next.x,
+                VERTICAL_PAN_MARGIN + PAGE_PADDING + point[1] * new.1 as f32 / old.1 as f32
+                    - next.y,
+            ];
+            assert!((before[0] - after[0]).abs() < 0.001);
+            assert!((before[1] - after[1]).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn thumbnails_cover_final_visible_rows_without_cache_churn() {
+        let bottom: Vec<_> = thumbnail_candidates(3, 7).collect();
+        assert_eq!(&bottom[..4], &[3, 4, 5, 6]);
+        for count in [0, 1, 7, 30, 100] {
+            for focus in 0..count.max(1) {
+                let candidates: Vec<_> = thumbnail_candidates(focus, count).collect();
+                let expected = thumbnail_window(focus, count);
+                assert_eq!(candidates.len(), expected.len());
+                assert!(candidates.len() <= MAX_THUMBNAILS);
+                for page in expected {
+                    assert_eq!(candidates.iter().filter(|&&p| p == page).count(), 1);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn stale_render_clears_busy_until_debounced_zoom_starts() {
         let bytes = Arc::new(
             include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec(),
@@ -816,6 +925,7 @@ mod zoom_interaction_tests {
             document: Some(OpenDocument {
                 path: "fixture.pdf".into(),
                 source_bytes: bytes,
+                dynlex_document: None,
                 pdf,
                 model,
                 last_saved_annotations: Vec::new(),
@@ -982,6 +1092,7 @@ mod unsaved_annotation_tests {
             document: Some(OpenDocument {
                 path: "source.pdf".into(),
                 source_bytes: bytes,
+                dynlex_document: None,
                 pdf,
                 model,
                 last_saved_annotations: Vec::new(),
@@ -1029,6 +1140,7 @@ mod unsaved_annotation_tests {
 struct OpenDocument {
     path: String,
     source_bytes: Arc<Vec<u8>>,
+    dynlex_document: Option<Arc<opds_dynlex_backend::DynlexDocument>>,
     pdf: Arc<ParsedPdf>,
     model: DocumentModel,
     last_saved_annotations: Vec<Annotation>,
@@ -2440,6 +2552,7 @@ mod dynlex_annotation_overlay_tests {
             let mut document = OpenDocument {
                 path: "large-tiled-text.pdf".into(),
                 source_bytes: Arc::new(bytes),
+                dynlex_document: None,
                 pdf,
                 model,
                 last_saved_annotations: Vec::new(),
@@ -2553,6 +2666,7 @@ mod dynlex_annotation_overlay_tests {
         let mut document = OpenDocument {
             path: "blank-two-text.pdf".into(),
             source_bytes: Arc::new(bytes),
+            dynlex_document: None,
             pdf,
             model,
             last_saved_annotations: Vec::new(),
@@ -2642,6 +2756,7 @@ mod dynlex_annotation_overlay_tests {
         let mut document = OpenDocument {
             path: "opaque-color.pdf".into(),
             source_bytes: Arc::new(bytes),
+            dynlex_document: None,
             pdf,
             model,
             last_saved_annotations: Vec::new(),
@@ -2873,6 +2988,7 @@ mod dynlex_annotation_overlay_tests {
         let mut document = OpenDocument {
             path: "fixture.pdf".into(),
             source_bytes: Arc::new(source),
+            dynlex_document: None,
             pdf,
             model,
             last_saved_annotations: Vec::new(),
@@ -3038,6 +3154,7 @@ mod dynlex_annotation_overlay_tests {
         let mut document = OpenDocument {
             path: "fixture.pdf".into(),
             source_bytes: Arc::new(source),
+            dynlex_document: None,
             pdf,
             model,
             last_saved_annotations: Vec::new(),
@@ -3368,6 +3485,7 @@ mod dynlex_annotation_overlay_tests {
         let mut document = OpenDocument {
             path: "fixture.pdf".into(),
             source_bytes: Arc::new(source),
+            dynlex_document: None,
             pdf,
             model,
             last_saved_annotations: Vec::new(),
@@ -3561,9 +3679,6 @@ enum Message {
     FitView(FitMode),
     WindowResized((f32, f32)),
     KeyboardModifiersChanged(iced::keyboard::Modifiers),
-    PagePointerMoved([f32; 2]),
-    PagePointerLeft,
-    PageWheel(iced::mouse::ScrollDelta),
     WheelZoom {
         amount: f32,
         anchor: [f32; 2],
@@ -3670,8 +3785,8 @@ impl App {
         }
         let document = self.document.as_ref()?;
         let preview_size = zoom_preview_size(
+            document.bitmap_page_points,
             document.bitmap_size,
-            document.bitmap_scale,
             document.model.view().viewport().scale(),
         );
         let scroll_height = if preview_size.1 == 0 {
@@ -3684,7 +3799,7 @@ impl App {
             reader_mode::Position {
                 page: document.model.view().page() + 1,
                 scale: document.model.view().viewport().scale(),
-                scroll_top: self.page_scroll_offset.y.max(0.0),
+                scroll_top: (self.page_scroll_offset.y - VERTICAL_PAN_MARGIN).max(0.0),
                 scroll_height,
                 single_page: true,
             },
@@ -4882,6 +4997,7 @@ impl App {
                         let mut document = OpenDocument {
                             path,
                             source_bytes,
+                            dynlex_document: None,
                             pdf,
                             model,
                             last_saved_annotations: Vec::new(),
@@ -4915,9 +5031,10 @@ impl App {
                         self.reader_mode_active = saved.is_some();
                         self.page_scroll_offset = scrollable::AbsoluteOffset {
                             x: HORIZONTAL_PAN_MARGIN,
-                            y: saved.map_or(0.0, |position| {
-                                position.restored_scroll_top(restored_scroll_height)
-                            }),
+                            y: VERTICAL_PAN_MARGIN
+                                + saved.map_or(0.0, |position| {
+                                    position.restored_scroll_top(restored_scroll_height)
+                                }),
                         };
                         self.pending_zoom_offset = None;
                         return Task::batch([
@@ -4964,38 +5081,6 @@ impl App {
             Message::WindowResized(size) => self.window_size = size,
             Message::KeyboardModifiersChanged(modifiers) => {
                 self.keyboard_modifiers = modifiers;
-                if !modifiers.control() {
-                    self.page_pointer = None;
-                }
-            }
-            Message::PagePointerMoved(position) => self.page_pointer = Some(position),
-            Message::PagePointerLeft => self.page_pointer = None,
-            Message::PageWheel(delta) => {
-                let amount = match delta {
-                    iced::mouse::ScrollDelta::Lines { y, .. } => y,
-                    iced::mouse::ScrollDelta::Pixels { y, .. } => y / 60.0,
-                };
-                if !amount.is_finite() || amount == 0.0 {
-                    return Task::none();
-                }
-                let document_width = self.window_size.0
-                    - if self.hide_pages { 0.0 } else { 200.0 }
-                    - if self.hide_properties { 0.0 } else { 230.0 };
-                let document_height =
-                    self.window_size.1 - if self.ribbon_collapsed { 86.0 } else { 180.0 } - 28.0;
-                let anchor = self.page_pointer.map_or(
-                    [
-                        document_width.max(0.0) / 2.0,
-                        document_height.max(0.0) / 2.0,
-                    ],
-                    |position| {
-                        [
-                            (position[0] - self.page_scroll_offset.x).max(0.0),
-                            (position[1] - self.page_scroll_offset.y).max(0.0),
-                        ]
-                    },
-                );
-                return self.update(Message::WheelZoom { amount, anchor });
             }
             Message::ThumbnailRendered(token, page, result) => {
                 if token != self.next_load {
@@ -5016,7 +5101,16 @@ impl App {
                             image::Handle::from_rgba(raster.width, raster.height, raster.rgba),
                         ));
                         while document.thumbnails.len() > MAX_THUMBNAILS {
-                            document.thumbnails.pop_front();
+                            let window = thumbnail_window(
+                                document.thumbnail_focus,
+                                document.pdf.page_count(),
+                            );
+                            let evict = document
+                                .thumbnails
+                                .iter()
+                                .position(|(page, _)| !window.contains(page))
+                                .unwrap_or(0);
+                            document.thumbnails.remove(evict);
                         }
                     }
                     Err(_) => {
@@ -5026,6 +5120,9 @@ impl App {
                 return self.render_nearby_thumbnail();
             }
             Message::WheelZoom { amount, anchor } => {
+                if !amount.is_finite() || !anchor.iter().all(|n| n.is_finite()) {
+                    return Task::none();
+                }
                 if let Some(document) = &mut self.document {
                     let scale = document.model.view().viewport().scale();
                     let next = (scale * 1.15_f64.powf(f64::from(amount))).clamp(0.1, 8.0);
@@ -5039,12 +5136,22 @@ impl App {
                     {
                         return Task::none();
                     }
-                    let current = self.page_scroll_offset;
-                    let factor = (next / scale) as f32;
-                    self.pending_zoom_offset = Some(scrollable::AbsoluteOffset {
-                        x: (current.x + anchor[0] * (factor - 1.0)).max(0.0),
-                        y: (current.y + anchor[1] * (factor - 1.0)).max(0.0),
-                    });
+                    let anchor = [
+                        self.page_scroll_offset.x + anchor[0]
+                            - HORIZONTAL_PAN_MARGIN
+                            - PAGE_PADDING,
+                        self.page_scroll_offset.y + anchor[1] - VERTICAL_PAN_MARGIN - PAGE_PADDING,
+                    ];
+                    let old_size =
+                        zoom_preview_size(document.bitmap_page_points, document.bitmap_size, scale);
+                    let new_size =
+                        zoom_preview_size(document.bitmap_page_points, document.bitmap_size, next);
+                    self.pending_zoom_offset = Some(zoom_scroll_offset(
+                        self.page_scroll_offset,
+                        anchor,
+                        old_size,
+                        new_size,
+                    ));
                 } else {
                     return Task::none();
                 }
@@ -5226,31 +5333,7 @@ impl App {
         if self.hide_pages || document.thumbnail_in_flight.is_some() {
             return Task::none();
         }
-        let current = document.model.view().page();
-        let focus = document.thumbnail_focus;
-        let count = document.pdf.page_count();
-        let candidate = [
-            Some(focus),
-            focus.checked_add(1),
-            focus.checked_sub(1),
-            focus.checked_add(2),
-            focus.checked_sub(2),
-            current.checked_add(1),
-            current.checked_sub(1),
-            current.checked_add(2),
-            current.checked_sub(2),
-        ]
-        .into_iter()
-        .flatten()
-        .find(|&page| {
-            page < count
-                && !(page == document.displayed_page && document.bitmap.is_some())
-                && !document
-                    .thumbnails
-                    .iter()
-                    .any(|(cached, _)| *cached == page)
-                && !document.thumbnail_failed.contains(&page)
-        });
+        let candidate = next_thumbnail(document);
         let Some(page) = candidate else {
             return Task::none();
         };
@@ -5420,6 +5503,17 @@ impl App {
         }
         let pdf = Arc::clone(&document.pdf);
         let source = Arc::clone(&document.source_bytes);
+        let dynlex_document = if self.backend == Backend::Dynlex {
+            Some(Arc::clone(document.dynlex_document.get_or_insert_with(
+                || {
+                    Arc::new(opds_dynlex_backend::DynlexDocument::new(Arc::clone(
+                        &source,
+                    )))
+                },
+            )))
+        } else {
+            None
+        };
         let generation = self.backend_generation;
         let backend = self.backend;
         #[cfg(feature = "dynlex-experimental")]
@@ -5458,8 +5552,14 @@ impl App {
                         }
                     }
                 }
-                render_page_selected(&pdf, &source, page, scale, backend)
-                    .map(|outcome| (outcome, None))
+                let rendered = if let Some(document) = dynlex_document {
+                    document
+                        .render_with_report(&pdf, page, scale, backend)
+                        .map_err(|error| error.to_string())
+                } else {
+                    render_page_selected(&pdf, &source, page, scale, backend)
+                };
+                rendered.map(|outcome| (outcome, None))
             },
             move |result| Message::Rendered(generation, ticket, result),
         )

@@ -277,26 +277,6 @@ impl canvas::Program<Message> for Layer<'_> {
             {
                 self.finish_polyline(state.polyline.take()?, bounds)
             }
-            canvas::Event::Mouse(mouse::Event::WheelScrolled { delta })
-                if state.modifiers.control() && cursor.is_over(bounds) =>
-            {
-                let amount = match delta {
-                    mouse::ScrollDelta::Lines { y, .. } => *y,
-                    mouse::ScrollDelta::Pixels { y, .. } => *y / 40.0,
-                };
-                if amount == 0.0 {
-                    None
-                } else {
-                    let position = cursor.position_in(bounds)?;
-                    Some(
-                        canvas::Action::publish(Message::WheelZoom {
-                            amount,
-                            anchor: [position.x, position.y],
-                        })
-                        .and_capture(),
-                    )
-                }
-            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = cursor.position_in(bounds)?;
                 if self.tool == AnnotationTool::Polyline {
@@ -842,6 +822,36 @@ mod tests {
     use super::*;
     use opds_native_core::annotations::{Annotation, Edit};
     use opds_native_core::DocumentId;
+
+    #[test]
+    fn annotation_canvas_leaves_ctrl_wheel_to_the_single_page_zoom_handler() {
+        use canvas::Program;
+        let model = DocumentModel::new(DocumentId(1), 1).unwrap();
+        let layer = Layer {
+            model: &model,
+            page: 0,
+            selected: None,
+            editing_text: None,
+            tool: AnnotationTool::Select,
+            tool_epoch: 0,
+            page_points: (256.0, 192.0),
+            paint_existing: true,
+        };
+        let mut state = State {
+            modifiers: keyboard::Modifiers::CTRL,
+            ..State::default()
+        };
+        assert!(layer
+            .update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::WheelScrolled {
+                    delta: mouse::ScrollDelta::Lines { x: 0.0, y: 1.0 }
+                }),
+                Rectangle::new(Point::ORIGIN, Size::new(256.0, 192.0)),
+                mouse::Cursor::Available(Point::new(45.0, 157.0))
+            )
+            .is_none());
+    }
 
     #[test]
     fn selected_line_grips_track_page_scale_and_ignore_other_points() {

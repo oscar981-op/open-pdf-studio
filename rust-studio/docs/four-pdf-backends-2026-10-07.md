@@ -111,3 +111,10 @@ direct mee tijdens Ctrl+scroll en begint de scherpe render pas na 160 ms
 zonder nieuwe zoomactie. Dit versnelt de interactie; het maakt de uiteindelijke
 Hayro-render van de complexe pagina niet op zichzelf sneller. De volledige app op deze echte PDF is
 nog niet pixelgelijk aan de oorspronkelijke Open PDF Studio-interface.
+
+Sinds 8 oktober bewaart de native DynLex-route een brongebonden, begrensde
+paginascene over zoomacties en rendererwissels. Pixeluitgelijnde dekkende
+vectoropdrachten kunnen op bewezen gehele pixelranden ook op andere schalen
+renderen. Beeld-/maskerresampling blijft fallback. Zie
+[dynlex-prepared-scene-2026-10-08.md](dynlex-prepared-scene-2026-10-08.md)
+voor grenzen, viewportproef en regressies. De UI gebruikt nog volledige bitmaps.

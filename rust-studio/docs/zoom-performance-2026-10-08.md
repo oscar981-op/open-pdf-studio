@@ -24,7 +24,7 @@ betrouwbare algemene snelheidsrangschikking of koude-startmeting.
 | `Combinatie Raster, vector, tekening images.pdf` | 763,7 ms | 120,1 ms | 62.494 | beide Hayro-fallback |
 | Barn Relocation | 978,1 ms | 276,8 ms | 133.591 | beide Hayro-fallback |
 
-De huidige DynLex- en Eigen Rust-paginaroutes weigeren schaal 0,25 volledig;
+Ten tijde van deze meting weigerden DynLex en Eigen Rust schaal 0,25 volledig;
 de gelijke pixels in die kolommen zijn **Hayro**, niet hun eigen kernels.
 PDFium rendert sommige complexe pagina's sneller maar is hier niet bytegelijk
 aan Hayro. De app laat de gebruiker linksonder een kernel kiezen en meldt
@@ -54,3 +54,8 @@ python3 scripts/bench_four_backends.py --probe target/release/backend_probe \
   --pdfium-library /pad/naar/libpdfium.so --rounds 2 --scale 0.25 \
   --output docs/four-backend-zoom-quarter-2026-10-08.json PDF1.pdf PDF2.pdf
 ```
+
+De daaropvolgende beperkte scene-cache en vector-zoom/viewport-API staan in
+[dynlex-prepared-scene-2026-10-08.md](dynlex-prepared-scene-2026-10-08.md).
+De bovenstaande ruwe benchmark is niet opnieuw geïnterpreteerd als resultaat
+van die nieuwe code; raster-/hybride zoom blijft daar buiten de subset.

@@ -1285,8 +1285,8 @@ pub fn view(app: &App) -> Element<'_, Message> {
             // raster is pending. The final render replaces it at full detail.
             let (width, height) = if document.displayed_page == document.model.view().page() {
                 super::zoom_preview_size(
+                    document.bitmap_page_points,
                     document.bitmap_size,
-                    document.bitmap_scale,
                     document.model.view().viewport().scale(),
                 )
             } else {
@@ -1405,25 +1405,25 @@ pub fn view(app: &App) -> Element<'_, Message> {
                 page,
                 Space::new().width(super::HORIZONTAL_PAN_MARGIN),
             ];
-            let mut page_area = mouse_area(container(page_with_pan_room).padding(24));
-            if app.keyboard_modifiers.control() {
-                page_area = page_area
-                    .on_move(|position| Message::PagePointerMoved([position.x, position.y]))
-                    .on_exit(Message::PagePointerLeft)
-                    .on_scroll(Message::PageWheel);
-            }
-            scrollable(page_area)
-                .id(iced::widget::Id::new("pdf-page-scroll"))
-                .on_scroll(Message::PageScrolled)
-                .direction(scrollable::Direction::Both {
-                    vertical: scrollable::Scrollbar::new(),
-                    horizontal: scrollable::Scrollbar::new()
-                        .width(0)
-                        .scroller_width(0)
-                        .margin(0)
-                        .spacing(0),
-                })
-                .into()
+            let page_with_pan_room = column![
+                Space::new().height(super::VERTICAL_PAN_MARGIN),
+                page_with_pan_room,
+                Space::new().height(super::VERTICAL_PAN_MARGIN),
+            ];
+            super::zoom_area::view(
+                scrollable(container(page_with_pan_room).padding(super::PAGE_PADDING))
+                    .id(iced::widget::Id::new("pdf-page-scroll"))
+                    .on_scroll(Message::PageScrolled)
+                    .direction(scrollable::Direction::Both {
+                        vertical: scrollable::Scrollbar::new(),
+                        horizontal: scrollable::Scrollbar::new()
+                            .width(0)
+                            .scroller_width(0)
+                            .margin(0)
+                            .spacing(0),
+                    }),
+                app.keyboard_modifiers.control(),
+            )
         } else {
             container(
                 column![

@@ -1,6 +1,7 @@
 //! Opt-in native Rust boundary for the bounded DynLex vector kernel.
 //! Unsupported PDFs return None so the host can keep its existing renderer.
 mod annotation_overlay;
+mod prepared;
 pub use annotation_overlay::{
     render_native_annotation_overlay, render_native_annotation_overlay_pixels,
     render_native_annotation_overlay_pixels_on_opaque_source,
@@ -8,6 +9,9 @@ pub use annotation_overlay::{
     render_native_annotation_overlay_pixels_with_content, render_native_selection_overlay_pixels,
     render_native_ui_preview_pixels,
 };
+pub use prepared::DynlexDocument;
+#[cfg(feature = "kernel")]
+pub use prepared::{PixelViewport, PreparedPage};
 #[cfg(feature = "kernel")]
 mod appearance_stage;
 #[cfg(feature = "kernel")]
@@ -97,6 +101,21 @@ pub fn render_with_report(
     scale: f32,
     backend: Backend,
 ) -> Result<RenderOutcome, RenderError> {
+    render_with_report_using(pdf, source, page, scale, backend, || {
+        try_render(source, page, scale)
+    })
+}
+
+fn render_with_report_using(
+    pdf: &ParsedPdf,
+    source: &[u8],
+    page: usize,
+    scale: f32,
+    backend: Backend,
+    dynlex_render: impl FnOnce() -> Result<Option<Bitmap>, String>,
+) -> Result<RenderOutcome, RenderError> {
+    #[cfg(not(any(feature = "kernel", feature = "pdfium", feature = "own-rust")))]
+    let _ = source;
     #[cfg(feature = "own-rust")]
     if backend == Backend::OwnRust {
         if let Ok(raster) = opds_rust_kernel::render(source, page, scale) {
@@ -135,7 +154,7 @@ pub fn render_with_report(
                 });
             }
         }
-        if let Ok(Some(bitmap)) = try_render(source, page, scale) {
+        if let Ok(Some(bitmap)) = dynlex_render() {
             let (page_width_pt, page_height_pt) = pdf.page_dimensions(page)?;
             return Ok(RenderOutcome {
                 used: Backend::Dynlex,
@@ -190,10 +209,10 @@ unsafe extern "C" {
     ) -> i32;
 }
 
-/// Only a first-page 72-dpi rendering is supported by OPGM-v3.
-/// Every unsupported PDF shape or requested zoom is left to the host backend.
+/// Prepare a bounded first-page scene and render the supported zoom subset.
+/// Use DynlexDocument in a viewer to retain this preparation across renders.
 pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap>, String> {
-    if page != 1 || scale != 1.0 {
+    if page != 1 || !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
         return Ok(None);
     }
     #[cfg(not(feature = "kernel"))]
@@ -203,49 +222,56 @@ pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap
     }
     #[cfg(feature = "kernel")]
     {
-        let (scene, width, height) = if let Ok(geometry) = page_to_opgm_v3_bytes(bytes) {
-            validated_scene(&geometry)?
-        } else {
-            let old = page_to_opdl_bytes(bytes)
-                .ok()
-                .and_then(|scene| validated_rgb_scene(scene).ok());
-            let ordered = || {
-                page_to_opdl_ordered_bytes(bytes)
-                    .ok()
-                    .and_then(|scene| validated_ordered_scene(scene).ok())
-            };
-            match old.or_else(ordered) {
-                Some(validated) => validated,
-                None => return Ok(None),
-            }
-        };
-        let mode = if word(&scene, 32)? == 0 { 2 } else { 3 };
-        let pixel_bytes = usize::try_from(width)
-            .unwrap()
-            .checked_mul(usize::try_from(height).unwrap())
-            .and_then(|n| n.checked_mul(4))
-            .ok_or("bitmap size overflow")?;
-        let mut output = vec![0_u8; 12 + pixel_bytes];
-        // SAFETY: validated_scene bounds every command, dimensions and scene length.
-        // The output has a 12-byte ABI header and exactly width*height*4 pixel bytes.
-        let code = unsafe {
-            opds_render_buffer(
-                scene.as_ptr(),
-                i32::try_from(scene.len()).map_err(|_| "scene too large")?,
-                output.as_mut_ptr(),
-                i32::try_from(output.len()).map_err(|_| "output too large")?,
-                mode,
-            )
-        };
-        if code != 0 {
-            return Err(format!("DynLex kernel status {code}"));
+        match PreparedPage::from_pdf(bytes)? {
+            Some(prepared) => prepared.render(scale),
+            None => Ok(None),
         }
-        Ok(Some(Bitmap {
-            width,
-            height,
-            rgba: output.split_off(12),
-        }))
     }
+}
+
+#[cfg(feature = "kernel")]
+fn prepare_scene(bytes: &[u8]) -> Result<Option<(Vec<u8>, u32, u32)>, String> {
+    if let Ok(geometry) = page_to_opgm_v3_bytes(bytes) {
+        return validated_scene(&geometry).map(Some);
+    }
+    let old = page_to_opdl_bytes(bytes)
+        .ok()
+        .and_then(|scene| validated_rgb_scene(scene).ok());
+    let ordered = || {
+        page_to_opdl_ordered_bytes(bytes)
+            .ok()
+            .and_then(|scene| validated_ordered_scene(scene).ok())
+    };
+    Ok(old.or_else(ordered))
+}
+
+#[cfg(feature = "kernel")]
+fn render_validated_scene(scene: &[u8], width: u32, height: u32) -> Result<Bitmap, String> {
+    let mode = if word(scene, 32)? == 0 { 2 } else { 3 };
+    let pixel_bytes = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or("bitmap size overflow")?;
+    let mut output = vec![0_u8; 12 + pixel_bytes];
+    // SAFETY: private callers validate every command/offset and bound dimensions
+    // before this call. The buffer has the ABI header and exactly width*height*4 bytes.
+    let code = unsafe {
+        opds_render_buffer(
+            scene.as_ptr(),
+            i32::try_from(scene.len()).map_err(|_| "scene too large")?,
+            output.as_mut_ptr(),
+            i32::try_from(output.len()).map_err(|_| "output too large")?,
+            mode,
+        )
+    };
+    if code != 0 {
+        return Err(format!("DynLex kernel status {code}"));
+    }
+    Ok(Bitmap {
+        width,
+        height,
+        rgba: output.split_off(12),
+    })
 }
 
 #[cfg(feature = "kernel")]
