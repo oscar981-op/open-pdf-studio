@@ -728,6 +728,14 @@ mod tests {
         let fallback = render_with_report(&pdf, &bytes, 1, 1.25, Backend::OwnRust).unwrap();
         assert_eq!(fallback.used, Backend::Hayro);
         assert_eq!(fallback.raster.rgba, pdf.render_page(1, 1.25).unwrap().rgba);
+        let hybrid = include_bytes!("../tests/fixtures/two-images-hybrid.pdf").to_vec();
+        let hybrid_pdf = ParsedPdf::open(Arc::new(hybrid.clone())).unwrap();
+        let selected = render_with_report(&hybrid_pdf, &hybrid, 1, 1.0, Backend::OwnRust).unwrap();
+        assert_eq!(selected.used, Backend::OwnRust);
+        assert_eq!(
+            selected.raster.rgba,
+            hybrid_pdf.render_page(1, 1.0).unwrap().rgba
+        );
     }
 
     #[cfg(feature = "pdfium")]

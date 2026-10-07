@@ -3685,6 +3685,10 @@ impl App {
                 self.annotation_gesture_preview = None;
                 self.backend_generation = self.backend_generation.wrapping_add(1);
                 if let Some(document) = &mut self.document {
+                    // The temporary empty bitmap lets Iced clamp the horizontal
+                    // scroll offset. Restore the previous viewport only after
+                    // the replacement bitmap has been laid out.
+                    self.pending_zoom_offset = Some(self.page_scroll_offset);
                     document.page_cache.clear();
                     document.bitmap = None;
                     document.imported_annotations_dynlex = false;

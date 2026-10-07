@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let started = std::time::Instant::now();
     let args: Vec<_> = env::args_os().collect();
     if args.len() != 3 && args.len() != 4 {
-        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected]".into());
+        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--pdfium|--own-rust]".into());
     }
     let bytes = fs::read(&args[1])?;
     let read_done = std::time::Instant::now();
@@ -32,11 +32,16 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 eprintln!("{}x{} Hayro", raster.width, raster.height);
             }
-            Some("--selected") => {
+            Some("--selected" | "--dynlex" | "--pdfium" | "--own-rust") => {
+                let backend = match args[3].to_str() {
+                    Some("--pdfium") => Backend::Pdfium,
+                    Some("--own-rust") => Backend::OwnRust,
+                    _ => Backend::Dynlex,
+                };
                 let pdf = ParsedPdf::open(Arc::new(bytes.clone()))?;
                 let open_done = std::time::Instant::now();
                 let result =
-                    opds_dynlex_backend::render_with_report(&pdf, &bytes, 1, 1.0, Backend::Dynlex)?;
+                    opds_dynlex_backend::render_with_report(&pdf, &bytes, 1, 1.0, backend)?;
                 let render_done = std::time::Instant::now();
                 fs::write(&args[2], result.raster.rgba)?;
                 let write_done = std::time::Instant::now();
@@ -59,7 +64,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     result.imported_annotations_dynlex
                 );
             }
-            _ => return Err("optional flag must be --hayro or --selected".into()),
+            _ => return Err("unsupported backend flag".into()),
         }
     } else {
         let bitmap = opds_dynlex_backend::try_render(&bytes, 1, 1.0)?

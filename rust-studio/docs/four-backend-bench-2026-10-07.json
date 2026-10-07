@@ -1,0 +1,2564 @@
+{
+  "protocol": "rotating-backend-order, same PDF and 72-dpi page 1, warm OS cache, new process per sample",
+  "probe": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/target/release/backend_probe",
+  "pdfium_library": "/home/aia02/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/pypdfium2_raw/libpdfium.so",
+  "rounds": 15,
+  "fixtures": [
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/crates/dynlex-backend/tests/fixtures/simple-fill-stroke.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 11.248,
+          "peak_rss_kib": 6368,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.915,
+          "peak_rss_kib": 5204,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.453,
+          "peak_rss_kib": 7156,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.027,
+          "peak_rss_kib": 5244,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.073,
+          "peak_rss_kib": 5236,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.124,
+          "peak_rss_kib": 7068,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.521,
+          "peak_rss_kib": 5272,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.316,
+          "peak_rss_kib": 6384,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.165,
+          "peak_rss_kib": 7192,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.884,
+          "peak_rss_kib": 5188,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.345,
+          "peak_rss_kib": 6504,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.455,
+          "peak_rss_kib": 5444,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.082,
+          "peak_rss_kib": 5184,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.646,
+          "peak_rss_kib": 6344,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 6.88,
+          "peak_rss_kib": 5380,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.263,
+          "peak_rss_kib": 7068,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 9.52,
+          "peak_rss_kib": 6208,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 5.861,
+          "peak_rss_kib": 5412,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.058,
+          "peak_rss_kib": 7196,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.265,
+          "peak_rss_kib": 5324,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.176,
+          "peak_rss_kib": 5360,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.627,
+          "peak_rss_kib": 7048,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.145,
+          "peak_rss_kib": 5312,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.047,
+          "peak_rss_kib": 6212,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.842,
+          "peak_rss_kib": 7228,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.359,
+          "peak_rss_kib": 5108,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.404,
+          "peak_rss_kib": 6392,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 6.367,
+          "peak_rss_kib": 5352,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.02,
+          "peak_rss_kib": 5108,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 9.717,
+          "peak_rss_kib": 6372,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.793,
+          "peak_rss_kib": 5312,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.072,
+          "peak_rss_kib": 6992,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.135,
+          "peak_rss_kib": 6208,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.959,
+          "peak_rss_kib": 5316,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.275,
+          "peak_rss_kib": 7112,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.88,
+          "peak_rss_kib": 5188,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 8.296,
+          "peak_rss_kib": 5320,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.34,
+          "peak_rss_kib": 7004,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.263,
+          "peak_rss_kib": 5252,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.583,
+          "peak_rss_kib": 6212,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.312,
+          "peak_rss_kib": 7184,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.181,
+          "peak_rss_kib": 5116,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.798,
+          "peak_rss_kib": 6268,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.802,
+          "peak_rss_kib": 5368,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.381,
+          "peak_rss_kib": 5188,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.789,
+          "peak_rss_kib": 6216,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.483,
+          "peak_rss_kib": 5312,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.963,
+          "peak_rss_kib": 7188,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 9.161,
+          "peak_rss_kib": 6340,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.007,
+          "peak_rss_kib": 5236,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.354,
+          "peak_rss_kib": 7196,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.02,
+          "peak_rss_kib": 5016,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 10.231,
+          "peak_rss_kib": 5312,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.781,
+          "peak_rss_kib": 7076,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.768,
+          "peak_rss_kib": 5252,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.401,
+          "peak_rss_kib": 6464,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 11.979,
+          "peak_rss_kib": 6940,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.008,
+          "peak_rss_kib": 5196,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.506,
+          "peak_rss_kib": 6240,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 5.117,
+          "peak_rss_kib": 5360,
+          "rgba_bytes": 196608,
+          "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 8.404,
+          "median_peak_rss_kib": 6340,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 7.483,
+          "median_peak_rss_kib": 5320,
+          "used": [
+            "Dynlex"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 9.263,
+          "median_peak_rss_kib": 7112,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "own-rust": {
+          "median_wall_ms": 8.008,
+          "median_peak_rss_kib": 5188,
+          "used": [
+            "OwnRust"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    },
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/crates/dynlex-backend/tests/fixtures/placed-raster-flate.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 9.517,
+          "peak_rss_kib": 6648,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.857,
+          "peak_rss_kib": 5608,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.29,
+          "peak_rss_kib": 7084,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.116,
+          "peak_rss_kib": 5380,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 11.65,
+          "peak_rss_kib": 5368,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.186,
+          "peak_rss_kib": 7004,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 5.848,
+          "peak_rss_kib": 5352,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.582,
+          "peak_rss_kib": 6532,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.923,
+          "peak_rss_kib": 7016,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.463,
+          "peak_rss_kib": 5344,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.482,
+          "peak_rss_kib": 6640,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 8.962,
+          "peak_rss_kib": 5480,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.291,
+          "peak_rss_kib": 5240,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 10.028,
+          "peak_rss_kib": 6660,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.747,
+          "peak_rss_kib": 5620,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.572,
+          "peak_rss_kib": 7208,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.165,
+          "peak_rss_kib": 6464,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.994,
+          "peak_rss_kib": 5496,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.943,
+          "peak_rss_kib": 7104,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.477,
+          "peak_rss_kib": 5352,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.918,
+          "peak_rss_kib": 5700,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.502,
+          "peak_rss_kib": 7048,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.088,
+          "peak_rss_kib": 5312,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.957,
+          "peak_rss_kib": 6532,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.016,
+          "peak_rss_kib": 7016,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.399,
+          "peak_rss_kib": 5308,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.609,
+          "peak_rss_kib": 6596,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 8.355,
+          "peak_rss_kib": 5440,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.181,
+          "peak_rss_kib": 5396,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.251,
+          "peak_rss_kib": 6648,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 6.665,
+          "peak_rss_kib": 5380,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 11.077,
+          "peak_rss_kib": 7100,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.387,
+          "peak_rss_kib": 6684,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.417,
+          "peak_rss_kib": 5508,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.499,
+          "peak_rss_kib": 7104,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.479,
+          "peak_rss_kib": 5232,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.58,
+          "peak_rss_kib": 5492,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 11.228,
+          "peak_rss_kib": 6984,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 5.452,
+          "peak_rss_kib": 5196,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.193,
+          "peak_rss_kib": 6660,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.038,
+          "peak_rss_kib": 7044,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.087,
+          "peak_rss_kib": 5220,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.833,
+          "peak_rss_kib": 6524,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.603,
+          "peak_rss_kib": 5488,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 10.096,
+          "peak_rss_kib": 5312,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 10.543,
+          "peak_rss_kib": 6660,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 6.139,
+          "peak_rss_kib": 5472,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.813,
+          "peak_rss_kib": 7188,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 9.288,
+          "peak_rss_kib": 6524,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 8.41,
+          "peak_rss_kib": 5496,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.076,
+          "peak_rss_kib": 7236,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.159,
+          "peak_rss_kib": 5232,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 11.647,
+          "peak_rss_kib": 5444,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.384,
+          "peak_rss_kib": 7280,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.302,
+          "peak_rss_kib": 5252,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 5.978,
+          "peak_rss_kib": 6580,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.93,
+          "peak_rss_kib": 7140,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.28,
+          "peak_rss_kib": 5240,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.631,
+          "peak_rss_kib": 6632,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.136,
+          "peak_rss_kib": 5508,
+          "rgba_bytes": 196608,
+          "sha256": "823e75192f80b5ad3db8155c9400d06ed70f8b3bc50d245522804e2064bc8b55",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 7.609,
+          "median_peak_rss_kib": 6632,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 8.41,
+          "median_peak_rss_kib": 5492,
+          "used": [
+            "Dynlex"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 9.93,
+          "median_peak_rss_kib": 7100,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "own-rust": {
+          "median_wall_ms": 7.28,
+          "median_peak_rss_kib": 5308,
+          "used": [
+            "OwnRust"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    },
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/crates/dynlex-backend/tests/fixtures/two-images-hybrid.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 11.074,
+          "peak_rss_kib": 6392,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 8.653,
+          "peak_rss_kib": 5624,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.649,
+          "peak_rss_kib": 7192,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 4.976,
+          "peak_rss_kib": 5372,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 11.197,
+          "peak_rss_kib": 5564,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 12.509,
+          "peak_rss_kib": 7052,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.591,
+          "peak_rss_kib": 5440,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.38,
+          "peak_rss_kib": 6520,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 12.234,
+          "peak_rss_kib": 7132,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.179,
+          "peak_rss_kib": 5368,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.38,
+          "peak_rss_kib": 6468,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.188,
+          "peak_rss_kib": 5500,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.005,
+          "peak_rss_kib": 5312,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.338,
+          "peak_rss_kib": 6376,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 8.945,
+          "peak_rss_kib": 5480,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.175,
+          "peak_rss_kib": 7200,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.888,
+          "peak_rss_kib": 6464,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 11.343,
+          "peak_rss_kib": 5588,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.929,
+          "peak_rss_kib": 7320,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.771,
+          "peak_rss_kib": 5384,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.118,
+          "peak_rss_kib": 5556,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 7.878,
+          "peak_rss_kib": 7356,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.031,
+          "peak_rss_kib": 5424,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.801,
+          "peak_rss_kib": 6464,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 11.783,
+          "peak_rss_kib": 7056,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.412,
+          "peak_rss_kib": 5360,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.247,
+          "peak_rss_kib": 6404,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 6.908,
+          "peak_rss_kib": 5492,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.723,
+          "peak_rss_kib": 5348,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.803,
+          "peak_rss_kib": 6340,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 10.496,
+          "peak_rss_kib": 5432,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.377,
+          "peak_rss_kib": 7196,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 10.408,
+          "peak_rss_kib": 6404,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 6.85,
+          "peak_rss_kib": 5592,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.824,
+          "peak_rss_kib": 7136,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.268,
+          "peak_rss_kib": 5348,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 11.5,
+          "peak_rss_kib": 5500,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.484,
+          "peak_rss_kib": 7108,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 7.67,
+          "peak_rss_kib": 5320,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 6.315,
+          "peak_rss_kib": 6288,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 11.321,
+          "peak_rss_kib": 7196,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.499,
+          "peak_rss_kib": 5364,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.674,
+          "peak_rss_kib": 6592,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.64,
+          "peak_rss_kib": 5496,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.516,
+          "peak_rss_kib": 5568,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.406,
+          "peak_rss_kib": 6660,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.198,
+          "peak_rss_kib": 5592,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.958,
+          "peak_rss_kib": 7160,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 10.388,
+          "peak_rss_kib": 6404,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 7.892,
+          "peak_rss_kib": 5496,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.858,
+          "peak_rss_kib": 7264,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.193,
+          "peak_rss_kib": 5372,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 10.933,
+          "peak_rss_kib": 5432,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.562,
+          "peak_rss_kib": 7112,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.575,
+          "peak_rss_kib": 5312,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 7.269,
+          "peak_rss_kib": 6532,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.956,
+          "peak_rss_kib": 7228,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 6.619,
+          "peak_rss_kib": 5388,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 9.011,
+          "peak_rss_kib": 6532,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 6.252,
+          "peak_rss_kib": 5560,
+          "rgba_bytes": 196608,
+          "sha256": "5c8f64729a7364c1b4a4bcc02a64ddc9437ab7e171ec0d2381c0df83f7c42f1e",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 7.674,
+          "median_peak_rss_kib": 6464,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 9.118,
+          "median_peak_rss_kib": 5500,
+          "used": [
+            "Dynlex"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 9.562,
+          "median_peak_rss_kib": 7192,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "own-rust": {
+          "median_wall_ms": 7.67,
+          "median_peak_rss_kib": 5368,
+          "used": [
+            "OwnRust"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    },
+    {
+      "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/crates/dynlex-backend/tests/fixtures/rotated-cropped-image-90.pdf",
+      "samples": [
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 13.891,
+          "peak_rss_kib": 6844,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 10.238,
+          "peak_rss_kib": 5964,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.657,
+          "peak_rss_kib": 7992,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 1
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.932,
+          "peak_rss_kib": 5940,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 1
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 11.281,
+          "peak_rss_kib": 6184,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 12.81,
+          "peak_rss_kib": 7960,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 2
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 12.354,
+          "peak_rss_kib": 5936,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 9.035,
+          "peak_rss_kib": 6808,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 2
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 13.026,
+          "peak_rss_kib": 8028,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 12.674,
+          "peak_rss_kib": 6132,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 14.004,
+          "peak_rss_kib": 7008,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 8.267,
+          "peak_rss_kib": 6128,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 3
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 10.768,
+          "peak_rss_kib": 5984,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 13.214,
+          "peak_rss_kib": 6740,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 8.972,
+          "peak_rss_kib": 6228,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 4
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 12.132,
+          "peak_rss_kib": 8104,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 4
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 11.294,
+          "peak_rss_kib": 6808,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 10.337,
+          "peak_rss_kib": 6196,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.463,
+          "peak_rss_kib": 7988,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 5
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.586,
+          "peak_rss_kib": 6124,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 5
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 11.725,
+          "peak_rss_kib": 6064,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 10.431,
+          "peak_rss_kib": 7988,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 6
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 10.742,
+          "peak_rss_kib": 6128,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 10.703,
+          "peak_rss_kib": 6904,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 6
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 12.034,
+          "peak_rss_kib": 8124,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 7
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.835,
+          "peak_rss_kib": 5936,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 8.887,
+          "peak_rss_kib": 6840,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 13.767,
+          "peak_rss_kib": 6108,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 7
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 12.622,
+          "peak_rss_kib": 5988,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 10.122,
+          "peak_rss_kib": 6776,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 11.758,
+          "peak_rss_kib": 6004,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 8
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 11.742,
+          "peak_rss_kib": 7924,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 8
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 11.298,
+          "peak_rss_kib": 6952,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 10.887,
+          "peak_rss_kib": 6128,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 13.806,
+          "peak_rss_kib": 7932,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 9
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.33,
+          "peak_rss_kib": 5984,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 9
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 12.722,
+          "peak_rss_kib": 5872,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.432,
+          "peak_rss_kib": 8100,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 10
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 10.422,
+          "peak_rss_kib": 6108,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 11.479,
+          "peak_rss_kib": 6900,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 10
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 15.17,
+          "peak_rss_kib": 8028,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 11
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 10.287,
+          "peak_rss_kib": 5936,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 12.041,
+          "peak_rss_kib": 6796,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 13.439,
+          "peak_rss_kib": 5992,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 11
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.759,
+          "peak_rss_kib": 5996,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 9.207,
+          "peak_rss_kib": 6808,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 12.064,
+          "peak_rss_kib": 6224,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 12
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 8.966,
+          "peak_rss_kib": 7996,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 12
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 15.071,
+          "peak_rss_kib": 6776,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.072,
+          "peak_rss_kib": 5876,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 9.667,
+          "peak_rss_kib": 8116,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 13
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.251,
+          "peak_rss_kib": 5992,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 13
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 13.852,
+          "peak_rss_kib": 5940,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 11.65,
+          "peak_rss_kib": 7964,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 14
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 9.054,
+          "peak_rss_kib": 5956,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 13.468,
+          "peak_rss_kib": 6792,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 14
+        },
+        {
+          "requested": "pdfium",
+          "used": "Pdfium",
+          "wall_ms": 15.059,
+          "peak_rss_kib": 8104,
+          "rgba_bytes": 114000,
+          "sha256": "15c002c9f6587078fce27fea7a136c7011eaf34ccb95986b6c41d07a08775328",
+          "different_rgba_channels_vs_hayro": 38415,
+          "round": 15
+        },
+        {
+          "requested": "own-rust",
+          "used": "OwnRust",
+          "wall_ms": 8.784,
+          "peak_rss_kib": 5984,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "hayro",
+          "used": "Hayro",
+          "wall_ms": 11.015,
+          "peak_rss_kib": 6780,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        },
+        {
+          "requested": "dynlex",
+          "used": "Dynlex",
+          "wall_ms": 9.032,
+          "peak_rss_kib": 5996,
+          "rgba_bytes": 114000,
+          "sha256": "c63d58f30ee309480f7ddc6352586a79fe042fe3ece02e9d2f3ba430f55abf1b",
+          "different_rgba_channels_vs_hayro": 0,
+          "round": 15
+        }
+      ],
+      "summary": {
+        "hayro": {
+          "median_wall_ms": 11.298,
+          "median_peak_rss_kib": 6808,
+          "used": [
+            "Hayro"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "dynlex": {
+          "median_wall_ms": 11.281,
+          "median_peak_rss_kib": 6064,
+          "used": [
+            "Dynlex"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        },
+        "pdfium": {
+          "median_wall_ms": 11.742,
+          "median_peak_rss_kib": 7996,
+          "used": [
+            "Pdfium"
+          ],
+          "max_different_rgba_channels_vs_hayro": 38415
+        },
+        "own-rust": {
+          "median_wall_ms": 9.759,
+          "median_peak_rss_kib": 5984,
+          "used": [
+            "OwnRust"
+          ],
+          "max_different_rgba_channels_vs_hayro": 0
+        }
+      }
+    }
+  ]
+}

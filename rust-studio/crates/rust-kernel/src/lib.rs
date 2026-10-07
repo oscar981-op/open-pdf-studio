@@ -3,7 +3,7 @@
 //! pixels and never calls DynLex, Hayro, PDFium or a foreign rasterizer.
 #![forbid(unsafe_code)]
 use opds_engine_probe::Raster;
-use opds_opdl_adapter::geometry_v3::page_to_opgm_v3_bytes;
+use opds_opdl_adapter::{geometry_v3::page_to_opgm_v3_bytes, page_to_opdl_ordered_bytes};
 use std::time::Instant;
 
 fn word(bytes: &[u8], offset: usize) -> Option<u32> {
@@ -17,8 +17,141 @@ pub fn render(source: &[u8], page_number: usize, scale: f32) -> Result<Raster, S
         return Err("own Rust kernel only supports bounded page 1 at 100%".into());
     }
     let started = Instant::now();
-    let scene = page_to_opgm_v3_bytes(source).map_err(|e| e.to_string())?;
-    render_scene(&scene, started)
+    if let Ok(scene) = page_to_opgm_v3_bytes(source) {
+        return render_scene(&scene, started);
+    }
+    let scene = page_to_opdl_ordered_bytes(source).map_err(|e| e.to_string())?;
+    render_ordered_scene(&scene, started)
+}
+
+enum OrderedCommand {
+    Solid([u32; 4], [u8; 4]),
+    Image([u32; 4], std::ops::Range<usize>),
+}
+
+/// Independently paint the bounded opaque, ordered OPDL-v3 scene. Newer
+/// coverage-mask versions deliberately fall back until their blending has
+/// its own pixel proof in this kernel.
+fn render_ordered_scene(scene: &[u8], started: Instant) -> Result<Raster, String> {
+    if scene.len() < 40
+        || scene.len() > 3_538_984
+        || scene.get(..4) != Some(b"OPDL")
+        || word(scene, 4) != Some(3)
+        || word(scene, 32) != Some(0)
+    {
+        return Err("unsupported ordered OPDL header".into());
+    }
+    let width = word(scene, 8).ok_or("missing width")?;
+    let height = word(scene, 12).ok_or("missing height")?;
+    let pixels = width.checked_mul(height).ok_or("page size overflow")?;
+    if width == 0
+        || height == 0
+        || width > 4096
+        || height > 4096
+        || pixels > 6_000_000
+        || [
+            word(scene, 16),
+            word(scene, 20),
+            word(scene, 24),
+            word(scene, 28),
+        ] != [Some(0), Some(0), Some(width), Some(height)]
+    {
+        return Err("invalid ordered OPDL page".into());
+    }
+    let count = word(scene, 36).ok_or("missing command count")? as usize;
+    let image_start = count
+        .checked_mul(24)
+        .and_then(|bytes| 40_usize.checked_add(bytes))
+        .ok_or("command table overflow")?;
+    if count > 16_384 || image_start > scene.len() {
+        return Err("invalid ordered command table".into());
+    }
+    let mut commands = Vec::with_capacity(count);
+    let mut image_bytes = 0_usize;
+    let mut image_count = 0_usize;
+    for index in 0..count {
+        let at = 40 + index * 24;
+        let kind = word(scene, at).ok_or("truncated command")?;
+        let rect = [
+            word(scene, at + 4).ok_or("truncated rectangle")?,
+            word(scene, at + 8).ok_or("truncated rectangle")?,
+            word(scene, at + 12).ok_or("truncated rectangle")?,
+            word(scene, at + 16).ok_or("truncated rectangle")?,
+        ];
+        if rect[0] >= rect[2] || rect[1] >= rect[3] || rect[2] > width || rect[3] > height {
+            return Err("invalid ordered command bounds".into());
+        }
+        match kind {
+            1 | 3 => {
+                let ink: [u8; 4] = scene[at + 20..at + 24].try_into().unwrap();
+                if ink[3] != 255 || (kind == 3 && rect[2] - rect[0] != 1 && rect[3] - rect[1] != 1)
+                {
+                    return Err("invalid ordered vector command".into());
+                }
+                commands.push(OrderedCommand::Solid(rect, ink));
+            }
+            6 => {
+                image_count += 1;
+                let offset = word(scene, at + 20).ok_or("truncated image offset")? as usize;
+                if image_count > 256 || offset != image_bytes {
+                    return Err("invalid ordered image offset or count".into());
+                }
+                let length = (rect[2] - rect[0])
+                    .checked_mul(rect[3] - rect[1])
+                    .and_then(|n| n.checked_mul(3))
+                    .ok_or("image size overflow")? as usize;
+                let start = image_start
+                    .checked_add(offset)
+                    .ok_or("image offset overflow")?;
+                let end = start.checked_add(length).ok_or("image length overflow")?;
+                if scene.get(start..end).is_none() {
+                    return Err("truncated ordered image".into());
+                }
+                image_bytes = image_bytes
+                    .checked_add(length)
+                    .ok_or("image tail overflow")?;
+                commands.push(OrderedCommand::Image(rect, start..end));
+            }
+            _ => return Err("unsupported ordered command".into()),
+        }
+    }
+    if image_start.checked_add(image_bytes) != Some(scene.len()) {
+        return Err("invalid ordered image tail".into());
+    }
+    let mut rgba = vec![255; pixels as usize * 4];
+    for command in commands {
+        match command {
+            OrderedCommand::Solid([left, top, right, bottom], ink) => {
+                for y in top..bottom {
+                    for x in left..right {
+                        let dst = ((y * width + x) * 4) as usize;
+                        rgba[dst..dst + 4].copy_from_slice(&ink);
+                    }
+                }
+            }
+            OrderedCommand::Image([left, top, right, bottom], range) => {
+                let rgb = &scene[range];
+                let image_width = right - left;
+                for y in top..bottom {
+                    for x in left..right {
+                        let src = (((y - top) * image_width + (x - left)) * 3) as usize;
+                        let dst = ((y * width + x) * 4) as usize;
+                        rgba[dst..dst + 3].copy_from_slice(&rgb[src..src + 3]);
+                    }
+                }
+            }
+        }
+    }
+    Ok(Raster {
+        width,
+        height,
+        rgba,
+        page_width_pt: width as f32,
+        page_height_pt: height as f32,
+        total_pages: 1,
+        parse_ms: 0,
+        render_ms: started.elapsed().as_millis(),
+    })
 }
 
 fn render_scene(scene: &[u8], started: Instant) -> Result<Raster, String> {
@@ -119,6 +252,14 @@ mod tests {
 
     const SIMPLE: &[u8] =
         include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf");
+    const RASTER: &[u8] =
+        include_bytes!("../../dynlex-backend/tests/fixtures/placed-raster-flate.pdf");
+    const HYBRID: &[u8] =
+        include_bytes!("../../dynlex-backend/tests/fixtures/two-images-hybrid.pdf");
+    const ROTATED: &[u8] =
+        include_bytes!("../../dynlex-backend/tests/fixtures/rotated-cropped-image-90.pdf");
+    const MANY_IMAGES: &[u8] =
+        include_bytes!("../../dynlex-backend/tests/fixtures/three-images-layered.pdf");
 
     #[test]
     fn rejects_bad_requests_and_corrupt_scenes() {
@@ -168,5 +309,42 @@ mod tests {
         let mut bytes = Vec::new();
         source.save_to(&mut bytes).unwrap();
         assert!(render(&bytes, 1, 1.0).is_err());
+    }
+
+    #[test]
+    fn ordered_images_and_vector_layers_match_hayro() {
+        for source in [RASTER, HYBRID, ROTATED, MANY_IMAGES] {
+            let scene = page_to_opdl_ordered_bytes(source).unwrap();
+            assert_eq!(word(&scene, 4), Some(3));
+            let actual = render(source, 1, 1.0).unwrap();
+            let expected = ParsedPdf::open(Arc::new(source.to_vec()))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            assert_eq!(
+                (actual.width, actual.height),
+                (expected.width, expected.height)
+            );
+            assert_eq!(actual.rgba, expected.rgba);
+        }
+    }
+
+    #[test]
+    fn ordered_images_reject_aliases_truncation_and_unknown_coverage() {
+        let scene = page_to_opdl_ordered_bytes(HYBRID).unwrap();
+        let now = Instant::now();
+        let mut truncated = scene.clone();
+        truncated.pop();
+        assert!(render_ordered_scene(&truncated, now).is_err());
+        let image_at = (0..word(&scene, 36).unwrap() as usize)
+            .map(|index| 40 + index * 24)
+            .find(|&at| word(&scene, at) == Some(6))
+            .unwrap();
+        let mut aliased = scene.clone();
+        aliased[image_at + 20..image_at + 24].copy_from_slice(&1_u32.to_le_bytes());
+        assert!(render_ordered_scene(&aliased, now).is_err());
+        let mut coverage = scene;
+        coverage[4..8].copy_from_slice(&6_u32.to_le_bytes());
+        assert!(render_ordered_scene(&coverage, now).is_err());
     }
 }
