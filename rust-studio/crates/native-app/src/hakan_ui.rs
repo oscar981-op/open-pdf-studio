@@ -937,7 +937,12 @@ pub fn view(app: &App) -> Element<'_, Message> {
         groups = groups.push(group(
             "Draw",
             vec![
-                large_tool("Line", icon_asset!("line.svg"), None),
+                large_tool_active(
+                    "Line",
+                    icon_asset!("line.svg"),
+                    has_doc.then_some(Message::SelectAnnotationTool(AnnotationTool::Line)),
+                    app.annotation_tool == AnnotationTool::Line,
+                ),
                 large_tool("Polyline", icon_asset!("polyline.svg"), None),
                 large_tool_active(
                     "Rectangle",
@@ -1506,6 +1511,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                         "Highlight"
                     }
                     opds_native_core::annotations::Kind::Rectangle { .. } => "Rectangle",
+                    opds_native_core::annotations::Kind::Line { .. } => "Line",
                     opds_native_core::annotations::Kind::Text { .. } => "Text Box",
                 };
                 let selected = document.selected_annotation == Some(annotation.id);
@@ -1548,6 +1554,7 @@ pub fn view(app: &App) -> Element<'_, Message> {
                     "Highlight"
                 }
                 opds_native_core::annotations::Kind::Rectangle { .. } => "Rectangle",
+                opds_native_core::annotations::Kind::Line { .. } => "Line",
                 opds_native_core::annotations::Kind::Text { .. } => "Text",
             };
             properties = properties

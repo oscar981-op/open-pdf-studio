@@ -97,7 +97,7 @@ impl Layer<'_> {
 
     fn selected_handle(&self, point: Point, bounds: Rectangle) -> Option<(u64, Handle, Rect)> {
         let item = self.model.get(self.selected?)?;
-        if item.page != self.page {
+        if item.page != self.page || matches!(item.kind, Kind::Line { .. }) {
             return None;
         }
         let rect = item.bounds;
@@ -323,6 +323,18 @@ impl canvas::Program<Message> for Layer<'_> {
                 let end = cursor.position_in(bounds).unwrap_or(last);
                 let width = (end.x - start.x).abs();
                 let height = (end.y - start.y).abs();
+                if self.tool == AnnotationTool::Line {
+                    if width.hypot(height) < 3.0 {
+                        return Some(canvas::Action::request_redraw().and_capture());
+                    }
+                    return Some(
+                        canvas::Action::publish(Message::AddLine(
+                            self.page_point(start, bounds),
+                            self.page_point(end, bounds),
+                        ))
+                        .and_capture(),
+                    );
+                }
                 if width < 3.0 || height < 3.0 {
                     return Some(canvas::Action::request_redraw().and_capture());
                 }
@@ -353,6 +365,7 @@ impl canvas::Program<Message> for Layer<'_> {
         let scale_x = bounds.width / self.page_points.0;
         let scale_y = bounds.height / self.page_points.1;
         let mut selection = None;
+        let mut line_selection = None;
         for annotation in self
             .model
             .items()
@@ -391,6 +404,42 @@ impl canvas::Program<Message> for Layer<'_> {
                             size,
                             Stroke::default().with_color(color).with_width(2.0),
                         );
+                    }
+                }
+                Kind::Line {
+                    start,
+                    end,
+                    color_rgb,
+                } => {
+                    let offset = if state
+                        .moving
+                        .as_ref()
+                        .is_some_and(|moving| moving.id == annotation.id)
+                    {
+                        let moving = state.moving.as_ref().expect("checked above");
+                        Point::new(
+                            moving.current.x - moving.start.x,
+                            moving.current.y - moving.start.y,
+                        )
+                    } else {
+                        Point::ORIGIN
+                    };
+                    let from = Point::new(
+                        start[0] as f32 * scale_x + offset.x,
+                        start[1] as f32 * scale_y + offset.y,
+                    );
+                    let to = Point::new(
+                        end[0] as f32 * scale_x + offset.x,
+                        end[1] as f32 * scale_y + offset.y,
+                    );
+                    frame.stroke(
+                        &canvas::Path::line(from, to),
+                        Stroke::default()
+                            .with_color(Color::from_rgb8(color_rgb[0], color_rgb[1], color_rgb[2]))
+                            .with_width(2.0),
+                    );
+                    if self.selected == Some(annotation.id) {
+                        line_selection = Some((from, to));
                     }
                 }
                 Kind::Text {
@@ -448,8 +497,18 @@ impl canvas::Program<Message> for Layer<'_> {
                     }
                 }
             }
-            if self.selected == Some(annotation.id) {
+            if self.selected == Some(annotation.id) && !matches!(annotation.kind, Kind::Line { .. })
+            {
                 selection = Some((top_left, size));
+            }
+        }
+        if let Some((from, to)) = line_selection {
+            for point in [from, to] {
+                frame.fill_rectangle(
+                    Point::new(point.x - 3.0, point.y - 3.0),
+                    Size::new(6.0, 6.0),
+                    Color::from_rgb8(31, 136, 255),
+                );
             }
         }
         if let Some((top_left, size)) = selection {
@@ -476,7 +535,14 @@ impl canvas::Program<Message> for Layer<'_> {
                 AnnotationTool::Highlight => Color::from_rgba(1.0, 0.89, 0.26, 0.35),
                 _ => Color::from_rgba(0.91, 0.30, 0.24, 0.8),
             };
-            frame.fill_rectangle(top_left, size, color);
+            if self.tool == AnnotationTool::Line {
+                frame.stroke(
+                    &canvas::Path::line(start, end),
+                    Stroke::default().with_color(color).with_width(2.0),
+                );
+            } else {
+                frame.fill_rectangle(top_left, size, color);
+            }
         }
         vec![frame.into_geometry()]
     }

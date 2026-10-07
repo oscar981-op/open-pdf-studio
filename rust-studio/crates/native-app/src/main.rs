@@ -93,6 +93,32 @@ fn thumbnail_scale(width: f32, height: f32) -> Result<f32, String> {
     Ok(scale)
 }
 
+fn line_bounds(start: [f64; 2], end: [f64; 2], page: (f32, f32)) -> Option<Rect> {
+    let size = [f64::from(page.0), f64::from(page.1)];
+    if !start
+        .iter()
+        .chain(end.iter())
+        .all(|value| value.is_finite())
+        || !size.iter().all(|value| value.is_finite() && *value > 0.0)
+        || (start[0] - end[0]).hypot(start[1] - end[1]) < 1.0
+        || [start, end].iter().any(|point| {
+            point[0] < 0.0 || point[1] < 0.0 || point[0] > size[0] || point[1] > size[1]
+        })
+    {
+        return None;
+    }
+    let left = (start[0].min(end[0]) - 2.0).max(0.0);
+    let top = (start[1].min(end[1]) - 2.0).max(0.0);
+    let right = (start[0].max(end[0]) + 2.0).min(size[0]);
+    let bottom = (start[1].max(end[1]) + 2.0).min(size[1]);
+    (right > left && bottom > top).then_some(Rect {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    })
+}
+
 fn thumbnail_page_at_scroll(y: f32, page_count: usize) -> usize {
     if page_count == 0 {
         return 0;
@@ -442,6 +468,7 @@ enum AnnotationTool {
     #[default]
     Select,
     Rectangle,
+    Line,
     Highlight,
     Text,
 }
@@ -670,6 +697,23 @@ mod fit_view_tests {
         assert!((width - 0.722).abs() < 1e-5);
         assert!(full < width);
         assert!(fit_scale(FitMode::Width, page, window, false, false, false).unwrap() > width);
+    }
+}
+
+#[cfg(test)]
+mod line_geometry_tests {
+    use super::line_bounds;
+
+    #[test]
+    fn line_bounds_include_stroke_without_leaving_page() {
+        let bounds = line_bounds([0.0, 10.0], [100.0, 10.0], (200.0, 150.0)).unwrap();
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (0.0, 8.0, 102.0, 4.0)
+        );
+        assert!(line_bounds([20.0, 20.0], [20.0, 20.0], (200.0, 150.0)).is_none());
+        assert!(line_bounds([f64::NAN, 0.0], [30.0, 40.0], (200.0, 150.0)).is_none());
+        assert!(line_bounds([10.0, 10.0], [201.0, 10.0], (200.0, 150.0)).is_none());
     }
 }
 
@@ -3396,6 +3440,7 @@ enum Message {
     ResizeAnnotation(u64, Rect),
     RemoveSelectedAnnotation,
     AddAnnotation(Rect),
+    AddLine([f64; 2], [f64; 2]),
     TextEdited(iced::widget::text_editor::Action),
     TextPointer(iced::advanced::text::editor::Cursor, bool),
     SetTextColor([u8; 3]),
@@ -4337,6 +4382,14 @@ impl App {
                                 .max(0.0);
                             item.bounds.x = (item.bounds.x + delta[0]).clamp(0.0, max_x);
                             item.bounds.y = (item.bounds.y + delta[1]).clamp(0.0, max_y);
+                            if let Kind::Line { start, end, .. } = &mut item.kind {
+                                let dx = item.bounds.x - previous.x;
+                                let dy = item.bounds.y - previous.y;
+                                for point in [start, end] {
+                                    point[0] += dx;
+                                    point[1] += dy;
+                                }
+                            }
                             if item.bounds != previous {
                                 match document.model.apply(Edit::Replace(item)) {
                                     Ok(()) => self.message = "Annotation moved".into(),
@@ -4361,6 +4414,9 @@ impl App {
                         {
                             self.message = "Resize outside page".into();
                         } else if let Some(mut item) = document.model.get(id).cloned() {
+                            if matches!(item.kind, Kind::Line { .. }) {
+                                return Task::none();
+                            }
                             if item.page == document.displayed_page && item.bounds != bounds {
                                 item.bounds = bounds;
                                 match document.model.apply(Edit::Replace(item)) {
@@ -4407,6 +4463,7 @@ impl App {
                 if let Some(document) = &mut self.document {
                     let color_rgb = match self.annotation_tool {
                         AnnotationTool::Rectangle => [231, 76, 60],
+                        AnnotationTool::Line => return Task::none(),
                         AnnotationTool::Highlight => [255, 226, 67],
                         AnnotationTool::Select => return Task::none(),
                         AnnotationTool::Text => unreachable!("handled above"),
@@ -4424,6 +4481,34 @@ impl App {
                             self.message = "Annotation added".into();
                         }
                         Err(error) => self.message = format!("Annotation failed: {error:?}"),
+                    }
+                }
+            }
+            Message::AddLine(start, end) => {
+                if self.annotation_tool != AnnotationTool::Line {
+                    return Task::none();
+                }
+                if let Some(document) = &mut self.document {
+                    let Some(bounds) = line_bounds(start, end, document.bitmap_page_points) else {
+                        return Task::none();
+                    };
+                    let item = Annotation {
+                        id: self.next_annotation_id,
+                        page: document.displayed_page,
+                        bounds,
+                        kind: Kind::Line {
+                            start,
+                            end,
+                            color_rgb: [231, 76, 60],
+                        },
+                    };
+                    match document.model.apply(Edit::Add(item)) {
+                        Ok(()) => {
+                            document.selected_annotation = Some(self.next_annotation_id);
+                            self.next_annotation_id += 1;
+                            self.message = "Line added".into();
+                        }
+                        Err(error) => self.message = format!("Line failed: {error:?}"),
                     }
                 }
             }

@@ -403,6 +403,49 @@ fn annotation_object(
             )
             .into_bytes()
         }
+        Kind::Line {
+            start,
+            end,
+            color_rgb,
+        } => {
+            if !start
+                .iter()
+                .chain(end.iter())
+                .all(|value| value.is_finite())
+                || start == end
+                || [start, end].iter().any(|point| {
+                    point[0] < b.x
+                        || point[0] > b.x + b.width
+                        || point[1] < b.y
+                        || point[1] > b.y + b.height
+                })
+            {
+                return Err("Invalid line endpoints".into());
+            }
+            let pdf_start = display_to_pdf(crop, rotation, start[0], start[1]);
+            let pdf_end = display_to_pdf(crop, rotation, end[0], end[1]);
+            let rgb = color_rgb.map(|v| f64::from(v) / 255.0);
+            dictionary.set("Subtype", Object::Name(b"Line".to_vec()));
+            dictionary.set(
+                "L",
+                array(&[pdf_start[0], pdf_start[1], pdf_end[0], pdf_end[1]]),
+            );
+            dictionary.set("C", array(&rgb));
+            let mut border = Dictionary::new();
+            border.set("W", number(2.0));
+            dictionary.set("BS", border);
+            format!(
+                "q {:.3} {:.3} {:.3} RG 2 w 0 J {:.3} {:.3} m {:.3} {:.3} l S Q",
+                rgb[0],
+                rgb[1],
+                rgb[2],
+                start[0] - b.x,
+                b.y + b.height - start[1],
+                end[0] - b.x,
+                b.y + b.height - end[1],
+            )
+            .into_bytes()
+        }
         Kind::Text {
             value,
             color_rgb,
@@ -850,6 +893,74 @@ mod tests {
     use super::*;
     use lopdf::dictionary;
     use opds_native_core::annotations::Rect;
+
+    #[test]
+    fn line_appearance_matches_direct_pdf_stroke_on_rotated_pages() {
+        use opds_engine_probe::ParsedPdf;
+
+        fn pdf(rotation: i64, content: Vec<u8>) -> Vec<u8> {
+            let mut doc = Document::with_version("1.4");
+            let pages = doc.new_object_id();
+            let stream = doc.add_object(Stream::new(Dictionary::new(), content));
+            let page = doc.add_object(dictionary! {
+                "Type" => "Page", "Parent" => pages, "Contents" => stream,
+                "MediaBox" => vec![0.into(), 0.into(), 200.into(), 150.into()],
+                "Rotate" => rotation,
+            });
+            doc.objects.insert(
+                pages,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1,
+                }),
+            );
+            let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+            doc.trailer.set("Root", Object::Reference(catalog));
+            let mut output = Vec::new();
+            doc.save_to(&mut output).unwrap();
+            output
+        }
+
+        for rotation in [0_u16, 90, 180, 270] {
+            let source = pdf(i64::from(rotation), Vec::new());
+            let start = [20.0, 30.0];
+            let end = [100.0, 80.0];
+            let annotation = Annotation {
+                id: 1,
+                page: 0,
+                bounds: Rect {
+                    x: 18.0,
+                    y: 28.0,
+                    width: 84.0,
+                    height: 54.0,
+                },
+                kind: Kind::Line {
+                    start,
+                    end,
+                    color_rgb: [231, 76, 60],
+                },
+            };
+            let saved = export_annotations(&source, &[annotation]).unwrap();
+            let pdf_start = display_to_pdf([0.0, 0.0, 200.0, 150.0], rotation, start[0], start[1]);
+            let pdf_end = display_to_pdf([0.0, 0.0, 200.0, 150.0], rotation, end[0], end[1]);
+            let reference = pdf(
+                i64::from(rotation),
+                format!(
+                    "0.906 0.298 0.235 RG 2 w 0 J {} {} m {} {} l S",
+                    pdf_start[0], pdf_start[1], pdf_end[0], pdf_end[1]
+                )
+                .into_bytes(),
+            );
+            let actual = ParsedPdf::open(std::sync::Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let expected = ParsedPdf::open(std::sync::Arc::new(reference))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            assert_eq!(actual.rgba, expected.rgba, "rotation {rotation}");
+        }
+    }
     #[cfg(feature = "dynlex-experimental")]
     use std::sync::Arc;
 

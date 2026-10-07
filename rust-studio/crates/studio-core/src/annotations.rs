@@ -27,6 +27,11 @@ pub enum Kind {
     Rectangle {
         color_rgb: [u8; 3],
     },
+    Line {
+        start: [f64; 2],
+        end: [f64; 2],
+        color_rgb: [u8; 3],
+    },
     Text {
         value: String,
         color_rgb: [u8; 3],
@@ -126,12 +131,29 @@ impl DocumentModel {
         }
         self.items.iter().rev().find_map(|(id, annotation)| {
             let bounds = annotation.bounds;
-            (annotation.page == page
+            let in_bounds = annotation.page == page
                 && point[0] >= bounds.x - tolerance
                 && point[0] <= bounds.x + bounds.width + tolerance
                 && point[1] >= bounds.y - tolerance
-                && point[1] <= bounds.y + bounds.height + tolerance)
-                .then_some(*id)
+                && point[1] <= bounds.y + bounds.height + tolerance;
+            if !in_bounds {
+                return None;
+            }
+            match &annotation.kind {
+                Kind::Line { start, end, .. } => {
+                    let dx = end[0] - start[0];
+                    let dy = end[1] - start[1];
+                    let length_squared = dx * dx + dy * dy;
+                    let t = (((point[0] - start[0]) * dx + (point[1] - start[1]) * dy)
+                        / length_squared)
+                        .clamp(0.0, 1.0);
+                    let distance = ((point[0] - start[0] - t * dx).powi(2)
+                        + (point[1] - start[1] - t * dy).powi(2))
+                    .sqrt();
+                    (distance <= tolerance + 1.0).then_some(*id)
+                }
+                _ => Some(*id),
+            }
         })
     }
     pub fn can_undo(&self) -> bool {
@@ -186,6 +208,22 @@ impl DocumentModel {
         if let Kind::Text { font_size, .. } = item.kind {
             if !TEXT_FONT_SIZES.contains(&font_size) {
                 return Err(EditError::InvalidTextSize);
+            }
+        }
+        if let Kind::Line { start, end, .. } = &item.kind {
+            if !start
+                .iter()
+                .chain(end.iter())
+                .all(|value| value.is_finite())
+                || start == end
+                || [start, end].iter().any(|point| {
+                    point[0] < item.bounds.x
+                        || point[0] > item.bounds.x + item.bounds.width
+                        || point[1] < item.bounds.y
+                        || point[1] > item.bounds.y + item.bounds.height
+                })
+            {
+                return Err(EditError::InvalidGeometry);
             }
         }
         Ok(())
@@ -333,6 +371,38 @@ mod tests {
         assert_eq!(doc.hit_test(0, [5.0, 5.0], 0.0), Some(2));
         assert_eq!(doc.hit_test(1, [5.0, 5.0], 0.0), None);
         assert_eq!(doc.hit_test(0, [f64::NAN, 5.0], 1.0), None);
+    }
+
+    #[test]
+    fn line_hit_test_uses_stroke_instead_of_bounding_box() {
+        let mut doc = DocumentModel::new(DocumentId(3), 1).unwrap();
+        let line = Annotation {
+            id: 8,
+            page: 0,
+            bounds: Rect {
+                x: 8.0,
+                y: 18.0,
+                width: 104.0,
+                height: 84.0,
+            },
+            kind: Kind::Line {
+                start: [10.0, 20.0],
+                end: [110.0, 100.0],
+                color_rgb: [231, 76, 60],
+            },
+        };
+        doc.apply(Edit::Add(line.clone())).unwrap();
+        assert_eq!(doc.hit_test(0, [60.0, 60.0], 2.0), Some(8));
+        assert_eq!(doc.hit_test(0, [60.0, 30.0], 2.0), None);
+        let mut invalid = line;
+        invalid.id = 9;
+        if let Kind::Line { end, .. } = &mut invalid.kind {
+            *end = [115.0, 100.0];
+        }
+        assert_eq!(
+            doc.apply(Edit::Add(invalid)),
+            Err(EditError::InvalidGeometry)
+        );
     }
 
     #[test]
