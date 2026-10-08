@@ -109,17 +109,24 @@ pub(crate) fn load_page(path: &Path) -> Result<PageFixture, Box<dyn Error>> {
 }
 
 pub(crate) fn load_page_bytes(source: &[u8]) -> Result<PageFixture, Box<dyn Error>> {
+    load_numbered_page_bytes(source, None)
+}
+
+pub(crate) fn load_numbered_page_bytes(
+    source: &[u8],
+    selected_page: Option<usize>,
+) -> Result<PageFixture, Box<dyn Error>> {
     if source.len() > 16_000_000 {
         return Err(fail("PDF fixture is too large"));
     }
     let doc = Document::load_mem(&source)?;
-    let pages = doc.get_pages();
-    if pages.len() != 1 {
-        return Err(fail("OPGM requires one page"));
-    }
-    let page_id = *pages.values().next().ok_or_else(|| fail("missing page"))?;
+    let page_id = super::select_page_id(&doc, selected_page)?;
     let page = doc.get_dictionary(page_id)?;
-    let resources = page.get(b"Resources")?.as_dict()?;
+    let resources = if selected_page.is_some() {
+        super::inherited_page_resources(&doc, page_id)?
+    } else {
+        page.get(b"Resources")?.as_dict()?
+    };
     if !resources.is_empty() {
         return Err(fail("OPGM requires empty resources"));
     }

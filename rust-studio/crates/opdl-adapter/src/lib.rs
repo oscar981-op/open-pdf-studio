@@ -8,6 +8,46 @@ pub mod paint_v4;
 pub mod path_v3;
 pub mod text_quad_glyph;
 
+/// Select a one-based page in the original document, without rewriting its
+/// content stream or flattening inherited page state. Legacy fixtures pass None.
+pub(crate) fn select_page_id(
+    document: &Document,
+    page: Option<usize>,
+) -> Result<lopdf::ObjectId, Box<dyn Error>> {
+    let pages = document.get_pages();
+    if page.is_none() && pages.len() != 1 {
+        return Err(fail("fixture must have exactly one page"));
+    }
+    let number = page.unwrap_or(1);
+    if number == 0 || number > 4096 || pages.len() > 4096 {
+        return Err(fail("page count/number exceeds bound"));
+    }
+    pages
+        .get(&(number as u32))
+        .copied()
+        .ok_or_else(|| fail("page is outside document"))
+}
+
+/// Resources are an inherited dictionary: the nearest value replaces its
+/// ancestor, it must not be merged with same-named parent resources.
+pub(crate) fn inherited_page_resources(
+    document: &Document,
+    page_id: lopdf::ObjectId,
+) -> Result<&lopdf::Dictionary, Box<dyn Error>> {
+    let mut id = page_id;
+    let mut seen = std::collections::HashSet::new();
+    loop {
+        if !seen.insert(id) || seen.len() > 16 {
+            return Err(fail("cyclic or deep resources ancestry"));
+        }
+        let node = document.get_dictionary(id)?;
+        if let Ok(value) = node.get(b"Resources") {
+            return Ok(document.dereference(value)?.1.as_dict()?);
+        }
+        id = node.get(b"Parent")?.as_reference()?;
+    }
+}
+
 fn load_path_probe(
     path: &std::path::Path,
 ) -> Result<(u32, u32, Content), Box<dyn std::error::Error>> {
@@ -2150,18 +2190,28 @@ pub fn page_to_opdl_bytes(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
 /// Experimental ordered image/vector scene. The native caller validates the
 /// complete byte stream before passing it to the DynLex ABI.
 pub fn page_to_opdl_ordered_bytes(bytes: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
-    Ok(page_to_opdl_bytes_internal(bytes, true)?.0)
+    Ok(page_to_opdl_bytes_internal(bytes, true, None)?.0)
 }
 
 fn page_to_opdl_bytes_with_timings(
     bytes: &[u8],
 ) -> Result<(Vec<u8>, AdapterTimings), Box<dyn Error>> {
-    page_to_opdl_bytes_internal(bytes, false)
+    page_to_opdl_bytes_internal(bytes, false, None)
+}
+
+/// Native page-aware route. Keeps original bytes and inherited resources intact.
+pub fn page_to_opdl_numbered_bytes(
+    bytes: &[u8],
+    page: usize,
+    ordered_images: bool,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    Ok(page_to_opdl_bytes_internal(bytes, ordered_images, Some(page))?.0)
 }
 
 fn page_to_opdl_bytes_internal(
     bytes: &[u8],
     ordered_images: bool,
+    selected_page: Option<usize>,
 ) -> Result<(Vec<u8>, AdapterTimings), Box<dyn Error>> {
     let mut timings = AdapterTimings::default();
     if bytes.len() > 16_000_000 {
@@ -2171,11 +2221,7 @@ fn page_to_opdl_bytes_internal(
     let document = Document::load_mem(&bytes)?;
     timings.document_ms = started.elapsed().as_secs_f64() * 1000.0;
     let started = Instant::now();
-    let pages = document.get_pages();
-    if pages.len() != 1 {
-        return Err(fail("fixture must have exactly one page"));
-    }
-    let page_id = *pages.values().next().ok_or_else(|| fail("missing page"))?;
+    let page_id = select_page_id(&document, selected_page)?;
     let page = document.get_dictionary(page_id)?;
     if !ordered_images
         && (page.has(b"Rotate")
@@ -2248,11 +2294,15 @@ fn page_to_opdl_bytes_internal(
         return Err(fail("page exceeds bounded pixel count"));
     }
     let exact_u32 = |value| exact_u32_with_limit(value, coordinate_limit);
-    let (resources, inherited) = document.get_page_resources(page_id)?;
-    if !inherited.is_empty() {
-        return Err(fail("inherited resources are not in this subset"));
-    }
-    let resources = resources.ok_or_else(|| fail("missing resources"))?;
+    let resources = if selected_page.is_some() {
+        inherited_page_resources(&document, page_id)?
+    } else {
+        let (resources, inherited) = document.get_page_resources(page_id)?;
+        if !inherited.is_empty() {
+            return Err(fail("inherited resources are not in this subset"));
+        }
+        resources.ok_or_else(|| fail("missing resources"))?
+    };
     let content_bytes = document.get_page_content(page_id)?;
     if has_compound_operand(&content_bytes) {
         return Err(fail("compound PDF operands are outside the fixture subset"));

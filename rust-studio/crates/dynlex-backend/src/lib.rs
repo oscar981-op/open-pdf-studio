@@ -41,9 +41,9 @@ pub use glyph_scene::{
 };
 use opds_engine_probe::{ParsedPdf, Raster, RenderError};
 #[cfg(feature = "kernel")]
-use opds_opdl_adapter::{
-    geometry_v3::page_to_opgm_v3_bytes, page_to_opdl_bytes, page_to_opdl_ordered_bytes,
-};
+use opds_opdl_adapter::{geometry_v3::page_to_opgm_v3_numbered_bytes, page_to_opdl_numbered_bytes};
+#[cfg(all(test, feature = "kernel"))]
+use opds_opdl_adapter::{page_to_opdl_bytes, page_to_opdl_ordered_bytes};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Backend {
@@ -211,10 +211,10 @@ unsafe extern "C" {
     ) -> i32;
 }
 
-/// Prepare a bounded first-page scene and render the supported zoom subset.
+/// Prepare a bounded selected-page scene and render the supported zoom subset.
 /// Use DynlexDocument in a viewer to retain this preparation across renders.
 pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap>, String> {
-    if page != 1 || !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
+    if page == 0 || page > 4096 || !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
         return Ok(None);
     }
     #[cfg(not(feature = "kernel"))]
@@ -224,7 +224,7 @@ pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap
     }
     #[cfg(feature = "kernel")]
     {
-        match PreparedPage::from_pdf(bytes)? {
+        match PreparedPage::from_pdf_page(bytes, page)? {
             Some(prepared) => prepared.render(scale),
             None => Ok(None),
         }
@@ -232,15 +232,15 @@ pub fn try_render(bytes: &[u8], page: usize, scale: f32) -> Result<Option<Bitmap
 }
 
 #[cfg(feature = "kernel")]
-fn prepare_scene(bytes: &[u8]) -> Result<Option<(Vec<u8>, u32, u32)>, String> {
-    if let Ok(geometry) = page_to_opgm_v3_bytes(bytes) {
+fn prepare_scene(bytes: &[u8], page: usize) -> Result<Option<(Vec<u8>, u32, u32)>, String> {
+    if let Ok(geometry) = page_to_opgm_v3_numbered_bytes(bytes, page) {
         return validated_scene(&geometry).map(Some);
     }
-    let old = page_to_opdl_bytes(bytes)
+    let old = page_to_opdl_numbered_bytes(bytes, page, false)
         .ok()
         .and_then(|scene| validated_rgb_scene(scene).ok());
     let ordered = || {
-        page_to_opdl_ordered_bytes(bytes)
+        page_to_opdl_numbered_bytes(bytes, page, true)
             .ok()
             .and_then(|scene| validated_ordered_scene(scene).ok())
     };

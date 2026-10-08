@@ -1,3 +1,5 @@
+> Nieuw: de native route selecteert nu iedere begrensde documentpagina en bewaart maximaal vier scenes. Zie [meerdere pagina’s](dynlex-multipage-2026-10-08.md). De eerste-pagina-beschrijving hieronder is historisch.
+
 > Actuele wijziging: de native DynLex-keuze heeft sinds c830cae3 geen Hayro-fallback.
 > Unsupported geeft een melding. De hieronder beschreven eerste 16×16-index
 > is inmiddels vervangen door [LBVH](dynlex-lbvh-2026-10-08.md).

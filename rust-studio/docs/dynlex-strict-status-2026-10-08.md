@@ -63,3 +63,16 @@ Reproduceren: `python3 scripts/audit_strict_dynlex_corpus.py --probe target/rele
 De audit gebruikt `pdfinfo` uitsluitend voor het paginatal en vergelijkt
 succesvolle pixels met een afzonderlijke Hayro-aanroep. Ruwe documenthashes,
 pagina's, schalen en foutredenen: `dynlex-complex-corpus-2026-10-08.json`.
+
+
+## Herhaling na ondersteuning van meerdere pagina’s
+
+De oorspronkelijke paginanummer-1-grens is verwijderd uit de native route;
+legacy fixture-CLI’s behouden hun éénpagina-contract. De audit is opnieuw
+uitgevoerd met de releasebuild: **0 ondersteund, 276 unsupported, 0 procesfouten**.
+Ruwe resultaten: `dynlex-complex-multipage-2026-10-08.json`.
+Dit resultaat wordt dus niet meer uitsluitend veroorzaakt door `page != 1`.
+De overige limieten blijven gelden: onder andere maximaal 16 MB bron-PDF,
+gehele paginacoördinaten, resources/tekst, algemene paden en annotaties.
+Gedetailleerde nieuwe tests en vroege blokkades staan in
+[dynlex-multipage-2026-10-08.md](dynlex-multipage-2026-10-08.md).

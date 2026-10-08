@@ -1,15 +1,21 @@
-//! Source-bound, lazily prepared first-page display list. PDF interpretation is
+//! Source-bound, lazily prepared page display lists. PDF interpretation is
 //! shared across zooms; unsupported sources are remembered as well.
 use super::{Backend, Bitmap, RenderOutcome};
 use opds_engine_probe::{ParsedPdf, RenderError};
+#[cfg(feature = "kernel")]
+use std::collections::VecDeque;
 use std::sync::Arc;
 #[cfg(feature = "kernel")]
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+#[cfg(feature = "kernel")]
+type PageSlot = Arc<OnceLock<Result<Option<PreparedPage>, String>>>;
 
 pub struct DynlexDocument {
     source: Arc<Vec<u8>>,
     #[cfg(feature = "kernel")]
     prepared: OnceLock<Result<Option<PreparedPage>, String>>,
+    #[cfg(feature = "kernel")]
+    other_pages: Mutex<VecDeque<(usize, PageSlot)>>,
 }
 
 impl DynlexDocument {
@@ -18,19 +24,40 @@ impl DynlexDocument {
             source,
             #[cfg(feature = "kernel")]
             prepared: OnceLock::new(),
+            #[cfg(feature = "kernel")]
+            other_pages: Mutex::new(VecDeque::new()),
         }
     }
 
     pub fn try_render(&self, page: usize, scale: f32) -> Result<Option<Bitmap>, String> {
-        if page != 1 || !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
+        if page == 0 || page > 4096 || !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
             return Ok(None);
         }
         #[cfg(feature = "kernel")]
         {
-            match self
-                .prepared
-                .get_or_init(|| PreparedPage::from_pdf(&self.source))
-            {
+            // Retain first page plus three LRU page slots; never hold the lock
+            // while interpreting PDF or rendering. In-flight callers own a slot.
+            let slot = if page == 1 {
+                None
+            } else {
+                let mut pages = self
+                    .other_pages
+                    .lock()
+                    .map_err(|_| "page cache lock poisoned")?;
+                let slot = if let Some(index) = pages.iter().position(|(number, _)| *number == page)
+                {
+                    pages.remove(index).unwrap().1
+                } else {
+                    Arc::new(OnceLock::new())
+                };
+                pages.push_back((page, Arc::clone(&slot)));
+                while pages.len() > 3 {
+                    pages.pop_front();
+                }
+                Some(slot)
+            };
+            let cell = slot.as_deref().unwrap_or(&self.prepared);
+            match cell.get_or_init(|| PreparedPage::from_pdf_page(&self.source, page)) {
                 Ok(Some(prepared)) => prepared.render(scale),
                 Ok(None) => Ok(None),
                 Err(error) => Err(error.clone()),
@@ -150,7 +177,14 @@ mod scene {
 
     impl PreparedPage {
         pub fn from_pdf(bytes: &[u8]) -> Result<Option<Self>, String> {
-            let Some((scene, width, height)) = prepare_scene(bytes)? else {
+            Self::from_pdf_page(bytes, 1)
+        }
+
+        pub fn from_pdf_page(bytes: &[u8], page: usize) -> Result<Option<Self>, String> {
+            if page == 0 || page > 4096 {
+                return Ok(None);
+            }
+            let Some((scene, width, height)) = prepare_scene(bytes, page)? else {
                 return Ok(None);
             };
             let mut vectors = None;
@@ -411,6 +445,189 @@ mod tests {
         assert!(doc.try_render(1, 1.0).unwrap().is_none());
         assert!(matches!(doc.prepared.get(), Some(Ok(None))));
         assert!(doc.try_render(1, 2.0).unwrap().is_none());
+    }
+
+    fn multiple_vector_pages() -> Vec<u8> {
+        let mut doc = Document::with_version("1.7");
+        let root = doc.new_object_id();
+        let empty_resources = doc.add_object(dictionary! {});
+        let mut branches = Vec::new();
+        for index in 0..8 {
+            let branch = doc.new_object_id();
+            let rgb = if index % 2 == 0 { "1 0 0" } else { "0 0 1" };
+            let stream = doc.add_object(Stream::new(
+                dictionary! {},
+                format!("{rgb} rg\n{} 32 64 48 re\nf\n", 24 + index * 4).into_bytes(),
+            ));
+            let page =
+                doc.add_object(dictionary! {"Type"=>"Page", "Parent"=>branch, "Contents"=>stream});
+            doc.objects.insert(
+                branch,
+                Object::Dictionary(dictionary! {
+                    "Type"=>"Pages", "Parent"=>root, "Kids"=>vec![page.into()], "Count"=>1,
+                    "MediaBox"=>vec![0.into(),0.into(),256.into(),192.into()],
+                    "CropBox"=>vec![8.into(),16.into(),248.into(),176.into()],
+                    "Rotate"=>((index%4)*90), "Resources"=>empty_resources,
+                }),
+            );
+            branches.push(branch.into());
+        }
+        doc.objects.insert(
+            root,
+            Object::Dictionary(dictionary! {"Type"=>"Pages","Kids"=>branches,"Count"=>8}),
+        );
+        let catalog = doc.add_object(dictionary! {"Type"=>"Catalog","Pages"=>root});
+        doc.trailer.set("Root", catalog);
+        let mut source = Vec::new();
+        doc.save_to(&mut source).unwrap();
+        source
+    }
+
+    #[test]
+    fn all_pages_keep_inherited_geometry_and_bounded_page_cache() {
+        let bytes = Arc::new(multiple_vector_pages());
+        // Legacy one-page fixture API keeps its rejection contract.
+        assert!(opds_opdl_adapter::geometry_v3::page_to_opgm_v3_bytes(&bytes).is_err());
+        let pdf = ParsedPdf::open(bytes.clone()).unwrap();
+        let cached = Arc::new(DynlexDocument::new(bytes));
+        for page in [8, 1, 3, 5, 7, 2, 6, 4, 8, 1] {
+            let actual = cached.render_strict(&pdf, page, 1.0).unwrap();
+            let reference = pdf.render_page(page, 1.0).unwrap();
+            assert_eq!(actual.used, Backend::Dynlex);
+            assert_eq!(actual.raster.total_pages, 8);
+            assert_eq!(
+                (actual.raster.width, actual.raster.height),
+                (reference.width, reference.height)
+            );
+            assert_eq!(actual.raster.rgba, reference.rgba, "page {page}");
+            assert!(cached.other_pages.lock().unwrap().len() <= 3);
+        }
+        for page in [0, 9, 4097] {
+            assert!(cached.try_render(page, 1.0).unwrap().is_none());
+        }
+        std::thread::scope(|scope| {
+            let calls: Vec<_> = (0..4)
+                .map(|_| {
+                    let cached = cached.clone();
+                    scope.spawn(move || cached.try_render(8, 1.0).unwrap().unwrap().rgba)
+                })
+                .collect();
+            let expected = pdf.render_page(8, 1.0).unwrap().rgba;
+            for call in calls {
+                assert_eq!(call.join().unwrap(), expected);
+            }
+        });
+    }
+
+    #[test]
+    fn unsupported_inherited_state_does_not_hide_later_valid_pages() {
+        for bad in ["Resources", "Rotate", "UserUnit"] {
+            let mut doc = Document::load_mem(&multiple_vector_pages()).unwrap();
+            let pages = doc.get_pages();
+            let first = pages[&1];
+            let parent = doc
+                .get_dictionary(first)
+                .unwrap()
+                .get(b"Parent")
+                .unwrap()
+                .as_reference()
+                .unwrap();
+            doc.get_dictionary_mut(parent).unwrap().set(bad, 13);
+            let mut bytes = Vec::new();
+            doc.save_to(&mut bytes).unwrap();
+            let bytes = Arc::new(bytes);
+            let cached = DynlexDocument::new(bytes.clone());
+            assert!(cached.try_render(1, 1.0).unwrap().is_none(), "{bad}");
+            let expected = ParsedPdf::open(bytes).unwrap().render_page(8, 1.0).unwrap();
+            assert_eq!(
+                cached.try_render(8, 1.0).unwrap().unwrap().rgba,
+                expected.rgba
+            );
+        }
+    }
+
+    #[test]
+    fn later_page_keeps_original_decimal_clip_content() {
+        let source = include_bytes!("../tests/fixtures/clipped-real-shape-582.pdf");
+        let mut doc = Document::load_mem(source).unwrap();
+        let first = doc.get_pages()[&1];
+        let content = doc.get_page_content(first).unwrap();
+        let parent = doc
+            .get_dictionary(first)
+            .unwrap()
+            .get(b"Parent")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let page = doc.get_dictionary(first).unwrap().clone();
+        let second = doc.add_object(page);
+        let root = doc.get_dictionary_mut(parent).unwrap();
+        root.set("Kids", vec![first.into(), second.into()]);
+        root.set("Count", 2);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        assert_eq!(
+            Document::load_mem(&bytes)
+                .unwrap()
+                .get_page_content(second)
+                .unwrap(),
+            content
+        );
+        let bytes = Arc::new(bytes);
+        let expected = ParsedPdf::open(bytes.clone())
+            .unwrap()
+            .render_page(2, 1.0)
+            .unwrap();
+        let cached = DynlexDocument::new(bytes);
+        assert_eq!(
+            cached.try_render(2, 1.0).unwrap().unwrap().rgba,
+            expected.rgba
+        );
+    }
+
+    #[test]
+    fn inherited_image_resources_are_not_merged_and_unsupported_pages_stay_isolated() {
+        let source = include_bytes!("../tests/fixtures/two-images-hybrid.pdf");
+        let mut doc = Document::load_mem(source).unwrap();
+        let first = *doc.get_pages().get(&1).unwrap();
+        let parent = doc
+            .get_dictionary(first)
+            .unwrap()
+            .get(b"Parent")
+            .unwrap()
+            .as_reference()
+            .unwrap();
+        let mut second = doc.get_dictionary(first).unwrap().clone();
+        let resources = second.get(b"Resources").unwrap().clone();
+        doc.get_dictionary_mut(first).unwrap().remove(b"Resources");
+        let original_content = doc.get_page_content(first).unwrap();
+        let mut changed = original_content.clone();
+        changed.extend_from_slice(b"\n0 0 1 rg\n10 10 10 10 re\nf\n");
+        let content = doc.add_object(Stream::new(dictionary! {}, changed));
+        second.set("Contents", content);
+        second.remove(b"Resources");
+        let second = doc.add_object(second);
+        let mut unsupported = doc.get_dictionary(first).unwrap().clone();
+        // An explicit empty Resources overrides the inherited images; it must
+        // not accidentally borrow those names through dictionary merging.
+        unsupported.set("Resources", dictionary! {});
+        let third = doc.add_object(unsupported);
+        let resources = doc.add_object(resources);
+        let root = doc.get_dictionary_mut(parent).unwrap();
+        root.set("Kids", vec![first.into(), second.into(), third.into()]);
+        root.set("Count", 3);
+        root.set("Resources", resources);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        let bytes = Arc::new(bytes);
+        let pdf = ParsedPdf::open(bytes.clone()).unwrap();
+        let cached = DynlexDocument::new(bytes);
+        for page in [1, 2] {
+            let actual = cached.render_strict(&pdf, page, 1.0).unwrap();
+            assert_eq!(actual.raster.rgba, pdf.render_page(page, 1.0).unwrap().rgba);
+        }
+        assert!(cached.try_render(3, 1.0).unwrap().is_none());
+        assert!(cached.try_render(2, 1.0).unwrap().is_some());
     }
 
     #[test]

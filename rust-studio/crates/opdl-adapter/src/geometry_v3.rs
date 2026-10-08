@@ -12,6 +12,20 @@ pub fn page_to_opgm_v3(path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
 
 pub fn page_to_opgm_v3_bytes(source: &[u8]) -> Result<Vec<u8>, Box<dyn Error>> {
     let page = load_page_bytes(source)?;
+    encode_page(page)
+}
+
+pub fn page_to_opgm_v3_numbered_bytes(
+    source: &[u8],
+    page: usize,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    encode_page(super::geometry_v1::load_numbered_page_bytes(
+        source,
+        Some(page),
+    )?)
+}
+
+fn encode_page(page: super::geometry_v1::PageFixture) -> Result<Vec<u8>, Box<dyn Error>> {
     let ops = &page.operations;
     let mut records = Vec::new();
     let mut i = 0;

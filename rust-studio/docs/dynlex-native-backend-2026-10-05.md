@@ -1,3 +1,5 @@
+> Update 8 oktober: [DynLex ondersteunt nu geselecteerde pagina’s en geërfde resources](dynlex-multipage-2026-10-08.md), met een begrensde scene-cache. De native keuze is strikt zonder Hayro-fallback; oudere fallbackbeschrijvingen hieronder zijn historisch.
+
 # DynLex als optionele kernel in de native Rust-app
 
 De native app gebruikt standaard Hayro. De Rust-crate

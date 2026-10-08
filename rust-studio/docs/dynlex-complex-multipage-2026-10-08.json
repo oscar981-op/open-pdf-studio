@@ -1,0 +1,1720 @@
+{
+  "protocol": "all pages, scales 0.25/1/2, strict DynLex; unsupported has no speed score; successful output requires full Hayro equality",
+  "documents": [
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/20260316 - Barn Relocation - 389 E Hemenway Lane - for Permit.pdf",
+      "pages": 7,
+      "bytes": 26767844,
+      "sha256": "9287796b021eab8907a1b150d379b7115f290d6f246835df356abb1922296df0",
+      "results": [
+        {
+          "page": 1,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        }
+      ]
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/Combinatie Raster, vector, tekening images.pdf",
+      "pages": 1,
+      "bytes": 704377,
+      "sha256": "794eb1680b0e8046811fbf8a768f5d2bfebd51b3fd347472bf5b921d35b4ec1e",
+      "results": [
+        {
+          "page": 1,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        }
+      ]
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/Technische tekening.pdf",
+      "pages": 4,
+      "bytes": 1023840,
+      "sha256": "a4c53952c3b7618f017d9be01d965d581d9bddb5de1a4d55daa02ddb80438c96",
+      "results": [
+        {
+          "page": 1,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        }
+      ]
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/Tekst.pdf",
+      "pages": 5,
+      "bytes": 158293,
+      "sha256": "a97db0d26a89643a88976e4a68823d96b3b6f24b29e9dca3cc74f29c48c0fc43",
+      "results": [
+        {
+          "page": 1,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        }
+      ]
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/Text pdf gecombineerd.pdf",
+      "pages": 28,
+      "bytes": 1663460,
+      "sha256": "4f065ba1e66f76177c8c6abafa4cda4af13dc354bceede4ae813a9adad49319b",
+      "results": [
+        {
+          "page": 1,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 20,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 20,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 20,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 21,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 21,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 21,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 22,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 22,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 22,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 23,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 23,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 23,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 24,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 24,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 24,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 25,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 25,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 25,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 26,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 26,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 26,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 27,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 27,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 27,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 28,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 28,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 28,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        }
+      ]
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/Zware vector PDF.pdf",
+      "pages": 19,
+      "bytes": 17894799,
+      "sha256": "bfada12e0b2eebce2ba6021deaf27cc629b5c605327fed19132af43e5eb455bf",
+      "results": [
+        {
+          "page": 1,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        }
+      ]
+    },
+    {
+      "pdf": "../test pdf-bestanden/Testbestanden/rapport-constructie.pdf",
+      "pages": 28,
+      "bytes": 1663461,
+      "sha256": "1f5d5d7e170c5b3389748663e30f2ecc136582737c6cde6a89954371faf9ec8c",
+      "results": [
+        {
+          "page": 1,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 1,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 10,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 11,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 12,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 13,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 14,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 18,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 19,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 20,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 20,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 20,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 21,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 21,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 21,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 22,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 22,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 22,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 23,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 23,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 23,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 24,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 24,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 24,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 25,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 25,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 25,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 26,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 26,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 26,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 27,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 27,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 27,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 28,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 28,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 28,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        }
+      ]
+    }
+  ],
+  "supported": 0,
+  "unsupported": 276,
+  "errors": 0
+}
