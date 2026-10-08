@@ -299,9 +299,9 @@ mod scene {
 
         pub fn render(&self, scale: f32) -> Result<Option<Bitmap>, String> {
             if let Some((plan, key, cache)) = &self.raster {
-                // Non-binary ratios (including 125%) can change Hayro's image
-                // sampling extent despite integer page edges. Keep them strict.
-                if ![0.25, 0.5, 1., 2.].contains(&scale) {
+                // Only measured zooms; the plan additionally limits 125% to
+                // downsampling with aligned placement and crop edges.
+                if ![0.25, 0.5, 1., 1.25, 2.].contains(&scale) {
                     return Ok(None);
                 }
                 if self.scaled_size(scale).is_none() {

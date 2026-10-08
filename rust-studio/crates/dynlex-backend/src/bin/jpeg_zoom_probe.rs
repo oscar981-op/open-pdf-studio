@@ -5,8 +5,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use opds_engine_probe::ParsedPdf;
     use std::{fs, sync::Arc, time::Instant};
     let args: Vec<_> = std::env::args().collect();
-    if args.len() != 5 || !matches!(args[2].as_str(), "dynlex" | "hayro") {
-        return Err("usage: jpeg_zoom_probe PDF dynlex|hayro ROUNDS REFERENCE_DIRECTORY".into());
+    if !(5..=6).contains(&args.len()) || !matches!(args[2].as_str(), "dynlex" | "hayro") {
+        return Err("usage: jpeg_zoom_probe PDF dynlex|hayro ROUNDS REFERENCE_DIRECTORY [SCALES_COMMA_SEPARATED]".into());
+    }
+    let scales: Vec<f32> = args
+        .get(5)
+        .map(String::as_str)
+        .unwrap_or("0.25,1,2")
+        .split(',')
+        .map(str::parse)
+        .collect::<Result<_, _>>()?;
+    if scales.is_empty()
+        || scales.len() > 8
+        || scales
+            .iter()
+            .any(|s| !s.is_finite() || !(0.01..=8.).contains(s))
+    {
+        return Err("invalid bounded scales".into());
     }
     let rounds: usize = args[3].parse()?;
     if !(1..=30).contains(&rounds) {
@@ -19,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let open_ms = started.elapsed().as_secs_f64() * 1000.;
     let mut rows = Vec::new();
     for round in 0..=rounds {
-        for (index, scale) in [0.25, 1., 2.].into_iter().enumerate() {
+        for (index, scale) in scales.iter().copied().enumerate() {
             let started = Instant::now();
             let rgba = if args[2] == "dynlex" {
                 document

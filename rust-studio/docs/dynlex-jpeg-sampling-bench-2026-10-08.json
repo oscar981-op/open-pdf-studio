@@ -1,0 +1,2182 @@
+{
+  "source": {
+    "id": "albany-contract",
+    "url": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/02_Contract_Documents_SS-25-02.pdf",
+    "category": "contract text",
+    "path": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/albany-contract.pdf",
+    "resolved_url": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/02_Contract_Documents_SS-25-02.pdf",
+    "bytes": 2474873,
+    "sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+    "pdfinfo": "Title:           Public Works Contract\nAuthor:          Shultz, Shelley\nCreator:         Acrobat PDFMaker 26 for Word\nProducer:        Adobe PDF Library 26.1.173\nCreationDate:    Thu Jun 25 17:19:30 2026 CEST\nModDate:         Thu Jun 25 19:32:31 2026 CEST\nCustom Metadata: yes\nMetadata Stream: yes\nTagged:          no\nUserProperties:  no\nSuspects:        no\nForm:            AcroForm\nJavaScript:      no\nPages:           49\nEncrypted:       no\nPage size:       612 x 792 pts (letter)\nPage rot:        0\nFile size:       2474873 bytes\nOptimized:       no\nPDF version:     1.6\n",
+    "pages": 49,
+    "status": "downloaded"
+  },
+  "protocol": "Alternating paired new processes, warm OS cache. Each process retains PDF/document for initial requested scales and repeated cycles of those scales. Every result byte checked outside render timer. DynLex caches original RGB; current Hayro app route creates RenderCache per render. This measures current app routes, not equal internal caches or a kernel-only comparison. First render has empty engine cache, not cold OS cache. /usr/bin/time measures whole-process RSS including byte verification. No UI latency measurement.",
+  "rounds": 2,
+  "scales": [
+    0.25,
+    1.0,
+    1.25,
+    2.0
+  ],
+  "pairs": [
+    {
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 4.209474,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 239.821459
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 74.149665
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 61.26575
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 99.328017
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 39.028043
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 71.990992
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 59.229439
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 86.190958
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 39.149203
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 76.380399
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 59.95906
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 86.197188
+          }
+        ],
+        "peak_rss_kib": 137944
+      },
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 3.730376,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 301.041918
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 350.55451
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 344.355194
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 371.698729
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 325.912815
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 348.366795
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 335.44386
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 363.313172
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 302.153415
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 337.774505
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 346.70801
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 338.565017
+          }
+        ],
+        "peak_rss_kib": 215044
+      }
+    },
+    {
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 6.537809,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 322.658316
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 352.415767
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 321.326466
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 367.303473
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 328.255861
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 360.806745
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 343.592403
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 361.217191
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 329.828784
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 362.268337
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 327.725333
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 359.497825
+          }
+        ],
+        "peak_rss_kib": 215032
+      },
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 3.517903,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 247.169041
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 74.115864
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 64.229584
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 99.785404
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 40.18651
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 74.824765
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 57.922058
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 85.63768
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 39.766123
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 76.765305
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 58.779862
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 88.671785
+          }
+        ],
+        "peak_rss_kib": 138040
+      }
+    },
+    {
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 3.397032,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 256.102355
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 74.48825
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 63.370311
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 97.935626
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 39.54151
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 73.677918
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 61.469282
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 87.152393
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 31.560839
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 72.535611
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 60.521448
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 87.927204
+          }
+        ],
+        "peak_rss_kib": 137900
+      },
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 3.234939,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 327.979416
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 383.436578
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 357.490184
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 374.737676
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 332.793159
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 366.410549
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 348.65772
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 369.74158
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 334.8027
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 371.75569
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 345.152207
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 361.543096
+          }
+        ],
+        "peak_rss_kib": 215136
+      }
+    },
+    {
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 3.692566,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 336.676719
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 364.574531
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 349.483452
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 372.588263
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 330.737478
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 360.275147
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 371.69517
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 368.711655
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 326.412872
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 366.340459
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 348.700461
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 370.648464
+          }
+        ],
+        "peak_rss_kib": 214920
+      },
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 3.567414,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 247.246441
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 74.093094
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 64.092983
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 97.736642
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 38.85128
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 71.015118
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 58.378165
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 87.724491
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 39.169595
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 76.312028
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 60.816512
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 87.822542
+          }
+        ],
+        "peak_rss_kib": 137912
+      }
+    },
+    {
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 3.28138,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 221.659983
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 63.183509
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 55.763556
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 88.33996
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 31.729851
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 60.487888
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 50.620628
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 77.233481
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 31.933984
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 65.108228
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 51.505402
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 87.924504
+          }
+        ],
+        "peak_rss_kib": 137860
+      },
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 7.8696,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 329.462909
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 363.716338
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 356.047563
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 369.024559
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 332.305282
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 363.382514
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 344.144601
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 368.769736
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 331.792785
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 369.05332
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 348.416666
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 367.494216
+          }
+        ],
+        "peak_rss_kib": 215008
+      }
+    },
+    {
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 7.050547,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 324.169138
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 363.909632
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 347.603544
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 371.561367
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 322.710106
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 366.41203
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 347.573533
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 365.16023
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 317.275235
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 329.709922
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 321.877453
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 332.059108
+          }
+        ],
+        "peak_rss_kib": 215048
+      },
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 8.516429,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 252.830816
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 74.956657
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 64.308566
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 102.039378
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 39.320666
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 71.368963
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 59.713696
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 87.809162
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 39.369308
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 75.697408
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 60.784612
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 88.445102
+          }
+        ],
+        "peak_rss_kib": 137984
+      }
+    },
+    {
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 7.311581,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 236.840853
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 74.44145
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 67.139298
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 104.002948
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 40.929681
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 72.822465
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 61.814928
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 88.542903
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 36.27424
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 75.639088
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 62.877074
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 88.440662
+          }
+        ],
+        "peak_rss_kib": 137864
+      },
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 6.195134,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 339.705314
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 371.153282
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 351.259191
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 378.502203
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 336.935143
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 367.616368
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 355.278081
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 367.355144
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 329.059802
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 366.006964
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 352.871004
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 364.639993
+          }
+        ],
+        "peak_rss_kib": 215140
+      }
+    },
+    {
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 7.815479,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 342.545198
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 369.03217
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 358.283296
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 385.190465
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 334.069219
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 367.838302
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 350.342365
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 367.73285
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 325.996796
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 356.179865
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 347.062836
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 363.012748
+          }
+        ],
+        "peak_rss_kib": 215068
+      },
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 6.662511,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 236.297516
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 75.504245
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 64.410648
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 89.903084
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 39.595241
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 72.067634
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 58.201274
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 99.160694
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 38.054177
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 77.382724
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 60.042731
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 90.583355
+          }
+        ],
+        "peak_rss_kib": 137648
+      }
+    },
+    {
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 5.559454,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 249.681209
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 75.13822
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 63.314531
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 96.618986
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 39.875805
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 71.575876
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 61.479833
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 85.330305
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 39.272926
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 77.615178
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 62.286595
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 87.604859
+          }
+        ],
+        "peak_rss_kib": 137908
+      },
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 6.511098,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 315.858323
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 359.691668
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 362.018663
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 387.299866
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 340.09383
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 369.7076
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 351.25906
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 368.449301
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 327.840084
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 370.185527
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 344.955214
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 353.684397
+          }
+        ],
+        "peak_rss_kib": 215076
+      }
+    },
+    {
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 6.833453,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 334.811451
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 370.917378
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 357.052198
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 383.679542
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 335.155565
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 368.867837
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 345.811707
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 353.857649
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 300.796104
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 360.51983
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 344.272114
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 366.498091
+          }
+        ],
+        "peak_rss_kib": 215100
+      },
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 5.433373,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 252.679204
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 74.406749
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 62.953295
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 99.542331
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 39.797784
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 72.419889
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 61.042336
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 99.050953
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 35.629261
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 76.732524
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 58.863713
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 87.670741
+          }
+        ],
+        "peak_rss_kib": 137856
+      }
+    },
+    {
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 3.701276,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 233.388102
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 75.416415
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 61.089457
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 97.467189
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 35.995226
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 71.877471
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 59.789737
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 85.888824
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 39.658282
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 76.058744
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 60.016751
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 87.494877
+          }
+        ],
+        "peak_rss_kib": 137824
+      },
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 4.964095,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 329.836114
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 370.497972
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 333.559732
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 367.723399
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 321.188324
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 355.014346
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 330.795949
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 353.632296
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 322.581024
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 357.998822
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 339.601983
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 364.179446
+          }
+        ],
+        "peak_rss_kib": 214992
+      }
+    },
+    {
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 7.349932,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 325.839964
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 359.534485
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 351.467443
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 367.576817
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 299.433813
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 328.129599
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 312.908707
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 332.401354
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 314.471952
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 362.48234
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 337.292238
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 351.864249
+          }
+        ],
+        "peak_rss_kib": 214944
+      },
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 6.865774,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 251.958123
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 79.168061
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 71.919131
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 97.752733
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 36.542684
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 72.891056
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 59.31155
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 87.721211
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 35.385947
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 76.396899
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 60.827143
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 86.792286
+          }
+        ],
+        "peak_rss_kib": 137756
+      }
+    },
+    {
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 7.22335,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 251.193341
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 75.365864
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 63.841469
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 101.116564
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 38.87604
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 72.014733
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 59.469702
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 86.882358
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 35.025552
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 76.106724
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 60.182604
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 89.244144
+          }
+        ],
+        "peak_rss_kib": 137936
+      },
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 3.615764,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 327.287217
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 350.339566
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 350.837773
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 375.796202
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 326.430193
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 364.43267
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 345.425582
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 361.974702
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 328.554895
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 361.76283
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 346.843433
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 363.116899
+          }
+        ],
+        "peak_rss_kib": 215032
+      }
+    },
+    {
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 6.552649,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 321.63189
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 354.338696
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 343.9679
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 376.017785
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 326.294091
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 370.325519
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 322.709857
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 337.39727
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 306.991968
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 354.812903
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 333.815056
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 349.879549
+          }
+        ],
+        "peak_rss_kib": 214976
+      },
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 7.065707,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 258.908569
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 73.16774
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 55.601523
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 90.28468
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 32.191548
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 63.574545
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 52.290713
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 78.935948
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 37.339026
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 76.730605
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 52.211262
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 79.455045
+          }
+        ],
+        "peak_rss_kib": 137804
+      }
+    },
+    {
+      "dynlex": {
+        "mode": "dynlex",
+        "open_ms": 6.920655,
+        "retained_rgb_bytes": 100980000,
+        "decodes": 1,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 253.502126
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 74.572282
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 62.747882
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 96.275691
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 40.106058
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 71.2134
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 60.742892
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 89.890933
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 40.466694
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 77.215102
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 61.534774
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 90.439813
+          }
+        ],
+        "peak_rss_kib": 137700
+      },
+      "hayro": {
+        "mode": "hayro",
+        "open_ms": 5.404502,
+        "retained_rgb_bytes": 0,
+        "decodes": 0,
+        "all_bytes_equal": true,
+        "samples": [
+          {
+            "round": 0,
+            "scale": 0.25,
+            "ms": 306.960717
+          },
+          {
+            "round": 0,
+            "scale": 1,
+            "ms": 331.48212
+          },
+          {
+            "round": 0,
+            "scale": 1.25,
+            "ms": 315.471637
+          },
+          {
+            "round": 0,
+            "scale": 2,
+            "ms": 334.874911
+          },
+          {
+            "round": 1,
+            "scale": 0.25,
+            "ms": 324.370602
+          },
+          {
+            "round": 1,
+            "scale": 1,
+            "ms": 347.985961
+          },
+          {
+            "round": 1,
+            "scale": 1.25,
+            "ms": 352.259545
+          },
+          {
+            "round": 1,
+            "scale": 2,
+            "ms": 361.064339
+          },
+          {
+            "round": 2,
+            "scale": 0.25,
+            "ms": 325.754923
+          },
+          {
+            "round": 2,
+            "scale": 1,
+            "ms": 356.437108
+          },
+          {
+            "round": 2,
+            "scale": 1.25,
+            "ms": 347.074926
+          },
+          {
+            "round": 2,
+            "scale": 2,
+            "ms": 354.586721
+          }
+        ],
+        "peak_rss_kib": 215032
+      }
+    }
+  ],
+  "summary": {
+    "dynlex": {
+      "first_render_ms": 249.681209,
+      "peak_rss_kib": 137864,
+      "warm_render_ms": {
+        "0.25": 39.088623,
+        "1.0": 73.28448700000001,
+        "1.25": 59.9879055,
+        "2.0": 87.72285099999999
+      }
+    },
+    "hayro": {
+      "first_render_ms": 327.287217,
+      "peak_rss_kib": 215032,
+      "warm_render_ms": {
+        "0.25": 326.4215325,
+        "1.0": 362.3753385,
+        "1.25": 345.6186445,
+        "2.0": 362.493725
+      }
+    }
+  },
+  "paired_warm_dynlex_wins": {
+    "0.25": 15,
+    "1.0": 15,
+    "1.25": 15,
+    "2.0": 15
+  }
+}

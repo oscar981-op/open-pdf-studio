@@ -5,9 +5,26 @@ use opds_engine_probe::ParsedPdf;
 use std::sync::Arc;
 
 fn source(turn: i64, contents: &str, page_count: usize) -> Vec<u8> {
+    source_image(
+        turn,
+        contents,
+        page_count,
+        include_bytes!("../../opdl-adapter/tests/fixtures/rgb8-small.jpg"),
+        32,
+        24,
+    )
+}
+fn source_image(
+    turn: i64,
+    contents: &str,
+    page_count: usize,
+    jpeg: &[u8],
+    width: i64,
+    height: i64,
+) -> Vec<u8> {
     let mut doc = Document::with_version("1.7");
     let pages = doc.new_object_id();
-    let image = doc.add_object(Stream::new(dictionary! {"Type"=>"XObject","Subtype"=>"Image","Width"=>32,"Height"=>24,"ColorSpace"=>"DeviceRGB","BitsPerComponent"=>8,"Filter"=>"DCTDecode"}, include_bytes!("../../opdl-adapter/tests/fixtures/rgb8-small.jpg").to_vec()));
+    let image = doc.add_object(Stream::new(dictionary! {"Type"=>"XObject","Subtype"=>"Image","Width"=>width,"Height"=>height,"ColorSpace"=>"DeviceRGB","BitsPerComponent"=>8,"Filter"=>"DCTDecode"}, jpeg.to_vec()));
     let contents = doc.add_object(Stream::new(dictionary! {}, contents.as_bytes().to_vec()));
     let mut kids = Vec::new();
     for _ in 0..page_count {
@@ -31,12 +48,17 @@ fn original_jpeg_reused_across_zoom_rotation_crop_and_margins() {
             CONTENT,
             "q 64 0 0 48 16 16 cm /Scan Do Q",
             "q 32 0 0 24 16 16 cm /Scan Do Q",
+            "q 16 0 0 12 16 16 cm /Scan Do Q",
         ] {
             let bytes = Arc::new(source(turn, content, 1));
             let oracle = ParsedPdf::open(bytes.clone()).unwrap();
             let actual = DynlexDocument::new(bytes);
-            for scale in [0.25, 1., 2., 0.5, 1.] {
+            for scale in [0.25, 1., 2., 0.5, 1.25, 1.] {
                 let expected = oracle.render_page(1, scale).unwrap();
+                if scale == 1.25 && content != "q 16 0 0 12 16 16 cm /Scan Do Q" {
+                    assert!(actual.try_render(1, scale).unwrap().is_none());
+                    continue;
+                }
                 let bitmap = actual
                     .try_render(1, scale)
                     .unwrap()
@@ -74,7 +96,7 @@ fn document_cache_evicts_previous_page_and_serializes_concurrent_decode() {
 #[test]
 fn unsafe_scale_and_unproven_content_never_produce_zoom_bitmap() {
     let doc = DynlexDocument::new(Arc::new(source(0, CONTENT, 1)));
-    for scale in [f32::NAN, f32::INFINITY, 0., -1., 0.3, 1.25, 9.] {
+    for scale in [f32::NAN, f32::INFINITY, 0., -1., 0.3, 9.] {
         assert!(doc.try_render(1, scale).unwrap().is_none());
     }
     for content in [
@@ -89,5 +111,34 @@ fn unsafe_scale_and_unproven_content_never_produce_zoom_bitmap() {
     ] {
         let doc = DynlexDocument::new(Arc::new(source(0, content, 1)));
         assert!(doc.try_render(1, 2.).unwrap().is_none(), "{content}");
+    }
+}
+
+#[test]
+fn ceil_intermediate_grid_and_second_sampling_match_with_crop_and_rotation() {
+    let jpeg = include_bytes!("../../opdl-adapter/tests/fixtures/rgb81-grid.jpg");
+    for turn in [0, 90, 180, 270] {
+        for x in [0, 16, 44] {
+            for y in [0, 16, 44] {
+                let content = format!("q 36 0 0 36 {x} {y} cm /Scan Do Q");
+                let bytes = Arc::new(source_image(turn, &content, 1, jpeg, 81, 81));
+                let oracle = ParsedPdf::open(bytes.clone()).unwrap();
+                let actual = DynlexDocument::new(bytes)
+                    .try_render(1, 1.25)
+                    .unwrap()
+                    .unwrap();
+                let expected = oracle.render_page(1, 1.25).unwrap();
+                assert!(
+                    actual.rgba == expected.rgba,
+                    "turn={turn} x={x} y={y}: {} differing channels",
+                    actual
+                        .rgba
+                        .iter()
+                        .zip(&expected.rgba)
+                        .filter(|(a, b)| a != b)
+                        .count()
+                );
+            }
+        }
     }
 }

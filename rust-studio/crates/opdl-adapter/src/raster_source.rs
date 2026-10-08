@@ -233,7 +233,7 @@ impl RasterPlan {
     pub fn scene(&self, rgb: &[u8], scale: f32) -> Result<Vec<u8>, Box<dyn Error>> {
         if rgb.len() != self.decoded_len()
             || !scale.is_finite()
-            || ![0.25, 0.5, 1., 2.].contains(&scale)
+            || ![0.25, 0.5, 1., 1.25, 2.].contains(&scale)
         {
             return Err(fail("invalid raster source or scale"));
         }
@@ -266,27 +266,66 @@ impl RasterPlan {
         {
             return Err(fail("raster output limit"));
         }
-        // Hayro's downsample grid uses f32 advances then ceil, which may be
-        // one pixel larger than integer PDF edges (e.g. Albany at 125%).
-        // Reject until the independent post-resample sampling matches too.
+        // The added non-binary scale is proven for downsampling only. Upscaled
+        // nearest-neighbour transforms still have unresolved phase differences.
+        if scale == 1.25 && (placement[2] >= self.source[0] || placement[3] >= self.source[1]) {
+            return Err(fail("non-binary image upsampling not proven"));
+        }
+        let mut intermediate = [placement[2], placement[3]];
         if placement[2] < self.source[0] || placement[3] < self.source[1] {
             for axis in 0..2 {
                 let advance = ((f64::from(self.placement[axis + 2]) / f64::from(self.source[axis]))
                     * f64::from(scale)) as f32;
-                let sample_extent = (self.source[axis] as f32 * advance).ceil();
-                if sample_extent != placement[axis + 2] as f32 {
-                    return Err(fail("unproven intermediate image sampling extent"));
-                }
+                intermediate[axis] = (self.source[axis] as f32 * advance).ceil() as u32;
             }
         }
-        let pixels = crate::resample_rgb(
+        if intermediate.contains(&0)
+            || intermediate.iter().any(|&n| n > 4096)
+            || intermediate[0]
+                .checked_mul(intermediate[1])
+                .is_none_or(|n| n > 6_000_000)
+        {
+            return Err(fail("intermediate sampling buffer exceeds limit"));
+        }
+        if scale != 1.25 && intermediate != [placement[2], placement[3]] {
+            return Err(fail("intermediate sampling change outside verified scale"));
+        }
+        let sampled = crate::resample_rgb(
             rgb,
             self.source[0],
             self.source[1],
-            placement[2],
-            placement[3],
+            intermediate[0],
+            intermediate[1],
             false,
         )?;
+        let pixels = if intermediate == [placement[2], placement[3]] {
+            sampled
+        } else {
+            let mut pixels = vec![0; placement[2] as usize * placement[3] as usize * 3];
+            for y in 0..placement[3] {
+                let sy = (((f64::from(y) + 0.5) * f64::from(intermediate[1])
+                    / f64::from(placement[3]))
+                .floor() as u32)
+                    .min(intermediate[1] - 1);
+                if intermediate[0] == placement[2] {
+                    let row_bytes = placement[2] as usize * 3;
+                    let from = sy as usize * row_bytes;
+                    let to = y as usize * row_bytes;
+                    pixels[to..to + row_bytes].copy_from_slice(&sampled[from..from + row_bytes]);
+                    continue;
+                }
+                for x in 0..placement[2] {
+                    let sx = (((f64::from(x) + 0.5) * f64::from(intermediate[0])
+                        / f64::from(placement[2]))
+                    .floor() as u32)
+                        .min(intermediate[0] - 1);
+                    let from = ((sy * intermediate[0] + sx) * 3) as usize;
+                    let to = ((y * placement[2] + x) * 3) as usize;
+                    pixels[to..to + 3].copy_from_slice(&sampled[from..from + 3]);
+                }
+            }
+            pixels
+        };
         let (rect, pixels) = image_to_display(&pixels, placement, crop, self.geometry.turn)?;
         let mut scene = b"OPDL".to_vec();
         for n in [

@@ -1,5 +1,8 @@
 # Originele JPEG-scene en gedeelde decode voor DynLex-zoom
 
+Historisch verslag van 7bdf331f. Het vervolg repareert 125% voor begrensde
+downsampling: [tweede samplingstadium](dynlex-jpeg-sampling-2026-10-08.md).
+
 Het ongewijzigde openbare Albany-contract, pagina 1/49, rendert nu zelfstandig
 via DynLex op **25%, 100% en 200%**. Alle 121.176 / 1.938.816 / 7.755.264 RGBA-bytes
 zijn exact gelijk aan Hayro. Dit blijft een gescande pagina: de letters zijn

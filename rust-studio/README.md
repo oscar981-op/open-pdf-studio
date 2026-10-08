@@ -58,5 +58,9 @@ experimenteel en vallen buiten hun bewezen deelset terug op Hayro; zie
 
 De onafhankelijke DynLex JPEG-route heeft nu een gedeelde begrensde brondecode
 voor geverifieerde 25/50/100/200%-zoom op de volledige openbare Albany-scan.
-Zie [metingen en grenzen](docs/dynlex-jpeg-zoom-2026-10-08.md); 125% en
-algemene fractionele zoom blijven expliciet unsupported wegens pixelverschillen.
+Zie de [historische metingen en grenzen](docs/dynlex-jpeg-zoom-2026-10-08.md).
+
+Voor de eerste externe scan is ook 125% nu bytegelijk via een gecontroleerd
+tweede samplingstadium, uitsluitend bij downsampling en uitgelijnde randen.
+Zie [samplingpariteit en meting](docs/dynlex-jpeg-sampling-2026-10-08.md).
+Vrije Ctrl+scroll-schalen en upsampling op 125% blijven unsupported.
