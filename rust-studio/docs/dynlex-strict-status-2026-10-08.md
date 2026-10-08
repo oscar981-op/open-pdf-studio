@@ -76,3 +76,7 @@ De overige limieten blijven gelden: onder andere maximaal 16 MB bron-PDF,
 gehele paginacoördinaten, resources/tekst, algemene paden en annotaties.
 Gedetailleerde nieuwe tests en vroege blokkades staan in
 [dynlex-multipage-2026-10-08.md](dynlex-multipage-2026-10-08.md).
+
+## Latere uitbreiding: eerste volledige externe scan
+
+De nulmeting hierboven blijft historisch intact. Met de daarna toegevoegde begrensde DCTDecode-route rendert Albany-contract pagina 1 op 100% zelfstandig via DynLex en volledig bytegelijk aan Hayro: 1/30 gevallen van het openbare corpus. Zie [JPEG-implementatie, grenzen, native UI en gepaarde meting](dynlex-public-jpeg-2026-10-08.md). Geen algemene tekst/vector/zoomdekking.

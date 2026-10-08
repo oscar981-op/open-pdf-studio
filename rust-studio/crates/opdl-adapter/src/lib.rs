@@ -4,6 +4,7 @@
 pub mod geometry_v1;
 pub mod geometry_v2;
 pub mod geometry_v3;
+mod jpeg_rgb;
 pub mod paint_v4;
 pub mod path_v3;
 pub mod text_quad_glyph;
@@ -1136,6 +1137,7 @@ fn image_bytes<'a>(
     placed_height: u32,
     allow_scaling: bool,
     force_catmull: bool,
+    jpeg_pixels_remaining: &mut u32,
 ) -> Result<std::borrow::Cow<'a, [u8]>, Box<dyn Error>> {
     if name.is_empty() || name.len() > 127 {
         return Err(fail("image resource name is outside the bounded subset"));
@@ -1156,6 +1158,7 @@ fn image_bytes<'a>(
         b"Length",
         b"Filter",
         b"DecodeParms",
+        b"Name",
     ];
     if dict
         .iter()
@@ -1163,6 +1166,16 @@ fn image_bytes<'a>(
     {
         return Err(fail("unsupported image dictionary key"));
     }
+    if dict.has(b"Name") {
+        dict.get(b"Name")?.as_name()?;
+    }
+    let filter = match dict.get(b"Filter") {
+        Err(_) => None,
+        Ok(Object::Name(name)) => Some(name.as_slice()),
+        Ok(Object::Array(filters)) if filters.len() == 1 => Some(filters[0].as_name()?),
+        _ => return Err(fail("unsupported image filter chain")),
+    };
+    let jpeg = filter == Some(b"DCTDecode".as_slice());
     let source_width = u32::try_from(dict.get(b"Width")?.as_i64()?)?;
     let source_height = u32::try_from(dict.get(b"Height")?.as_i64()?)?;
     let (_, color_space) = document.dereference(dict.get(b"ColorSpace")?)?;
@@ -1191,16 +1204,31 @@ fn image_bytes<'a>(
         || dict.get(b"BitsPerComponent")?.as_i64()? != 8
         || source_width == 0
         || source_height == 0
-        || source_width > 4096
-        || source_height > 4096
+        || source_width > if jpeg { 8192 } else { 4096 }
+        || source_height > if jpeg { 8192 } else { 4096 }
         || source_width
             .checked_mul(source_height)
-            .is_none_or(|pixels| pixels > 6_000_000)
+            .is_none_or(|pixels| {
+                pixels
+                    > if jpeg {
+                        jpeg_rgb::MAX_PIXELS
+                    } else {
+                        6_000_000
+                    }
+            })
         || (!allow_scaling && (source_width != placed_width || source_height != placed_height))
     {
         return Err(fail(
             "image is outside bounded 8-bit source/placement subset",
         ));
+    }
+    if jpeg && (indexed_palette.is_some() || dict.has(b"DecodeParms")) {
+        return Err(fail("DCT requires DeviceRGB8 without DecodeParms"));
+    }
+    if jpeg {
+        *jpeg_pixels_remaining = jpeg_pixels_remaining
+            .checked_sub(source_width * source_height)
+            .ok_or_else(|| fail("cumulative JPEG decode pixel budget exceeded"))?;
     }
     let sample_len = source_width as usize
         * source_height as usize
@@ -1209,7 +1237,7 @@ fn image_bytes<'a>(
         if indexed_palette.is_some() {
             return Err(fail("Indexed image predictors are not yet supported"));
         }
-        if !dict.has(b"Filter") || dict.get(b"Filter")?.as_name()? != b"FlateDecode" {
+        if filter != Some(b"FlateDecode".as_slice()) {
             return Err(fail(
                 "image DecodeParms require a single FlateDecode filter",
             ));
@@ -1238,8 +1266,12 @@ fn image_bytes<'a>(
     } else {
         false
     };
-    let pixels = if dict.has(b"Filter") {
-        if dict.get(b"Filter")?.as_name()? != b"FlateDecode" {
+    let pixels = if jpeg {
+        std::borrow::Cow::Owned(
+            jpeg_rgb::decode(content, source_width, source_height).map_err(fail)?,
+        )
+    } else if let Some(filter) = filter {
+        if filter != b"FlateDecode" {
             return Err(fail("only a single FlateDecode image filter is supported"));
         }
         let decoded_len = if png_predictor {
@@ -2348,6 +2380,7 @@ fn page_to_opdl_bytes_internal(
     let mut ordered_image_bytes = Vec::new();
     let mut has_fractional_image = false;
     let mut has_fractional_clip_image = false;
+    let mut jpeg_pixels_remaining = jpeg_rgb::MAX_PIXELS;
     let started = Instant::now();
     for (op_index, op) in content.operations.iter().enumerate() {
         if !closed_clip_contours.is_empty()
@@ -2490,6 +2523,7 @@ fn page_to_opdl_bytes_internal(
                                 placed_height,
                                 true,
                                 false,
+                                &mut jpeg_pixels_remaining,
                             )?;
                             let (rect, display_pixels) = image_to_display(
                                 &pixels,
@@ -2521,6 +2555,7 @@ fn page_to_opdl_bytes_internal(
                                 raster_height,
                                 true,
                                 needs_resize,
+                                &mut jpeg_pixels_remaining,
                             )?;
                             let (rect, display_pixels) = fractional_image_to_display(
                                 &pixels,
@@ -2593,6 +2628,7 @@ fn page_to_opdl_bytes_internal(
                         placed_height,
                         false,
                         false,
+                        &mut jpeg_pixels_remaining,
                     )?;
                     if image_count == 0
                         && [x, y, placed_width, placed_height] == [0, 0, width, height]
@@ -2628,6 +2664,15 @@ fn page_to_opdl_bytes_internal(
                     }
                     *target = (channel * 255.0).round() as u8;
                 }
+            }
+            "g" if ordered_images && pending_rect.is_none() && pending_path.is_none() => {
+                // Exact black/white DeviceGray only; no unproven rounding for
+                // fractional gray. This state also follows the existing q/Q stack.
+                let [gray] = operands::<1>(&op.operands)?;
+                if gray != 0.0 && gray != 1.0 {
+                    return Err(fail("only exact black/white gray is supported"));
+                }
+                color = [if gray == 0.0 { 0 } else { 255 }; 3];
             }
             "re" if !image_matrix && pending_rect.is_none() && pending_path.is_none() => {
                 let [x, y, w, h] = operands::<4>(&op.operands)?;

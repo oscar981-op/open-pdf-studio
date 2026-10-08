@@ -1,0 +1,36 @@
+{
+  "source": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/02_Contract_Documents_SS-25-02.pdf",
+  "sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "page": 1,
+  "scale": 1,
+  "complete_original_document": true,
+  "cases": [
+    {
+      "mode": "dynlex-strict",
+      "status": "612x792 PDF=Dynlex imported_AP_DynLex=false",
+      "bytes": 1938816,
+      "rgba_sha256": "e86d54d685a5c04eaf08e78cec099e518e68502713517e98682b44d414f1b3f1"
+    },
+    {
+      "mode": "hayro",
+      "status": "612x792 Hayro",
+      "bytes": 1938816,
+      "rgba_sha256": "e86d54d685a5c04eaf08e78cec099e518e68502713517e98682b44d414f1b3f1"
+    }
+  ],
+  "byte_equal": true,
+  "unsupported_without_output": [
+    {
+      "page": 1,
+      "scale": 0.25
+    },
+    {
+      "page": 1,
+      "scale": 2
+    },
+    {
+      "page": 6,
+      "scale": 1
+    }
+  ]
+}

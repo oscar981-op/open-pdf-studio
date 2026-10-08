@@ -2203,6 +2203,7 @@ dependencies = [
  "pic-scale",
  "skrifa 0.42.1",
  "ttf-parser",
+ "zune-jpeg 0.5.15",
 ]
 
 [[package]]

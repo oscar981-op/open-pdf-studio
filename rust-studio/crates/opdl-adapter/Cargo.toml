@@ -11,3 +11,4 @@ miniz_oxide = "=0.8.9"
 pic-scale = { version = "=0.7.12", default-features = false, features = ["neon", "rdm", "sse", "avx"] }
 ttf-parser = "=0.25.1"
 skrifa = "=0.42.1"
+zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std", "x86", "neon"] }

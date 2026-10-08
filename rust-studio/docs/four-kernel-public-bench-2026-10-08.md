@@ -92,3 +92,7 @@ Bronrevisie vóór deze toevoeging: `154a3290` met de nieuwe strikt-directe prob
 DynLex is nog niet bruikbaar voor deze volledige praktijkpagina’s. Eerste prioriteit is één complete externe pagina zelfstandig ondersteunen met correcte geometrie, fonts/paden of beelddecoding. LBVH/tiling alleen lost de ontbrekende PDF-interpretatie niet op. Houd unsupported expliciet; herhaal dezelfde corpusbench pas na inhoudelijke uitbreiding. Voor eerlijke directe pixelvergelijking moet bovendien de PDFium-dimensieafronding worden gelijkgetrokken en afzonderlijk geverifieerd.
 
 Validatie na toevoeging: 238 workspace-tests met alle features geslaagd; standaard-, losse PDFium- en losse Eigen Rust-probechecks geslaagd; release-probebuild, `cargo fmt`, Python-compile en `git diff --check` geslaagd. App-rendercode en caches zijn voor deze benchmark niet gewijzigd.
+
+## Latere uitbreiding: eerste volledige externe scan
+
+De nulmeting hierboven blijft historisch intact. Met de daarna toegevoegde begrensde DCTDecode-route rendert Albany-contract pagina 1 op 100% zelfstandig via DynLex en volledig bytegelijk aan Hayro: 1/30 gevallen van het openbare corpus. Zie [JPEG-implementatie, grenzen, native UI en gepaarde meting](dynlex-public-jpeg-2026-10-08.md). Geen algemene tekst/vector/zoomdekking.
