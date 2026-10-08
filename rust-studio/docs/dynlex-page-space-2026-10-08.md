@@ -63,3 +63,11 @@ De volgende stap is integratie met een algemene geordende scene: originele
 PDF-numerieke precisie, overerfde geometry/resources en paint-state oplossen,
 met expliciete dekking voor fractionele inktranden. Sluit deze header niet
 simpelweg aan op de oude integeradapter: die kan de vereiste AA/clip niet tekenen.
+
+## Precieze PDF-geometrie uitlezen
+
+De afzonderlijke `PageSpace::from_pdf`-proef leest nu de geselecteerde pagina en dichtstbijzijnde geërfde MediaBox/CropBox/Rotate met de pure-Rust `hayro-syntax`-parser. Dit is uitsluitend syntaxis/metadata, zonder Hayro/Vello-interpreter of rasterisatie. Originele numerieke arraybytes worden strikt als precies vier directe PDF-getallen gelezen zodat lopdf-f32-vernauwing wordt vermeden.
+
+Grenzen: 16 MB bron, maximaal 4.096 pagina’s, 16 ouderknooppunten, expliciete cyclusdetectie, maximaal 4.096 arraybytes en 64 bytes per getal. Ontbrekende MediaBox, extra/ongeldige arrayoperanden, UserUnit, ongeldige rotatie, lege crop en ongeldige pagina/schaal worden afgewezen. De ouder wordt met een nieuwe xref-context opgehaald; de bestaande page-tree-parsercontext heeft die ouder bij het afdalen al bezocht.
+
+Tests verifiëren originele f64-decimalen, dichtstbijzijnde overerving, negatieve kwartslag, pagina-/schaalgrenzen, corrupte geometrie en een cyclische ouder. De bestaande 36 uitgelijnde DynLex-pixelproeven blijven behouden. **Geen koppeling aan native acceptatie of nieuwe corpusdekking:** de volledige praktijk-PDF’s uit de publieke benchmark blijven buiten DynLex.

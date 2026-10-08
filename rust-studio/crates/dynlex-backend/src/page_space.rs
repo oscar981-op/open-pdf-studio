@@ -20,7 +20,135 @@ fn valid_box(b: [f64; 4]) -> bool {
     b.iter().all(|n| n.is_finite() && n.abs() <= COORD_LIMIT) && b[0] < b[2] && b[1] < b[3]
 }
 
+// Strict bounded numeric array reader: all bytes must be four direct PDF
+// numbers or whitespace/comments. Do not use typed iterators that could stop
+// at a malformed fifth operand and silently accept a numeric prefix.
+fn exact_box_numbers(bytes: &[u8]) -> Result<[f64; 4], &'static str> {
+    if bytes.len() > 4096 {
+        return Err("geometry array too long");
+    }
+    let whitespace = |b: u8| matches!(b, 0 | 9 | 10 | 12 | 13 | 32);
+    let mut position = 0;
+    let mut result = [0.0; 4];
+    let mut count = 0;
+    while position < bytes.len() {
+        if whitespace(bytes[position]) {
+            position += 1;
+            continue;
+        }
+        if bytes[position] == b'%' {
+            while position < bytes.len() && !matches!(bytes[position], 10 | 13) {
+                position += 1;
+            }
+            continue;
+        }
+        if count == 4 {
+            return Err("too many geometry operands");
+        }
+        let start = position;
+        while position < bytes.len() && !whitespace(bytes[position]) && bytes[position] != b'%' {
+            position += 1;
+        }
+        let token = &bytes[start..position];
+        if token.len() > 64 {
+            return Err("geometry number too long");
+        }
+        let digits = if matches!(token.first(), Some(b'+' | b'-')) {
+            &token[1..]
+        } else {
+            token
+        };
+        if !digits.iter().any(u8::is_ascii_digit)
+            || digits.iter().any(|b| !b.is_ascii_digit() && *b != b'.')
+            || digits.iter().filter(|b| **b == b'.').count() > 1
+        {
+            return Err("invalid direct geometry number");
+        }
+        result[count] = std::str::from_utf8(token)
+            .map_err(|_| "invalid geometry bytes")?
+            .parse::<f64>()
+            .map_err(|_| "invalid geometry number")?;
+        count += 1;
+    }
+    if count != 4 {
+        return Err("missing geometry operands");
+    }
+    Ok(result)
+}
+
 impl PageSpace {
+    /// Read only resolved page geometry. This does not accept/render the page's
+    /// content, resources or annotations. Uses the pure-Rust syntax parser, not
+    /// Hayro's interpreter/rasterizer, preserving original f64 dictionary values.
+    pub fn from_pdf(
+        source: std::sync::Arc<Vec<u8>>,
+        page: usize,
+        scale: f32,
+    ) -> Result<Self, &'static str> {
+        use hayro_syntax::{
+            object::{Array, Dict, Number},
+            Pdf,
+        };
+        if source.len() > 16_000_000
+            || !(1..=4096).contains(&page)
+            || !scale.is_finite()
+            || !(0.01..=8.0).contains(&scale)
+        {
+            return Err("PDF, page or scale exceeds geometry bounds");
+        }
+        let pdf = Pdf::new(source).map_err(|_| "PDF syntax could not be read")?;
+        if pdf.pages().len() > 4096 {
+            return Err("too many pages");
+        }
+        let selected = pdf.pages().get(page - 1).ok_or("page outside document")?;
+        let mut node = selected.raw().clone();
+        let mut visited = std::collections::HashSet::new();
+        let (mut media, mut crop, mut rotation) = (None, None, None);
+        for depth in 0..16 {
+            if node.contains_key(b"UserUnit") {
+                return Err("UserUnit outside geometry probe");
+            }
+            for (key, destination) in [
+                (b"MediaBox".as_slice(), &mut media),
+                (b"CropBox".as_slice(), &mut crop),
+            ] {
+                if destination.is_none() && node.contains_key(key) {
+                    let array = node.get::<Array<'_>>(key).ok_or("invalid geometry array")?;
+                    *destination = Some(exact_box_numbers(array.data())?);
+                }
+            }
+            if rotation.is_none() && node.contains_key(b"Rotate") {
+                let number = node
+                    .get::<Number>(b"Rotate")
+                    .ok_or("invalid rotation")?
+                    .as_f64();
+                if !number.is_finite()
+                    || number.fract() != 0.0
+                    || number.abs() > 360_000.0
+                    || number % 90.0 != 0.0
+                {
+                    return Err("invalid rotation");
+                }
+                rotation = Some(number.rem_euclid(360.0) as u32);
+            }
+            if !node.contains_key(b"Parent") {
+                let media = media.ok_or("missing MediaBox")?;
+                return Self::new(media, crop.unwrap_or(media), rotation.unwrap_or(0), scale);
+            }
+            let parent = node.get_ref(b"Parent").ok_or("invalid page parent")?;
+            if depth == 15 || !visited.insert(parent) {
+                return Err("cyclic or deep page geometry ancestry");
+            }
+            // Resolve from the xref with a fresh parser context: the page-tree
+            // reader's context already visited its parent on the way down.
+            // Our explicit set/depth bound guards this upward traversal.
+            node = pdf
+                .xref()
+                .get::<Dict<'_>>(parent.into())
+                .ok_or("invalid parent dictionary")?;
+        }
+        Err("deep page geometry ancestry")
+    }
     pub fn new(
         media: [f64; 4],
         crop: [f64; 4],
@@ -162,6 +290,87 @@ impl PageSpace {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn geometry_pdf(parent_fields: &str, page_fields: &str) -> std::sync::Arc<Vec<u8>> {
+        use std::io::Write;
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+            format!("<< /Type /Pages /Kids [3 0 R] /Count 1 {parent_fields} >>"),
+            format!("<< /Type /Page /Parent 2 0 R {page_fields} >>"),
+        ];
+        let mut bytes = b"%PDF-1.7\n".to_vec();
+        let mut offsets = Vec::new();
+        for (i, object) in objects.iter().enumerate() {
+            offsets.push(bytes.len());
+            writeln!(bytes, "{} 0 obj\n{object}\nendobj", i + 1).unwrap();
+        }
+        let xref = bytes.len();
+        writeln!(bytes, "xref\n0 4\n0000000000 65535 f ").unwrap();
+        for offset in offsets {
+            writeln!(bytes, "{offset:010} 00000 n ").unwrap();
+        }
+        writeln!(
+            bytes,
+            "trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF"
+        )
+        .unwrap();
+        std::sync::Arc::new(bytes)
+    }
+
+    #[test]
+    fn pdf_metadata_preserves_decimals_and_nearest_inherited_geometry() {
+        let bytes = geometry_pdf(
+            "/MediaBox [-3.123456789 -8.5 595.320000019 841.92] /CropBox [0 0 590 830] /Rotate 180",
+            "/CropBox [0.123456789 2.5 580.750000019 820.25] /Rotate -270",
+        );
+        let space = PageSpace::from_pdf(bytes.clone(), 1, 1.25).unwrap();
+        assert_eq!(space.media, [-3.123456789, -8.5, 595.320000019, 841.92]);
+        assert_eq!(space.crop, [0.123456789, 2.5, 580.750000019, 820.25]);
+        assert_eq!(space.rotation, 90);
+        assert_eq!(space.pixels(), [1022, 725]);
+        assert!(PageSpace::from_pdf(bytes.clone(), 0, 1.).is_err());
+        assert!(PageSpace::from_pdf(bytes.clone(), 2, 1.).is_err());
+        assert!(PageSpace::from_pdf(bytes, 1, f32::NAN).is_err());
+    }
+
+    #[test]
+    fn pdf_metadata_does_not_silently_repair_invalid_geometry() {
+        for parent in [
+            "",
+            "/MediaBox [0 0 64]",
+            "/MediaBox [0 0 64 48 null]",
+            "/MediaBox [0 0 64 48 2 0 R]",
+            "/MediaBox [0 0 64 48] /Rotate 45",
+            "/MediaBox [0 0 64 48] /Rotate /Invalid",
+            "/MediaBox [0 0 64 48] /UserUnit 2",
+            "/MediaBox [0 0 64 48] /CropBox [65 0 90 48]",
+            "/MediaBox [0 0 64 48] /Parent 2 0 R",
+        ] {
+            assert!(
+                PageSpace::from_pdf(geometry_pdf(parent, ""), 1, 1.).is_err(),
+                "{parent}"
+            );
+        }
+    }
+
+    #[test]
+    fn geometry_number_grammar_rejects_malformed_suffixes() {
+        assert_eq!(
+            exact_box_numbers(b"+0 -.5 64.125%comment\n48."),
+            Ok([0., -0.5, 64.125, 48.])
+        );
+        for invalid in [
+            b"0 0 64 48 []".as_slice(),
+            b"0 0 6e1 48",
+            b"0 0 64 NaN",
+            b"0 0 64 --4",
+            b"0 0 64 .",
+            b"0 0 64 48 junk",
+            b"0 0 64 48\x0b",
+        ] {
+            assert!(exact_box_numbers(invalid).is_err());
+        }
+    }
 
     #[test]
     fn bounds_roundtrip_and_malformed_records() {

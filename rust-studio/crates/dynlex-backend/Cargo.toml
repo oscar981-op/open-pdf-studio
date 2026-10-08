@@ -12,6 +12,8 @@ pdfium = ["dep:opds-pdfium-backend"]
 own-rust = ["dep:opds-rust-kernel"]
 
 [dependencies]
+# Syntax/metadata only; no Hayro or Vello raster calls in PageSpace.
+hayro-syntax = { version = "=0.7.2", default-features = false, features = ["std"] }
 opds-opdl-adapter = { path = "../opdl-adapter" }
 opds-engine-probe = { path = "../engine-probe" }
 opds-native-core = { path = "../studio-core" }
