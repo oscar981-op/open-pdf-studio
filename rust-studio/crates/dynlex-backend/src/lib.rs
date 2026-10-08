@@ -3,6 +3,7 @@
 mod annotation_overlay;
 #[cfg(feature = "kernel")]
 mod lbvh;
+pub mod page_space;
 mod prepared;
 pub use annotation_overlay::{
     render_native_annotation_overlay, render_native_annotation_overlay_pixels,

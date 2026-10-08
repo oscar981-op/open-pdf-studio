@@ -69,3 +69,5 @@ fractionele paginageometrie, fonts/tekst en paden, met zelfstandige rasterisatie
 Volledige praktijkpagina’s moeten zichtbaar worden voordat een brede vergelijking
 van snelheid zinvol is. Deze wijziging claimt geen volledige dekking of snelheid.
 DynLex gebruikt nog steeds de LLVM/C++-toolchain en libc; de appintegratie is Rust.
+
+Nieuwe voorbereidende proef: [OPGX-v1 fractionele paginacoördinaten](dynlex-page-space-2026-10-08.md). Deze is nog niet gekoppeld aan de native PDF-adapter en verandert de corpusdekking niet.
