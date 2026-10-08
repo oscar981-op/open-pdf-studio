@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let started = std::time::Instant::now();
     let args: Vec<_> = env::args_os().collect();
     if !(3..=6).contains(&args.len()) {
-        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--dynlex-strict|--pdfium|--own-rust] [--scale=FACTOR] [--page=NUMBER]".into());
+        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--dynlex-strict|--pdfium|--pdfium-strict|--own-rust|--own-rust-strict] [--scale=FACTOR] [--page=NUMBER]".into());
     }
     let scale: f32 = if args.len() >= 5 {
         args[4]
@@ -55,6 +55,32 @@ fn main() -> Result<(), Box<dyn Error>> {
                     );
                 }
                 eprintln!("{}x{} Hayro", raster.width, raster.height);
+            }
+            Some("--pdfium-strict" | "--own-rust-strict") => {
+                #[cfg(not(any(feature = "pdfium", feature = "own-rust")))]
+                return Err("requested strict backend not compiled".into());
+                #[cfg(any(feature = "pdfium", feature = "own-rust"))]
+                {
+                    let raster: opds_engine_probe::Raster = match args[3].to_str() {
+                        #[cfg(feature = "pdfium")]
+                        Some("--pdfium-strict") => {
+                            opds_pdfium_backend::render(&bytes, page, scale)?
+                        }
+                        #[cfg(feature = "own-rust")]
+                        Some("--own-rust-strict") => opds_rust_kernel::render(&bytes, page, scale)?,
+                        _ => return Err("requested strict backend not compiled".into()),
+                    };
+                    fs::write(&args[2], &raster.rgba)?;
+                    let used = if args[3].to_str() == Some("--pdfium-strict") {
+                        "Pdfium"
+                    } else {
+                        "OwnRust"
+                    };
+                    eprintln!(
+                        "{}x{} PDF={} imported_AP_DynLex=false",
+                        raster.width, raster.height, used
+                    );
+                }
             }
             Some("--selected" | "--dynlex" | "--dynlex-strict" | "--pdfium" | "--own-rust") => {
                 let backend = match args[3].to_str() {

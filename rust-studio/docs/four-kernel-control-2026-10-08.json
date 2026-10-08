@@ -1,0 +1,33 @@
+{
+  "fixture": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/rust-studio/crates/dynlex-backend/tests/fixtures/simple-fill-stroke.pdf",
+  "fixture_sha256": "fe066f83c98cc2eb44eb9373d2720b04a243cc9e6b6584e2c5e3315ad929dd47",
+  "probe_sha256": "321bca535253c5786b9d4cf2b6b01e7fe644220565b4eeed83895b914b6c7ae2",
+  "scale": 1,
+  "page": 1,
+  "results": [
+    {
+      "backend": "hayro",
+      "status": "256x192 Hayro",
+      "bytes": 196608,
+      "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+    },
+    {
+      "backend": "pdfium-strict",
+      "status": "256x192 PDF=Pdfium imported_AP_DynLex=false",
+      "bytes": 196608,
+      "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+    },
+    {
+      "backend": "dynlex-strict",
+      "status": "256x192 PDF=Dynlex imported_AP_DynLex=false",
+      "bytes": 196608,
+      "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+    },
+    {
+      "backend": "own-rust-strict",
+      "status": "256x192 PDF=OwnRust imported_AP_DynLex=false",
+      "bytes": 196608,
+      "sha256": "32847d8df388d8d70ffc9a0fbc2b0347276a67a9ea0afcaedad5650adfd8257b"
+    }
+  ]
+}

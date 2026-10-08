@@ -1,0 +1,86 @@
+[
+  {
+    "id": "attention",
+    "url": "https://arxiv.org/pdf/1706.03762",
+    "category": "scientific text",
+    "path": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/attention.pdf",
+    "resolved_url": "https://arxiv.org/pdf/1706.03762",
+    "bytes": 2215244,
+    "sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+    "pdfinfo": "Title:           \nSubject:         \nKeywords:        \nAuthor:          \nCreator:         LaTeX with hyperref\nProducer:        pdfTeX-1.40.25\nCreationDate:    Wed Apr 10 23:11:43 2024 CEST\nModDate:         Wed Apr 10 23:11:43 2024 CEST\nCustom Metadata: yes\nMetadata Stream: no\nTagged:          no\nUserProperties:  no\nSuspects:        no\nForm:            none\nJavaScript:      no\nPages:           15\nEncrypted:       no\nPage size:       612 x 792 pts (letter)\nPage rot:        0\nFile size:       2215244 bytes\nOptimized:       no\nPDF version:     1.5\n",
+    "pages": 15,
+    "status": "downloaded"
+  },
+  {
+    "id": "albany-contract",
+    "url": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/02_Contract_Documents_SS-25-02.pdf",
+    "category": "contract text",
+    "path": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/albany-contract.pdf",
+    "resolved_url": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/02_Contract_Documents_SS-25-02.pdf",
+    "bytes": 2474873,
+    "sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+    "pdfinfo": "Title:           Public Works Contract\nAuthor:          Shultz, Shelley\nCreator:         Acrobat PDFMaker 26 for Word\nProducer:        Adobe PDF Library 26.1.173\nCreationDate:    Thu Jun 25 17:19:30 2026 CEST\nModDate:         Thu Jun 25 19:32:31 2026 CEST\nCustom Metadata: yes\nMetadata Stream: yes\nTagged:          no\nUserProperties:  no\nSuspects:        no\nForm:            AcroForm\nJavaScript:      no\nPages:           49\nEncrypted:       no\nPage size:       612 x 792 pts (letter)\nPage rot:        0\nFile size:       2474873 bytes\nOptimized:       no\nPDF version:     1.6\n",
+    "pages": 49,
+    "status": "downloaded"
+  },
+  {
+    "id": "albany-drawings",
+    "url": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/08_Construction_Drawings_SS-25-02.pdf",
+    "category": "construction drawings",
+    "path": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/albany-drawings.pdf",
+    "resolved_url": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/08_Construction_Drawings_SS-25-02.pdf",
+    "bytes": 49574100,
+    "sha256": "07b49d1cbf8117b8043271a0805f3c58cd75f87cf48d7d6c21861cab78acacde",
+    "pdfinfo": "Title:           \nSubject:         \nAuthor:          \nCreator:         Canon iR-ADV C5840              \nProducer:        Adobe PSL 1.3e for Canon\u0000\nCreationDate:    Thu Jun 25 18:27:17 2026 CEST\nCustom Metadata: no\nMetadata Stream: yes\nTagged:          no\nUserProperties:  no\nSuspects:        no\nForm:            none\nJavaScript:      no\nPages:           9\nEncrypted:       no\nPage size:       1224 x 792 pts\nPage rot:        0\nFile size:       49574100 bytes\nOptimized:       no\nPDF version:     1.4\n",
+    "pages": 9,
+    "status": "downloaded"
+  },
+  {
+    "id": "nps-schematic",
+    "url": "https://parkplanning.nps.gov/showFile.cfm?projectID=116110&sfid=768676",
+    "category": "schematic drawings",
+    "path": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/nps-schematic.pdf",
+    "resolved_url": "https://parkplanning.nps.gov/showFile.cfm?projectID=116110&sfid=768676",
+    "bytes": 30720875,
+    "sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+    "pdfinfo": "Title:           \nCreator:         Adobe Acrobat Pro (32-bit) 24.2.20687\nProducer:        Adobe Acrobat Pro (32-bit) 24.2.20687\nCreationDate:    Fri Apr 26 19:35:24 2024 CEST\nModDate:         Mon Nov 18 16:58:56 2024 CET\nCustom Metadata: no\nMetadata Stream: yes\nTagged:          no\nUserProperties:  no\nSuspects:        no\nForm:            AcroForm\nJavaScript:      no\nPages:           142\nEncrypted:       no\nPage size:       2448 x 1584 pts\nPage rot:        0\nFile size:       30720875 bytes\nOptimized:       yes\nPDF version:     1.7\n",
+    "pages": 142,
+    "status": "downloaded"
+  },
+  {
+    "id": "tfl-tube",
+    "url": "https://content.tfl.gov.uk/standard-tube-map.pdf",
+    "category": "vector map",
+    "path": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/tfl-tube.pdf",
+    "resolved_url": "https://content.tfl.gov.uk/standard-tube-map.pdf",
+    "bytes": 544783,
+    "sha256": "5c6f71e2ef8dbc391a683044762de5b9618f306f05afc9dfbaf3ddcf240e0117",
+    "pdfinfo": "Title:           Standard Tube Map\nSubject:         Standard Tube Map\nKeywords:        Standard Tube Map\nAuthor:          Transport for London\nCreator:         Adobe Illustrator 30.2 (Macintosh)\nProducer:        Adobe PDF library 18.00\nCreationDate:    Fri Aug  7 15:16:58 2026 CEST\nModDate:         Fri Aug  7 15:54:41 2026 CEST\nCustom Metadata: no\nMetadata Stream: yes\nTagged:          no\nUserProperties:  no\nSuspects:        no\nForm:            AcroForm\nJavaScript:      no\nPages:           2\nEncrypted:       yes (print:yes copy:no change:no addNotes:no algorithm:AES-256)\nPage size:       1190.55 x 907.588 pts\nPage rot:        0\nFile size:       544783 bytes\nOptimized:       no\nPDF version:     1.7\n",
+    "pages": 2,
+    "status": "downloaded"
+  },
+  {
+    "id": "nps-drawing-manual",
+    "url": "https://www.nps.gov/dscw/upload/ReferenceManual10A_April2001.pdf",
+    "category": "drawing manual",
+    "path": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/nps-drawing-manual.pdf",
+    "resolved_url": "https://www.nps.gov/dscw/upload/ReferenceManual10A_April2001.pdf",
+    "bytes": 8785992,
+    "sha256": "2630f3f2ce4670a288f430e3840b245e1d0332d34d15107ec80f11510334cfe0",
+    "pdfinfo": "Title:           Reference Manual 10A\nKeywords:        Reference Manual 10A, Guideline for Preparation of Design and Construction Drawings\nAuthor:          National Park Service - Denver Service Center\nProducer:        Acrobat Distiller 4.0 for Windows\nCreationDate:    Fri Nov  2 16:31:17 2001 CET\nModDate:         Wed Dec 14 18:24:39 2016 CET\nCustom Metadata: no\nMetadata Stream: yes\nTagged:          yes\nUserProperties:  no\nSuspects:        no\nForm:            none\nJavaScript:      no\nPages:           126\nEncrypted:       no\nPage size:       612 x 792 pts (letter)\nPage rot:        0\nFile size:       8785992 bytes\nOptimized:       yes\nPDF version:     1.6\n",
+    "pages": 126,
+    "status": "downloaded"
+  },
+  {
+    "id": "usgs-topo-guide",
+    "url": "https://pubs.usgs.gov/tm/tm11b2/downloads/tm11b2_v2.pdf",
+    "category": "text and map images",
+    "path": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/usgs-topo-guide.pdf",
+    "resolved_url": "https://pubs.usgs.gov/tm/tm11b2/downloads/tm11b2_v2.pdf",
+    "bytes": 6818675,
+    "sha256": "ecbdc9d547810ebc18a1be0d0a546aeca6f67e106d37982722dcc3fcb8fb6536",
+    "pdfinfo": "Title:           cover TM v4.1\nCreator:         Adobe InDesign CC 13.0 (Macintosh)\nProducer:        Adobe PDF Library 15.0\nCreationDate:    Thu Jan 31 22:25:42 2019 CET\nModDate:         Mon Mar 25 17:23:55 2019 CET\nCustom Metadata: no\nMetadata Stream: yes\nTagged:          yes\nUserProperties:  no\nSuspects:        no\nForm:            AcroForm\nJavaScript:      no\nPages:           30\nEncrypted:       no\nPage size:       612 x 792 pts (letter)\nPage rot:        0\nFile size:       6818675 bytes\nOptimized:       no\nPDF version:     1.6\n",
+    "pages": 30,
+    "status": "downloaded"
+  }
+]

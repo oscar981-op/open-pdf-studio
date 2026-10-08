@@ -149,3 +149,7 @@ vectoropdrachten kunnen op bewezen gehele pixelranden ook op andere schalen
 renderen. Beeld-/maskerresampling blijft fallback. Zie
 [dynlex-prepared-scene-2026-10-08.md](dynlex-prepared-scene-2026-10-08.md)
 voor grenzen, viewportproef en regressies. De UI gebruikt nog volledige bitmaps.
+
+## Openbaar corpus — 8 oktober
+
+Zie [de strikte vier-kernelbenchmark](four-kernel-public-bench-2026-10-08.md): zeven internet-PDF’s, tien geselecteerde pagina’s en drie zoomniveaus. Hayro/PDFium renderen elk 28/30 gevallen; DynLex/Eigen Rust 0/30. Dit meet geen fallback als eigen kernelprestatie. Tijd, RSS, pixelverschillen, bronhashes en reproduceerbare scripts zijn vastgelegd.
