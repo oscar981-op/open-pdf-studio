@@ -230,6 +230,128 @@ impl RasterPlan {
         )?
         .into_owned())
     }
+    /// Diagnostic route only: a full-MediaBox JPEG with arbitrary downsampling.
+    /// It is deliberately separate from the native, proven-scale scene route.
+    pub fn experimental_fractional_scene(
+        &self,
+        rgb: &[u8],
+        scale: f32,
+        strip_f32: bool,
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
+        if rgb.len() != self.decoded_len()
+            || !scale.is_finite()
+            || !(0.01..=8.).contains(&scale)
+            || self.placement != [0, 0, self.geometry.media[2], self.geometry.media[3]]
+        {
+            return Err(fail("fractional probe requires full-media opaque image"));
+        }
+        let crop = self.geometry.crop;
+        let base = [crop[2] - crop[0], crop[3] - crop[1]];
+        let mut extent = base.map(|v| v as f32 * scale);
+        if matches!(self.geometry.turn, 90 | 270) {
+            extent.swap(0, 1);
+        }
+        if extent.iter().any(|&v| !(1. ..=4096.).contains(&v))
+            || f64::from(extent[0]) * f64::from(extent[1]) > 6_000_000.
+        {
+            return Err(fail("fractional output exceeds limit"));
+        }
+        let [width, height] = extent.map(|v| v.floor() as u32);
+        let mut intermediate = [0; 2];
+        for axis in 0..2 {
+            let advance = ((f64::from(self.placement[axis + 2]) / f64::from(self.source[axis]))
+                * f64::from(scale)) as f32;
+            if !(0. ..1.).contains(&advance) {
+                return Err(fail("fractional probe requires downsampling in both axes"));
+            }
+            intermediate[axis] = (self.source[axis] as f32 * advance).ceil() as u32;
+        }
+        if intermediate.iter().any(|&v| v == 0 || v > 4096)
+            || intermediate[0]
+                .checked_mul(intermediate[1])
+                .is_none_or(|v| v > 6_000_000)
+        {
+            return Err(fail("fractional intermediate exceeds limit"));
+        }
+        let sampled = crate::resample_rgb(
+            rgb,
+            self.source[0],
+            self.source[1],
+            intermediate[0],
+            intermediate[1],
+            false,
+        )?;
+        let mut pixels = vec![0; width as usize * height as usize * 3];
+        let mut strip_x = 0_f32;
+        for y in 0..height {
+            for x in 0..width {
+                let u = (f64::from(x) + 0.5) / f64::from(scale);
+                let v = (f64::from(y) + 0.5) / f64::from(scale);
+                let [px, py] = match self.geometry.turn {
+                    0 => [u, f64::from(base[1]) - v],
+                    90 => [v, u],
+                    180 => [f64::from(base[0]) - u, v],
+                    270 => [f64::from(base[0]) - v, f64::from(base[1]) - u],
+                    _ => return Err(fail("invalid turn")),
+                };
+                let ix = (px + f64::from(crop[0])) * f64::from(intermediate[0])
+                    / f64::from(self.placement[2]);
+                let iy = (f64::from(self.placement[3]) - py - f64::from(crop[1]))
+                    * f64::from(intermediate[1])
+                    / f64::from(self.placement[3]);
+                let (ix, iy) = if strip_f32 {
+                    // Scalar diagnostic informed by Vello CPU 0.0.8 (MIT /
+                    // Apache-2.0): 256-column restart and four vertical lanes.
+                    let ax = f64::from(intermediate[0])
+                        / (f64::from(self.placement[2]) * f64::from(scale));
+                    let ay = f64::from(intermediate[1])
+                        / (f64::from(self.placement[3]) * f64::from(scale));
+                    let (dx, dy) = match self.geometry.turn {
+                        0 => ([ax, 0.], [0., ay]),
+                        90 => ([0., -ay], [ax, 0.]),
+                        180 => ([-ax, 0.], [0., -ay]),
+                        270 => ([0., ay], [-ax, 0.]),
+                        _ => unreachable!(),
+                    };
+                    let lane = (y % 4) as f64;
+                    let base_x = (ix - lane * dy[0]) as f32;
+                    let base_y = (iy - lane * dy[1]) as f32;
+                    if matches!(self.geometry.turn, 0 | 180) {
+                        if x % 256 == 0 {
+                            strip_x = base_x;
+                        }
+                        let sample_x = strip_x;
+                        strip_x += dx[0] as f32;
+                        (
+                            f64::from(sample_x),
+                            f64::from((lane as f32).mul_add(dy[1] as f32, base_y)),
+                        )
+                    } else {
+                        (
+                            f64::from((lane as f32).mul_add(dy[0] as f32, base_x)),
+                            f64::from((lane as f32).mul_add(dy[1] as f32, base_y)),
+                        )
+                    }
+                } else {
+                    (ix, iy)
+                };
+                let sx = (ix.floor() as u32).min(intermediate[0] - 1);
+                let sy = (iy.floor() as u32).min(intermediate[1] - 1);
+                let from = ((sy * intermediate[0] + sx) * 3) as usize;
+                let to = ((y * width + x) * 3) as usize;
+                pixels[to..to + 3].copy_from_slice(&sampled[from..from + 3]);
+            }
+        }
+        let mut scene = b"OPDL".to_vec();
+        for n in [
+            3, width, height, 0, 0, width, height, 0, 1, 6, 0, 0, width, height, 0,
+        ] {
+            scene.extend_from_slice(&n.to_le_bytes());
+        }
+        scene.extend_from_slice(&pixels);
+        Ok(scene)
+    }
+
     pub fn scene(&self, rgb: &[u8], scale: f32) -> Result<Vec<u8>, Box<dyn Error>> {
         if rgb.len() != self.decoded_len()
             || !scale.is_finite()

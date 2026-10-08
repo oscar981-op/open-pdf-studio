@@ -2,6 +2,8 @@
 //! Unsupported PDFs return None so the host can keep its existing renderer.
 mod annotation_overlay;
 #[cfg(feature = "kernel")]
+pub mod fractional_probe;
+#[cfg(feature = "kernel")]
 mod lbvh;
 pub mod page_space;
 mod prepared;

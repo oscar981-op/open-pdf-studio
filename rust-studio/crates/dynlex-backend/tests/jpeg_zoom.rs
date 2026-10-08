@@ -142,3 +142,31 @@ fn ceil_intermediate_grid_and_second_sampling_match_with_crop_and_rotation() {
         }
     }
 }
+
+#[test]
+fn fractional_sampling_probe_rotation_crop_diagnosis() {
+    use opds_dynlex_backend::fractional_probe::FractionalProbe;
+    let jpeg = include_bytes!("../../opdl-adapter/tests/fixtures/rgb81-grid.jpg");
+    for turn in [0, 90, 180, 270] {
+        let bytes = Arc::new(source_image(turn, CONTENT, 1, jpeg, 81, 81));
+        let expected = ParsedPdf::open(bytes.clone()).unwrap();
+        let probe = FractionalProbe::new(bytes, 1).unwrap();
+        for scale in [0.13, 0.21, 0.33, 0.47, 0.6] {
+            let oracle = expected.render_page(1, scale).unwrap();
+            let actual = probe.render(scale, true).unwrap();
+            assert_eq!((actual.width, actual.height), (oracle.width, oracle.height));
+            let differences = actual
+                .rgba
+                .iter()
+                .zip(&oracle.rgba)
+                .filter(|(a, b)| a != b)
+                .count();
+            println!("fractional turn={turn} scale={scale} differing_channels={differences}");
+            assert_eq!(differences, 0, "turn={turn} scale={scale}");
+        }
+        assert_eq!(probe.decoded_bytes(), 81 * 81 * 3);
+        for scale in [0., f32::NAN, f32::INFINITY, -1., 8., 1.25] {
+            assert!(probe.render(scale, true).is_err());
+        }
+    }
+}

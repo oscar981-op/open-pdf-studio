@@ -64,3 +64,6 @@ Voor de eerste externe scan is ook 125% nu bytegelijk via een gecontroleerd
 tweede samplingstadium, uitsluitend bij downsampling en uitgelijnde randen.
 Zie [samplingpariteit en meting](docs/dynlex-jpeg-sampling-2026-10-08.md).
 Vrije Ctrl+scroll-schalen en upsampling op 125% blijven unsupported.
+
+Afzonderlijke proef voor vrije JPEG-zoom (nog niet in de app):
+[20 volledige pagina/zoomvergelijkingen](docs/dynlex-fractional-jpeg-2026-10-08.md).
