@@ -10,12 +10,24 @@ use std::sync::{Mutex, OnceLock};
 #[cfg(feature = "kernel")]
 type PageSlot = Arc<OnceLock<Result<Option<PreparedPage>, String>>>;
 
+#[cfg(feature = "kernel")]
+#[derive(Default)]
+struct RasterCache {
+    key: usize,
+    pixels: Vec<u8>,
+    decodes: usize,
+}
+#[cfg(feature = "kernel")]
+type SharedRasterCache = Arc<Mutex<RasterCache>>;
+
 pub struct DynlexDocument {
     source: Arc<Vec<u8>>,
     #[cfg(feature = "kernel")]
     prepared: OnceLock<Result<Option<PreparedPage>, String>>,
     #[cfg(feature = "kernel")]
     other_pages: Mutex<VecDeque<(usize, PageSlot)>>,
+    #[cfg(feature = "kernel")]
+    raster_cache: SharedRasterCache,
 }
 
 impl DynlexDocument {
@@ -26,6 +38,8 @@ impl DynlexDocument {
             prepared: OnceLock::new(),
             #[cfg(feature = "kernel")]
             other_pages: Mutex::new(VecDeque::new()),
+            #[cfg(feature = "kernel")]
+            raster_cache: Arc::default(),
         }
     }
 
@@ -57,7 +71,13 @@ impl DynlexDocument {
                 Some(slot)
             };
             let cell = slot.as_deref().unwrap_or(&self.prepared);
-            match cell.get_or_init(|| PreparedPage::from_pdf_page(&self.source, page)) {
+            match cell.get_or_init(|| {
+                PreparedPage::from_pdf_page_with_cache(
+                    &self.source,
+                    page,
+                    self.raster_cache.clone(),
+                )
+            }) {
                 Ok(Some(prepared)) => prepared.render(scale),
                 Ok(None) => Ok(None),
                 Err(error) => Err(error.clone()),
@@ -67,6 +87,16 @@ impl DynlexDocument {
         {
             Ok(None)
         }
+    }
+
+    /// Retained original RGB bytes and successful decodes; diagnostic only.
+    #[cfg(feature = "kernel")]
+    pub fn raster_cache_stats(&self) -> Result<(usize, usize), String> {
+        let cache = self
+            .raster_cache
+            .lock()
+            .map_err(|_| "raster cache lock poisoned")?;
+        Ok((cache.pixels.len(), cache.decodes))
     }
 
     /// Strict native viewer route: never invokes another rasterizer, including
@@ -144,6 +174,11 @@ mod scene {
         width: u32,
         height: u32,
         vectors: Option<Vectors>,
+        raster: Option<(
+            opds_opdl_adapter::raster_source::RasterPlan,
+            usize,
+            super::SharedRasterCache,
+        )>,
     }
 
     fn gcd(mut a: u32, mut b: u32) -> u32 {
@@ -181,8 +216,38 @@ mod scene {
         }
 
         pub fn from_pdf_page(bytes: &[u8], page: usize) -> Result<Option<Self>, String> {
+            Self::from_pdf_page_with_cache(bytes, page, std::sync::Arc::default())
+        }
+
+        pub(super) fn from_pdf_page_with_cache(
+            bytes: &[u8],
+            page: usize,
+            cache: super::SharedRasterCache,
+        ) -> Result<Option<Self>, String> {
             if page == 0 || page > 4096 {
                 return Ok(None);
+            }
+            if let Ok(plan) = opds_opdl_adapter::raster_source::RasterPlan::from_pdf(bytes, page) {
+                if let Ok(space) = crate::page_space::PageSpace::from_pdf(
+                    std::sync::Arc::new(bytes.to_vec()),
+                    page,
+                    1.,
+                ) {
+                    let (media, crop, turn) = plan.geometry();
+                    if space.matches_integer_geometry(media, crop, turn) {
+                        static NEXT: std::sync::atomic::AtomicUsize =
+                            std::sync::atomic::AtomicUsize::new(1);
+                        let key = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let [width, height] = space.pixels();
+                        return Ok(Some(Self {
+                            scene: Vec::new(),
+                            width,
+                            height,
+                            vectors: None,
+                            raster: Some((plan, key, cache)),
+                        }));
+                    }
+                }
             }
             let Some((scene, width, height)) = prepare_scene(bytes, page)? else {
                 return Ok(None);
@@ -228,10 +293,47 @@ mod scene {
                 width,
                 height,
                 vectors,
+                raster: None,
             }))
         }
 
         pub fn render(&self, scale: f32) -> Result<Option<Bitmap>, String> {
+            if let Some((plan, key, cache)) = &self.raster {
+                // Non-binary ratios (including 125%) can change Hayro's image
+                // sampling extent despite integer page edges. Keep them strict.
+                if ![0.25, 0.5, 1., 2.].contains(&scale) {
+                    return Ok(None);
+                }
+                if self.scaled_size(scale).is_none() {
+                    return Ok(None);
+                }
+                // One source cache per document, shared by ALL page slots. Hold
+                // its lock through resampling so an in-flight render cannot
+                // keep an evicted 120 MB buffer alive while the next decodes.
+                let mut cache = cache.lock().map_err(|_| "raster cache lock poisoned")?;
+                if cache.key != *key {
+                    cache.pixels = Vec::new();
+                    cache.key = 0;
+                    if plan.decoded_len() > 120_000_000 {
+                        return Ok(None);
+                    }
+                    let Ok(pixels) = plan.decode() else {
+                        return Ok(None);
+                    };
+                    if pixels.len() != plan.decoded_len() {
+                        return Err("decoded raster size mismatch".into());
+                    }
+                    cache.pixels = pixels;
+                    cache.key = *key;
+                    cache.decodes += 1;
+                }
+                let Ok(scene) = plan.scene(&cache.pixels, scale) else {
+                    return Ok(None);
+                };
+                drop(cache);
+                let (scene, width, height) = validated_ordered_scene(scene)?;
+                return render_validated_scene(&scene, width, height).map(Some);
+            }
             if scale == 1.0 {
                 return render_validated_scene(&self.scene, self.width, self.height).map(Some);
             }

@@ -1,0 +1,360 @@
+{
+  "protocol": "strict DynLex audit of same 30 public page/zoom cases, no speed scores",
+  "probe_sha256": "0febb58a93c4a7527be65b01d9c0b74db49677270e5a2dcc6a09e24680aeb06c",
+  "cases": [
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 2,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 2,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 2,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 3,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 3,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 3,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 1,
+      "scale": 0.25,
+      "result": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          153,
+          198
+        ],
+        "wall_ms": 284.964,
+        "peak_rss_kib": 117980,
+        "sha256": "58c3b22e52137f4e77c1ba68d7641e4585feba8a9f5f68bd70115553297acc7a"
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 1,
+      "scale": 1,
+      "result": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          612,
+          792
+        ],
+        "wall_ms": 314.448,
+        "peak_rss_kib": 122328,
+        "sha256": "e86d54d685a5c04eaf08e78cec099e518e68502713517e98682b44d414f1b3f1"
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 1,
+      "scale": 2,
+      "result": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          1224,
+          1584
+        ],
+        "wall_ms": 339.802,
+        "peak_rss_kib": 138768,
+        "sha256": "8cd64545840c6b19728b76c0c8e472c316f4d73296911482f03fa0b3b3634a4d"
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-drawings",
+      "source_sha256": "07b49d1cbf8117b8043271a0805f3c58cd75f87cf48d7d6c21861cab78acacde",
+      "page": 3,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-drawings",
+      "source_sha256": "07b49d1cbf8117b8043271a0805f3c58cd75f87cf48d7d6c21861cab78acacde",
+      "page": 3,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-drawings",
+      "source_sha256": "07b49d1cbf8117b8043271a0805f3c58cd75f87cf48d7d6c21861cab78acacde",
+      "page": 3,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 3,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 3,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 3,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 71,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 71,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 71,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "tfl-tube",
+      "source_sha256": "5c6f71e2ef8dbc391a683044762de5b9618f306f05afc9dfbaf3ddcf240e0117",
+      "page": 1,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "tfl-tube",
+      "source_sha256": "5c6f71e2ef8dbc391a683044762de5b9618f306f05afc9dfbaf3ddcf240e0117",
+      "page": 1,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "tfl-tube",
+      "source_sha256": "5c6f71e2ef8dbc391a683044762de5b9618f306f05afc9dfbaf3ddcf240e0117",
+      "page": 1,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-drawing-manual",
+      "source_sha256": "2630f3f2ce4670a288f430e3840b245e1d0332d34d15107ec80f11510334cfe0",
+      "page": 48,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-drawing-manual",
+      "source_sha256": "2630f3f2ce4670a288f430e3840b245e1d0332d34d15107ec80f11510334cfe0",
+      "page": 48,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-drawing-manual",
+      "source_sha256": "2630f3f2ce4670a288f430e3840b245e1d0332d34d15107ec80f11510334cfe0",
+      "page": 48,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "usgs-topo-guide",
+      "source_sha256": "ecbdc9d547810ebc18a1be0d0a546aeca6f67e106d37982722dcc3fcb8fb6536",
+      "page": 7,
+      "scale": 0.25,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "usgs-topo-guide",
+      "source_sha256": "ecbdc9d547810ebc18a1be0d0a546aeca6f67e106d37982722dcc3fcb8fb6536",
+      "page": 7,
+      "scale": 1,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "usgs-topo-guide",
+      "source_sha256": "ecbdc9d547810ebc18a1be0d0a546aeca6f67e106d37982722dcc3fcb8fb6536",
+      "page": 7,
+      "scale": 2,
+      "result": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    }
+  ],
+  "summary": {
+    "rendered": 3,
+    "unsupported": 27,
+    "error": 0,
+    "timeout": 0
+  }
+}

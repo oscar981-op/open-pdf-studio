@@ -430,12 +430,19 @@ fn validated_rgb_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
 #[cfg(feature = "kernel")]
 fn validated_ordered_scene(scene: Vec<u8>) -> Result<(Vec<u8>, u32, u32), String> {
     if scene.len() < 40
-        || scene.len() > 3_538_984
+        || scene.len() > 18_000_064
         || scene.get(..4) != Some(b"OPDL")
         || !matches!(word(&scene, 4)?, 3 | 5 | 6)
         || word(&scene, 32)? != 0
     {
         return Err("invalid ordered OPDL header".into());
+    }
+    // Larger zoom payloads are restricted to one opaque RGB image. Keep the
+    // previous command/image budget for all general ordered scenes.
+    if scene.len() > 3_538_984
+        && (word(&scene, 4)? != 3 || word(&scene, 36)? != 1 || word(&scene, 40)? != 6)
+    {
+        return Err("large ordered scene must contain exactly one RGB image".into());
     }
     let width = word(&scene, 8)?;
     let height = word(&scene, 12)?;
@@ -1676,5 +1683,27 @@ mod tests {
         let result = render_with_report(&pdf, fractional, 1, 1.0, Backend::Dynlex).unwrap();
         assert_eq!(result.used, Backend::Dynlex);
         assert_eq!(result.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
+    }
+    #[cfg(feature = "kernel")]
+    #[test]
+    fn large_single_rgb_zoom_scene_has_strict_size_and_command_boundary() {
+        let mut scene = b"OPDL".to_vec();
+        for n in [
+            3_u32, 1200, 1000, 0, 0, 1200, 1000, 0, 1, 6, 0, 0, 1200, 1000, 0,
+        ] {
+            scene.extend_from_slice(&n.to_le_bytes());
+        }
+        scene.resize(64 + 1200 * 1000 * 3, 42);
+        assert!(validated_ordered_scene(scene.clone()).is_ok());
+        for (offset, value) in [(4, 5_u32), (36, 2), (40, 8), (60, 1), (8, 4097)] {
+            let mut bad = scene.clone();
+            bad[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+            assert!(validated_ordered_scene(bad).is_err());
+        }
+        let mut truncated = scene.clone();
+        truncated.pop();
+        assert!(validated_ordered_scene(truncated).is_err());
+        scene.resize(18_000_065, 0);
+        assert!(validated_ordered_scene(scene).is_err());
     }
 }

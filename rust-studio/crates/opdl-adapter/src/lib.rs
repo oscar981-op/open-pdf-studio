@@ -7,6 +7,7 @@ pub mod geometry_v3;
 mod jpeg_rgb;
 pub mod paint_v4;
 pub mod path_v3;
+pub mod raster_source;
 pub mod text_quad_glyph;
 
 /// Select a one-based page in the original document, without rewriting its
@@ -1311,6 +1312,27 @@ fn image_bytes<'a>(
     if (source_width, source_height) == (placed_width, placed_height) {
         return Ok(pixels);
     }
+    Ok(std::borrow::Cow::Owned(resample_rgb(
+        &pixels,
+        source_width,
+        source_height,
+        placed_width,
+        placed_height,
+        force_catmull,
+    )?))
+}
+
+fn resample_rgb(
+    pixels: &[u8],
+    source_width: u32,
+    source_height: u32,
+    placed_width: u32,
+    placed_height: u32,
+    force_catmull: bool,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    if (source_width, source_height) == (placed_width, placed_height) {
+        return Ok(pixels.to_vec());
+    }
     if placed_width
         .checked_mul(placed_height)
         .is_none_or(|count| count > 6_000_000)
@@ -1350,7 +1372,7 @@ fn image_bytes<'a>(
             }
         }
     }
-    Ok(std::borrow::Cow::Owned(output))
+    Ok(output)
 }
 
 fn decode_png_rgb8_rows(

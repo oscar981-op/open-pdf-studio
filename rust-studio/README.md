@@ -55,3 +55,8 @@ De Settings-ribbon kan daarnaast een optioneel dynamisch geladen PDFium
 via Rust-FFI en een afzonderlijke pure-Rust-proefkernel tonen. Beide zijn
 experimenteel en vallen buiten hun bewezen deelset terug op Hayro; zie
 [vier renderkeuzes](docs/four-pdf-backends-2026-10-07.md).
+
+De onafhankelijke DynLex JPEG-route heeft nu een gedeelde begrensde brondecode
+voor geverifieerde 25/50/100/200%-zoom op de volledige openbare Albany-scan.
+Zie [metingen en grenzen](docs/dynlex-jpeg-zoom-2026-10-08.md); 125% en
+algemene fractionele zoom blijven expliciet unsupported wegens pixelverschillen.

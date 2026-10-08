@@ -77,6 +77,17 @@ fn exact_box_numbers(bytes: &[u8]) -> Result<[f64; 4], &'static str> {
 }
 
 impl PageSpace {
+    #[cfg(feature = "kernel")]
+    pub(crate) fn matches_integer_geometry(
+        &self,
+        media: [u32; 4],
+        crop: [u32; 4],
+        rotation: u32,
+    ) -> bool {
+        self.media == media.map(f64::from)
+            && self.requested_crop == crop.map(f64::from)
+            && self.rotation == rotation
+    }
     /// Read only resolved page geometry. This does not accept/render the page's
     /// content, resources or annotations. Uses the pure-Rust syntax parser, not
     /// Hayro's interpreter/rasterizer, preserving original f64 dictionary values.

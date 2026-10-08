@@ -1,0 +1,85 @@
+{
+  "source": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/02_Contract_Documents_SS-25-02.pdf",
+  "sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "page": 1,
+  "scales": [
+    0.25,
+    0.5,
+    1,
+    2
+  ],
+  "complete_original_document": true,
+  "cases": [
+    {
+      "scale": 0.25,
+      "mode": "dynlex-strict",
+      "status": "153x198 PDF=Dynlex imported_AP_DynLex=false",
+      "bytes": 121176,
+      "rgba_sha256": "58c3b22e52137f4e77c1ba68d7641e4585feba8a9f5f68bd70115553297acc7a"
+    },
+    {
+      "scale": 0.25,
+      "mode": "hayro",
+      "status": "153x198 Hayro",
+      "bytes": 121176,
+      "rgba_sha256": "58c3b22e52137f4e77c1ba68d7641e4585feba8a9f5f68bd70115553297acc7a"
+    },
+    {
+      "scale": 0.5,
+      "mode": "dynlex-strict",
+      "status": "306x396 PDF=Dynlex imported_AP_DynLex=false",
+      "bytes": 484704,
+      "rgba_sha256": "c8ae2a2f592e52c77cfe2d7dbff049127767e95cb8e6779419cca811cb888bfd"
+    },
+    {
+      "scale": 0.5,
+      "mode": "hayro",
+      "status": "306x396 Hayro",
+      "bytes": 484704,
+      "rgba_sha256": "c8ae2a2f592e52c77cfe2d7dbff049127767e95cb8e6779419cca811cb888bfd"
+    },
+    {
+      "scale": 1,
+      "mode": "dynlex-strict",
+      "status": "612x792 PDF=Dynlex imported_AP_DynLex=false",
+      "bytes": 1938816,
+      "rgba_sha256": "e86d54d685a5c04eaf08e78cec099e518e68502713517e98682b44d414f1b3f1"
+    },
+    {
+      "scale": 1,
+      "mode": "hayro",
+      "status": "612x792 Hayro",
+      "bytes": 1938816,
+      "rgba_sha256": "e86d54d685a5c04eaf08e78cec099e518e68502713517e98682b44d414f1b3f1"
+    },
+    {
+      "scale": 2,
+      "mode": "dynlex-strict",
+      "status": "1224x1584 PDF=Dynlex imported_AP_DynLex=false",
+      "bytes": 7755264,
+      "rgba_sha256": "8cd64545840c6b19728b76c0c8e472c316f4d73296911482f03fa0b3b3634a4d"
+    },
+    {
+      "scale": 2,
+      "mode": "hayro",
+      "status": "1224x1584 Hayro",
+      "bytes": 7755264,
+      "rgba_sha256": "8cd64545840c6b19728b76c0c8e472c316f4d73296911482f03fa0b3b3634a4d"
+    }
+  ],
+  "byte_equal": true,
+  "unsupported_without_output": [
+    {
+      "page": 1,
+      "scale": 0.3
+    },
+    {
+      "page": 1,
+      "scale": 1.25
+    },
+    {
+      "page": 6,
+      "scale": 1
+    }
+  ]
+}

@@ -47,12 +47,30 @@ entry:
   %bad_output = icmp eq ptr %output, null
   %bad_ptr = or i1 %bad_scene, %bad_output
   %short = icmp slt i32 %scene_len, 40
-  %too_long = icmp sgt i32 %scene_len, 3538984
+  %too_long = icmp sgt i32 %scene_len, 18000064
   %small_output = icmp slt i32 %output_len, 12
   %bad_size1 = or i1 %short, %too_long
   %bad_size2 = or i1 %bad_size1, %small_output
   %bad = or i1 %bad_ptr, %bad_size2
-  br i1 %bad, label %reject, label %call
+  br i1 %bad, label %reject, label %check_large
+check_large:
+  %large = icmp sgt i32 %scene_len, 3538984
+  br i1 %large, label %large_header, label %call
+large_header:
+  ; Extended size is only for Rust-validated single RGB image zoom scenes.
+  ; Legacy versions retain their original ABI size bound.
+  %version_ptr = getelementptr i8, ptr %scene, i64 4
+  %version = load i32, ptr %version_ptr, align 1
+  %count_ptr = getelementptr i8, ptr %scene, i64 36
+  %count = load i32, ptr %count_ptr, align 1
+  %kind_ptr = getelementptr i8, ptr %scene, i64 40
+  %kind = load i32, ptr %kind_ptr, align 1
+  %version_ok = icmp eq i32 %version, 3
+  %count_ok = icmp eq i32 %count, 1
+  %kind_ok = icmp eq i32 %kind, 6
+  %header_ok = and i1 %version_ok, %count_ok
+  %large_ok = and i1 %header_ok, %kind_ok
+  br i1 %large_ok, label %call, label %reject
 call:
   store i32 %mode, ptr %output, align 1
   %length_slot = getelementptr i8, ptr %output, i64 4

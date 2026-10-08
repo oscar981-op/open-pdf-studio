@@ -1,5 +1,8 @@
 # Eerste volledige openbare praktijkpagina via strikt DynLex
 
+Historische meting van commit 0324ec94. Het vervolg ondersteunt nu 25/100/200%
+met een gedeelde brondecode: zie [JPEG-zoom](dynlex-jpeg-zoom-2026-10-08.md).
+
 De eerste pagina van het oorspronkelijke 49-pagina Albany-contract rendert nu
 op 100% via de native **strikte DynLex-route**: 612×792 pixels,
 1.938.816 RGBA-bytes, volledig bytegelijk aan Hayro. Het volledige originele

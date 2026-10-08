@@ -1,0 +1,131 @@
+{
+  "page": 1,
+  "scale": 1.25,
+  "size": [
+    765,
+    990
+  ],
+  "candidate_before_scale_guard": true,
+  "different_rgba_bytes": 241881,
+  "different_pixels": 102935,
+  "max_channel_delta": 108,
+  "sha256": [
+    "f8270b0d2074fc551af41a0e4ca368c85288070a15a91e2509715717638d14ba",
+    "edb13f5dd1f97e630f917dce68cd40ca6dd4cc16225e364d4e1eb5d28a04a67d"
+  ],
+  "first_16_differences": [
+    {
+      "x": 764,
+      "y": 32,
+      "channel": 2,
+      "candidate": 248,
+      "hayro": 249
+    },
+    {
+      "x": 676,
+      "y": 76,
+      "channel": 2,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 504,
+      "y": 77,
+      "channel": 2,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 532,
+      "y": 77,
+      "channel": 2,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 533,
+      "y": 77,
+      "channel": 2,
+      "candidate": 252,
+      "hayro": 253
+    },
+    {
+      "x": 561,
+      "y": 77,
+      "channel": 2,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 581,
+      "y": 77,
+      "channel": 0,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 581,
+      "y": 77,
+      "channel": 1,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 581,
+      "y": 77,
+      "channel": 2,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 593,
+      "y": 77,
+      "channel": 2,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 612,
+      "y": 77,
+      "channel": 0,
+      "candidate": 254,
+      "hayro": 255
+    },
+    {
+      "x": 613,
+      "y": 77,
+      "channel": 2,
+      "candidate": 253,
+      "hayro": 254
+    },
+    {
+      "x": 615,
+      "y": 77,
+      "channel": 1,
+      "candidate": 254,
+      "hayro": 253
+    },
+    {
+      "x": 621,
+      "y": 77,
+      "channel": 0,
+      "candidate": 253,
+      "hayro": 254
+    },
+    {
+      "x": 621,
+      "y": 77,
+      "channel": 2,
+      "candidate": 253,
+      "hayro": 254
+    },
+    {
+      "x": 624,
+      "y": 77,
+      "channel": 0,
+      "candidate": 254,
+      "hayro": 255
+    }
+  ],
+  "resolution": "125% disabled in original-image zoom route pending sampling diagnosis; no fallback"
+}
