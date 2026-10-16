@@ -1,5 +1,5 @@
 import { parseEditorDom } from '../../text/editor-dom-parse.js';
-import { PDFName, PDFDict, PDFArray, PDFHexString } from 'pdf-lib';
+import { PDFName, PDFDict, PDFArray, PDFHexString, PDFString } from 'pdf-lib';
 import { pdfNum, pdfColorToHex, mapPdfFontName, inflateBytes } from './pdf-helpers.js';
 import { fillAlphaAtFirstFill } from './ap-fill-alpha.js';
 import { leesKnipselBronnen, leesKnipselVelden } from './vector-snippet-load.js';
@@ -8,6 +8,7 @@ import { decodePdfTextObject } from '../saver/pdf-text.js';
 import { readPluginPdfAnnotation } from '../../plugins/plugin-pdf.js';
 import { laagVanOc } from '../saver/annotatie-lagen.js';
 import { leesPlattegrondMeta } from './plattegrond-meta.js';
+import { leesLijnSleutels } from './maatlijn-uit-bestand.js';
 
 // Documenten waarvan de knipsel-bronpagina's al in de store staan: dat
 // uitpakken gebeurt één keer per document, bij het eerste knipsel dat we zien.
@@ -120,6 +121,53 @@ async function extractApAlphas(context, nStream) {
   }
 }
 
+const TEKSTCORRECTIE_SOORTEN = new Set(['/Caret', '/Highlight', '/Underline', '/StrikeOut', '/Squiggly']);
+
+// Een gewone tekst-string uit een ander programma (/NM, /Subj, /Contents):
+// met escapes en UTF-16 gedecodeerd, zoals pdf.js dat ook doet.
+function leesTekstString(context, raw) {
+  if (!raw) return undefined;
+  const v = context.lookup(raw) || raw;
+  return (v instanceof PDFString || v instanceof PDFHexString) ? v.decodeText() : undefined;
+}
+
+// /Sy, /RD, /NM, /Subj, de rauwe /QuadPoints (bestandsvolgorde),
+// /OPS_TextDir en /OPS_MarkedText; bij een /Caret ook de eigen /Contents (als
+// kind in een groep geeft pdf.js die van de ouder).
+function leesTekstcorrectieExtra(context, annotDict, subtypeName, colors) {
+  const getallen = (raw) => {
+    const arr = raw !== undefined ? (context.lookup(raw) || raw) : null;
+    if (!arr || typeof arr.size !== 'function') return null;
+    const uit = [];
+    for (let j = 0; j < arr.size(); j++) uit.push(pdfNum(context.lookup(arr.get(j)) || arr.get(j)));
+    return uit.every((v) => typeof v === 'number' && Number.isFinite(v)) ? uit : null;
+  };
+  const syRaw = annotDict.get(PDFName.of('Sy'));
+  if (syRaw) {
+    const sy = String(context.lookup(syRaw) || syRaw).replace('/', '');
+    if (sy) colors.sy = sy;
+  }
+  const rd = getallen(annotDict.get(PDFName.of('RD')));
+  if (rd && rd.length === 4) colors.rd = rd;
+  const nm = leesTekstString(context, annotDict.get(PDFName.of('NM')));
+  if (nm) colors.nm = nm;
+  const subj = leesTekstString(context, annotDict.get(PDFName.of('Subj')));
+  if (subj) colors.subj = subj;
+  const quads = getallen(annotDict.get(PDFName.of('QuadPoints')));
+  if (quads && quads.length >= 8) colors.rawQuadPoints = quads;
+  const tdRaw = annotDict.get(PDFName.of('OPS_TextDir'));
+  if (tdRaw !== undefined) {
+    const td = pdfNum(context.lookup(tdRaw) || tdRaw);
+    if (typeof td === 'number' && Number.isFinite(td)) colors.opsTextDir = td;
+  }
+  const gemarkeerd = leesPdfTekst(context, annotDict.get(PDFName.of('OPS_MarkedText')));
+  if (gemarkeerd) colors.opsMarkedText = gemarkeerd;
+  if (subtypeName === '/Caret') {
+    const eigen = leesTekstString(context, annotDict.get(PDFName.of('Contents')));
+    if (eigen !== undefined) colors.ownContents = eigen;
+  }
+}
+
 // Extract colors (IC, appearance stream) from annotations using pdf-lib
 // Returns Map<rectKey, { ic, apStrokeColor }> where ic = Interior Color hex, apStrokeColor = stroke from appearance stream
 export async function extractAnnotationColors(pageNum, pdfDoc) {
@@ -183,7 +231,9 @@ export async function extractAnnotationColors(pageNum, pdfDoc) {
           const nStreamForAlpha = nForAlpha ? context.lookup(nForAlpha) : null;
           if (nStreamForAlpha) {
             const { fillAlpha, strokeAlpha } = await extractApAlphas(context, nStreamForAlpha);
-            if (fillAlpha !== null) colors.fillOpacity = fillAlpha;
+            // Gelijk aan /CA is het de algehele doorzichtigheid die ook in de
+            // appearance staat (#512), geen aparte vul-alfa.
+            if (fillAlpha !== null && fillAlpha !== colors.opacity) colors.fillOpacity = fillAlpha;
             if (strokeAlpha !== null && colors.opacity === undefined) colors.opacity = strokeAlpha;
           }
         }
@@ -246,6 +296,11 @@ export async function extractAnnotationColors(pageNum, pdfDoc) {
           const on = leesPdfTekst(context, opsNameRaw);
           if (on !== undefined) colors.stampName = on;
         }
+        const opsTekstRaw = annotDict.get(PDFName.of('OPS_StampText'));
+        if (opsTekstRaw) {
+          const tekst = leesPdfTekst(context, opsTekstRaw);
+          if (tekst) colors.opsStampText = tekst;
+        }
         // Read /OPS_CropLeft.. (non-destructive image crop, fractions 0-1
         // per side — issue #212). The AP embeds the FULL bitmap, so these
         // fractions re-apply the crop after the image round-trips.
@@ -286,6 +341,13 @@ export async function extractAnnotationColors(pageNum, pdfDoc) {
       if (opsRotRaw) {
         const rv = pdfNum(context.lookup(opsRotRaw) || opsRotRaw);
         if (rv !== null) colors.rotation = rv;
+      }
+
+      // /OPS_LineHeads: exacte lijnkoppen die /LE niet kent (lijnkoppen.js).
+      const opsKoppenRaw = annotDict.get(PDFName.of('OPS_LineHeads'));
+      if (opsKoppenRaw) {
+        const koppen = leesPdfTekst(context, opsKoppenRaw);
+        if (koppen) colors.opsLineHeads = koppen;
       }
 
       // Read /OPS_HeadSize (our custom arrowhead size for dimension annotations)
@@ -614,6 +676,9 @@ export async function extractAnnotationColors(pageNum, pdfDoc) {
         if (sgTypeId) colors.sgTypeId = sgTypeId;
         const sgTypeDef = srStr('OPS_SgTypeDef');
         if (sgTypeDef) colors.sgTypeDefJson = sgTypeDef;
+        // Koppelingen van extensies (#574): JSON per extensie-id.
+        const sgLinks = srStr('OPS_SgExtLinks');
+        if (sgLinks) colors.sgExtLinksJson = sgLinks;
         // Legacy (eerste vorm): hartlijn-polyline [x1,y1,...] — de converter
         // splitst meerpunts-exemplaren in losse tweepunts-balken.
         const bbHart = srArr('OPS_Hartlijn');
@@ -810,6 +875,13 @@ export async function extractAnnotationColors(pageNum, pdfDoc) {
         if (itStr) colors.intent = itStr.replace('/', '');
       }
 
+      // Proefleescorrecties (#508) en tekstmarkeringen: pdf.js geeft /Sy, /RD,
+      // /NM, /Subj, de rauwe /QuadPoints en de eigen sleutels niet door (zie
+      // loader/correction-load.js). Alleen gezet als het bestand ze heeft.
+      if (TEKSTCORRECTIE_SOORTEN.has(subtypeName)) {
+        leesTekstcorrectieExtra(context, annotDict, subtypeName, colors);
+      }
+
       // Check for /Measure dictionary (PDF measurement annotations)
       const measureRaw = annotDict.get(PDFName.of('Measure'));
       if (measureRaw) {
@@ -953,6 +1025,12 @@ const result = {};
             if (kleur) bewaard.kleur = kleur;
           }
           colors.opsNoStroke = bewaard;
+        }
+
+        // Lijndikte-, punt- en bijschriftsleutels van een lijn of polylijn
+        // zoals ze in het woordenboek staan (zie maatlijn-uit-bestand.js).
+        if (subtypeName === '/Line' || subtypeName === '/PolyLine') {
+          colors.lijn = leesLijnSleutels(annotDict, context);
         }
 
         // For Line annotations, read original /L array (PDF.js normalizeRect destroys direction)
@@ -1177,7 +1255,9 @@ const result = {};
           try {
             // Hex-/DS (UTF-16, bijv. een niet-ASCII-fontnaam): eerst decoderen.
             const dsObj = context.lookup(dsRaw) || dsRaw;
-            const dsStr = dsObj instanceof PDFHexString ? dsObj.decodeText() : (dsRaw.toString?.() || '');
+            // Gedecodeerd, zonder de haakjes van de PDF-notatie: anders mist
+            // een /DS die met 'margin:' begint zijn eerste declaratie.
+            const dsStr = decodePdfTextObject(dsObj) ?? (dsRaw.toString?.() || '');
             const fsSizeMatch = dsStr.match(/font-size\s*:\s*([\d.]+)\s*pt/i);
             if (fsSizeMatch) {
               colors.dsFontSize = parseFloat(fsSizeMatch[1]);
@@ -1210,6 +1290,13 @@ const result = {};
               if (fsMatch && /italic|oblique/i.test(fsMatch[1])) {
                 colors.fontItalic = true;
               }
+            }
+            // Binnenmarge van het tekstvak. De app kent één gelijke marge;
+            // bij meerdere CSS-waarden telt de eerste.
+            const marginMatch = dsStr.match(/(?:^|[;\s])margin\s*:\s*(\d+(?:\.\d+)?|\.\d+)\s*pt/i);
+            if (marginMatch) {
+              const marge = parseFloat(marginMatch[1]);
+              if (Number.isFinite(marge)) colors.dsMargin = marge;
             }
             if (!colors.rawLineHeight) {
               const lhMatch = dsStr.match(/line-height\s*:\s*([\d.]+)/i);
@@ -1532,8 +1619,16 @@ const result = {};
         delete colors.rawLineHeight;
       }
 
-      if (Object.keys(colors).length > 0) {
-        colorMap.set(key, colors);
+      if (Object.keys(colors).length > 0) colorMap.set(key, colors);
+      // Invoegteken en tekstmarkeringen ook op objectverwijzing, ook zonder
+      // gegevens: markeringen op dezelfde woorden hebben dezelfde /Rect, en de
+      // latere gaf anders haar /IT, /NM en /Subj aan de eerdere. Zie
+      // extra-sleutel.js.
+      if (TEKSTCORRECTIE_SOORTEN.has(subtypeName)) {
+        const ref = annots.get(i);
+        if (Number.isInteger(ref?.objectNumber)) {
+          colorMap.set(`@ref:${ref.objectNumber}R${ref.generationNumber || ''}`, colors);
+        }
       }
     }
   } catch (e) {

@@ -13,14 +13,15 @@ import { hatchUitExtra } from '../saver/hatch-meta.js';
 import { wandJoinUitExtra } from '../saver/wand-join-meta.js';
 import { wolkVakUitHoeken, wolkVakUitZeshoek } from '../saver/veelhoek-grondvorm.js';
 import { vlakOmhullende } from '../../annotations/vlak-ringen.js';
+import { vlakSchaalUitMeasure } from '../../annotations/vlak-zijden.js';
 import { heeft as heeftKnipselBron } from '../../annotations/vector-snippet-store.js';
 import { syncTwoPointGeometry } from '../../symbols/two-point.js';
 import { systeemFromOps, sparingenFromJson } from '../../annotations/systeemraster.js';
-import { systeemTypeFromJson } from '../../annotations/systeem-typen.js';
+import { linksUitJson } from '../../annotations/systeem-instance-links.js';
+import { systeemTypeFromJson, ifcPredefinedNaLaden } from '../../annotations/systeem-typen.js';
 import { ensureSysteemType, getSysteemTypeById } from '../../annotations/systeem-typen-registry.js';
 import { computeTextboxContentHeight } from '../../annotations/rendering/shapes.js';
 import { pasRegelafstandAanDoos } from '../../annotations/rendering/textbox-layout.js';
-import { toWinAnsiText } from '../saver/pdf-text.js';
 import { maatVanGedraaideVorm } from './gedraaide-vorm-maat.js';
 import { tekstvakRotatie, tekstvakMaat } from './tekstvak-rotatie.js';
 import { onzichtbaarVlakUitExtra, randloosUitExtra } from './geen-rand.js';
@@ -28,6 +29,15 @@ import { opmerkingUitAnnot, zonderDubbeleOpmerking } from './annotatie-opmerking
 import { zetLaagUitBestand } from './annotatie-laag.js';
 import { extraVoorAnnotatie } from './extra-sleutel.js';
 import { plattegrondUitExtra } from './plattegrond-meta.js';
+import { viewportRectangle } from '../pdfjs-record.js';
+import {
+  maatlijnUitBestand, lijnBreedteUitBestand, pijlKopVullingUitBestand, meetlijnKoppenUitBestand,
+} from './maatlijn-uit-bestand.js';
+import { eigenTekststempel, tekststempelKleur } from './stempel-tekst.js';
+import { koppenUitBestand } from '../lijnkoppen.js';
+import { kiesTekstvakTekst, runsZonderInspringing } from './tekstvak-tekst.js';
+import { inzetUitDsMarge, tolerantieVoorDsInzet } from '../../annotations/rendering/textbox-layout.js';
+import { caretPropsFromPdf, textEditPropsFromPdf } from './correction-load.js';
 
 /**
  * Zet een PDF-annotatie om naar het model van de app.
@@ -49,7 +59,7 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
   // Helpers to convert PDF coordinates to viewport coordinates (handles CropBox/MediaBox offsets)
   const convertPoint = (pdfX, pdfY) => viewport.convertToViewportPoint(pdfX, pdfY);
   const convertRect = (pdfRect) => {
-    const vr = viewport.convertToViewportRectangle(pdfRect);
+    const vr = viewportRectangle(viewport, pdfRect);
     return {
       x: Math.min(vr[0], vr[2]),
       y: Math.min(vr[1], vr[3]),
@@ -179,9 +189,20 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
         height: maxY - minY,
         rects: rects.length > 0 ? rects : undefined,
         color: colorArrayToHex(annot.color, '#FFFF00'),
-        fillColor: colorArrayToHex(annot.color, '#FFFF00')
+        fillColor: colorArrayToHex(annot.color, '#FFFF00'),
+        // Proefleescorrecties (#508): /IT, /NM, /Subj, gemarkeerde tekst en
+        // leesrichting, alleen als het bestand ze heeft.
+        ...textEditPropsFromPdf(annot, extraColors, convertPoint, viewport.rotation || 0)
       });
     }
+
+    case 'Caret':
+      // Invoegteken (#508): vak = /Rect min /RD, tekst uit de eigen /Contents.
+      // Hoort bij '/Caret' in handledSubtypes van saver.js.
+      return createAnnotation({
+        ...baseProps,
+        ...caretPropsFromPdf(annot, extraColors, convertRect, viewport.rotation || 0),
+      });
 
     case 'Square': {
       const squareImgEntry = findImageEntryForAnnotation(stampImageMap, annot, 'square-image');
@@ -488,25 +509,12 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
                               extraColors.hasMeasure ||
                               annot.it === 'LineDimension';
         if (isMeasureDist) {
+          // Ligging, punten, hulplijnen, schaal en (bij een maat uit een ander
+          // programma) de overgenomen opmaak: zie maatlijn-uit-bestand.js.
           const mdProps = {
             ...baseProps,
-            type: 'measureDistance',
-            startX: lsx,
-            startY: lsy,
-            endX: lex,
-            endY: ley,
-            color: colorArrayToHex(annot.color, '#ff0000'),
-            strokeColor: colorArrayToHex(annot.color, '#ff0000'),
-            lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 1,
+            ...maatlijnUitBestand({ annot, extra: extraColors, convertPoint }),
           };
-          // Store per-annotation scale/unit/precision from PDF Measure dictionary
-          if (extraColors.measureScale) {
-            mdProps.measureScale = extraColors.measureScale;
-            mdProps.measureUnit = extraColors.measureUnit || 'mm';
-            if (extraColors.measurePrecision !== undefined) {
-              mdProps.measurePrecision = extraColors.measurePrecision;
-            }
-          }
           // Get measurement text from Contents, or auto-calculate using annotation's own scale
           let mdText = (annot.contentsObj && annot.contentsObj.str) || annot.contents || baseProps.subject || '';
           if (!mdText) {
@@ -522,80 +530,12 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
             }
           }
           mdProps.measureText = mdText;
-          // Read line endings from PDF LE array
-          const mdLe = annot.lineEndings || [];
-          const mapMdHead = (h) => {
-            switch (h) {
-              case 'OpenArrow': return 'open';
-              case 'ClosedArrow': return 'closed';
-              case 'Diamond': return 'diamond';
-              case 'Circle': return 'openCircle';
-              case 'Square': return 'square';
-              case 'Slash': return 'slash';
-              case 'Butt': return 'butt';
-              case 'ROpenArrow': return 'openReversed';
-              case 'RClosedArrow': return 'closedReversed';
-              default: return 'openCircle';
-            }
-          };
-          if (mdLe.length >= 2) {
-            mdProps.startHead = mapMdHead(mdLe[0]);
-            mdProps.endHead = mapMdHead(mdLe[1]);
-          } else {
-            mdProps.startHead = 'openCircle';
-            mdProps.endHead = 'openCircle';
-          }
-          mdProps.headSize = extraColors.opsHeadSize || 12;
-          if (extraColors.opsPrecision != null) mdProps.measurePrecision = extraColors.opsPrecision;
-          // User-dragged text offset (relative to dimension-line midpoint) —
-          // written verbatim by the saver, read back verbatim here.
-          if (extraColors.opsTextOffsetX != null) mdProps.textOffsetX = extraColors.opsTextOffsetX;
-          if (extraColors.opsTextOffsetY != null) mdProps.textOffsetY = extraColors.opsTextOffsetY;
-          // Maat zonder eenheid (OPS_DimNoUnit, zie saver/plattegrond-meta.js).
-          Object.assign(mdProps, plattegrondUitExtra(extraColors, convertPoint));
-          // Compute dimension line position from PDF LL (leader length)
-          // Per PDF spec: /L = base points on measured object, /LL = perpendicular
-          // offset to the dimension line. Positive LL = counter-clockwise from /L direction.
-          // Our data model: startX/Y = dimension line, leaderX/Y = base object points.
-          const ll = extraColors.leaderLength;
-          if (ll && ll !== 0) {
-            const lineAngle = Math.atan2(lc[3] - lc[1], lc[2] - lc[0]);
-            const perpX = -Math.sin(lineAngle);
-            const perpY = Math.cos(lineAngle);
-            // Dimension line endpoints = /L offset by LL along perpendicular
-            const [dimX1, dimY1] = convertPoint(lc[0] + ll * perpX, lc[1] + ll * perpY);
-            const [dimX2, dimY2] = convertPoint(lc[2] + ll * perpX, lc[3] + ll * perpY);
-            // Swap: startX/Y = dimension line, leaderX/Y = /L base points
-            mdProps.leaderStartX = lsx;
-            mdProps.leaderStartY = lsy;
-            mdProps.leaderEndX = lex;
-            mdProps.leaderEndY = ley;
-            mdProps.startX = dimX1;
-            mdProps.startY = dimY1;
-            mdProps.endX = dimX2;
-            mdProps.endY = dimY2;
-          }
           return createAnnotation(mdProps);
         }
 
         // Check for line endings (arrow heads)
         const le = annot.lineEndings || [];
-        const mapPdfHead = (h) => {
-          switch (h) {
-            case 'OpenArrow': return 'open';
-            case 'ClosedArrow': return 'closed';
-            case 'Diamond': return 'diamond';
-            case 'Circle': return 'circle';
-            case 'Square': return 'square';
-            case 'Slash': return 'slash';
-            case 'Butt': return 'butt';
-            case 'ROpenArrow': return 'openReversed';
-            case 'RClosedArrow': return 'closedReversed';
-            default: return 'none';
-          }
-        };
-        const startHead = mapPdfHead(le[0]);
-        const endHead = mapPdfHead(le[1]);
+        const { startHead, endHead } = koppenUitBestand(le, extraColors.opsLineHeads);
         const isArrow = startHead !== 'none' || endHead !== 'none';
 
         return createAnnotation({
@@ -608,11 +548,15 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
           color: colorArrayToHex(annot.color, '#000000'),
           strokeColor: colorArrayToHex(annot.color, '#000000'),
           fillColor: extraColors.ic || undefined,
-          lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 2,
+          // Zonder /BS en /Border: 1 (specificatie), niet de 0 van pdf.js.
+          lineWidth: lijnBreedteUitBestand(extraColors, annot, 2),
           borderStyle: mapBorderStyle(annot, extraColors),
           startHead: startHead,
           endHead: endHead,
-          headSize: 12
+          // Ours carry the size the appearance was drawn with; 12 for others.
+          headSize: extraColors.opsHeadSize || 12,
+          // Gesloten punt zonder /IC uit een ander programma: hol.
+          ...(pijlKopVullingUitBestand(extraColors) === false ? { headFill: false } : {}),
         });
       }
       break;
@@ -708,7 +652,7 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
             points: plPoints,
             color: colorArrayToHex(annot.color, '#ff0000'),
             strokeColor: colorArrayToHex(annot.color, '#ff0000'),
-            lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 1,
+            lineWidth: lijnBreedteUitBestand(extraColors, annot, 1),
             borderStyle: mapBorderStyle(annot, extraColors),
             measureText: mpText,
           };
@@ -732,7 +676,8 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
             mpProps.startHead = mapHead(mpLe[0]);
             mpProps.endHead = mapHead(mpLe[1]);
           }
-          mpProps.headSize = extraColors.opsHeadSize || 12;
+          // Puntmaat, en holle punten bij een omtrekmaat uit een ander programma.
+          Object.assign(mpProps, meetlijnKoppenUitBestand(extraColors, mpProps.lineWidth));
           if (extraColors.measureScale) {
             mpProps.measureScale = extraColors.measureScale;
             mpProps.measureUnit = extraColors.measureUnit || 'mm';
@@ -752,20 +697,6 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
             const [sx, sy] = convertPoint(extraColors.opsPoints[i], extraColors.opsPoints[i + 1]);
             saPts.push({ x: sx, y: sy });
           }
-          const saMapHead = (h) => {
-            switch (h) {
-              case 'OpenArrow': return 'open';
-              case 'ClosedArrow': return 'closed';
-              case 'Diamond': return 'diamond';
-              case 'Circle': return 'circle';
-              case 'Square': return 'square';
-              case 'Slash': return 'slash';
-              case 'Butt': return 'butt';
-              case 'ROpenArrow': return 'openReversed';
-              case 'RClosedArrow': return 'closedReversed';
-              default: return 'none';
-            }
-          };
           const saLe = annot.lineEndings || [];
           return createAnnotation({
             ...baseProps,
@@ -775,8 +706,9 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
             strokeColor: colorArrayToHex(annot.color, '#000000'),
             lineWidth: extraColors.borderWidth ?? annot.borderStyle?.width ?? 2,
             borderStyle: mapBorderStyle(annot, extraColors),
-            startHead: saLe.length >= 2 ? saMapHead(saLe[0]) : 'none',
-            endHead: saLe.length >= 2 ? saMapHead(saLe[1]) : 'open',
+            ...(saLe.length >= 2 || extraColors.opsLineHeads
+              ? koppenUitBestand(saLe, extraColors.opsLineHeads)
+              : { startHead: 'none', endHead: 'open' }),
             headSize: extraColors.opsHeadSize || 8,
           });
         }
@@ -857,12 +789,20 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
             system: sgSystem,
             sparingen: sparingenFromJson(extraColors.sgSparingenJson),
             systeemTypeId: sgTypeId,
-            ifcPredefinedType: sgResolvedType?.ifcPredefinedType
-              || extraColors.opsIfcPredefined
-              || (sgSystem.type === 'plafond' ? 'CEILING' : undefined),
+            // Koppelingen van extensies (#574); ongeldige items vallen weg.
+            extensionLinks: linksUitJson(extraColors.sgExtLinksJson),
+            // Met een gevonden type is het TYPE leidend (#567): geen verzonnen
+            // CEILING voor een type zonder predefined type.
+            ifcPredefinedType: ifcPredefinedNaLaden({
+              typeDef: sgResolvedType,
+              bewaard: extraColors.opsIfcPredefined,
+              sysType: sgSystem.type,
+            }),
             x: minX, y: minY, width: maxX - minX, height: maxY - minY,
-            plaatBreedteMm: extraColors.sgPlaatBreedteMm ?? 2000,
-            plaatHoogteMm: extraColors.sgPlaatHoogteMm ?? 2000,
+            // Terugval op 2000 alleen voor een raster ZONDER type; bij een
+            // type bepaalt het type de maat (#567: geen verzonnen maat).
+            plaatBreedteMm: extraColors.sgPlaatBreedteMm ?? (sgTypeId ? undefined : 2000),
+            plaatHoogteMm: extraColors.sgPlaatHoogteMm ?? (sgTypeId ? undefined : 2000),
             originXMm: extraColors.sgOriginXMm ?? 0,
             originYMm: extraColors.sgOriginYMm ?? 0,
             equalizeX: extraColors.sgEqualizeX === true,
@@ -1043,8 +983,11 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
             ...hatchUitExtra(extraColors),
           };
           if (extraColors.measureScale) {
-            maProps.measureScale = extraColors.measureScale;
-            maProps.measureUnit = extraColors.measureAreaUnit || extraColors.measureUnit || 'mm';
+            // De schaal uit /X staat in de eenheid van /X; het meetvlak rekent
+            // hem in de lengte-eenheid van measureUnit (#536). Die twee laten
+            // kloppen, ook bij /X in mm en /A in m² of /X in voet + inch.
+            Object.assign(maProps, vlakSchaalUitMeasure(
+              extraColors.measureScale, extraColors.measureUnit, extraColors.measureAreaUnit));
             const areaPrecision = extraColors.measureAreaPrecision !== undefined
               ? extraColors.measureAreaPrecision : extraColors.measurePrecision;
             if (areaPrecision !== undefined) maProps.measurePrecision = areaPrecision;
@@ -1193,22 +1136,15 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
       let fontUnderline = extraColors.fontUnderline || false;
       let fontStrikethrough = extraColors.fontStrikethrough || false;
 
-      // Text content: prefer textContent array (joined), fallback to contents
-      let text = annot.textContent ? annot.textContent.join('\n') : (annot.contents || '');
-      // De appearance kan alleen WinAnsi tonen: tekens daarbuiten staan er als
-      // '?' of een naaste equivalent in, terwijl /Contents (UTF-16) de echte
-      // tekst bewaart. Is de appearance-tekst precies de WinAnsi-weergave van
-      // /Contents, dan is /Contents de bron; anders legt de volgende save de
-      // vervangingstekens ook in /Contents vast.
-      const contentsTekst = annot.contentsObj?.str || annot.contents || '';
-      if (annot.textContent && contentsTekst) {
-        const zonderWit = (s) => String(s).replace(/\s+/g, '');
-        const appearanceTekst = zonderWit(text);
-        if (appearanceTekst !== zonderWit(contentsTekst)
-          && appearanceTekst === zonderWit(toWinAnsiText(contentsTekst))) {
-          text = contentsTekst;
-        }
-      }
+      // /Contents draagt de getypte tekst (met witregels, zonder de
+      // afbrekingen van de appearance); de appearance-regels zijn de
+      // terugval. Ook de WinAnsi-vervangtekens van de appearance wijzen
+      // /Contents als bron aan. Zie tekstvak-tekst.js.
+      const appearanceTekst = annot.textContent ? annot.textContent.join('\n') : '';
+      let text = kiesTekstvakTekst({
+        appearanceTekst,
+        contents: annot.contentsObj?.str || annot.contents || '',
+      });
       // Inline opmaak uit /RC: alleen als de platte tekst (op witruimte na)
       // overeenkomt met Contents — anders zijn de runs niet te vertrouwen.
       let textRuns;
@@ -1222,7 +1158,11 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
         // (losing bold/italic/underline for the whole annotation) over a
         // difference that isn't a real content difference.
         const norm = (s) => String(s).replace(/\s+/g, '');
-        if (norm(rcText) === norm(text)) { text = rcText; textRuns = extraColors.textRuns; }
+        if (norm(rcText) === norm(text)) {
+          // Zelfde voorloopwit-regel als de platte tekst (tekstvak-tekst.js).
+          textRuns = runsZonderInspringing(extraColors.textRuns, appearanceTekst);
+          text = textRuns.map(l => l.map(r => r.text).join('')).join('\n');
+        }
       }
 
       // For FreeText annotations, annot.color (C entry) is the background/fill color per PDF spec
@@ -1249,6 +1189,9 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
       const zonderRand = randloosUitExtra(extraColors);
       const borderWidth = zonderRand ? zonderRand.lineWidth
         : extraColors.borderWidth !== undefined ? extraColors.borderWidth : (annot.borderStyle?.width || 1);
+      // Tekstinzet uit /DS (randdikte + marge + 1, zie inzetUitDsMarge); zonder
+      // marge blijft het de app-regel (randdikte).
+      const dsInzet = extraColors.dsMargin != null ? inzetUitDsMarge(borderWidth, extraColors.dsMargin) : undefined;
 
       // Weergaverotatie en doosmaat: zie tekstvak-rotatie.js.
       const ftRotation = tekstvakRotatie({
@@ -1257,10 +1200,15 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
         paginaRotatie: viewport.rotation,
         noRotate: !!(annot.annotationFlags & 16), // Bit 5: NoRotate
       });
+      // pdf.js doesn't expose calloutLine; use pdf-lib extracted CL from extraColors
+      const calloutLine = extraColors.calloutLine || annot.calloutLine;
+      const isCallout = calloutLine && calloutLine.length >= 4;
+
       // Rotation-aware viewport rect — its width/height already account for the
       // page /Rotate (they SWAP vs the raw PDF Rect on 90/270 pages).
       const ftRectVp = convertRect(annot.rect);
-      const ftMaat = tekstvakMaat({ rotatie: ftRotation, extra: extraColors, rect, rectVp: ftRectVp });
+      // De /Rect van een callout bevat ook de aanhaallijn (zie tekstvakMaat).
+      const ftMaat = tekstvakMaat({ rotatie: ftRotation, extra: extraColors, rect, rectVp: ftRectVp, callout: !!isCallout });
       const ftWidth = ftMaat.width;
       let ftHeight = ftMaat.height;
       // Position: center of the Rect (bounding box center = rotated textbox center)
@@ -1268,10 +1216,6 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
       const cy = ftRectVp.y + ftRectVp.height / 2;
       const ftX = cx - ftWidth / 2;
       const ftY = cy - ftHeight / 2;
-
-      // pdf.js doesn't expose calloutLine; use pdf-lib extracted CL from extraColors
-      const calloutLine = extraColors.calloutLine || annot.calloutLine;
-      const isCallout = calloutLine && calloutLine.length >= 4;
 
       if (isCallout) {
         // For callouts, Rect may include the leader line. Use /RD to get the actual text box.
@@ -1293,14 +1237,14 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
         // of truncating text other editors show in full.
         const coNeededH = computeTextboxContentHeight({
           text, textRuns, width: coW, fontSize,
-          lineSpacing: extraColors.lineSpacing, lineWidth: borderWidth,
+          lineSpacing: extraColors.lineSpacing, lineWidth: borderWidth, textPadding: dsInzet,
           fontFamily: fontFamily || 'Arial'
         });
         // An implausible /DS line-height (e.g. 4pt text with 18.4pt) is fitted
         // into the authored box instead of growing the box over the drawing.
         const coPas = pasRegelafstandAanDoos({
           lineSpacing: extraColors.lineSpacing, fontSize, boxHeight: coH,
-          padding: borderWidth ?? 0, neededHeight: coNeededH,
+          padding: dsInzet ?? borderWidth ?? 0, neededHeight: coNeededH, tolerantie: dsInzet != null ? tolerantieVoorDsInzet(dsInzet, fontSize, extraColors.lineSpacing) : 0,
         });
         coH = coPas.height;
         // Callout stroke color: IC > AP stroke > borderColor fallback
@@ -1334,6 +1278,8 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
           fontSize: fontSize,
           borderStyle: borderStyle,
           lineWidth: borderWidth,
+          // Binnenmarge uit /DS; zonder die opgave blijft het de randdikte.
+          textPadding: dsInzet,
           fontFamily: fontFamily || 'Arial',
           fontBold: fontBold,
           fontItalic: fontItalic,
@@ -1356,16 +1302,26 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
         });
       }
 
+      // Typemachine-tekst (/IT /FreeTextTypewriter): het vak is precies zo
+      // breed als de tekst en breekt niet af, alleen op een harde
+      // regelovergang (noWrap, zie layoutTextboxLines). Dat is een waarneming
+      // aan zulke bestanden, geen regel uit de PDF-specificatie. Een fractie
+      // verschil in de tekstmeting liet hem anders naar twee regels groeien.
+      // De specificatie spelt de waarde FreeTextTypeWriter, veel producers
+      // FreeTextTypewriter: beide tellen.
+      const typemachine = /^FreeTextTypewriter$/i.test(annot.it || extraColors.intent || '');
+
       // Same grow-to-fit as the callout branch above: don't silently drop
       // lines other editors show in full just because the authored Rect is tight.
       const ftNeededH = computeTextboxContentHeight({
         text, textRuns, width: ftWidth, fontSize,
-        lineSpacing: extraColors.lineSpacing, lineWidth: borderWidth,
-        fontFamily: fontFamily || 'Arial'
+        lineSpacing: extraColors.lineSpacing, lineWidth: borderWidth, textPadding: dsInzet,
+        fontFamily: fontFamily || 'Arial',
+        ...(typemachine ? { noWrap: true } : {}),
       });
       const ftPas = pasRegelafstandAanDoos({
         lineSpacing: extraColors.lineSpacing, fontSize, boxHeight: ftHeight,
-        padding: borderWidth ?? 0, neededHeight: ftNeededH,
+        padding: dsInzet ?? borderWidth ?? 0, neededHeight: ftNeededH, tolerantie: dsInzet != null ? tolerantieVoorDsInzet(dsInzet, fontSize, extraColors.lineSpacing) : 0,
       });
       ftHeight = ftPas.height;
 
@@ -1386,12 +1342,15 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
         fontSize: fontSize,
         borderStyle: borderStyle,
         lineWidth: borderWidth,
+        // Binnenmarge uit /DS; zonder die opgave blijft het de randdikte.
+        textPadding: dsInzet,
         fontFamily: fontFamily || 'Arial',
         fontBold: fontBold,
         fontItalic: fontItalic,
         lineSpacing: ftPas.lineSpacing || undefined,
         fontUnderline: fontUnderline,
         fontStrikethrough: fontStrikethrough,
+        ...(typemachine ? { noWrap: true } : {}),
         ...(extraColors.borderCloudy ? {
           borderEffect: 'cloudy',
           ...(extraColors.cloudIntensity !== undefined ? { cloudIntensity: extraColors.cloudIntensity } : {})
@@ -1475,7 +1434,13 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
       const w = stRect.width;
       const h = stRect.height;
 
-      const stampImgEntry = findImageEntryForAnnotation(stampImageMap, annot, 'stamp');
+      const gevondenBeeld = findImageEntryForAnnotation(stampImageMap, annot, 'stamp');
+      // Een tekststempel van de app: de uitsnede van de weergave is geen bron.
+      const eigenTekst = eigenTekststempel({
+        stampName: extraColors.stampName, opsStampText: extraColors.opsStampText,
+        beeldBron: gevondenBeeld ? (gevondenBeeld.source === 'render' ? 'render' : 'pdf') : null,
+      });
+      const stampImgEntry = eigenTekst ? null : gevondenBeeld;
       const dataUrl = stampImgEntry?.dataUrl ?? null;
 
       let stRotation = 0;
@@ -1502,8 +1467,12 @@ async function converteerPdfAnnotatie(annot, pageNum, viewport, stampImageMap, a
       };
       const pdfName = extraColors.stampPdfName || '';
       const appStampName = extraColors.stampName || pdfToAppName[pdfName] || pdfName || 'Draft';
-      const stampText = annot.subject || annot.contentsObj?.str || annot.contents || appStampName.toUpperCase();
-      const stampColor = baseProps.color || '#ef4444';
+      const stampText = eigenTekst?.stampText || annot.subject || annot.contentsObj?.str || annot.contents || appStampName.toUpperCase();
+      // Een teruggezette tekststempel tekent zijn kleur zelf: uit /C, anders
+      // die van de ingebouwde stempel.
+      const stampColor = eigenTekst
+        ? tekststempelKleur({ cKleur: annot.color ? colorArrayToHex(annot.color, null) : null, stampName: appStampName })
+        : (baseProps.color || '#ef4444');
 
       const stampProps = {
         ...baseProps,

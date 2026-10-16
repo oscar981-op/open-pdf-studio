@@ -2,11 +2,24 @@ import { defineConfig } from 'vite';
 import solidPlugin from 'vite-plugin-solid';
 import { pdfjsAssets } from './scripts/pdfjs-assets.mjs';
 import { readFileSync } from 'fs';
+import { pdfjsWorkerOudeWebview, voorafScriptPlugin } from './scripts/oude-webview.mjs';
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
+// Het script vóór de app-boot (thema, opstartdiagnose) staat in een eigen
+// bestand, geen inline script: de Android-WebView weigert inline scripts
+// (#596). De PDF.js-worker wordt omgezet voor oudere WebViews. Zie
+// scripts/oude-webview.mjs.
 export default defineConfig({
-  plugins: [solidPlugin(), pdfjsAssets()],
+  plugins: [solidPlugin(), pdfjsAssets(), voorafScriptPlugin(), pdfjsWorkerOudeWebview()],
+  resolve: {
+    alias: [
+      // PDF.js 6's modern build calls Map.prototype.getOrInsertComputed and
+      // other recent APIs without fallbacks; the WebViews on older macOS and
+      // Linux lack them. The legacy build ships the polyfills.
+      { find: /^pdfjs-dist$/, replacement: 'pdfjs-dist/legacy/build/pdf.mjs' },
+    ],
+  },
   define: {
     '__APP_VERSION__': JSON.stringify(pkg.version),
   },

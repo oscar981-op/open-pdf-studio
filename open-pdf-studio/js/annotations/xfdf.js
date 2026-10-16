@@ -3,7 +3,7 @@ import { createAnnotation, cloneAnnotation } from './factory.js';
 import { recordBulkAdd } from '../core/undo-manager.js';
 import { redrawAnnotations, redrawContinuous } from './rendering.js';
 import { updateStatusMessage } from '../ui/chrome/status-bar.js';
-import { isTauri, readBinaryFile, writeBinaryFile, saveFileDialog, openFileDialog } from '../core/platform.js';
+import { readBinaryFile, writeBinaryFile, saveFileDialog, openFileDialog } from '../core/platform.js';
 import i18next from '../i18n/config.js';
 import { showMessage, refreshAnnotationLayers } from '../bridge.js';
 import { ifcCategoryForParametric } from '../solid/data/ifcCategoryMap.js';
@@ -12,11 +12,13 @@ import { colorWithoutStroke } from './fill-utils.js';
 import { colorToXFDF, xfdfColorToHex, randkleurAttribuut, randkleurUitAttribuut, vulkleurUitAttribuut } from './xfdf-kleur.js';
 import { laagAttribuut, laagUitAttribuut } from './xfdf-laag.js';
 import { assignLayer } from './annotatie-lagen.js';
+import { paginaUitXfdf } from './xfdf-pagina.js';
 
-// Export annotations to XFDF XML format
-export function exportToXFDF() {
+// Export annotations to XFDF XML format. Without `subset` all annotations of
+// the active document; with `subset` only those (export selected, #383).
+export function exportToXFDF(subset) {
   const doc = getActiveDocument();
-  const annotations = doc?.annotations || [];
+  const annotations = subset || doc?.annotations || [];
   if (annotations.length === 0) {
     showMessage(i18next.t('noAnnotationsToExport'));
     return;
@@ -39,26 +41,18 @@ export function exportToXFDF() {
   return xml;
 }
 
-// Export and save to file
-export async function exportXFDFToFile() {
-  const xml = exportToXFDF();
+// Export and save to file. In the web build saveFileDialog returns the
+// suggested name and writeBinaryFile turns it into a download.
+// `options.annotations`: export only these; `options.suffix` goes into the
+// suggested file name (e.g. "-selection").
+export async function exportXFDFToFile(options = {}) {
+  const xml = exportToXFDF(options.annotations);
   if (!xml) return;
-
-  if (!isTauri()) {
-    // Fallback: download as file in browser
-    const blob = new Blob([xml], { type: 'application/xml' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'annotations.xfdf';
-    a.click();
-    URL.revokeObjectURL(url);
-    return;
-  }
 
   const doc = getActiveDocument();
   const baseName = doc?.filePath ? doc.filePath.replace(/\.pdf$/i, '') : 'annotations';
-  const savePath = await saveFileDialog(baseName + '.xfdf');
+  const savePath = await saveFileDialog(baseName + (options.suffix || '') + '.xfdf',
+    [{ name: 'XFDF', extensions: ['xfdf'] }]);
   if (savePath) {
     const encoder = new TextEncoder();
     await writeBinaryFile(savePath, encoder.encode(xml));
@@ -66,17 +60,14 @@ export async function exportXFDFToFile() {
   }
 }
 
-// Import annotations from XFDF file
+// Import annotations from XFDF file. In the web build openFileDialog uses a
+// file input and readBinaryFile reads the picked file from memory.
 export async function importXFDFFromFile() {
-  if (!isTauri()) {
-    showMessage(i18next.t('importRequiresTauri'));
-    return;
-  }
-
   const filePath = await openFileDialog(['xfdf', 'xml']);
   if (!filePath) return;
 
   const data = await readBinaryFile(filePath);
+  if (!data) return;
   const decoder = new TextDecoder();
   const xml = decoder.decode(data);
 
@@ -300,7 +291,7 @@ function annotationToXFDF(ann) {
 // Parse XFDF element to annotation
 function xfdfElementToAnnotation(el) {
   const tagName = el.localName || el.tagName;
-  const page = parseInt(el.getAttribute('page')) || 1;
+  const page = paginaUitXfdf(el.getAttribute('page'));
   const rect = parseRect(el.getAttribute('rect'));
   if (!rect) return null;
 

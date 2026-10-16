@@ -32,16 +32,17 @@ function tauri() {
   return window.__TAURI__ || {};
 }
 
-let cjkFontBytesPromise = null;
+const fontBytesPromises = new Map();
 
-// Bundled at src-tauri/resources/fonts/NotoSansTC-Regular.ttf (see
-// scripts/ocr-runtime.mjs + tauri.conf.json's bundle.resources). Kept
-// separate from embedOcrFont so the actual writing logic stays
-// Tauri-agnostic and directly testable (a test script can pass its own
-// fontBytes straight to embedOcrFont without going through this).
-export async function loadDefaultOcrFontBytes() {
-  if (cjkFontBytesPromise) return cjkFontBytesPromise;
-  cjkFontBytesPromise = (async () => {
+// Bundled in src-tauri/resources/fonts/ (see scripts/ocr-runtime.mjs +
+// tauri.conf.json's bundle.resources). Kept separate from embedOcrFont so
+// the actual writing logic stays Tauri-agnostic and directly testable (a
+// test script can pass its own fontBytes straight to embedOcrFont without
+// going through this). Only a successful read stays cached: a missing file
+// rejects, and the next save tries again.
+export function loadBundledFontBytes(fileName) {
+  if (fontBytesPromises.has(fileName)) return fontBytesPromises.get(fileName);
+  const promise = (async () => {
     const t = tauri();
     // Tauri's own join() picks the right separator per OS — a hardcoded
     // '\\' (the pattern js/pdf/frames.js uses for kaders/) produced a
@@ -49,7 +50,7 @@ export async function loadDefaultOcrFontBytes() {
     // ".../resources\fonts\NotoSansTC-Regular.ttf"), which the fs plugin's
     // scope check then rejected outright as a forbidden path — OCR ran
     // fine, but every save silently failed to write the text layer.
-    const fontPath = await t.path.join(await t.path.resourceDir(), 'fonts', 'NotoSansTC-Regular.ttf');
+    const fontPath = await t.path.join(await t.path.resourceDir(), 'fonts', fileName);
     // The fs plugin's static capability scope doesn't cover the resource
     // dir by default — js/pdf/frames.js grants it the same way for kaders/
     // (allow_fs_scope registers the FILE's parent directory), otherwise
@@ -57,15 +58,22 @@ export async function loadDefaultOcrFontBytes() {
     try { await t.core.invoke('allow_fs_scope', { path: fontPath }); } catch { /* best-effort */ }
     return await t.fs.readFile(fontPath);
   })();
-  return cjkFontBytesPromise;
+  fontBytesPromises.set(fileName, promise);
+  promise.catch(() => fontBytesPromises.delete(fileName));
+  return promise;
+}
+
+/** The OCR layer's font: Noto Sans TC (Traditional Chinese + Latin). */
+export function loadDefaultOcrFontBytes() {
+  return loadBundledFontBytes('NotoSansTC-Regular.ttf');
 }
 
 let fontkitPromise = null;
 
-// Noto Sans TC is a CID-keyed CFF font; fontkit's CFF subsetter writes an
-// invalid header for it and mixes up its Font DICTs. metCffHerstel() corrects
-// that without touching node_modules (see cff-subset-herstel.js).
-function laadFontkit() {
+// Noto Sans TC/SC are CID-keyed CFF fonts; fontkit's CFF subsetter writes an
+// invalid header for them and mixes up their Font DICTs. metCffHerstel()
+// corrects that without touching node_modules (see cff-subset-herstel.js).
+export function laadFontkit() {
   if (!fontkitPromise) fontkitPromise = import('@pdf-lib/fontkit').then((m) => metCffHerstel(m.default));
   return fontkitPromise;
 }

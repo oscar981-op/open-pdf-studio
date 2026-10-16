@@ -6,10 +6,12 @@ import { renderWatermarksBehind, renderWatermarksInFront } from '../watermark/wa
 
 // Import from sub-modules
 import { drawPolygonShape, drawCloudShape, buildPolygonPath, buildPolygonPointsPath, buildCloudPath, buildCloudPolylinePath, drawTextboxContent, isRTLText } from './rendering/shapes.js';
+import { tekstvakKnipvlak } from './rendering/textbox-layout.js';
 import { drawArrowheadOnCanvas, applyBorderStyle, drawDimensionLineEnding } from './rendering/decorations.js';
 import { catmullRomSpline } from '../tools/tools/spline-tool.js';
 import { catmullRomToBezier, splineArrowEndTangent } from './spline-arrow-geometry.js';
-import { drawDimension, drawMeasureAreaShape, drawCentroidLabel, drawMeasurePerimeterShape } from './rendering/measurements.js';
+import { drawDimension, drawMeasureAreaShape, drawCentroidLabel, drawMeasurePerimeterShape, drawVlakZijdematen } from './rendering/measurements.js';
+import { vlakZijdeTeksten } from './measurement.js';
 import { maatlijnTekst } from './maat-label.js';
 import { maatlijnVelden } from './maatlijn-geometrie.js';
 import { tagWeergaveParams } from '../plattegrond/ruimte-koppeling.js';
@@ -32,10 +34,13 @@ import { weergaveLijndikte, symboolOpdrachtLijndikte } from './rendering/lijndik
 import { drawImageCropOverlay, activeCropAnnotation } from './image-crop-overlay.js';
 import { fracties as cropFracties, volledigVak as cropVolledigVak } from './crop-geometrie.js';
 import { drawEmbeddedImageOverlay } from '../tools/tools/remove-image-tool.js';
+import { drawScanTextOverlay } from '../tools/tools/scan-text-tool.js';
+import { drawProofreadingOverlay } from './corrections/proofreading-overlay.js';
 import { updateQuickAccessButtons, updateContextualTabs, drawGrid, snapToGrid } from './rendering/ui-state.js';
 import { drawCommentIcon } from './rendering/comment-icons.js';
+import { drawCaret, drawMarkupLines, replaceStrikeColor } from './rendering/caret.js';
 import { spatialIndex, annotationBounds } from './spatial-index.js';
-import { bitmapVoor, bijNieuweTegel } from './vector-snippet-preview.js';
+import { bitmapVoor, bijNieuweTegel, KNIPSEL_UITVOER_FOUT } from './vector-snippet-preview.js';
 import { invalidateScaleRegionCache, pixelsPerUnitFor, getRegionScaleFactor } from './scale-region.js';
 import { metSchaalBronnen } from './schaal-bronnen.js';
 import { drawSnapIndicator } from '../tools/snap-engine.js';
@@ -583,7 +588,9 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
       //     V. Use a tiny shortening (just enough to keep the line tip from
       //     poking past the V tip with thick strokes).
       const FILLED_HEADS = new Set(['closed', 'closedReversed', 'diamond', 'square', 'circle']);
-      const isHeadFilled = (s) => FILLED_HEADS.has(s);
+      // A closed head without /IC from another program is hollow: the line
+      // runs into it like into an open head.
+      const isHeadFilled = (s) => FILLED_HEADS.has(s) && annotation.headFill !== false;
       const aDx = annotation.endX - annotation.startX;
       const aDy = annotation.endY - annotation.startY;
       const aLen = Math.sqrt(aDx * aDx + aDy * aDy);
@@ -612,12 +619,12 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
 
       if (endHead !== 'none') {
         const endAngle = Math.atan2(aDy, aDx);
-        drawArrowheadOnCanvas(offCtx, annotation.endX, annotation.endY, endAngle, headSize, endHead);
+        drawArrowheadOnCanvas(offCtx, annotation.endX, annotation.endY, endAngle, headSize, endHead, { hol: annotation.headFill === false });
       }
 
       if (startHead !== 'none') {
         const startAngle = Math.atan2(-aDy, -aDx);
-        drawArrowheadOnCanvas(offCtx, annotation.startX, annotation.startY, startAngle, headSize, startHead);
+        drawArrowheadOnCanvas(offCtx, annotation.startX, annotation.startY, startAngle, headSize, startHead, { hol: annotation.headFill === false });
       }
 
       // Composite the offscreen arrow onto the main canvas with opacity
@@ -1136,10 +1143,14 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
       }
 
       // Allow text to overflow slightly beyond textbox bounds
-      // (other PDF viewers show overflow text; hard clipping hides words at edges)
-      ctx.beginPath();
-      ctx.rect(annotation.x - 2, annotation.y - 2, tbWidth + 4, tbHeight + 4);
-      ctx.clip();
+      // (other PDF viewers show overflow text; hard clipping hides words at edges).
+      // Een typemachine-tekst knipt niet: zie tekstvakKnipvlak.
+      const tbKnip = tekstvakKnipvlak(annotation, tbWidth, tbHeight);
+      if (tbKnip) {
+        ctx.beginPath();
+        ctx.rect(tbKnip.x, tbKnip.y, tbKnip.width, tbKnip.height);
+        ctx.clip();
+      }
 
       // Draw text content
       drawTextboxContent(ctx, annotation);
@@ -1269,8 +1280,16 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
       const zoom = (vpz && vpz.active)
         ? vpz.zoom
         : (state.documents[state.activeDocumentIndex]?.scale || 1);
-      const bmp = snippetBitmaps ? snippetBitmaps.get(annotation) : bitmapVoor(annotation, zoom);
-      if (snippetBitmaps && !bmp) throw new Error('Vectorknipsel ontbreekt in uitvoer');
+      // Afdruk of export: het beeld komt uit bereidKnipselsVoorUitvoer, nooit
+      // uit de schermcache, en ontbreekt het, dan stopt de uitvoer in plaats
+      // van het lege kader af te drukken (#511).
+      const uitvoer = !!_lagen && !laag('selectie');
+      const bmp = snippetBitmaps ? snippetBitmaps.get(annotation) : (uitvoer ? null : bitmapVoor(annotation, zoom));
+      if ((snippetBitmaps || uitvoer) && !bmp) {
+        const fout = new Error('Vectorknipsel ontbreekt in uitvoer');
+        fout.code = KNIPSEL_UITVOER_FOUT;
+        throw fout;
+      }
       ctx.save();
       const kcx = annotation.x + annotation.width / 2;
       const kcy = annotation.y + annotation.height / 2;
@@ -1412,48 +1431,36 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
       }
       break;
 
-    case 'textStrikethrough':
-      // Draw strikethrough line through the middle of each text rect
-      ctx.strokeStyle = strokeColor;
+    case 'textStrikethrough': {
+      // Doorhaallijn door het midden van elk tekstvak; bij verticale tekst
+      // (textDir 90/270) langs de tekst. De doorhaling van een vervanging
+      // (#508) krijgt de kleur van haar invoegteken, zoals ze ook opgeslagen
+      // wordt; een weergavetint gaat voor.
+      const ouderKleur = _evHalftone?.color ? null
+        : replaceStrikeColor(annotation, state.documents[state.activeDocumentIndex]?.annotations);
+      ctx.strokeStyle = ouderKleur || strokeColor;
       ctx.lineWidth = thinLw(annotation.lineWidth ?? 1);
       ctx.lineCap = 'round';
-      if (annotation.rects && annotation.rects.length > 0) {
-        annotation.rects.forEach(rect => {
-          const midY = rect.y + rect.height / 2;
-          ctx.beginPath();
-          ctx.moveTo(rect.x, midY);
-          ctx.lineTo(rect.x + rect.width, midY);
-          ctx.stroke();
-        });
-      } else {
-        const midY = annotation.y + annotation.height / 2;
-        ctx.beginPath();
-        ctx.moveTo(annotation.x, midY);
-        ctx.lineTo(annotation.x + annotation.width, midY);
-        ctx.stroke();
-      }
+      drawMarkupLines(ctx, annotation);
+      break;
+    }
+
+    case 'caret':
+      // Invoegteken (#508): dezelfde vorm als zijn appearance in de PDF.
+      drawCaret(ctx, annotation, fillColor);
       break;
 
     case 'textUnderline':
-      // Draw underline at the bottom of each text rect
+    case 'textSquiggly':
+      // Onderstreping of kronkellijn langs de onderkant van de tekst in de
+      // leesrichting (textDir), op dezelfde lijn als de opgeslagen
+      // appearance (#564): bij verticale tekst langs de kolom. De kronkellijn
+      // krijgt ronde hoeken, zoals in de appearance.
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = thinLw(annotation.lineWidth ?? 1);
       ctx.lineCap = 'round';
-      if (annotation.rects && annotation.rects.length > 0) {
-        annotation.rects.forEach(rect => {
-          const bottomY = rect.y + rect.height - 1;
-          ctx.beginPath();
-          ctx.moveTo(rect.x, bottomY);
-          ctx.lineTo(rect.x + rect.width, bottomY);
-          ctx.stroke();
-        });
-      } else {
-        const bottomY = annotation.y + annotation.height - 1;
-        ctx.beginPath();
-        ctx.moveTo(annotation.x, bottomY);
-        ctx.lineTo(annotation.x + annotation.width, bottomY);
-        ctx.stroke();
-      }
+      ctx.lineJoin = 'round';
+      drawMarkupLines(ctx, annotation);
       break;
 
     case 'stamp': {
@@ -1981,6 +1988,12 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
         dimOvershootEnds: annotation.dimOvershootEnds,
         dimExtGapMm: annotation.dimExtGapMm,
         dimExtOvershootMm: annotation.dimExtOvershootMm,
+        // Opmaak van een maat uit een ander programma (loader/maatlijn-uit-
+        // bestand.js): holle punten, bijschrift in de lijn, eigen tekstkleur.
+        headFill: annotation.headFill,
+        textPosition: annotation.dimTextPosition,
+        labelColor: _evHalftone?.color ? strokeColor : annotation.labelColor,
+        lineWidth: annotation.lineWidth ?? 1,
       });
       break;
     }
@@ -2008,6 +2021,11 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
       // in de ruimtetag van een plattegrond) en het vlak toont geen eigen label.
       if (annotation.measureText && annotation.measureShowLabel !== false) {
         drawCentroidLabel(ctx, annotation.points, annotation.measureText, strokeColor, annotation);
+      }
+      // Zijdematen (#536): alleen als ze voor dit vlak aanstaan; dezelfde
+      // schaal, eenheid en afronding als de oppervlaktetekst.
+      if (annotation.measureShowEdgeLengths === true) {
+        drawVlakZijdematen(ctx, vlakZijdeTeksten(annotation), strokeColor);
       }
       break;
     }
@@ -2103,14 +2121,14 @@ export function drawAnnotation(ctx, annotation, snippetBitmaps = null) {
       if (mpStartHead !== 'none' && mpPts.length >= 2) {
         const startAngle = Math.atan2(mpPts[0].y - mpPts[1].y, mpPts[0].x - mpPts[1].x);
         ctx.fillStyle = strokeColor;
-        drawDimensionLineEnding(ctx, mpPts[0].x, mpPts[0].y, startAngle, mpHeadSize, mpStartHead);
+        drawDimensionLineEnding(ctx, mpPts[0].x, mpPts[0].y, startAngle, mpHeadSize, mpStartHead, { hol: annotation.headFill === false });
       }
       if (mpEndHead !== 'none' && mpPts.length >= 2) {
         const last = mpPts[mpPts.length - 1];
         const prev = mpPts[mpPts.length - 2];
         const endAngle = Math.atan2(last.y - prev.y, last.x - prev.x);
         ctx.fillStyle = strokeColor;
-        drawDimensionLineEnding(ctx, last.x, last.y, endAngle, mpHeadSize, mpEndHead);
+        drawDimensionLineEnding(ctx, last.x, last.y, endAngle, mpHeadSize, mpEndHead, { hol: annotation.headFill === false });
       }
 
       if (annotation.measureText && mpPts.length > 0) {
@@ -2980,6 +2998,9 @@ export function redrawAnnotations(lightweight = false) {
 
   // Embedded image-removal tool highlights (issue #184).
   drawEmbeddedImageOverlay(annotationCtx, curPage);
+  drawScanTextOverlay(annotationCtx, curPage);
+  // Text cursor and selection of the proofreading mode (#508).
+  drawProofreadingOverlay(annotationCtx, curPage, _renderDoc?.id, effectiveScale);
 
   // Blender-style 2D cursor (Shift+right-click places it; hidden until set).
   if (_renderDoc?.cursor2D && _renderDoc.cursor2D.page === curPage) {
@@ -3166,6 +3187,8 @@ function tekenPaginaLagen(ctx, pageNum, width, height, overrideDpr, renderOffset
 
     // Embedded image-removal tool highlights (issue #184).
     drawEmbeddedImageOverlay(ctx, pageNum);
+    drawScanTextOverlay(ctx, pageNum);
+    drawProofreadingOverlay(ctx, pageNum, doc?.id, effectiveScale);
   }
 
   // Restore context

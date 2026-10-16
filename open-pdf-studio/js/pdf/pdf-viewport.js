@@ -2,6 +2,7 @@
 // Modeled after Open2D Studio's CADRenderer pattern.
 // The ONLY render path for PDF pages. No fallback, no CSS-scale, no debounce.
 
+import { nextScaleStep } from '../core/zoom-display.js';
 import { renderVectorPage } from './vector-renderer.js';
 import { state, getActiveDocument } from '../core/state.js';
 import { findAnnotationAt as _findAnnotationAt } from '../annotations/geometry.js';
@@ -14,6 +15,9 @@ import {
 } from './page-bitmap-cache.js';
 import { tileCoversViewport } from './tile-coverage.js';
 import { bepaalOverlayMaat, pasOverlayMaatToe } from './overlay-canvas-size.js';
+import { maakWielScroller } from './wiel-scroll.js';
+import { zoomNaDprWissel } from './schermkalibratie.js';
+import { maakFramePlanner, bewaakSchrijven } from './frame-planner.js';
 import {
   normaliseerRotatie,
   vermenigvuldig,
@@ -22,6 +26,7 @@ import {
   viewportNaarScherm,
   viewportZichtbaar,
 } from './weergave-rotatie.js';
+import { maakWeergaveStand, weergaveGeheugen, wisselWeergave } from './weergave-per-document.js';
 
 // ─── Viewport State (singleton via window to survive HMR/dynamic imports) ───
 if (!window.__pdfViewport) {
@@ -52,9 +57,43 @@ if (!window.__pdfViewport) {
 }
 export const viewport = window.__pdfViewport;
 
+// ─── Render-lus op aanvraag: dirty en active als accessors ─────────────────
+// Elke schrijver (ook rechtstreeks via window.__pdfViewport) blijft gewoon
+// `viewport.dirty = true` schrijven; de setter vraagt dan hooguit één frame
+// aan bij de render-lus (zie _startLoop). Zonder werk vraagt de lus geen
+// frames meer, zodat een stilstaand venster niets kost. De lus die het
+// canvas bezit (laatste initViewport) staat op window, net als de viewport
+// zelf: een tweede module-instantie (HMR) maakt de accessors opnieuw, met
+// behoud van de waarden, en wekt nog steeds de lus die echt tekent.
+const _volgers = window.__pdfViewportVolgers || (window.__pdfViewportVolgers = new Set());
+bewaakSchrijven(viewport, 'dirty', () => _wekLus());
+bewaakSchrijven(viewport, 'active', (nieuw, oud) => {
+  if (!nieuw !== !oud) _meldVolgers();
+  _wekLus();
+});
+
+function _wekLus() {
+  window.__pdfViewportLus?.plan();
+}
+
+/**
+ * Volg de viewport: fn() draait na elke render en bij elke wissel van
+ * viewport.active (bijv. de canvas-scrollbalken, die zo niet elk frame
+ * hoeven te pollen). Geeft een functie terug die het volgen stopt.
+ */
+export function volgViewport(fn) {
+  _volgers.add(fn);
+  return () => { _volgers.delete(fn); };
+}
+
+function _meldVolgers() {
+  for (const fn of _volgers) {
+    try { fn(); } catch (e) { console.warn('[viewport] volger faalde:', e); }
+  }
+}
+
 let _canvas = null;
 let _ctx = null;
-let _rafId = 0;
 let _annotationRedraw = null; // callback for annotation overlay
 let _resizeObserver = null;
 
@@ -62,7 +101,7 @@ let _resizeObserver = null;
 
 export function initViewport(canvas, annotationRedrawFn) {
   // Stop previous loop if re-initializing
-  if (_rafId) cancelAnimationFrame(_rafId);
+  _lus.stop();
   _canvas = canvas;
   _ctx = canvas.getContext('2d');
   _annotationRedraw = annotationRedrawFn || null;
@@ -96,7 +135,7 @@ export function initViewport(canvas, annotationRedrawFn) {
 
 export function destroyViewport() {
   viewport.active = false;
-  cancelAnimationFrame(_rafId);
+  _lus.stop();
   window.removeEventListener('resize', _resizeCanvas);
   if (_resizeObserver) {
     _resizeObserver.disconnect();
@@ -212,8 +251,13 @@ function _resizeCanvas() {
 // threshold is baked into the query, so we re-arm at the new ratio after every
 // change. Stored on window so an HMR reload can remove the stale listener.
 let _dprDebounce = null;
+// Schermschaal van VOOR een (reeks) dpr-wissel(s), voor de schermkalibratie
+// van Werkelijke grootte (#520). Blijft staan tot de debounce afloopt, zodat
+// een trage sleep over meerdere tussenstappen met de echte begin-dpr rekent.
+let _dprVoorWissel = null;
 
 function _onDprChanged() {
+  if (_dprVoorWissel == null) _dprVoorWissel = window.__pdfDprMql?.dpr ?? null;
   // Re-arm immediately at the new ratio so a further jump mid-drag isn't
   // missed while the debounce below is still pending.
   _armDprWatcher();
@@ -236,11 +280,34 @@ function _armDprWatcher() {
   const dpr = window.devicePixelRatio || 1;
   const mql = window.matchMedia(`(resolution: ${dpr}dppx)`);
   mql.addEventListener('change', _onDprChanged);
-  window.__pdfDprMql = { mql, handler: _onDprChanged };
+  window.__pdfDprMql = { mql, handler: _onDprChanged, dpr };
 }
 
 async function _applyDprChange() {
   _dprDebounce = null;
+  const oudeDpr = _dprVoorWissel;
+  _dprVoorWissel = null;
+  await _herschaalNaarNieuweDpr();
+  await _werkelijkeGrootteNaDprWissel(oudeDpr);
+}
+
+// Stond de weergave op Werkelijke grootte voor het vorige scherm en zijn beide
+// schermen gekalibreerd, dan krijgt het nieuwe scherm zijn eigen werkelijke
+// grootte (#520). In alle andere gevallen blijft de zoom zoals hij was.
+async function _werkelijkeGrootteNaDprWissel(oudeDpr) {
+  if (oudeDpr == null) return;
+  try {
+    const doc = getActiveDocument();
+    if (!doc?.pdfDoc) return;
+    const zoomNu = viewport.active && doc.filePath ? viewport.zoom : doc.scale;
+    const doel = zoomNaDprWissel(zoomNu, oudeDpr, window.devicePixelRatio || 1, state.preferences?.screenCalibration);
+    if (doel == null) return;
+    const m = await import('./renderer.js');
+    await m.actualSize();
+  } catch { /* zoomherstel is best-effort */ }
+}
+
+async function _herschaalNaarNieuweDpr() {
   const doc = getActiveDocument();
   if (doc && doc.viewMode === 'continuous') {
     // Continuous/book/facing mode paints per-page canvases sized at
@@ -274,24 +341,31 @@ async function _applyDprChange() {
   }
 }
 
-// ─── Smooth Scroll: Velocity + Momentum ────────────────────────────────────
-// Wheel-driven pan accumulates into _vx/_vy. The RAF loop then applies and
-// decays the velocity each frame so a single wheel notch glides to a smooth
-// stop instead of jumping in a single instantaneous step. Tuned to feel like
-// macOS / iOS rubber-banding scroll without rubber-band overshoot (we just
-// clamp at edges via clampAndCenter()).
-let _vx = 0;
-let _vy = 0;
-// Per-frame decay. Closer to 1 = longer glide. 0.88 ≈ velocity halves in
-// ~5 frames (~83ms @ 60fps); feels responsive but smooth, no over-floaty.
-const _VELOCITY_FRICTION = 0.88;
-// Hard stop threshold so we don't burn frames on sub-pixel residue.
-const _VELOCITY_MIN = 0.15;
-// How much of a wheel notch becomes velocity. The OS sends ~100 per notch;
-// we want ~25 CSS px/frame at impact, which a single notch of 100 * 0.25
-// produces. Trackpad inertia already smooths fine deltas so this scale
-// works for both.
-const _WHEEL_TO_VELOCITY = 0.25;
+// ─── Wielscrollen: korte, tijdgebonden uitloop (issue #522) ────────────────
+// Dezelfde helper als de scrollende weergaven (wiel-scroll.js). Een
+// muiswielklik schuift precies zijn delta op met een ease-out van ~180 ms die
+// de render-lus hieronder elk frame op TIJD afspeelt; touchpad-delta's gaan
+// direct door. Vroeger kreeg elke klik snelheid mee die per FRAME met 0,88
+// afnam: altijd 41 frames uitloop (0,7 s bij 60 fps, ruim 2 s op een zware
+// vectorpagina die het tempo naar 20 fps drukt) over ~2x de wieldelta.
+const _wielScroll = maakWielScroller({
+  nu: () => performance.now(),
+  verschuif: (dx, dy) => _verschuifDoorWiel(dx, dy),
+});
+
+function _verschuifDoorWiel(dx, dy) {
+  const dpr = _getDpr();
+  const vpW = _canvas ? _canvas.width / dpr : 0;
+  const vpH = _canvas ? _canvas.height / dpr : 0;
+  // Maat op het scherm: na paginarotatie én weergaverotatie.
+  const scherm = schermPaginaMaat();
+  // Alleen schuiven op een as waar de pagina niet in het venster past (zoals
+  // voorheen: anders valt er op die as niets te pannen).
+  if (dx !== 0 && scherm.w * viewport.zoom > vpW + 0.5) viewport.offsetX -= dx;
+  if (dy !== 0 && scherm.h * viewport.zoom > vpH + 0.5) viewport.offsetY -= dy;
+  viewport.dirty = true;
+  _scheduleTileRecheckAfterPan();
+}
 
 // Debounce timer for tile re-renders triggered by pan. ensureTileForCurrentView
 // is cheap when zoom <= cap (early-returns + clears tile state) but the Rust
@@ -384,28 +458,24 @@ function _scheduleTileRecheckAfterPan() {
 }
 
 /**
- * Add wheel deltas to the pan-momentum accumulator. Called from the wheel
- * handler in navigation-events.js on plain (non-ctrl) wheel events when the
- * vector viewport is active. The RAF loop applies velocity over multiple
- * frames with friction-based decay, producing smooth Apple-style scroll.
- *
- * No-op when momentum is suppressed by clamping on both axes (page fits).
+ * Pan de pagina met een wieldelta (CSS-px, zie leesWielDelta). Een
+ * muiswielklik (stap) loopt kort uit via de render-lus; touchpad- en fijne
+ * delta's worden direct toegepast. Aangeroepen vanuit navigation-events.js
+ * bij een gewoon wielevent (zonder Ctrl) als de viewport actief is.
  */
-export function addPanVelocity(dx, dy) {
-  _vx += dx * _WHEEL_TO_VELOCITY;
-  _vy += dy * _WHEEL_TO_VELOCITY;
-  viewport.dirty = true; // wake the RAF loop
+export function wielPanViewport(dx, dy, stap) {
   _anchorActive = true;  // user-positioned, don't auto-center
+  _wielScroll.wiel(dx, dy, stap);
+  viewport.dirty = true; // wake the RAF loop
 }
 
 /**
- * Halt any in-flight pan momentum. Called when a new gesture begins
+ * Halt any in-flight wheel scroll. Called when a new gesture begins
  * (pointer-down for click-pan, ctrl+wheel for zoom, edge-triggered page
- * nav) so the new gesture doesn't fight a still-decaying old one.
+ * nav) so the new gesture doesn't fight a still-running old one.
  */
 export function stopPanMomentum() {
-  _vx = 0;
-  _vy = 0;
+  _wielScroll.stop();
 }
 
 // ─── Render Loop ────────────────────────────────────────────────────────────
@@ -477,55 +547,40 @@ export function kickRedactAnts() {
   _redactAntsRafId = requestAnimationFrame(_redactAntsTick);
 }
 
-function _startLoop() {
-  function tick() {
-    if (viewport.active) {
-      // Apply pan momentum before the dirty check so a velocity > 0 keeps
-      // the loop alive even when nothing else marked dirty.
-      if (_vx !== 0 || _vy !== 0) {
-        const dpr = _getDpr();
-        const vpW = _canvas ? _canvas.width / dpr : 0;
-        const vpH = _canvas ? _canvas.height / dpr : 0;
-        // Maat op het scherm: na paginarotatie én weergaverotatie.
-        const _scherm = schermPaginaMaat();
-        const pageScreenW = _scherm.w * viewport.zoom;
-        const pageScreenH = _scherm.h * viewport.zoom;
-
-        // Skip the velocity update on any axis where the page already fits
-        // (clampAndCenter would just snap it back, producing a buzzy oscillation
-        // for an axis the user can't pan anyway). Also kill that axis's
-        // velocity outright so we don't waste frames decaying it.
-        if (pageScreenW > vpW + 0.5) {
-          viewport.offsetX -= _vx;
-        } else {
-          _vx = 0;
-        }
-        if (pageScreenH > vpH + 0.5) {
-          viewport.offsetY -= _vy;
-        } else {
-          _vy = 0;
-        }
-
-        // Decay
-        _vx *= _VELOCITY_FRICTION;
-        _vy *= _VELOCITY_FRICTION;
-        if (Math.abs(_vx) < _VELOCITY_MIN) _vx = 0;
-        if (Math.abs(_vy) < _VELOCITY_MIN) _vy = 0;
-
-        viewport.dirty = true;
-
-        if (_vx !== 0 || _vy !== 0) {
-          _scheduleTileRecheckAfterPan();
-        }
-      }
-      if (viewport.dirty) {
-        viewport.dirty = false;
-        _render();
-      }
+// Eén frame van de render-lus.
+function _tick() {
+  if (viewport.active) {
+    // Wieluitloop vóór de dirty-check: zolang hij loopt verschuift hij de
+    // pagina (en zet hij dirty) naar rato van de verstreken tijd.
+    if (_wielScroll.actief) _wielScroll.pomp(performance.now());
+    if (viewport.dirty) {
+      viewport.dirty = false;
+      _render();
     }
-    _rafId = requestAnimationFrame(tick);
+  } else if (_wielScroll.actief) {
+    // Doorlopende weergave zet de viewport direct uit (renderer.js). Een
+    // uitloop die blijft staan zou bij terugkomst in één keer het restant
+    // springen: hier gewoon laten vallen.
+    _wielScroll.stop();
   }
-  _rafId = requestAnimationFrame(tick);
+}
+
+// De lus vraagt alleen een frame bij werk: dirty bij een actieve viewport, of
+// een lopende wieluitloop (die elk frame verder moet tot hij klaar is, en bij
+// een inactieve viewport nog één frame om hem te laten vallen). Na een frame
+// zonder resterend werk volgt geen nieuw frame; de volgende schrijfactie op
+// dirty of active wekt hem weer (zie bewaakSchrijven bovenaan).
+const _lus = maakFramePlanner({
+  heeftWerk: () => _wielScroll.actief || (viewport.active && viewport.dirty),
+  frame: _tick,
+});
+
+function _startLoop() {
+  // Nooit twee lussen: die van een andere module-instantie (HMR) stopt.
+  const vorige = window.__pdfViewportLus;
+  if (vorige && vorige !== _lus) vorige.stop();
+  window.__pdfViewportLus = _lus;
+  _lus.start();
 }
 
 // Maat van de getoonde pagina in punten, zoals hij op het scherm ligt: na de
@@ -671,7 +726,19 @@ let _strictAnchor = false;
 export function clearAnchor() { _anchorActive = false; _strictAnchor = false; }
 export function markAnchored() { _anchorActive = true; }
 
+// Eén render: tekenen en daarna de volgers (scrollbalken) bijwerken. Ook na
+// een vroege terugkeer (geen pagina, zoom-snapshot) of als het tekenen faalt:
+// zoom en verschuiving kunnen dan toch veranderd zijn. De fout zelf gaat
+// gewoon door naar de frame-planner (geen foutlus per frame).
 function _render() {
+  try {
+    _tekenViewport();
+  } finally {
+    _meldVolgers();
+  }
+}
+
+function _tekenViewport() {
   if (!_ctx || !_canvas || !viewport.filePath) return;
   // CSS-pixel viewport (backing is dpr-scaled). All math below stays in CSS px;
   // the dpr multiplier is folded into the canvas transform so output
@@ -778,7 +845,10 @@ function _render() {
     _ctx.setTransform(
       paginaNaarDevice[0] / pxPerPt, paginaNaarDevice[1] / pxPerPt,
       paginaNaarDevice[2] / pxPerPt, paginaNaarDevice[3] / pxPerPt,
-      paginaNaarDevice[4], paginaNaarDevice[5],
+      // Whole device pixels: a bitmap drawn at a fractional offset is
+      // bilinearly blended with its neighbours, which softens every glyph
+      // even when the bitmap is already at the exact screen resolution.
+      Math.round(paginaNaarDevice[4]), Math.round(paginaNaarDevice[5]),
     );
   };
 
@@ -996,6 +1066,9 @@ function _render() {
 let _suppressNextFit = false;
 export function suppressNextFit() { _suppressNextFit = true; }
 
+// Geeft true terug als de bewaarde weergavestand van een eerder getoond
+// document is teruggezet (tabwissel, #539); de aanroeper haalt dan ook de
+// gecachte scherpe tegel erbij.
 export function setPage(filePath, pageNum, pageW, pageH, originX, originY, rotation, viewRotation = 0) {
   // Detect "first time loading this document" vs "navigating to a different
   // page within the same document". The first case should fit-to-viewport
@@ -1017,6 +1090,33 @@ export function setPage(filePath, pageNum, pageW, pageH, originX, originY, rotat
   // net als bij een paginarotatie (de afmeting op het scherm wisselt).
   const nieuweWeergave = normaliseerRotatie(viewRotation);
   const isViewRotationChange = normaliseerRotatie(viewport.viewRotation) !== nieuweWeergave;
+
+  // Documentwissel (tabblad, #539): bewaar hoe het vertrekkende document erbij
+  // lag en zoek de bewaarde stand van het aankomende. Vroeger werd elk
+  // document bij terugkomst opnieuw passend gemaakt; wie twee tekeningen met
+  // Ctrl+Tab om en om toont om verschillen te zien, verloor zo bij elke wissel
+  // zijn zoom en uitsnede. MOET vóór het overschrijven van de velden
+  // hieronder: de viewport toont op dit moment nog het vertrekkende document.
+  let herstel = null;
+  if (isNewDocument) {
+    // Een lopende zoom-bevriezing is een momentopname van het VERTREKKENDE
+    // document; _render() zou die anders tot 150 ms lang over het nieuwe
+    // document tekenen.
+    if (_zoomFreezeTimer) clearTimeout(_zoomFreezeTimer);
+    _zoomFreezeTimer = null;
+    _zoomFreezeBitmap = null;
+    const dpr = _getDpr();
+    const canvasMaat = {
+      cssW: _canvas ? _canvas.width / dpr : 0,
+      cssH: _canvas ? _canvas.height / dpr : 0,
+    };
+    herstel = wisselWeergave(weergaveGeheugen(), {
+      vertrek: maakWeergaveStand(viewport, { verankerd: _anchorActive, strikt: _strictAnchor, ...canvasMaat }),
+      openPaden: (state.documents || []).map((d) => d && d.filePath).filter(Boolean),
+      aankomst: { filePath, pageNum, rotation: (rotation || 0) % 360, viewRotation: nieuweWeergave, pageW, pageH },
+      canvas: canvasMaat,
+    });
+  }
 
   // Clear stale raster state on page, document OR rotation change so the
   // unified render loop doesn't keep painting the PREVIOUS bitmap (stretched
@@ -1041,7 +1141,20 @@ export function setPage(filePath, pageNum, pageW, pageH, originX, originY, rotat
   viewport.viewRotation = nieuweWeergave;
   viewport.active = true;
 
-  if (_suppressNextFit) {
+  let hersteld = false;
+  if (herstel && !herstel.opnieuwPassend) {
+    // Terug naar een eerder getoond document: zoom, verschuiving en
+    // ankervlaggen exact zoals de gebruiker het verliet.
+    _suppressNextFit = false;
+    stopPanMomentum();
+    viewport.zoom = herstel.zoom;
+    viewport.offsetX = herstel.offsetX;
+    viewport.offsetY = herstel.offsetY;
+    _anchorActive = herstel.verankerd;
+    _strictAnchor = herstel.strikt;
+    viewport.dirty = true;
+    hersteld = true;
+  } else if (_suppressNextFit) {
     _suppressNextFit = false;
     // suppressNextFit() is used by wheel-driven page nav, which then calls
     // alignPageToTop/Bottom to set its own offset → keep anchor active so
@@ -1065,6 +1178,27 @@ export function setPage(filePath, pageNum, pageW, pageH, originX, originY, rotat
     _strictAnchor = false;
     viewport.dirty = true;
   }
+
+  // Ander document: de paginabitmap ervan staat meestal nog in de cache (bij
+  // een tabwissel altijd, voor de zoom waarop het werd verlaten). Meteen
+  // tonen, zodat het eerstvolgende frame het document volledig laat zien en
+  // niet eerst een witte pagina tot de orchestrator (eigen chunk, dus een
+  // dynamische import verderop in renderPage) hem alsnog aanlevert (#539).
+  // Zelfde keuze als ensureBitmapForCurrentView: de beste beschikbare bucket
+  // onder de 4096 px-asgrens. Geen cache-treffer: niets aan de hand, de
+  // orchestrator vult hem zoals altijd.
+  if (isNewDocument) {
+    const maxAsPt = Math.max(pageW, pageH);
+    if (maxAsPt > 0) {
+      const schaal = Math.min(viewport.zoom * _getDpr(), 4096 / maxAsPt);
+      const gecacht = getBestAvailableBitmap(filePath, pageNum, viewport.rotation, computeZoomBucket(schaal));
+      if (gecacht && gecacht.bitmap) {
+        viewport.currentBitmap = gecacht.bitmap;
+        viewport.dirty = true;
+      }
+    }
+  }
+  return hersteld;
 }
 
 /// Compute the zoom factor needed to fit a page into a canvas under one of
@@ -1165,18 +1299,8 @@ const ZOOM_MAX = ZOOM_STEPS[ZOOM_STEPS.length - 1];
 // counts as past it (otherwise repeated wheel ticks at e.g. 1.0 would never
 // move because 1.0 is technically not strictly less than 1.0).
 function nextZoomStep(current, direction) {
-  const eps = current * 1e-4;
-  if (direction > 0) {
-    for (let i = 0; i < ZOOM_STEPS.length; i++) {
-      if (ZOOM_STEPS[i] > current + eps) return ZOOM_STEPS[i];
-    }
-    return ZOOM_MAX;
-  } else {
-    for (let i = ZOOM_STEPS.length - 1; i >= 0; i--) {
-      if (ZOOM_STEPS[i] < current - eps) return ZOOM_STEPS[i];
-    }
-    return ZOOM_MIN;
-  }
+  const next = nextScaleStep(current, direction);
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
 }
 
 // Re-anchor pan offsets so the world point under (screenX, screenY) stays

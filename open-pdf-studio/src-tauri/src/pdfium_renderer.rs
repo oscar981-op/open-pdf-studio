@@ -12,9 +12,25 @@ use std::path::Path;
 use std::sync::OnceLock;
 use pdfium_render::prelude::*;
 
+/// Thin Lines view mode (#595). Same file as the pdfium-worker sidecar uses,
+/// so the in-process fallback thins exactly what the workers thin.
+#[path = "../../../pdfium-worker/src/thin_lines.rs"]
+pub mod thin_lines;
+
 /// Global PDFium instance. Initialised once at app start by
 /// `init_pdfium`. Subsequent calls to `pdfium()` are zero-cost lookups.
 static PDFIUM: OnceLock<Pdfium> = OnceLock::new();
+
+/// Pad van de geladen PDFium-bibliotheek. De ontsleuteling van PDF's met een
+/// wachtwoord (beveiligde_pdf.rs) spreekt daarin C-functies aan die de
+/// Rust-schil niet aanbiedt.
+static PDFIUM_BIBLIOTHEEK: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+/// Pad van de PDFium-bibliotheek, als die geladen en geïnitialiseerd is.
+pub fn bibliotheek_pad() -> Option<std::path::PathBuf> {
+    PDFIUM.get()?;
+    PDFIUM_BIBLIOTHEEK.get().cloned()
+}
 
 /// Initialise the PDFium runtime by dynamically loading the DLL at the
 /// given directory. Call this exactly once during app startup, before
@@ -29,16 +45,16 @@ pub fn init_pdfium(dll_dir: &Path) -> Result<(), String> {
         return Ok(()); // Already initialised — idempotent.
     }
 
-    let bindings = Pdfium::bind_to_library(
-        Pdfium::pdfium_platform_library_name_at_path(dll_dir),
-    )
-    .map_err(|e| format!("Failed to load PDFium DLL from {:?}: {}", dll_dir, e))?;
+    let bibliotheek = Pdfium::pdfium_platform_library_name_at_path(dll_dir);
+    let bindings = Pdfium::bind_to_library(&bibliotheek)
+        .map_err(|e| format!("Failed to load PDFium DLL from {:?}: {}", dll_dir, e))?;
 
     let pdfium = Pdfium::new(bindings);
 
     PDFIUM
         .set(pdfium)
         .map_err(|_| "PDFium was concurrently initialised".to_string())?;
+    let _ = PDFIUM_BIBLIOTHEEK.set(bibliotheek);
 
     Ok(())
 }
@@ -220,6 +236,20 @@ pub fn render_page_to_rgba(
     scale: f32,
     rotation: i32,
 ) -> Result<(u32, u32, Vec<u8>), String> {
+    render_page_to_rgba_opts(doc, page_index, scale, rotation, false)
+}
+
+/// `render_page_to_rgba` for the screen: `thin_lines` draws every vector
+/// stroke as a hairline (Thin Lines view mode, #595). Printing, OCR and
+/// exports keep calling `render_page_to_rgba`, so they always get the true
+/// line widths.
+pub fn render_page_to_rgba_opts(
+    doc: &PdfDocument<'static>,
+    page_index: u32,
+    scale: f32,
+    rotation: i32,
+    thin_lines: bool,
+) -> Result<(u32, u32, Vec<u8>), String> {
     // Serialise all in-proc PDFium work (see PDFIUM_INPROC_LOCK). Declared
     // first so the guard outlives `pages`/`page`, whose Drop also calls PDFium.
     let _guard = inproc_guard();
@@ -227,6 +257,10 @@ pub fn render_page_to_rgba(
     let page = pages
         .get(page_index as i32)
         .map_err(|e| format!("Page {} not found: {}", page_index, e))?;
+    // A fresh handle per call: the thinned widths die with it.
+    if thin_lines {
+        thin_lines::thin_strokes(&page);
+    }
 
     let width_pt = page.width().value;
     let height_pt = page.height().value;
@@ -297,14 +331,23 @@ pub struct CachedPixmap {
 }
 
 /// Bounded-FIFO cache of fully-rendered pixmaps. Key: (path, page_idx,
-/// scale_q = round(scale*10000), rotation). Sized to keep BARN's 7 pages
+/// scale_q = round(scale*10000), rotation, thin_lines). Thin Lines (#595)
+/// is part of the key: the same page at the same zoom looks different with
+/// and without it, and switching back must not serve the other look. Sized to keep BARN's 7 pages
 /// at 2-3 zoom levels comfortably resident (~20 entries), with headroom
 /// for multi-doc workflows. 40 entries × ~15 MB ≈ 600 MB upper bound.
 const PIXMAP_CACHE_MAX_ENTRIES: usize = 40;
 
+pub type PixmapKey = (String, u32, u32, i32, bool);
+
+/// Cache key of one whole-page render.
+pub fn pixmap_key(path: &str, page_index: u32, scale: f32, rotation: i32, thin_lines: bool) -> PixmapKey {
+    (path.to_string(), page_index, (scale * 10_000.0).round() as u32, rotation, thin_lines)
+}
+
 pub struct PixmapCache {
-    map: HashMap<(String, u32, u32, i32), Arc<CachedPixmap>>,
-    order: VecDeque<(String, u32, u32, i32)>,
+    map: HashMap<PixmapKey, Arc<CachedPixmap>>,
+    order: VecDeque<PixmapKey>,
     max_entries: usize,
 }
 
@@ -317,11 +360,11 @@ impl PixmapCache {
         }
     }
 
-    pub fn get(&self, key: &(String, u32, u32, i32)) -> Option<Arc<CachedPixmap>> {
+    pub fn get(&self, key: &PixmapKey) -> Option<Arc<CachedPixmap>> {
         self.map.get(key).cloned()
     }
 
-    pub fn insert(&mut self, key: (String, u32, u32, i32), value: Arc<CachedPixmap>) {
+    pub fn insert(&mut self, key: PixmapKey, value: Arc<CachedPixmap>) {
         if self.map.insert(key.clone(), value).is_none() {
             self.order.push_back(key);
             while self.order.len() > self.max_entries {
@@ -458,6 +501,7 @@ pub fn render_page_region_to_rgba(
     region_y_pt: f32,
     region_w_pt: f32,
     region_h_pt: f32,
+    thin_lines: bool,
 ) -> Result<(u32, u32, Vec<u8>), String> {
     if rotation != 0 {
         return Err(format!(
@@ -480,6 +524,10 @@ pub fn render_page_region_to_rgba(
     let page = pages
         .get(page_index as i32)
         .map_err(|e| format!("Page {} not found: {}", page_index, e))?;
+    // Thin Lines (#595): fresh handle per call, see render_page_to_rgba_opts.
+    if thin_lines {
+        thin_lines::thin_strokes(&page);
+    }
 
     // Output bitmap pixel dimensions.
     let bitmap_w = (region_w_pt * scale).ceil() as i32;

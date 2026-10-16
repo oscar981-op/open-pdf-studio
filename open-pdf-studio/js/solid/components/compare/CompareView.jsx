@@ -42,6 +42,7 @@ import {
   setCompareTextChanges,
   setCompareTextComparing,
   setPagePair,
+  setCompareMode,
 } from '../../../compare/compare-store.js';
 import {
   renderCompareSideBySide,
@@ -54,6 +55,12 @@ import { diffWords } from '../../../compare/text-diff.js';
 import { useTranslation } from '../../../i18n/useTranslation.js';
 import { state } from '../../../core/state.js';
 import { diffAnnotationsForPair } from '../../../compare/compare-annotations.js';
+import {
+  isSinglePaneMode,
+  splitFraction,
+  splitOldTransform,
+  screenPx,
+} from '../../../compare/split-line.js';
 
 // Verticale scheidingslijn tussen toolbar-groepen — Windows/Visual-Studio-stijl.
 function Sep() {
@@ -67,6 +74,8 @@ export default function CompareView() {
   let oldHiCanvasRef;   // side-by-side: diff overlay on OLD page
   let newHiCanvasRef;   // side-by-side: diff overlay on NEW page
   let overlayNewCanvasRef;
+  // Split line: OLD page on top of NEW, shown left of the line only.
+  let splitOldCanvasRef;
   let overlayHighlightCanvasRef;
   let bodyRef;
   let overlayWrapRef;
@@ -128,6 +137,13 @@ export default function CompareView() {
   // preventDefault is honoured before the default action fires.
   const killMiddleAutoscroll = (e) => { if (e.button === 1) e.preventDefault(); };
   const [highlight, setHighlight] = createSignal(null); // {x,y,w,h} flash highlight
+  // Split line position as a fraction of the NEW page width (0 = all new, 1 = all old).
+  const [splitPos, setSplitPos] = createSignal(0.5);
+  // Bitmap size of the NEW page in split mode: the OLD page rotates about
+  // its centre, exactly like the change detection does.
+  const [splitBase, setSplitBase] = createSignal({ w: 0, h: 0 });
+  // Overlay and split line share one scroll body and one page wrapper.
+  const singlePane = () => isSinglePaneMode(compareMode());
   let highlightTimer = null;
 
   // Instant CSS-transform preview while zooming. The bitmap stays at the
@@ -274,7 +290,7 @@ export default function CompareView() {
     // de pixel-diff-laag blijft in deze modus onzichtbaar zodat er geen twee
     // tegenstrijdige markeringen door elkaar lopen.
     const textMode = textModeActive();
-    if (compareMode() === 'overlay') {
+    if (singlePane()) {
       if (!overlayHighlightCanvasRef || !overlayNewCanvasRef) return;
       overlayHighlightCanvasRef.width = overlayNewCanvasRef.width;
       overlayHighlightCanvasRef.height = overlayNewCanvasRef.height;
@@ -318,7 +334,7 @@ export default function CompareView() {
   // + zoomAnchored (keeps that centre fixed while scaling), so both panes stay
   // in sync via the existing scroll/zoom mirroring. Only ever zooms IN.
   const zoomToChange = (c) => {
-    const isOverlay = compareMode() === 'overlay';
+    const isOverlay = singlePane();
     const pairs = isOverlay
       ? [[bodyRef, overlayWrapRef]]
       : [[oldPaneRef, oldWrapRef], [newPaneRef, newWrapRef]];
@@ -353,7 +369,7 @@ export default function CompareView() {
     // Centre + zoom in on the clicked change (both panes / overlay).
     zoomToChange(c);
 
-    if (compareMode() === 'overlay' && bodyRef && overlayWrapRef) {
+    if (singlePane() && bodyRef && overlayWrapRef) {
       const ratio = changeRatio(c);
       setHighlight({ x: c.x * ratio, y: c.y * ratio, w: c.width * ratio, h: c.height * ratio });
       if (highlightTimer) clearTimeout(highlightTimer);
@@ -393,7 +409,14 @@ export default function CompareView() {
         skipDetection,
       };
       if (!opts.oldPath || !opts.newPath) return;
-      if (compareMode() === 'overlay') {
+      if (compareMode() === 'split') {
+        // Both pages rendered visibly; the CSS clip shows OLD left of the line.
+        if (splitOldCanvasRef && overlayNewCanvasRef) {
+          await renderCompareSideBySide(splitOldCanvasRef, overlayNewCanvasRef, opts);
+          setSplitBase({ w: overlayNewCanvasRef.width, h: overlayNewCanvasRef.height });
+          repaintHighlights();
+        }
+      } else if (compareMode() === 'overlay') {
         if (overlayNewCanvasRef && overlayHighlightCanvasRef) {
           await renderCompareOverlay(
             null,
@@ -540,8 +563,8 @@ export default function CompareView() {
     // Fit: the rendered bitmap is (natural * 1.5 * renderedZoom) px. Work out
     // the natural (scale-1.5) size, then pick a zoom so it fits the pane.
     queueMicrotask(() => {
-      const baseCanvas = compareMode() === 'overlay' ? overlayNewCanvasRef : newCanvasRef;
-      const pane = compareMode() === 'overlay' ? bodyRef : newPaneRef;
+      const baseCanvas = singlePane() ? overlayNewCanvasRef : newCanvasRef;
+      const pane = singlePane() ? bodyRef : newPaneRef;
       if (!baseCanvas || !pane || renderedZoom <= 0) return;
       const naturalW = baseCanvas.width / renderedZoom;   // px at zoom=1
       const naturalH = baseCanvas.height / renderedZoom;
@@ -617,6 +640,8 @@ export default function CompareView() {
       }
       const tag = e.target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // Ctrl+PageUp/PageDown is de tabwissel (#539), geen paginapaar.
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'PageDown') {
         e.preventDefault();
         e.stopPropagation();
@@ -745,6 +770,39 @@ export default function CompareView() {
     zoomAnchored(pane, rect.left + pane.clientWidth / 2, rect.top + pane.clientHeight / 2, factor);
   };
 
+  // Drag the split line. The wrapper's rect already includes the CSS zoom
+  // preview, so the fraction is right at any zoom.
+  const startSplitDrag = (e) => {
+    if (e.button !== 0 || !overlayWrapRef) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const target = e.currentTarget;
+    try { target.setPointerCapture?.(e.pointerId); } catch {}
+    const move = (ev) => {
+      if (!overlayWrapRef) return;
+      const rect = overlayWrapRef.getBoundingClientRect();
+      const f = splitFraction(ev.clientX, rect.left, rect.width);
+      if (f != null) setSplitPos(f);
+    };
+    const up = () => {
+      try { target.releasePointerCapture?.(e.pointerId); } catch {}
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+    move(e);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  };
+
+  // OLD page placement in split mode: the same dx/dy/rot alignment the change
+  // detection applies (bitmap px, rotation about the NEW page centre).
+  const oldSplitTransform = () => splitOldTransform(compareOffset(), splitBase().w, splitBase().h);
+
+  // Labels and handle keep their screen size while the wrapper is CSS-scaled.
+  const px = (n) => screenPx(n, cssScale());
+
   // Click outside the change list deselects the focused change.
   const handleBodyClick = () => {
     if (compareFocusedChange()) setFocusedChange(null);
@@ -763,7 +821,14 @@ export default function CompareView() {
         >
           {/* Titel + weergavemodus */}
           <strong>{t('compare.title') || 'Compare PDFs'}</strong>
-          <span style="color:#666;">{compareMode() === 'overlay' ? (t('compare.overlay') || 'Overlay') : (t('compare.sideBySide') || 'Side-by-side')}</span>
+          <select
+            style="font-size:12px;"
+            onChange={(e) => setCompareMode(e.currentTarget.value)}
+          >
+            <option value="overlay" selected={compareMode() === 'overlay'}>{t('compare.overlay') || 'Overlay'}</option>
+            <option value="side" selected={compareMode() === 'side'}>{t('compare.sideBySide') || 'Side-by-side'}</option>
+            <option value="split" selected={compareMode() === 'split'}>{t('compare.split') || 'Split line'}</option>
+          </select>
 
           <Sep />
 
@@ -796,8 +861,8 @@ export default function CompareView() {
             {t('compare.contour') || 'Contour'}
           </label>
 
-          {/* Uitlijnen (alleen overlay) */}
-          <Show when={compareMode() === 'overlay'}>
+          {/* Uitlijnen (overlay en scheidingslijn) */}
+          <Show when={singlePane()}>
             <Sep />
             <span style="color:#555;">{t('compare.align') || 'Align'}</span>
             <span style="color:#777;">dx</span>
@@ -855,6 +920,20 @@ export default function CompareView() {
                     style={`position:relative; background:#ffffff; box-shadow:0 0 0 1px #444; line-height:0; transform:scale(${cssScale()}); transform-origin:0 0;`}
                   >
                     <canvas ref={overlayNewCanvasRef} style="display:block;"></canvas>
+                    <Show when={compareMode() === 'split'}>
+                      {/* OLD left of the line: a clip box as wide as the
+                          split, so the alignment transform on the canvas
+                          does not turn the clip with it. */}
+                      {/* White clip background: where dx/dy/rot moves the OLD
+                          page away from an edge the strip stays white (as in
+                          the change detection) instead of showing NEW. */}
+                      <div style={`position:absolute; left:0; top:0; bottom:0; width:${splitPos() * 100}%; overflow:hidden; pointer-events:none; background:#ffffff;`}>
+                        <canvas
+                          ref={splitOldCanvasRef}
+                          style={`display:block; background:#ffffff; transform:${oldSplitTransform()}; transform-origin:0 0;`}
+                        ></canvas>
+                      </div>
+                    </Show>
                     {/* OLD page is rasterized for change detection only via
                         an offscreen canvas in compare-viewport.js — no DOM
                         element required. */}
@@ -862,6 +941,20 @@ export default function CompareView() {
                       ref={overlayHighlightCanvasRef}
                       style="position:absolute; left:0; top:0; pointer-events:none;"
                     ></canvas>
+                    <Show when={compareMode() === 'split'}>
+                      <div
+                        class="compare-split-line"
+                        title={t('compare.splitDesc') || 'Drag the line to reveal old and new'}
+                        onPointerDown={startSplitDrag}
+                        onClick={(e) => e.stopPropagation()}
+                        style={`position:absolute; top:0; bottom:0; left:${splitPos() * 100}%; width:${px(18)}; transform:translateX(-50%); cursor:ew-resize; z-index:3; line-height:normal;`}
+                      >
+                        <div style={`position:absolute; top:0; bottom:0; left:50%; width:${px(2)}; transform:translateX(-50%); background:#0078d4;`}></div>
+                        <div style={`position:absolute; top:50%; left:50%; width:${px(28)}; height:${px(28)}; transform:translate(-50%, -50%); border-radius:50%; background:#0078d4; border:${px(2)} solid #fff; box-sizing:border-box; box-shadow:0 1px 4px rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; color:#fff; font-size:${px(14)};`}>{'\u2194'}</div>
+                      </div>
+                      <div style={`position:absolute; top:${px(6)}; left:${px(6)}; padding:${px(2)} ${px(8)}; background:rgba(40,40,40,0.85); color:#ddd; font-size:${px(11)}; line-height:normal; pointer-events:none; z-index:2;`}>{t('compare.oldDoc') || 'Old'}</div>
+                      <div style={`position:absolute; top:${px(6)}; right:${px(6)}; padding:${px(2)} ${px(8)}; background:rgba(40,40,40,0.85); color:#ddd; font-size:${px(11)}; line-height:normal; pointer-events:none; z-index:2;`}>{t('compare.newDoc') || 'New'}</div>
+                    </Show>
                     <Show when={highlight()}>
                       {(h) => (
                         <div

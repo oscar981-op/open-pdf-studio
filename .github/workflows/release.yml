@@ -9,7 +9,7 @@ on:
       version:
         description: 'Version tag (e.g., v1.0.0)'
         required: true
-        default: 'v2.1.0'
+        default: 'v2026.42.10'
 
 jobs:
   create-release:
@@ -109,7 +109,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -211,7 +211,7 @@ jobs:
         if: matrix.target == 'linux'
         run: |
           mkdir -p src-tauri/binaries/linux-x64
-          curl -L "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F7834/pdfium-linux-x64.tgz" -o /tmp/pdfium-linux.tgz
+          curl -L "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8076/pdfium-linux-x64.tgz" -o /tmp/pdfium-linux.tgz
           tar xzf /tmp/pdfium-linux.tgz -C /tmp lib/libpdfium.so
           cp /tmp/lib/libpdfium.so src-tauri/binaries/linux-x64/libpdfium.so
 
@@ -497,7 +497,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
           cache-dependency-path: open-pdf-studio/package-lock.json
 
@@ -528,13 +528,31 @@ jobs:
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
 
+      # gen/android is generated fresh on every run; put the app's own Android
+      # files in it (MainActivity: system bar insets, content:// file names).
+      - name: Customize Android project
+        run: node scripts/android-project.mjs
+
       - name: Build Android APK
         run: npx tauri android build --apk --target aarch64
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
 
+      # Every release must be signed with the SAME key, or Android refuses to
+      # install it over the previous version ("App not installed",
+      # INSTALL_FAILED_UPDATE_INCOMPATIBLE). The key lives in repository
+      # secrets: ANDROID_KEYSTORE_BASE64 (the keystore file, base64),
+      # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD
+      # (alias and key password are optional: "open-pdf-studio" and the
+      # keystore password). Without them the build still produces an APK,
+      # signed with a one-off key, and says so loudly.
       - name: Sign APK
         id: sign-apk
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           # Find the unsigned APK
           UNSIGNED_APK=$(find src-tauri/gen/android -name "*-unsigned.apk" -type f | head -1)
@@ -545,13 +563,30 @@ jobs:
           echo "Found unsigned APK: $UNSIGNED_APK"
           APK_DIR=$(dirname "$UNSIGNED_APK")
 
-          # Generate a signing keystore
-          keytool -genkeypair -v \
-            -keystore "$APK_DIR/release.keystore" \
-            -alias release \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass openpdfstudio -keypass openpdfstudio \
-            -dname "CN=Open PDF Studio, O=OpenAEC Foundation, L=Unknown, ST=Unknown, C=US"
+          # The keystore stays outside the build tree and is removed afterwards.
+          KEYSTORE="$RUNNER_TEMP/open-pdf-studio-release.keystore"
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            if [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+              echo "::error title=Android signing::ANDROID_KEYSTORE_BASE64 is set but ANDROID_KEYSTORE_PASSWORD is not"
+              exit 1
+            fi
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$KEYSTORE"
+            export KS_PASS="$ANDROID_KEYSTORE_PASSWORD"
+            export KEY_PASS="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+            KEY_ALIAS="${ANDROID_KEY_ALIAS:-open-pdf-studio}"
+            echo "Signing with the fixed release key from the repository secrets (alias $KEY_ALIAS)"
+          else
+            echo "::warning title=Android signing::ANDROID_KEYSTORE_BASE64 is not set. This APK is signed with a one-off key and cannot be installed over an earlier version (INSTALL_FAILED_UPDATE_INCOMPATIBLE). Add the ANDROID_KEYSTORE_* signing secrets to the repository."
+            export KS_PASS=openpdfstudio
+            export KEY_PASS=openpdfstudio
+            KEY_ALIAS=release
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE" \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KEY_PASS" \
+              -dname "CN=Open PDF Studio, O=OpenAEC Foundation, L=Unknown, ST=Unknown, C=US"
+          fi
 
           # Find the build-tools for zipalign and apksigner
           BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/*/ | sort -V | tail -1)
@@ -561,18 +596,20 @@ jobs:
           ALIGNED_APK="$APK_DIR/app-universal-release-aligned.apk"
           "${BUILD_TOOLS}zipalign" -v 4 "$UNSIGNED_APK" "$ALIGNED_APK"
 
-          # Sign the APK
+          # Sign the APK (passwords via the environment, not the command line)
           SIGNED_APK="$APK_DIR/open-pdf-studio-release.apk"
           "${BUILD_TOOLS}apksigner" sign \
-            --ks "$APK_DIR/release.keystore" \
-            --ks-key-alias release \
-            --ks-pass pass:openpdfstudio \
-            --key-pass pass:openpdfstudio \
+            --ks "$KEYSTORE" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KS_PASS \
+            --key-pass env:KEY_PASS \
             --out "$SIGNED_APK" \
             "$ALIGNED_APK"
+          rm -f "$KEYSTORE"
 
-          # Verify the signature
-          "${BUILD_TOOLS}apksigner" verify --verbose "$SIGNED_APK"
+          # Verify the signature and show the certificate fingerprint: it must
+          # be the same for every release.
+          "${BUILD_TOOLS}apksigner" verify --verbose --print-certs "$SIGNED_APK"
           echo "signed_apk=$SIGNED_APK" >> $GITHUB_OUTPUT
           echo "Signed APK: $SIGNED_APK"
 
@@ -607,7 +644,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Extensie bouwen
         run: node mcpb/scripts/pack.mjs

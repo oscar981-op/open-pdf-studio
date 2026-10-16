@@ -1,8 +1,15 @@
-import { For, Show, createSignal } from 'solid-js';
-import { activeTab } from '../../../stores/leftPanelStore.js';
+import { For, Show, createSignal, createMemo, createEffect, on } from 'solid-js';
+import { activeTab, collapsed } from '../../../stores/leftPanelStore.js';
 import { tree, countText, emptyMessage, selectedId, toolbarDisabled } from '../../../stores/panels/bookmarksStore.js';
+import { activePage } from '../../../stores/panels/thumbnailStore.js';
 import { showBookmarkMenu } from '../../../stores/contextMenuStore.js';
+import { getActiveDocument } from '../../../../core/state.js';
+import { huidigeBladwijzer, volgendeTreffer, scrollVoorItem } from '../../../../ui/panels/bladwijzer-zoeken.js';
 import { useTranslation } from '../../../../i18n/useTranslation.js';
+
+// Treffer van het zoekveld (#578): krijgt een streep links en wordt in beeld
+// geschoven. De lijst zelf wordt niet gefilterd.
+const [gevondenId, setGevondenId] = createSignal(null);
 
 function BookmarkNode(props) {
   const indent = () => props.depth * 16;
@@ -10,7 +17,8 @@ function BookmarkNode(props) {
   return (
     <div>
       <div
-        class={`bookmark-item${selectedId() === props.node.id ? ' selected' : ''}`}
+        class={`bookmark-item${selectedId() === props.node.id ? ' selected' : ''}${props.huidig() === props.node.id ? ' current' : ''}${gevondenId() === props.node.id ? ' found' : ''}`}
+        data-bm-id={props.node.id}
         style={{ 'padding-left': `${indent()}px` }}
         onClick={() => {
           import('../../../../ui/panels/bookmarks.js').then(m => m.selectBookmark(props.node.id));
@@ -49,7 +57,7 @@ function BookmarkNode(props) {
       <Show when={props.node.hasChildren && props.node.expanded}>
         <div class="bookmark-children">
           <For each={props.node.children}>
-            {(child) => <BookmarkNode node={child} depth={props.depth + 1} />}
+            {(child) => <BookmarkNode node={child} depth={props.depth + 1} huidig={props.huidig} />}
           </For>
         </div>
       </Show>
@@ -60,11 +68,106 @@ function BookmarkNode(props) {
 export default function BookmarksPanel() {
   const { t } = useTranslation('properties');
   const disabled = () => toolbarDisabled();
+  let lijstRef;
+  let zoekRef;
+  const [geenTreffer, setGeenTreffer] = createSignal(false);
+
+  // De bladwijzer van de pagina in beeld: zachte achtergrond, hoe er ook
+  // genavigeerd wordt (zelfde activePage als de actieve miniatuur).
+  const huidig = createMemo(() => huidigeBladwijzer(tree(), activePage()));
+  const paneelOpen = () => activeTab() === 'bookmarks' && !collapsed();
+
+  // Schuif een bladwijzer in beeld binnen de lijst (niet de panelen eromheen).
+  function scrollNaar(id, modus) {
+    if (!id || !lijstRef) return;
+    const el = lijstRef.querySelector(`[data-bm-id="${CSS.escape(id)}"]`);
+    if (!el) return;
+    const top = scrollVoorItem(lijstRef.getBoundingClientRect(), el.getBoundingClientRect(), lijstRef.scrollTop, modus);
+    if (top != null) lijstRef.scrollTop = top;
+  }
+
+  // Volgt de pagina: staat de huidige bladwijzer buiten beeld, dan schuift
+  // hij erin. Een frame later, zodat een net ververste boom er al staat.
+  createEffect(on([huidig, paneelOpen], ([id, open]) => {
+    if (id && open) requestAnimationFrame(() => scrollNaar(id, 'nearest'));
+  }));
+
+  function wisZoeken() {
+    if (zoekRef) zoekRef.value = '';
+    setGevondenId(null);
+    setGeenTreffer(false);
+  }
+
+  // Ander document in beeld: de ids beginnen per document opnieuw (bm_1 ...),
+  // dus een oude treffer zou een willekeurige bladwijzer markeren.
+  let laatsteDocId;
+  createEffect(on(tree, () => {
+    const docId = getActiveDocument()?.id ?? null;
+    if (docId === laatsteDocId) return;
+    laatsteDocId = docId;
+    wisZoeken();
+    if (paneelOpen()) requestAnimationFrame(() => scrollNaar(huidig(), 'nearest'));
+  }));
+
+  function zoek(tekst, naId) {
+    const id = volgendeTreffer(tree(), tekst, naId);
+    setGevondenId(id);
+    setGeenTreffer(String(tekst).trim() !== '' && !id);
+    return id;
+  }
+
+  // Klap de ouders van de treffer open en zet hem midden in de lijst.
+  async function toon(id) {
+    if (!id) return;
+    const m = await import('../../../../ui/panels/bookmarks.js');
+    m.revealBookmark(id);
+    requestAnimationFrame(() => scrollNaar(id, 'center'));
+  }
+
+  function onZoekInvoer() {
+    toon(zoek(zoekRef.value, null));
+  }
+
+  async function onZoekToets(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      wisZoeken();
+      return;
+    }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    e.stopPropagation();
+    let id = gevondenId();
+    // De eerste Enter opent de treffer; elke volgende gaat naar de volgende.
+    if (!id || selectedId() === id) {
+      id = zoek(zoekRef.value, id);
+      if (!id) return;
+      await toon(id);
+    }
+    const m = await import('../../../../ui/panels/bookmarks.js');
+    m.selectBookmark(id);
+    zoekRef?.focus();
+  }
 
   return (
     <div class={`left-panel-content${activeTab() === 'bookmarks' ? ' active' : ''}`} id="bookmarks-panel">
       <div class="left-panel-header">
         <span>{t('leftPanel.bookmarks')}</span>
+        <input
+          ref={zoekRef}
+          class="bookmarks-search"
+          classList={{ 'no-match': geenTreffer() }}
+          type="text"
+          spellcheck={false}
+          autocomplete="off"
+          disabled={!!emptyMessage()}
+          placeholder={t('leftPanel.findBookmark')}
+          title={t('leftPanel.findBookmarkTip')}
+          aria-label={t('leftPanel.findBookmark')}
+          onInput={onZoekInvoer}
+          onKeyDown={onZoekToets}
+        />
       </div>
       <div class="bookmarks-toolbar">
         <button
@@ -102,6 +205,7 @@ export default function BookmarksPanel() {
       </div>
       <div
         class="bookmarks-container"
+        ref={lijstRef}
         onContextMenu={(e) => {
           e.preventDefault();
           showBookmarkMenu(e.clientX, e.clientY);
@@ -112,7 +216,7 @@ export default function BookmarksPanel() {
         </Show>
         <Show when={!emptyMessage()}>
           <For each={tree()}>
-            {(node) => <BookmarkNode node={node} depth={0} />}
+            {(node) => <BookmarkNode node={node} depth={0} huidig={huidig} />}
           </For>
         </Show>
       </div>

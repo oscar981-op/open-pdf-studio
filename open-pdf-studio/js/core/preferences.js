@@ -5,8 +5,19 @@ import { updateStatusMessage } from '../ui/chrome/status-bar.js';
 import { changeLanguage } from '../i18n/useTranslation.js';
 import { isTauri, getUsername, savePreferencesFile, loadPreferencesFile } from './platform.js';
 import { preferencesMirrorJson } from './preferences-mirror.js';
+import { leesOpslag, schrijfOpslag, VOORKEUREN_NAAM } from './opslag.js';
 import { voegSamenMetStandaarden } from './preferences-merge.js';
 import { randkleurVoorVoorkeur, randkleurenUitVoorkeur } from '../annotations/fill-utils.js';
+import { zetRanddikte } from '../annotations/rendering/textbox-layout.js';
+import { setZoomDpi, setZoomDpiSource, normalizeZoomDpi } from './zoom-display.js';
+import { kalibratieVoor } from '../pdf/schermkalibratie.js';
+
+// What 100% zoom means (#523), read live so a new calibration, a changed
+// preference or a move to a screen with another scale applies at once: on a
+// screen with a calibration (#520) its CSS pixels per inch (100% = the real
+// paper size), otherwise the 'Screen resolution for 100% zoom' preference.
+setZoomDpiSource(() => kalibratieVoor(state.preferences?.screenCalibration, globalThis.devicePixelRatio || 1)
+  ?? normalizeZoomDpi(state.preferences?.zoomDpi));
 
 // Load preferences from Rust file storage, with localStorage migration fallback
 export async function loadPreferences() {
@@ -16,7 +27,7 @@ export async function loadPreferences() {
 
     if (!loaded) {
       // Fallback: migrate from localStorage (first launch after update, or non-Tauri)
-      const saved = localStorage.getItem('pdfEditorPreferences');
+      const saved = leesOpslag(VOORKEUREN_NAAM);
       if (saved) {
         loaded = JSON.parse(saved);
       }
@@ -61,7 +72,7 @@ export async function loadPreferences() {
       );
     }
     try {
-      localStorage.setItem('pdfEditorPreferences', preferencesMirrorJson(state.preferences, isTauri()));
+      schrijfOpslag(VOORKEUREN_NAAM, preferencesMirrorJson(state.preferences, isTauri()));
     } catch (e) {
       console.warn('Voorkeuren-spiegel niet bijgewerkt (localStorage):', e);
     }
@@ -100,7 +111,7 @@ export function savePreferences() {
   }
   applyPreferences();
   try {
-    localStorage.setItem('pdfEditorPreferences', preferencesMirrorJson(state.preferences, isTauri()));
+    schrijfOpslag(VOORKEUREN_NAAM, preferencesMirrorJson(state.preferences, isTauri()));
   } catch (e) {
     // Alleen de pre-boot-themaflits staat op het spel — niet de instellingen.
     console.warn('Voorkeuren-spiegel niet bijgewerkt (localStorage):', e);
@@ -165,6 +176,9 @@ export function applyPreferences() {
     applyTheme(state.preferences.theme);
   }
 
+  // Screen resolution behind the 100% zoom label
+  setZoomDpi(state.preferences.zoomDpi);
+
   // Update default author from preferences
   state.defaultAuthor = state.preferences.authorName || 'User';
 
@@ -181,6 +195,11 @@ export function applyPreferences() {
   // (lazy import to avoid a static import cycle with the loader/tools layer).
   import('../tools/screenshot-annotate.js')
     .then((m) => m.applyPrintScreenHotkeyPref())
+    .catch(() => {});
+
+  // Unit for paper sizes in the properties panel (#598).
+  import('../solid/stores/papierEenheidStore.js')
+    .then((m) => m.hydratePapierEenheid())
     .catch(() => {});
 }
 
@@ -225,8 +244,12 @@ export function getStyleMapping(type) {
       return { prefix: 'redaction', overlayColor: 'OverlayColor' };
     case 'measureDistance':
       return { prefix: 'measureDist', stroke: 'StrokeColor', width: 'LineWidth', borderStyle: 'BorderStyle', opacity: 'Opacity', startHead: 'StartHead', endHead: 'EndHead', headSize: 'HeadSize', fontSize: 'FontSize', dimension: true };
+    // noDimScale: schaal en eenheid van een meetvlak zijn geen stijl. Een
+    // nieuw vlak rekent met de schaal van het document; een eigen schaal
+    // hoort bij dat ene vlak en mag niet via de standaardstijl naar een
+    // ander vlak (#536).
     case 'measureArea':
-      return { prefix: 'measureArea', stroke: 'StrokeColor', fill: 'FillColor', fillNone: 'FillNone', width: 'LineWidth', borderStyle: 'BorderStyle', opacity: 'Opacity', dimension: true };
+      return { prefix: 'measureArea', stroke: 'StrokeColor', fill: 'FillColor', fillNone: 'FillNone', width: 'LineWidth', borderStyle: 'BorderStyle', opacity: 'Opacity', dimension: true, noDimScale: true, edgeLengths: 'ShowEdgeLengths' };
     case 'measurePerimeter':
       return { prefix: 'measurePerim', stroke: 'StrokeColor', width: 'LineWidth', borderStyle: 'BorderStyle', opacity: 'Opacity', startHead: 'StartHead', endHead: 'EndHead', headSize: 'HeadSize', dimension: true };
     default:
@@ -273,13 +296,18 @@ export function setAsDefaultStyle(annotation) {
 
   // Dimension measurement properties (use 'Dim' prefix to avoid clash with global measureScale object)
   if (m.dimension) {
-    if (annotation.measureScale != null) prefs[p + 'DimScale'] = annotation.measureScale;
-    if (annotation.measureUnit) prefs[p + 'DimUnit'] = annotation.measureUnit;
+    if (!m.noDimScale) {
+      if (annotation.measureScale != null) prefs[p + 'DimScale'] = annotation.measureScale;
+      if (annotation.measureUnit) prefs[p + 'DimUnit'] = annotation.measureUnit;
+    }
     if (annotation.measurePrecision != null) prefs[p + 'DimPrecision'] = annotation.measurePrecision;
     // Dimension type preset (1.8/2.5/3.5/5.0 mm) — '' means custom.
     prefs[p + 'DimType'] = annotation.dimType || '';
     prefs[p + 'DimExtension'] = !!annotation.dimExtension;
   }
+
+  // Zijdematen van een meetvlak (#536): aan of uit, standaard uit.
+  if (m.edgeLengths) prefs[p + m.edgeLengths] = annotation.measureShowEdgeLengths === true;
 
   savePreferences();
   updateStatusMessage('Style set as default');
@@ -307,7 +335,7 @@ export function applyDefaultStyle(annotation) {
       annotation.fillColor = prefs[p + m.fill];
     }
   }
-  if (m.width && prefs[p + m.width] != null) annotation.lineWidth = prefs[p + m.width];
+  if (m.width && prefs[p + m.width] != null) zetRanddikte(annotation, prefs[p + m.width]);
   if (m.borderStyle && prefs[p + m.borderStyle]) annotation.borderStyle = prefs[p + m.borderStyle];
   if (m.opacity && prefs[p + m.opacity] !== undefined) annotation.opacity = prefs[p + m.opacity] / 100;
   if (m.startHead && prefs[p + m.startHead]) annotation.startHead = prefs[p + m.startHead];
@@ -329,12 +357,16 @@ export function applyDefaultStyle(annotation) {
 
   // Dimension measurement properties (use 'Dim' prefix to avoid clash with global measureScale object)
   if (m.dimension) {
-    if (prefs[p + 'DimScale'] != null) annotation.measureScale = prefs[p + 'DimScale'];
-    if (prefs[p + 'DimUnit']) annotation.measureUnit = prefs[p + 'DimUnit'];
+    if (!m.noDimScale) {
+      if (prefs[p + 'DimScale'] != null) annotation.measureScale = prefs[p + 'DimScale'];
+      if (prefs[p + 'DimUnit']) annotation.measureUnit = prefs[p + 'DimUnit'];
+    }
     if (prefs[p + 'DimPrecision'] != null) annotation.measurePrecision = prefs[p + 'DimPrecision'];
     if (prefs[p + 'DimType']) annotation.dimType = prefs[p + 'DimType'];
     if (prefs[p + 'DimExtension'] != null) annotation.dimExtension = !!prefs[p + 'DimExtension'];
   }
+
+  if (m.edgeLengths) annotation.measureShowEdgeLengths = prefs[p + m.edgeLengths] === true;
 
   annotation.modifiedAt = new Date().toISOString();
 }

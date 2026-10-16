@@ -157,6 +157,7 @@
     "extension": "Extension",
     "showUnit": "Show unit",
     "showLabel": "Show label",
+    "showEdgeLengths": "Show edge lengths",
     "lineOvershoot": "Dimension line overshoot (mm)",
     "extGap": "Extension line gap (mm)",
     "extOvershoot": "Extension line overshoot (mm)",
@@ -278,6 +279,9 @@
     "linkImageTitle": "Link image",
     "imageFilter": "Images"
   },
+  "sizeUnit": {
+    "tooltip": "Unit for sizes"
+  },
   "multiSelect": "{{count}} annotations selected",
   "pdfText": "PDF Text",
   "types": {
@@ -300,6 +304,9 @@
     "textStrikethrough": "Text Strikethrough",
     "textUnderline": "Text Underline",
     "textSquiggly": "Text Squiggly",
+    "caret": "Inserted Text",
+    "replaceText": "Replace Text",
+    "crossOut": "Cross-Out",
     "stamp": "Stamp",
     "signature": "Signature",
     "measureDistance": "Distance",
@@ -330,6 +337,8 @@
     "addChildBookmark": "Add child bookmark",
     "editBookmark": "Edit bookmark",
     "deleteBookmark": "Delete bookmark",
+    "findBookmark": "Find...",
+    "findBookmarkTip": "Type to jump to a bookmark. Enter opens it, Enter again goes to the next match.",
     "addAttachment": "Add attachment",
     "openAttachment": "Open attachment",
     "saveAttachment": "Save attachment",
@@ -371,12 +380,25 @@
     "importComments": "Import Comments...",
     "exportComments": "Export Comments to Data File...",
     "exportSelectedComments": "Export Selected Comments to Data File...",
+    "exportListCsv": "Export List to CSV...",
+    "summarizeComingSoon": "Coming soon",
+    "listExported": "Comment list exported to CSV",
+    "csvPage": "Page",
+    "csvType": "Type",
+    "csvAuthor": "Author",
+    "csvDate": "Date",
+    "csvStatus": "Status",
+    "csvSubject": "Subject",
+    "csvContents": "Contents",
+    "csvColor": "Color",
+    "csvLayer": "Layer",
     "filterLabel": "Filter",
     "expandAll": "Expand All",
     "collapseAll": "Collapse All",
     "annotationsMenu": "Menu",
     "schedules": "Schedules",
-    "addPage": "Add page"
+    "addPage": "Add page",
+    "pageLabels": "Page labels (name builder)"
   },
   "schedules": {
     "title": "Schedules",
@@ -673,5 +695,9 @@
     "refused": "Not possible: {{reason}}",
     "reasonTooNarrow": "a field would become too narrow",
     "reasonFrame": "the outer frame cannot be moved or removed"
+  },
+  "scopedPanel": {
+    "stale": "This object was changed elsewhere. The form shows the current values; your changes were not applied.",
+    "failed": "Could not apply the changes: {{error}}"
   }
 }

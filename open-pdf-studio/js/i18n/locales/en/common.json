@@ -35,6 +35,7 @@
   "saved": "Saved",
   "documentChangedDuringSave": "The document changed while saving. Save again.",
   "documentChangedDuringExport": "The document changed during export. Start again.",
+  "snippetOutputFailed": "A vector snippet could not be rendered, so the export or print was stopped. Try again.",
   "search": "Search",
   "find": "Find",
   "page": "Page",
@@ -48,6 +49,64 @@
   "percent": "%",
   "webSessionStartsEmpty": "A page reload starts empty: in the browser your document stays on your computer and is not stored.",
   "desktopOnly": "{{feature}} only works in the desktop app. This page is the browser version.",
+  "assistantTitle": "OpenAEC assistant",
+  "assistant": {
+    "greeting": "Hello! I am the **{{title}}**. I can: 🌐 translate, 📝 summarise, ✏️ draw on the drawing, and 🚪 recognise doors. Pick a skill below or ask your question.",
+    "workingIn": "working in",
+    "viaClaude": "via Claude",
+    "notConnected": "not connected",
+    "keyButton": "Set the Claude (Anthropic) API key",
+    "keyPlaceholder": "Claude (Anthropic) API key — sk-ant-…",
+    "thinking": "Thinking…",
+    "inputPlaceholder": "Ask something about this PDF…",
+    "send": "Send",
+    "noAnswer": "No answer received.",
+    "errorInvalidKey": "Invalid Claude (Anthropic) API key. Check the key with the 🔑 button at the top of the panel.",
+    "errorApi": "The Claude API returned an error.",
+    "errorNoConnection": "No connection to the AI service.",
+    "errorTimeout": "No MCP client answered the question in time.",
+    "errorFailed": "The AI request failed.",
+    "detail": "Detail",
+    "unknownError": "unknown error",
+    "skills": {
+      "translate": {
+        "label": "Translate",
+        "hint": "Translate the text of the document",
+        "prompt": "Translate the text of the open document."
+      },
+      "summarize": {
+        "label": "Summarise",
+        "hint": "Summarise the document or drawing",
+        "prompt": "Summarise the open document or drawing."
+      },
+      "draw": {
+        "label": "Draw",
+        "hint": "Draw an element or annotation on the drawing",
+        "prompt": "Draw on the drawing: "
+      },
+      "detect-doors": {
+        "label": "Detect doors",
+        "hint": "Detect the doors in the floor plan and mark them",
+        "prompt": "Recognise the doors in the floor plan and mark them."
+      },
+      "structural-layout": {
+        "label": "Lay out structure",
+        "hint": "Grid, columns, beams, floor fields with span direction and the structural schedule",
+        "prompt": "Lay out the load-bearing structure on the drawing. Brief: "
+      },
+      "structural-overview": {
+        "label": "Structural overview",
+        "hint": "Structural overview per storey on the architect's floor plans: foundation, floors with span, load-bearing walls below, beams and columns, legend and notes",
+        "prompt": "Make a structural overview on this sheet from the architect's floor plans. Source, storeys and structural principle: "
+      },
+      "floorplan": {
+        "label": "Floor plan",
+        "hint": "Draw an architectural floor plan: walls, frames, rooms, dimensions and fittings (sanitary, kitchen)",
+        "prompt": "Draw an architectural floor plan. What to draw: "
+      }
+    }
+  },
+  "onlineSymbolLibrary": "Online symbol library",
   "noDocumentOpen": "No document is open.",
   "noPdfLoaded": "No PDF loaded.",
   "saveRequiresTauri": "Save functionality requires Tauri environment.",
@@ -156,7 +215,9 @@
     "dragFileGone": "This file no longer exists on disk — the tab cannot be moved.",
     "dragNotStarted": "The tab could not be dragged to another window. Try again, or use right-click → open in new window.",
     "openInNewWindow": "Open in new window",
-    "closeTab": "Close tab"
+    "closeTab": "Close tab",
+    "nextTab": "Next Tab",
+    "previousTab": "Previous Tab"
   },
   "quickAccess": {
     "exportRaster": "Export as raster PDF (opens in a new tab)"
@@ -166,5 +227,36 @@
     "copied": "Snippet copied — paste it into another drawing",
     "failed": "Cutting failed",
     "clipboardEmpty": "No snippet on the clipboard"
+  },
+  "protectedPdfReadOnly": "This document was opened with a password and is read-only. It cannot be saved.",
+  "threeD": {
+    "title": "3D view",
+    "view": "View",
+    "fit": "Fit",
+    "display": "Display",
+    "modeSolid": "Solid",
+    "modeEdges": "Solid with edges",
+    "modeWire": "Wireframe",
+    "modeXray": "Transparent",
+    "tree": "Model tree",
+    "hint": "Left drag: orbit, right drag: pan, wheel: zoom",
+    "loading": "Loading 3D model... {{pct}}%",
+    "stats": "{{models}} objects, {{tris}} triangles",
+    "unsupported": "This 3D model uses the {{fmt}} format, which is not supported yet (only U3D).",
+    "activate": "Activate 3D",
+    "expand": "Fill the document area",
+    "shrink": "Back to the page",
+    "deactivate": "Turn off the 3D view",
+    "markupView": "Markup view",
+    "edit": "Edit",
+    "editTip": "Make a markup page of this view; the 3D page stays free to rotate",
+    "creating": "Creating page...",
+    "markupPages": "Markup pages",
+    "pageN": "page {{n}}",
+    "snapshotBar": "3D markup page: {{name}}",
+    "backTo3D": "Back to 3D model",
+    "readFailed": "The 3D model could not be read.",
+    "partial": "Some parts of the 3D model could not be read ({{n}} skipped).",
+    "viewerFailed": "The 3D view could not be started."
   }
 }

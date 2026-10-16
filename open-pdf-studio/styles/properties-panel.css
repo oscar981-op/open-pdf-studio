@@ -195,6 +195,29 @@
   margin: 0;
 }
 
+/* Papiermaat in de gekozen eenheid (#598): invoerveld + eenheid ernaast.
+   Keuzelijst en vast label even breed, zodat de velden eronder uitlijnen. */
+.property-group input.papier-maat-invoer {
+  min-width: 0;
+}
+
+.property-group select.papier-eenheid-keuze {
+  flex: 0 0 48px;
+  width: 48px;
+  padding-right: 16px;
+  background-position: right 3px center;
+}
+
+.property-group .papier-eenheid-label {
+  flex: 0 0 48px;
+  width: 48px;
+  box-sizing: border-box;
+  padding-left: 5px;
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+  user-select: none;
+}
+
 .property-group textarea {
   resize: vertical;
   min-height: 40px;
@@ -422,7 +445,7 @@
 .color-hex {
   font-size: 11px;
   color: var(--theme-text-secondary);
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--ui-font-mono);
 }
 
 /* Color Palette Picker - Dropdown Style */
@@ -469,7 +492,7 @@
 .color-picker-button .color-hex {
   font-size: 11px;
   color: var(--theme-text);
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--ui-font-mono);
   flex: 1;
 }
 
@@ -785,4 +808,50 @@
   font-size: 12px;
   color: var(--theme-text-secondary);
   padding: 6px 0;
+}
+
+/* ── Formulieren van extensies voor systeem-instances (#574) ─────────────── */
+/* De extensie tekent in .scoped-instance-panel-body; Toepassen en Annuleren
+   zijn van de host. Hoekig, compact, standaardcursor. */
+.scoped-instance-panel-body {
+  min-width: 0;
+}
+
+.scoped-instance-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 4px 0 2px;
+}
+
+.scoped-instance-panel-actions button {
+  min-width: 64px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 0;
+  background: var(--theme-surface);
+  color: var(--theme-text);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: default;
+}
+
+.scoped-instance-panel-actions button:hover:not(:disabled) {
+  background: var(--theme-hover);
+  border-color: var(--theme-text-secondary);
+}
+
+.scoped-instance-panel-actions button:disabled {
+  opacity: 0.5;
+}
+
+.scoped-instance-panel-message {
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--theme-text-secondary);
+}
+
+.scoped-instance-panel-message.failed {
+  color: #dc2626;
 }

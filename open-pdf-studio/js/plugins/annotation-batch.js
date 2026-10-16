@@ -1,4 +1,7 @@
-function assertSerializable(value, path = 'annotation', seen = new Set()) {
+/** Gooit een TypeError als `value` iets anders bevat dan JSON-zuivere data
+ *  (platte objecten, arrays, eindige getallen, tekst, booleans, null).
+ *  Ook gebruikt door het systeemtypen-contract (#567). */
+export function assertSerializable(value, path = 'annotation', seen = new Set()) {
   if (value === null || value === undefined || typeof value === 'string' || typeof value === 'boolean') return;
   if (typeof value === 'number' && Number.isFinite(value)) return;
   if (typeof value !== 'object' || seen.has(value)) {
@@ -90,7 +93,11 @@ export function applyAnnotationBatch(doc, operations, host) {
       } else if (operation.op === 'update') {
         const annotation = doc.annotations.find(item => item.id === operation.id);
         const before = snapshot(annotation);
+        const andereDikte = 'lineWidth' in operation.changes && operation.changes.lineWidth !== annotation.lineWidth;
         Object.assign(annotation, operation.changes);
+        // Een andere randdikte laat een tekstinzet uit het bestand vallen
+        // (zelfde regel als zetRanddikte in rendering/textbox-layout.js).
+        if (andereDikte && !('textPadding' in operation.changes)) delete annotation.textPadding;
         host.recordModify(operation.id, before, annotation);
       } else {
         const index = doc.annotations.findIndex(item => item.id === operation.id);

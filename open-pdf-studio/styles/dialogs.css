@@ -336,6 +336,109 @@
   color: var(--theme-text, #333);
 }
 
+/* Statusregel met knoppen ernaast (schermkalibratie, #520). */
+.pref-row .pref-status-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--theme-text, #333);
+  padding-right: 8px;
+}
+
+.pref-inline-buttons {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pref-inline-buttons .pref-btn {
+  min-width: 0;
+  padding: 3px 10px;
+}
+
+.pref-inline-buttons .pref-btn:disabled,
+.screen-cal-row .pref-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Schermkalibratie (#520): balk die met een betaalpas of liniaal wordt
+   vergeleken. Rechte hoeken, compact, zoals de overige dialogen. */
+.screen-calibration-dialog {
+  min-width: 460px;
+  max-width: 92vw;
+}
+
+.screen-cal-body {
+  font-size: 11px;
+  color: var(--theme-text, #333);
+}
+
+.screen-cal-text {
+  margin: 0 0 10px;
+  line-height: 1.4;
+  max-width: 520px;
+}
+
+.screen-cal-note {
+  margin: 10px 0 0;
+  opacity: 0.75;
+}
+
+.screen-cal-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.screen-cal-row > label {
+  min-width: 70px;
+}
+
+.screen-cal-ruler-wrap {
+  overflow-x: auto;
+  padding: 6px 0 10px;
+  margin-bottom: 8px;
+}
+
+.screen-cal-ruler {
+  position: relative;
+  height: 28px;
+  box-sizing: border-box;
+  background: var(--theme-surface, #fff);
+  border: 1px solid var(--theme-text, #000);
+}
+
+.screen-cal-tick {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 8px;
+  margin-left: -1px;
+  background: var(--theme-text, #000);
+}
+
+.screen-cal-tick.long {
+  height: 14px;
+}
+
+.screen-cal-slider {
+  flex: 1;
+  min-width: 120px;
+}
+
+.screen-cal-number {
+  width: 64px;
+  padding: 3px 6px;
+  border: 1px solid var(--theme-border, #acacac);
+  border-radius: 0;
+  font-size: 11px;
+  font-family: inherit;
+  background: var(--theme-surface, #fff);
+  color: var(--theme-text, #333);
+}
+
 /* Uitleg onder een instelling die hier niet kan, bv. in de webversie. */
 .pref-row .pref-hint {
   font-size: 11px;
@@ -881,6 +984,8 @@
   color: var(--theme-text);
   line-height: 1.5;
   margin: 4px 0 0;
+  /* Een opsomming (bv. de bestanden die al bestaan) houdt haar regels. */
+  white-space: pre-line;
 }
 
 .confirm-dialog-checkbox {
@@ -2086,6 +2191,143 @@
   gap: 6px;
 }
 
+/* Split Document Dialog (#381) */
+.split-doc-overlay { }
+
+.split-doc-dialog { width: 460px; }
+
+.split-doc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.split-doc-group {
+  border: 1px solid var(--theme-border, #b0b0b0);
+  border-radius: 0;
+  padding: 6px 8px 8px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.split-doc-group legend {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--theme-text, #333);
+  padding: 0 4px;
+}
+
+.split-doc-radio {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--theme-text, #333);
+  cursor: default;
+  min-height: 22px;
+}
+
+.split-doc-radio.disabled {
+  color: var(--theme-text-secondary, #888);
+}
+
+.split-doc-radio input[type="radio"] {
+  margin: 0;
+  cursor: default;
+  accent-color: #0078d7;
+}
+
+.split-doc-number {
+  width: 56px;
+  padding: 2px 4px;
+  border: 1px solid var(--theme-border, #acacac);
+  border-radius: 0;
+  font-size: 11px;
+  font-family: inherit;
+  background: var(--theme-surface, #fff);
+  color: var(--theme-text, inherit);
+  user-select: text;
+}
+
+.split-doc-number:focus,
+.split-doc-input-wide:focus {
+  outline: none;
+  border-color: #0078d7;
+}
+
+.split-doc-hint {
+  color: var(--theme-text-secondary, #666);
+}
+
+.split-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.split-doc-label {
+  font-size: 11px;
+  color: var(--theme-text, #333);
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.split-doc-input-wide {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--theme-border, #acacac);
+  border-radius: 0;
+  font-size: 11px;
+  font-family: inherit;
+  background: var(--theme-surface, #fff);
+  color: var(--theme-text, inherit);
+  user-select: text;
+}
+
+.split-doc-browse {
+  flex-shrink: 0;
+}
+
+.split-doc-info {
+  font-size: 10px;
+  color: var(--theme-text-secondary, #666);
+  line-height: 1.4;
+}
+
+.split-doc-info.split-doc-indent {
+  /* Onder het invoerveld, niet onder het label. */
+  padding-left: 96px;
+}
+
+.split-doc-summary {
+  font-size: 11px;
+  color: var(--theme-text, #333);
+  border: 1px solid var(--theme-border, #d4d4d4);
+  background: var(--theme-bg, #f5f5f5);
+  padding: 6px 8px;
+}
+
+.split-doc-names {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--theme-text-secondary, #555);
+  user-select: text;
+}
+
+.split-doc-warning {
+  font-size: 11px;
+  color: #a4262c;
+  line-height: 1.4;
+}
+
+.split-doc-footer-right {
+  display: flex;
+  gap: 6px;
+}
+
 /* Merge PDFs Dialog */
 .merge-pdfs-overlay { }
 
@@ -2426,6 +2668,7 @@
 .print-collate-label { margin-left: 12px; }
 
 .print-zoom-row { margin-left: 58px; }
+.print-note { font-size: 11px; color: var(--theme-text-secondary); }
 
 .print-pages-row { margin-bottom: 4px; }
 
@@ -2511,7 +2754,7 @@
   justify-content: center;
   padding: 0;
   color: var(--theme-text, #333);
-  font-family: "Segoe UI Symbol", "Segoe UI", sans-serif;
+  font-family: inherit;
 }
 .print-preview-nav-btn:hover:not(:disabled) { background: var(--theme-hover, #d4e8fc); border-color: var(--theme-accent, #84b8e8); }
 .print-preview-nav-btn:active:not(:disabled) { background: var(--theme-active, #b8d4f0); }
@@ -2888,6 +3131,18 @@
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* Bates-nummering in de kop-/voettekstdialoog */
+.hf-bates {
+  margin: 6px 0;
+}
+
+.hf-bates-example {
+  align-self: center;
+  font-family: var(--ui-font-mono);
+  font-size: 11px;
+  color: var(--theme-text-secondary, #666);
 }
 
 /* Manage Watermarks list */
@@ -3310,6 +3565,8 @@
 }
 .message-dialog-body p {
   margin: 0;
+  /* Meerregelige meldingen (zoals het CMYK-verslag, #422) houden hun regels. */
+  white-space: pre-line;
 }
 .message-dialog-footer {
   display: flex;
@@ -3392,7 +3649,7 @@
   padding: 6px 8px;
   margin: 0 3px;
   font-size: 13px;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--ui-font);
   color: #1a1a1a;
   user-select: text;
   scrollbar-width: thin;
@@ -3521,7 +3778,7 @@
   display: inline-block;
   padding: 1px 6px;
   font-size: 11px;
-  font-family: 'Segoe UI', Consolas, monospace;
+  font-family: var(--ui-font);
   background: var(--theme-bg, #f0f0f0);
   border: 1px solid var(--theme-border, #ccc);
   border-radius: 3px;
@@ -3651,6 +3908,23 @@
   margin: 2px 0 0 0;
   font-size: 10px;
   color: var(--theme-app-menu-shortcut);
+}
+
+/* Extensie die via de AI-koppeling is geïnstalleerd of bijgewerkt (#550). */
+.ext-card-badge {
+  padding: 0 4px;
+  font-size: 10px;
+  border: 1px solid var(--theme-app-menu-divider);
+  color: var(--theme-app-menu-shortcut);
+  white-space: nowrap;
+}
+
+/* Extensie die niet actief is, met de foutcode van de laatste poging. */
+.ext-card-status {
+  margin: 2px 0 0 0;
+  font-size: 11px;
+  color: var(--theme-error-text, #991b1b);
+  word-break: break-word;
 }
 
 .ext-uninstall-btn {
@@ -3931,7 +4205,6 @@
   padding: 10px 8px;
   border: 1px solid var(--theme-border, #d4d4d4);
   background: var(--theme-surface, #fff);
-  cursor: pointer;
   text-align: center;
   transition: background 0.1s, border-color 0.1s;
 }
@@ -4116,7 +4389,7 @@
   background: var(--theme-hover, #f0f0f0);
   color: var(--theme-text, #333);
   padding: 1px 4px;
-  font-family: Consolas, "Courier New", monospace;
+  font-family: var(--ui-font-mono);
   font-size: 11px;
 }
 .whats-new-dialog .wn-release-body .wn-code {
@@ -4125,7 +4398,7 @@
   border: 1px solid var(--theme-border, #e0e0e0);
   padding: 8px 10px;
   margin: 6px 0;
-  font-family: Consolas, "Courier New", monospace;
+  font-family: var(--ui-font-mono);
   font-size: 11px;
   overflow-x: auto;
   white-space: pre;
@@ -4491,6 +4764,58 @@ select.ste-field { padding: 2px 4px; cursor: pointer; }
   width: 82px;
 }
 
+/* Wachtwoord van een beveiligde PDF (PasswordDialog.jsx) */
+.pdf-password-dialog {
+  width: 380px;
+  max-width: calc(100vw - 32px);
+}
+
+.pdf-password-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  cursor: default;
+}
+
+.pdf-password-message {
+  margin: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.pdf-password-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pdf-password-row input {
+  flex: 1;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--theme-border, #ababab);
+  border-radius: 0;
+  font-size: 12px;
+  background: var(--theme-surface, #ffffff);
+  color: var(--theme-text, #333);
+}
+
+.pdf-password-error {
+  color: #c42b1c;
+}
+
+.pdf-password-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 100%;
+}
+
+.pdf-password-footer .pref-btn {
+  cursor: default;
+}
+
 /* CAD-uitwisseling: export naar DXF/DWG en import van DWG/DXF (#400).
    Windows-Forms-stijl: rechte hoeken, compact, thema-kleuren. */
 .cad-dialog { width: 600px; }
@@ -4695,7 +5020,7 @@ select.ste-field { padding: 2px 4px; cursor: pointer; }
   background: var(--theme-surface, #fff);
 }
 .cad-color:disabled { opacity: 0.5; }
-.cad-input-code { width: 66px; font-family: Consolas, 'Courier New', monospace; text-transform: uppercase; }
+.cad-input-code { width: 66px; font-family: var(--ui-font-mono); text-transform: uppercase; }
 /* Een lang pad toont zijn eind: daar staat de map die ertoe doet. */
 /* Een pad wordt aan het begin afgekapt (het eind zegt het meest): daarvoor
    staat de richting bewust andersom; de uitlijning volgt het venster en
@@ -4769,4 +5094,145 @@ select.ste-field { padding: 2px 4px; cursor: pointer; }
   padding: 4px 6px;
   border: 1px solid var(--theme-border, #d4d4d4);
   background: var(--theme-bg, #f5f5f5);
+}
+
+/* ===== Paginalabels: naambouwer (#580) ===== */
+.page-labels-dialog { width: 560px; max-width: 94vw; }
+.page-labels-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--theme-text, #333);
+}
+.page-labels-intro {
+  color: var(--theme-text-secondary, #666);
+  line-height: 1.5;
+}
+.page-labels-row { display: flex; align-items: center; gap: 6px; }
+.page-labels-label { flex-shrink: 0; }
+.page-labels-field {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--theme-border, #acacac);
+  border-radius: 0;
+  font-size: 12px;
+  font-family: var(--ui-font-mono);
+  background: var(--theme-surface, #fff);
+  color: var(--theme-text, inherit);
+  user-select: text;
+}
+.page-labels-field:focus { outline: none; border-color: var(--theme-accent, #0078d7); }
+.page-labels-regions {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--theme-border, #d4d4d4);
+  background: var(--theme-surface, #fff);
+}
+.page-labels-region {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 2px 6px;
+  min-width: 0;
+}
+.page-labels-region + .page-labels-region { border-top: 1px solid var(--theme-border, #e5e5e5); }
+.page-labels-token {
+  width: 56px;
+  flex-shrink: 0;
+  font-family: var(--ui-font-mono);
+  color: var(--theme-accent, #0078d7);
+}
+.page-labels-sample {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.page-labels-sample.empty { font-weight: 400; color: var(--theme-text-secondary, #888); }
+.page-labels-region-page { flex-shrink: 0; color: var(--theme-text-secondary, #888); }
+.page-labels-remove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0;
+  color: var(--theme-text-secondary, #666);
+}
+.page-labels-remove:hover { background: #e81123; color: #fff; }
+.page-labels-example {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-labels-check { display: flex; align-items: center; gap: 6px; }
+.page-labels-check input { margin: 0; }
+.page-labels-actions { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+.page-labels-progress { color: var(--theme-text-secondary, #666); }
+.page-labels-table-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--theme-border, #d4d4d4);
+  background: var(--theme-surface, #fff);
+}
+.page-labels-table { width: 100%; border-collapse: collapse; }
+.page-labels-table th {
+  position: sticky;
+  top: 0;
+  padding: 3px 6px;
+  text-align: start;
+  font-weight: 600;
+  background: var(--theme-bg, #f5f5f5);
+  border-bottom: 1px solid var(--theme-border, #d4d4d4);
+}
+.page-labels-table td { padding: 1px 6px; border-bottom: 1px solid var(--theme-border, #eeeeee); }
+.page-labels-col-page { width: 70px; white-space: nowrap; color: var(--theme-text-secondary, #666); }
+.page-labels-ocr {
+  margin-inline-start: 6px;
+  padding: 0 3px;
+  font-size: 9px;
+  border: 1px solid #c27c0e;
+  color: #c27c0e;
+}
+.page-labels-table td input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  font-size: 11px;
+  font-family: inherit;
+  background: transparent;
+  color: var(--theme-text, inherit);
+  user-select: text;
+}
+.page-labels-table td input:focus { outline: none; border-color: var(--theme-accent, #0078d7); background: var(--theme-surface, #fff); }
+.page-labels-legend { color: var(--theme-text-secondary, #888); }
+.page-labels-footer-right { display: flex; gap: 6px; }
+.page-labels-body .pref-btn:disabled,
+.page-labels-footer-right .pref-btn:disabled { opacity: 0.5; }
+
+/* Aanwijzing boven de pagina terwijl de gebruiker een vak sleept. */
+.page-label-pick-bar {
+  position: fixed;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1500;
+  padding: 5px 12px;
+  font-size: 12px;
+  background: var(--theme-notifbar-bg, #fff4ce);
+  border: 1px solid var(--theme-notifbar-border, #e1c16e);
+  color: var(--theme-notifbar-text, #333);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  white-space: nowrap;
 }

@@ -14,7 +14,7 @@
   padding: 4px;
   align-items: flex-start;
   gap: 2px;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--ui-font);
   font-size: 12px;
 }
 

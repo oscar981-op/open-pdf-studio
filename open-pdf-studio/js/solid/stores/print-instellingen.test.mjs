@@ -26,8 +26,47 @@ test('alle gekozen instellingen komen terug', () => {
     autoCenter: false,
     content: 'doc-only',
     asImage: true,
+    perSheet: 'custom',
+    sheetCols: 3,
+    sheetRows: 4,
+    sheetOrder: 'vertical-reversed',
+    sheetBorder: true,
+    posterScale: 50,
+    posterOverlap: 7.5,
+    posterCutMarks: false,
+    posterLabels: false,
+    posterOnlyLarge: false,
   };
   assert.deepEqual(herstelPrintInstellingen(gekozen), gekozen);
+});
+
+test('posterafdruk: Type "Poster" en de tegelkeuzes komen terug, rommel valt terug', () => {
+  assert.equal(herstelPrintInstellingen({ scaling: 'poster' }).scaling, 'poster');
+  const s = herstelPrintInstellingen({
+    posterScale: 5000, posterOverlap: -4, posterCutMarks: 'ja', posterLabels: 0, posterOnlyLarge: null,
+  });
+  assert.equal(s.posterScale, 400);
+  assert.equal(s.posterOverlap, 0);
+  assert.equal(s.posterCutMarks, true);
+  assert.equal(s.posterLabels, true);
+  assert.equal(s.posterOnlyLarge, true);
+  assert.equal(herstelPrintInstellingen({ posterOverlap: 'x' }).posterOverlap, 10);
+  assert.equal(herstelPrintInstellingen({ posterOverlap: 99 }).posterOverlap, 50);
+});
+
+test('pagina\'s per vel: een getal uit een oud bestand telt, rommel valt terug', () => {
+  assert.equal(herstelPrintInstellingen({ perSheet: 4 }).perSheet, '4');
+  const s = herstelPrintInstellingen({ perSheet: 7, sheetCols: 99, sheetRows: 'x', sheetOrder: 'diagonaal', sheetBorder: 'ja' });
+  assert.equal(s.perSheet, '1');
+  assert.equal(s.sheetCols, 10);
+  assert.equal(s.sheetRows, 2);
+  assert.equal(s.sheetOrder, 'horizontal');
+  assert.equal(s.sheetBorder, false);
+});
+
+test('boekje (#381): de keuze blijft bewaard', () => {
+  assert.equal(herstelPrintInstellingen({ perSheet: 'booklet' }).perSheet, 'booklet');
+  assert.equal(herstelPrintInstellingen({ perSheet: 'Booklet' }).perSheet, '1');
 });
 
 test('onbekende keuzes en verkeerde typen vallen terug op de standaard', () => {

@@ -1,4 +1,5 @@
 import { huidigeSymboolSchaal } from '../symbols/symbol-scale-store.js';
+import { symbolInsertStampFormat } from '../symbols/symbol-insert-format-store.js';
 import { state, getActiveDocument, imageCache } from '../core/state.js';
 import { createAnnotation } from './factory.js';
 import { recordAdd } from '../core/undo-manager.js';
@@ -6,25 +7,15 @@ import { showProperties } from '../ui/panels/properties-panel.js';
 import { redrawAnnotations, redrawContinuous } from './rendering.js';
 import { updateStatusMessage } from '../ui/chrome/status-bar.js';
 import { openDialog } from '../bridge.js';
-import { BUILTIN_STAMP_DEFAULT_WIDTH, BUILTIN_STAMP_DEFAULT_HEIGHT, OVERRIDE_STAMP_DEFAULT_HEIGHT } from './stamp-defaults.js';
-import { svgRealSizeMm, stampPlacementSize } from './svg-real-size.js';
+import { BUILTIN_STAMP_DEFAULT_WIDTH, BUILTIN_STAMP_DEFAULT_HEIGHT, BUILT_IN_STAMPS } from './stamp-defaults.js';
+import { overrideStampMaat } from './svg-real-size.js';
 import { stampPxPerMm } from './stamp-scale.js';
 import { rasterizeSvg } from './svg-raster.js';
 import { paginaMaat, rechtopRotatie } from '../pdf/weergave-ruimte.js';
 
 // Built-in stamp definitions
-export const BUILT_IN_STAMPS = [
-  { name: 'Approved', color: '#22c55e', text: 'APPROVED' },
-  { name: 'Rejected', color: '#ef4444', text: 'REJECTED' },
-  { name: 'Draft', color: '#3b82f6', text: 'DRAFT' },
-  { name: 'Confidential', color: '#ef4444', text: 'CONFIDENTIAL' },
-  { name: 'Final', color: '#22c55e', text: 'FINAL' },
-  { name: 'For Review', color: '#f59e0b', text: 'FOR REVIEW' },
-  { name: 'Not Approved', color: '#ef4444', text: 'NOT APPROVED' },
-  { name: 'Void', color: '#6b7280', text: 'VOID' },
-  { name: 'As Is', color: '#6b7280', text: 'AS IS' },
-  { name: 'Revised', color: '#8b5cf6', text: 'REVISED' }
-];
+// (in stamp-defaults.js, zodat ook de loader ze kan lezen)
+export { BUILT_IN_STAMPS };
 
 // Show stamp picker dialog
 export function showStampPicker(x, y) {
@@ -132,18 +123,32 @@ export async function placeOverrideStamp(x, y) {
     // maat (alle meegeleverde symbolen) blijft het bestaande gedrag gelden:
     // de standaardhoogte, met de breedte uit de beeldverhouding.
     const page = getActiveDocument()?.currentPage || 1;
-    const size = stampPlacementSize({
-      mm: svgRealSizeMm(overrides.stampSvg),
+    // Zelfde berekening als de spookafbeelding van het stempelgereedschap
+    // (tools/text-tool.js), inclusief de gekozen symboolschaal (#357).
+    const size = overrideStampMaat(overrides, {
       pxPerMm: stampPxPerMm(page, x, y),
       aspect,
-      defaultWidth: overrides.stampWidth,
-      defaultHeight: overrides.stampHeight || OVERRIDE_STAMP_DEFAULT_HEIGHT,
       schaal: huidigeSymboolSchaal(),
     });
     stampWidth = size.width;
     stampHeight = size.height;
     stampX = x - stampWidth / 2;
     stampY = y - stampHeight / 2;
+  }
+
+  // Opmaak uit de invoegsessie (#587): kleur en lijndikte gaan de SVG-bron
+  // in (een symbool wordt als raster getekend), dekking en mengmodus op de
+  // annotatie. De lijndikte rekent met de werkelijke plaatsingsbreedte; de
+  // beeldverhouding verandert niet, dus de maat hierboven blijft geldig.
+  let stampSvg = overrides.stampSvg || null;
+  const opmaak = stampSvg ? symbolInsertStampFormat(overrides, stampWidth) : null;
+  if (opmaak && opmaak.svg && opmaak.svg !== stampSvg) {
+    const opgemaakt = await rasterizeSvg(opmaak.svg);
+    if (opgemaakt) {
+      img = opgemaakt.img;
+      dataUrl = opgemaakt.dataUrl;
+      stampSvg = opmaak.svg;
+    }
   }
 
   const imageId = 'stamp_' + Date.now();
@@ -161,7 +166,7 @@ export async function placeOverrideStamp(x, y) {
     height: stampHeight,
     stampName: overrides.stampName || 'Custom',
     stampText: '',
-    stampSvg: overrides.stampSvg || null,
+    stampSvg,
     // Original (unedited) source SVG for this symbol type. Kept so the
     // "Edit Type" editor can resolve/update the correct type override even
     // after the stamp's rendered geometry has been replaced.
@@ -173,6 +178,7 @@ export async function placeOverrideStamp(x, y) {
     originalHeight: img.naturalHeight,
     color: '#000000',
     opacity: 1,
+    ...(opmaak ? opmaak.props : {}),
     // Rechtop op het scherm in een gedraaide weergave (#200); een stempel die
     // de pagina vult, volgt de pagina.
     rotation: overrides.stampFillPage ? 0 : rechtopRotatie(),

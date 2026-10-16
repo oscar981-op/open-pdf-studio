@@ -29,7 +29,8 @@ export default function ThumbnailsPanel() {
   };
 
   const handleKeyDown = async (e) => {
-    if (e.ctrlKey && e.key === 'a') {
+    // Ook met Caps Lock aan (e.key is dan 'A', #577).
+    if (e.ctrlKey && !e.shiftKey && (e.key || '').toLowerCase() === 'a') {
       e.preventDefault();
       selectAllPages();
     } else if (e.key === 'Escape') {
@@ -52,6 +53,18 @@ export default function ThumbnailsPanel() {
     <div class={`left-panel-content${activeTab() === 'thumbnails' ? ' active' : ''}`} id="thumbnails-panel">
       <div class="left-panel-header">
         <span>{t('leftPanel.thumbnails')}</span>
+        {/* Paginalabels: de naambouwer leest de bladnamen uit de onderhoek (#580). */}
+        <button
+          class="thumbnails-header-btn"
+          title={t('leftPanel.pageLabels')}
+          disabled={!pageCount()}
+          onClick={async () => {
+            const { openDialog } = await import('../../../stores/dialogStore.js');
+            openDialog('page-labels');
+          }}
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 3.5h8l4.5 4.5-4.5 4.5h-8z"/><path d="M4 6.5h4M4 9.5h5"/></svg>
+        </button>
       </div>
       <div class="thumbnails-container" id="thumbnails-container" ref={setContainerRef} tabIndex={0} onKeyDown={handleKeyDown}>
         <For each={pages()}>

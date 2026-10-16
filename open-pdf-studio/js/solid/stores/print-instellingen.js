@@ -24,14 +24,27 @@ export const PRINT_STANDAARD = Object.freeze({
   autoCenter: true,
   content: 'doc-and-markups',
   asImage: false,
+  perSheet: '1',
+  sheetCols: 2,
+  sheetRows: 2,
+  sheetOrder: 'horizontal',
+  sheetBorder: false,
+  // Posterafdruk (Type "Poster", print-poster.js).
+  posterScale: 100,
+  posterOverlap: 10,
+  posterCutMarks: true,
+  posterLabels: true,
+  posterOnlyLarge: true,
 });
 
 /** De toegestane waarden per keuzelijst van de printdialoog. */
 export const PRINT_KEUZES = Object.freeze({
   range: ['all', 'current', 'custom'],
   subset: ['all', 'odd', 'even'],
-  scaling: ['fit', 'actual', 'shrink', 'custom-scale'],
+  scaling: ['fit', 'actual', 'shrink', 'custom-scale', 'poster'],
   content: ['doc-and-markups', 'doc-only'],
+  perSheet: ['1', '2', '4', '6', '9', '16', 'custom', 'booklet'],
+  sheetOrder: ['horizontal', 'horizontal-reversed', 'vertical', 'vertical-reversed'],
 });
 
 const KEUZES = PRINT_KEUZES;
@@ -46,7 +59,10 @@ export function markeringenVoorInhoud(inhoud) {
   return inhoud !== 'doc-only';
 }
 
-const SCHAKELAARS = ['collate', 'reverseOrder', 'autoRotate', 'autoCenter', 'asImage'];
+const SCHAKELAARS = [
+  'collate', 'reverseOrder', 'autoRotate', 'autoCenter', 'asImage', 'sheetBorder',
+  'posterCutMarks', 'posterLabels', 'posterOnlyLarge',
+];
 
 function geheelGetal(waarde, min, max, terugval) {
   const n = Number(waarde);
@@ -65,12 +81,20 @@ export function herstelPrintInstellingen(opgeslagen) {
   if (typeof o.printer === 'string') s.printer = o.printer;
   if (o.copies !== undefined) s.copies = geheelGetal(o.copies, 1, 999, PRINT_STANDAARD.copies);
   if (o.zoom !== undefined) s.zoom = geheelGetal(o.zoom, 10, 400, PRINT_STANDAARD.zoom);
+  if (o.sheetCols !== undefined) s.sheetCols = geheelGetal(o.sheetCols, 1, 10, PRINT_STANDAARD.sheetCols);
+  if (o.sheetRows !== undefined) s.sheetRows = geheelGetal(o.sheetRows, 1, 10, PRINT_STANDAARD.sheetRows);
+  if (o.posterScale !== undefined) s.posterScale = geheelGetal(o.posterScale, 10, 400, PRINT_STANDAARD.posterScale);
+  if (o.posterOverlap !== undefined) {
+    const n = Number(o.posterOverlap);
+    if (Number.isFinite(n)) s.posterOverlap = Math.min(50, Math.max(0, Math.round(n * 10) / 10));
+  }
   if (typeof o.customPages === 'string') s.customPages = o.customPages;
   for (const sleutel of SCHAKELAARS) {
     if (typeof o[sleutel] === 'boolean') s[sleutel] = o[sleutel];
   }
   for (const [sleutel, toegestaan] of Object.entries(KEUZES)) {
-    if (toegestaan.includes(o[sleutel])) s[sleutel] = o[sleutel];
+    const waarde = typeof o[sleutel] === 'number' ? String(o[sleutel]) : o[sleutel];
+    if (toegestaan.includes(waarde)) s[sleutel] = waarde;
   }
   return s;
 }

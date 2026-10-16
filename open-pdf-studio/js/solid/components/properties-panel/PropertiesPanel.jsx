@@ -1,5 +1,5 @@
 import { Show, onMount } from 'solid-js';
-import { panelVisible, panelCollapsed, setPanelCollapsed, annotProps, sectionVis, updateAnnotProp, cycleSelectNext, nativePanelHidden, hydrateCollapsedSections, getCurrentAnnotation } from '../../stores/propertiesStore.js';
+import { panelVisible, panelCollapsed, setPanelCollapsed, annotProps, sectionVis, updateAnnotProp, cycleSelectNext, nativePanelHidden, hydrateCollapsedSections, getCurrentAnnotation, SCHAALBALK_MIN_HOOGTE_PT } from '../../stores/propertiesStore.js';
 import { openDialog } from '../../stores/dialogStore.js';
 import { startScaleMeasureFlow } from '../../../tools/tools/scale-measure-tool.js';
 import { useTranslation } from '../../../i18n/useTranslation.js';
@@ -17,9 +17,13 @@ import TextFormatSection from './TextFormatSection.jsx';
 import ParagraphSection from './ParagraphSection.jsx';
 import ContentSection from './ContentSection.jsx';
 import ImageSection from './ImageSection.jsx';
+import { PapierMaatInvoer, PapierEenheidKeuze } from './PapierMaat.jsx';
+import { leesInvoerInEenheid } from '../../../annotations/papiermaat-eenheid.js';
+import { papierEenheid } from '../../stores/papierEenheidStore.js';
 import ActionsSection from './ActionsSection.jsx';
 import CustomFieldsSection from './CustomFieldsSection.jsx';
 import CustomPluginPanel from './CustomPluginPanel.jsx';
+import ScopedInstancePanels from './ScopedInstancePanels.jsx';
 import CollapsibleSection from './CollapsibleSection.jsx';
 import ParametricSymbolSection from './ParametricSymbolSection.jsx';
 import GevelelementSection from './GevelelementSection.jsx';
@@ -218,13 +222,18 @@ export default function PropertiesPanel() {
                     onChange={(e) => updateAnnotProp('scaleBarDivisions', e.target.value)}
                   />
                 </div>
+                {/* Balkhoogte is een papiermaat: in de gekozen eenheid (#598),
+                    in het model paginapunten (4 pt of meer). */}
                 <div class="property-group">
                   <label>{t('scaleBar.barHeight')}</label>
-                  <input type="number" step="1" min="4" max="100"
-                    value={annotProps.scaleBarHeight}
+                  <PapierMaatInvoer pt={() => annotProps.scaleBarHeight} bron={() => annotProps.id}
                     disabled={annotProps.locked === true || annotProps.locked === 'mixed'}
-                    onChange={(e) => updateAnnotProp('scaleBarHeight', e.target.value)}
+                    onWijzig={(tekst) => {
+                      const pt = leesInvoerInEenheid(tekst, papierEenheid(), { min: SCHAALBALK_MIN_HOOGTE_PT });
+                      if (pt != null) updateAnnotProp('scaleBarHeight', pt);
+                    }}
                   />
+                  <PapierEenheidKeuze />
                 </div>
               </CollapsibleSection>
             </Show>
@@ -240,6 +249,7 @@ export default function PropertiesPanel() {
             <ImageSection />
             <CustomFieldsSection />
             <CustomPluginPanel />
+            <ScopedInstancePanels />
             <ActionsSection />
           </div>
         </Show>

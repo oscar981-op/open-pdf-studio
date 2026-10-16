@@ -27,9 +27,9 @@ async function bronMetVak({ rotatie = 0 } = {}) {
 
 /** Bed in, teken op een pagina, sla op en lees het XObject terug uit het
  *  resultaat — pas na opslaan staat het echt in de resources. */
-async function ingebedXObject(bronBytes, vak = VAK) {
+async function ingebedXObject(bronBytes, vak = VAK, opties) {
   const doel = await PDFDocument.create();
-  const r = await bedKnipselIn(doel, bronBytes, vak);
+  const r = await bedKnipselIn(doel, bronBytes, vak, 0, opties);
   const pagina = doel.addPage([800, 600]);
   pagina.drawPage(r.ingebed, { x: 0, y: 0, width: r.breedte, height: r.hoogte });
   const heropend = await PDFDocument.load(await doel.save());
@@ -37,6 +37,7 @@ async function ingebedXObject(bronBytes, vak = VAK) {
   const namen = xobjs.keys();
   const form = heropend.context.lookup(xobjs.get(namen[0]));
   return {
+    form,
     aantal: namen.length,
     bbox: form.dict.get(PDFName.of('BBox')).asArray().map((n) => n.asNumber()),
     matrix: form.dict.get(PDFName.of('Matrix')).asArray().map((n) => n.asNumber()),
@@ -257,4 +258,64 @@ test('herhaald knippen deelt mini-PDF, gewijzigde bron en rotatie krijgen eigen 
   assert.equal(a, b);
   assert.notEqual(await knipselAlsMiniPdf(bytes, 0, 90), a);
   assert.notEqual(await knipselAlsMiniPdf(new Uint8Array(bytes)), a);
+});
+
+// Een doorzichtige onderlegger (#512): de alfa staat vóór de `Do` van het
+// knipsel. Zet de brontekening zelf `gs` met ca 1, dan geldt binnen een gewone
+// Form XObject die 1 weer voor alles erna en wordt de onderlegger dekkend.
+// Als transparantiegroep wordt het knipsel eerst als geheel opgebouwd en dan
+// met de buitenste alfa samengesteld, zoals op het scherm.
+test('het knipsel is een transparantiegroep, zodat de buitenste alfa voor het geheel geldt', async () => {
+  const { form } = await ingebedXObject(await bronMetVak(), VAK, { alsGroep: true });
+  const groep = form.dict.lookup(PDFName.of('Group'));
+  assert.ok(groep, 'het knipsel heeft een /Group');
+  assert.equal(groep.get(PDFName.of('S')).asString(), '/Transparency');
+});
+
+test('een dekkend knipsel krijgt geen groep (overvloeimodi in de bron blijven werken)', async () => {
+  const { form } = await ingebedXObject(await bronMetVak());
+  assert.equal(form.dict.get(PDFName.of('Group')), undefined);
+});
+// Een lege pagina die pdf-lib zelf aanmaakte (nieuw document, ingevoegde lege
+// pagina) heeft geen /Contents. embedPage gooit daarop pas bij opslaan, en dan
+// mislukte elke volgende save van het document, niet alleen die ene.
+test('een knipsel van een lege pagina zonder inhoud blokkeert het opslaan niet', async () => {
+  const leeg = await PDFDocument.create();
+  leeg.addPage([600, 400]);
+  const bytes = await leeg.save();
+  assert.equal((await PDFDocument.load(bytes)).getPage(0).node.Contents(), undefined, 'de bron heeft echt geen /Contents');
+  for (const opties of [{}, { alsGroep: true }]) {
+    const doel = await PDFDocument.create();
+    const r = await bedKnipselIn(doel, bytes, VAK, 0, opties);
+    doel.addPage([800, 600]).drawPage(r.ingebed, { x: 0, y: 0, width: r.breedte, height: r.hoogte });
+    const opgeslagen = await doel.save();
+    assert.ok(opgeslagen.length > 0);
+    assert.ok((await doel.save()).length > 0, 'ook een tweede save lukt');
+  }
+});
+
+// Gedeelde bron (#509) en transparantiegroep (#512) samen: een dekkend en een
+// doorzichtig knipsel van hetzelfde vak in één document delen de zware
+// bron-Form, maar niet de wrapper; alleen de doorzichtige krijgt de groep.
+test('dekkend en doorzichtig knipsel van hetzelfde vak: eigen wrapper, gedeelde bron, groep alleen bij doorzichtig', async () => {
+  const bytes = await bronMetVak();
+  const target = await PDFDocument.create();
+  const dekkend = await bedKnipselIn(target, bytes, VAK);
+  const doorzichtig = await bedKnipselIn(target, bytes, VAK, 0, { alsGroep: true });
+  const nogmaals = await bedKnipselIn(target, bytes, VAK, 0, { alsGroep: true });
+  assert.notEqual(doorzichtig.ingebed.ref, dekkend.ingebed.ref);
+  assert.equal(nogmaals.ingebed.ref, doorzichtig.ingebed.ref);
+  const pagina = target.addPage();
+  pagina.drawPage(dekkend.ingebed);
+  pagina.drawPage(doorzichtig.ingebed);
+  await target.flush();
+  const form = (r) => target.context.lookup(r.ingebed.ref);
+  const bronVan = (r) => {
+    const x = form(r).dict.lookup(PDFName.of('Resources')).lookup(PDFName.of('XObject'));
+    return x.get(x.keys()[0]).toString();
+  };
+  assert.equal(bronVan(dekkend), bronVan(doorzichtig));
+  assert.equal(form(dekkend).dict.get(PDFName.of('Group')), undefined);
+  const groep = form(doorzichtig).dict.lookup(PDFName.of('Group'));
+  assert.equal(groep?.get(PDFName.of('S'))?.asString(), '/Transparency');
 });

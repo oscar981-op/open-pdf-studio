@@ -17,6 +17,7 @@ import { getEffectiveScale } from '../tools/effective-scale.js';
 import { raakMarge, wolkUitstulping, schermPxNaarPt } from './minimummaat.js';
 import { puntInVlak } from './vlak-ringen.js';
 import { raakbaarBijKlik } from '../plattegrond/ruimte-koppeling.js';
+import { caretHit } from './corrections/geometry.js';
 
 // Binnen-test voor vormen die overal in hun vak raakbaar zijn. Een vorm die op
 // het scherm kleiner is dan het minimale raakvlak krijgt een marge in
@@ -642,6 +643,7 @@ export function findAnnotationAt(x, y, pageNum = null) {
       case 'textHighlight':
       case 'textStrikethrough':
       case 'textUnderline':
+      case 'textSquiggly':
         // Check if clicking inside any of the text rects
         if (ann.rects && ann.rects.length > 0) {
           for (const rect of ann.rects) {
@@ -653,6 +655,11 @@ export function findAnnotationAt(x, y, pageNum = null) {
           // Fallback to bounding box
           if (x >= ann.x && x <= ann.x + ann.width && y >= ann.y && y <= ann.y + ann.height) return ann;
         }
+        break;
+      case 'caret':
+        // Invoegteken (#508): een klein teken, dus het vak groeit met de
+        // raaktolerantie.
+        if (caretHit(ann, x, y, tol)) return ann;
         break;
       default: {
         const typeHandler = getAnnotationType(ann.type);
@@ -855,6 +862,7 @@ export function isPointInsideAnnotation(x, y, annotation) {
     case 'textHighlight':
     case 'textStrikethrough':
     case 'textUnderline':
+    case 'textSquiggly':
       // Check if inside any of the text rects
       if (annotation.rects && annotation.rects.length > 0) {
         for (const rect of annotation.rects) {
@@ -866,6 +874,10 @@ export function isPointInsideAnnotation(x, y, annotation) {
       // Fallback to bounding box
       return x >= annotation.x && x <= annotation.x + annotation.width &&
              y >= annotation.y && y <= annotation.y + annotation.height;
+
+    case 'caret':
+      // Invoegteken (#508): zelfde raakvak als in findAnnotationAt.
+      return caretHit(annotation, x, y, schermPxNaarPt(10, getEffectiveScale()));
 
     default:
       return false;

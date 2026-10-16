@@ -14,13 +14,31 @@ function clonePlainValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function verhoogInhoudRevisie(doc) {
+  doc.inhoudRevisie = (Number.isInteger(doc.inhoudRevisie) ? doc.inhoudRevisie : 0) + 1;
+}
+
 // Sync the modified flag based on whether the undo stack matches the saved clean point
 function syncModifiedState() {
   const doc = getActiveDocument();
   if (!doc) return;
+  // Elke stap in de undo-geschiedenis (ook ongedaan maken en opnieuw) geeft
+  // het document een nieuwe inhoudsrevisie (#575, documentRevisie).
+  verhoogInhoudRevisie(doc);
   const isClean = doc.savedUndoStackLength >= 0 &&
                   (doc.undoStack || []).length === doc.savedUndoStackLength;
   doc.modified = !isClean;
+}
+
+/**
+ * De inhoudsrevisie van een document ('d<n>'): verandert bij elke wijziging
+ * die in de undo-geschiedenis komt, en bij ongedaan maken en opnieuw. Een
+ * vergelijking met een eerder gelezen revisie zegt dus of het document sinds
+ * dat moment is gewijzigd (#575: revisionContext van extensieopdrachten).
+ */
+export function documentRevisie(doc) {
+  if (!doc) return null;
+  return `d${Number.isInteger(doc.inhoudRevisie) ? doc.inhoudRevisie : 0}`;
 }
 
 // Per-document undo stack stored on the document object
@@ -840,6 +858,28 @@ export function recordBulkAdd(annotations) {
   execute({ type: 'bulkAdd', items });
 }
 
+// A correction that keeps growing in the proofreading mode (#508: pressing
+// Delete again extends the strike-through) stays one undo step: the add at
+// the top of the stack takes the new shape, so one undo removes the whole
+// correction. Only while that add is the last step, nothing can be redone,
+// no transaction is open and the document was not saved after it; otherwise
+// false, and the caller records an ordinary modify step.
+export function amendLastAdd(annotation) {
+  if (!annotation || undoTransactionDepth > 0) return false;
+  const doc = getActiveDocument();
+  if (!doc) return false;
+  const stack = getUndoStack();
+  const top = stack[stack.length - 1];
+  if (!top || top.type !== 'addAnnotation' || top.annotation?.id !== annotation.id) return false;
+  if ((doc.redoStack || []).length > 0) return false;
+  if (doc.savedUndoStackLength === stack.length) return false;
+  if (pendingPropertyChange) flushPropertyChange();
+  top.annotation = cloneAnnotation(annotation);
+  syncModifiedState();
+  scheduleThumbnailRefresh(top);
+  return true;
+}
+
 export function recordAnnotationOrder(oldOrder, newOrder) {
   if (!Array.isArray(oldOrder) || !Array.isArray(newOrder)) return;
   if (oldOrder.length !== newOrder.length) return;
@@ -955,10 +995,17 @@ export function flushPropertyChange() {
       }
     }
     targetDoc.redoStack = [];
+    // Ook een wijziging uit het eigenschappenpaneel is een nieuwe stap in de
+    // undo-geschiedenis: nieuwe inhoudsrevisie, anders blijft een verouderde
+    // revisionContext van een extensieopdracht geldig (#575).
+    verhoogInhoudRevisie(targetDoc);
     // Sync modified state
     const isClean = targetDoc.savedUndoStackLength >= 0 &&
                     targetDoc.undoStack.length === targetDoc.savedUndoStackLength;
     targetDoc.modified = !isClean;
+    // Kleur, lijndikte enz. uit het eigenschappenpaneel komen hier binnen,
+    // niet via execute(): ook dan de miniatuur van die pagina verversen (#579).
+    if (targetDoc.id === getActiveDocument()?.id) scheduleThumbnailRefresh(cmd);
   }
 
   pendingPropertyChange = null;

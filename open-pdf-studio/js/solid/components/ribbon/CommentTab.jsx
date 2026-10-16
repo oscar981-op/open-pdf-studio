@@ -27,6 +27,10 @@ import { savePreferences } from '../../../core/preferences.js';
 import { toggleSchedule, scheduleVisible } from '../../stores/scheduleStore.js';
 import { isDynamicScalingEnabled, setDynamicScalingEnabled } from '../../../annotations/dynamic-scaling.js';
 import PrefSelect from '../preferences/PrefSelect.jsx';
+import { toggleProofreading, PROOFREAD_TOOL } from '../../../tools/proofreading-mode.js';
+
+// Proofreading (#508): lines of text, a struck word (red) and an insert caret (blue).
+const proofreadIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><line x1="3" y1="5" x2="21" y2="5" stroke-width="1.5"/><line x1="3" y1="11" x2="8" y2="11" stroke-width="1.5"/><line x1="10" y1="11" x2="21" y2="11" stroke-width="1.5"/><line x1="10" y1="11" x2="16" y2="11" stroke="#FF0000" stroke-width="2"/><line x1="3" y1="17" x2="21" y2="17" stroke-width="1.5"/><path d="M6 21.5 L8.5 17.5 L11 21.5" stroke="#0066FF" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
 
 const scheduleIcon = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.5" stroke-width="1.5"/><line x1="3" y1="8" x2="21" y2="8" stroke-width="1.5"/><line x1="3" y1="13" x2="21" y2="13" stroke-width="1"/><line x1="3" y1="18" x2="21" y2="18" stroke-width="1"/><line x1="9" y1="8" x2="9" y2="21" stroke-width="1"/><line x1="15" y1="8" x2="15" y2="21" stroke-width="1"/></svg>`;
 
@@ -53,6 +57,11 @@ export function CommentGroups() {
             disabled={noPdf() || isPdfAReadOnly()} active={state.currentTool === 'callout'} onClick={() => setTool('callout')} />
           <RibbonButton id="tool-comment" title={t('comment.note')} icon={noteIcon} label={t('comment.note')}
             disabled={noPdf() || isPdfAReadOnly()} active={state.currentTool === 'comment'} onClick={() => setTool('comment')} />
+        </RibbonGroup>
+
+        <RibbonGroup label={t('proofread.group')}>
+          <RibbonButton id="tool-proofread" title={t('proofread.tooltip')} icon={proofreadIcon} label={t('proofread.button')}
+            disabled={noPdf() || isPdfAReadOnly()} active={state.currentTool === PROOFREAD_TOOL} onClick={() => toggleProofreading()} />
         </RibbonGroup>
 
         <RibbonGroup label={t('comment.stamp')}>

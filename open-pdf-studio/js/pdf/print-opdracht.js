@@ -165,7 +165,10 @@ export function leesPrintOpdracht(params, { onthouden, venster, naarBestand = tr
     return fout(`params.zoom must be between ${ZOOM_MIN} and ${ZOOM_MAX} percent`);
   }
   // Een zoom noemen betekent "aangepaste schaal", zoals params.scale bij app_export_cad.
-  const schaling = p.scaling ?? (p.zoom !== undefined ? 'custom-scale' : bewaard.scaling);
+  // De posterafdruk (print-poster.js) is een keuze van de printdialoog; een
+  // opdracht zonder schaal valt dan terug op passend.
+  const bewaardeSchaling = SCHALINGEN.includes(bewaard.scaling) ? bewaard.scaling : 'fit';
+  const schaling = p.scaling ?? (p.zoom !== undefined ? 'custom-scale' : bewaardeSchaling);
   if (schaling === 'custom-scale' && p.zoom === undefined && p.scaling !== undefined) {
     return fout('params.scaling "custom-scale" needs params.zoom');
   }

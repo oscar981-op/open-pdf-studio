@@ -140,7 +140,7 @@ export default function KeystrokeOverlay() {
               padding: '8px 14px',
               'font-size': '20px',
               'font-weight': 600,
-              'font-family': 'Segoe UI, Arial, sans-serif',
+              'font-family': 'var(--ui-font)',
               'box-shadow': '0 2px 8px rgba(0,0,0,0.4)',
               'white-space': 'nowrap',
             }}>

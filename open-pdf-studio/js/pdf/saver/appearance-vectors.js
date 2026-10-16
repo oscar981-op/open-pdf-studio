@@ -21,7 +21,9 @@ import { catmullRomToBezier, splineArrowEndTangent } from '../../annotations/spl
 import { toWinAnsiText, winAnsiLiteral } from './pdf-text.js';
 import { maatTekstMarge, leesbareHoek } from '../../annotations/maat-label.js';
 import { maatlijnGeometrie } from '../../annotations/maatlijn-geometrie.js';
+import { inlineMaatlijn, helveticaBreedte, HOOFDLETTER_HOOGTE } from '../../annotations/maatlijn-inline.js';
 import { klemMaat, MIN_VORM_MAAT_PT } from '../../annotations/minimummaat.js';
+import { vlakZijden, zijdeLabel, zijdeTekstBreedte, ZIJDE_TEKST_GROOTTE } from '../../annotations/vlak-zijden.js';
 import {
   rotToWorld as srRotToWorld,
   SYSTEEM_RAVEEL_OFFSET_MM as srRaveelOffsetMm,
@@ -331,14 +333,40 @@ export function buildFilledAreaAP({ points, holes, X, Y, fillColorHex, strokeCol
   return { content: s, needsFont: false };
 }
 
-// measureArea: fill + optional hatch + outline + centroid label.
+// Zijdematen van een meetvlak (#536): elke tekst midden op haar zijde, langs
+// de zijde, rechtop en aan de buitenkant — dezelfde plaats als op het scherm
+// (vlak-zijden.js). `zijdeTeksten` is een lijst { index, tekst }; `draaiing`
+// de paginarotatie (radialen), want de punten staan hier in het ongedraaide
+// paginaframe.
+function zijdematenOps({ points, zijdeTeksten, draaiing, colorRgb, X, Y }) {
+  const tekstVan = new Map(zijdeTeksten.map((z) => [z.index, z.tekst]));
+  const fs = ZIJDE_TEKST_GROOTTE;
+  let s = '';
+  for (const zijde of vlakZijden(points)) {
+    const tekst = tekstVan.get(zijde.index);
+    if (!tekst) continue;
+    const l = zijdeLabel(zijde, { fontSize: fs, draaiing });
+    const half = zijdeTekstBreedte(toWinAnsiText(tekst, { newlines: 'space' }), fs) / 2;
+    const bx = l.x - l.richting.x * half;
+    const by = l.y - l.richting.y * half;
+    // App-hoek is y-omlaag, PDF y-omhoog: hoek spiegelen (zoals maatLabelOps).
+    const c = Math.cos(-l.hoek), sn = Math.sin(-l.hoek);
+    s += `BT\n/Helv ${f(fs)} Tf\n${f(colorRgb[0])} ${f(colorRgb[1])} ${f(colorRgb[2])} rg\n`;
+    s += `${f(c)} ${f(sn)} ${f(-sn)} ${f(c)} ${f(X(bx))} ${f(Y(by))} Tm\n`;
+    s += `(${escapePdfText(tekst)}) Tj\nET\n`;
+  }
+  return s;
+}
+
+// measureArea: fill + optional hatch + outline + centroid label, en de
+// zijdematen als `zijdeTeksten` gegeven is (#536).
 // `fillAlpha` (annotation fillOpacity, PDF /ca) applies to the solid fill only,
 // wrapped in q…Q with /GSf so hatch, outline and label stay opaque — the same
 // split as on screen. The result then carries `fillAlpha`, which makes the
 // caller (attachVectorAP) add the /GSf ExtGState to the resources.
 export function buildMeasureAreaAP({ points, holes, X, Y, fillColorHex, strokeColorHex,
   lineWidth, borderStyle, hatchPattern, hatchColorHex, hatchScale, hatchAngle,
-  text, labelX, labelY, fillAlpha, heeftRand = true }) {
+  text, labelX, labelY, fillAlpha, heeftRand = true, zijdeTeksten, draaiing = 0 }) {
   if (!points || points.length < 3) return null;
   const stroke = hexToRgb(strokeColorHex || '#ff0000');
   const alpha = (typeof fillAlpha === 'number' && fillAlpha >= 0 && fillAlpha < 1) ? fillAlpha : undefined;
@@ -364,6 +392,9 @@ export function buildMeasureAreaAP({ points, holes, X, Y, fillColorHex, strokeCo
   cx /= points.length; cy /= points.length;
   s += labelOps({ text, x: labelX != null ? labelX : cx, y: labelY != null ? labelY : cy,
     fontSize: 11, colorRgb: stroke, X, Y });
+  if (Array.isArray(zijdeTeksten) && zijdeTeksten.length > 0) {
+    s += zijdematenOps({ points, zijdeTeksten, draaiing, colorRgb: stroke, X, Y });
+  }
   return filledWithAlpha
     ? { content: s, needsFont: true, fillAlpha: alpha }
     : { content: s, needsFont: true };
@@ -411,9 +442,10 @@ function maatLabelOps({ text, startX, startY, endX, endY, offsetX, offsetY, font
 // measureDistance: dimension line + extension lines + label above the line.
 // `fontSize`, `startHead`/`endHead`/`headSize` or an explicit `marge` place
 // the label exactly as the screen does (maat-label.js).
+// `labelColorHex`: eigen tekstkleur (overgenomen uit /RC), anders de lijnkleur.
 export function buildMeasureDistanceAP({ startX, startY, endX, endY,
   leaderStartX, leaderStartY, leaderEndX, leaderEndY,
-  X, Y, strokeColorHex, lineWidth, borderStyle, text, textOffsetX, textOffsetY,
+  X, Y, strokeColorHex, labelColorHex, lineWidth, borderStyle, text, textOffsetX, textOffsetY,
   fontSize, startHead, endHead, headSize, marge,
   extension, dimLineOvershootMm, dimOvershootEnds, dimExtGapMm, dimExtOvershootMm }) {
   const stroke = hexToRgb(strokeColorHex || '#ff0000');
@@ -434,11 +466,71 @@ export function buildMeasureDistanceAP({ startX, startY, endX, endY,
   if (text) {
     s += maatLabelOps({
       text, startX, startY, endX, endY, offsetX: textOffsetX, offsetY: textOffsetY,
-      fontSize, colorRgb: stroke, X, Y,
+      fontSize, colorRgb: labelColorHex ? hexToRgb(labelColorHex) : stroke, X, Y,
       marge: marge ?? maatTekstMarge({ fontSize, startHead, endHead, headSize }),
     });
   }
   return { content: s, needsFont: !!text };
+}
+
+// measureDistance met het bijschrift IN de lijn (dimTextPosition 'inline',
+// een maat uit een ander programma): hulplijnen, de maatlijn onderbroken
+// voor de tekst, de punten (hol als `headFill` false is) en de tekst midden
+// op de lijn, zoals het scherm (annotations/maatlijn-inline.js). `draaiing`
+// (radialen) is de paginarotatie: de tekst leest van onder of van links op
+// de GEDRAAIDE pagina, zoals op het scherm.
+export function buildInlineMaatAP({ startX, startY, endX, endY,
+  leaderStartX, leaderStartY, leaderEndX, leaderEndY,
+  X, Y, strokeColorHex, labelColorHex, lineWidth, borderStyle, text, textOffsetX, textOffsetY,
+  fontSize, startHead, endHead, headSize, headFill, draaiing = 0,
+  extension, dimLineOvershootMm, dimOvershootEnds, dimExtGapMm, dimExtOvershootMm }) {
+  const stroke = hexToRgb(strokeColorHex || '#ff0000');
+  const lw = lineWidth ?? 1;
+  const fs = fontSize > 0 ? fontSize : 11;
+  const kop = headSize || 12;
+  let s = `${f(stroke[0])} ${f(stroke[1])} ${f(stroke[2])} RG\n${f(lw)} w\n${dashOp(borderStyle)}`;
+  const geo = maatlijnGeometrie({
+    startX, startY, endX, endY, leaderStartX, leaderStartY, leaderEndX, leaderEndY,
+    headSize: kop, extension, dimLineOvershootMm, dimOvershootEnds, dimExtGapMm, dimExtOvershootMm,
+  });
+  for (const h of geo.hulplijnen) {
+    s += `${f(X(h.x1))} ${f(Y(h.y1))} m ${f(X(h.x2))} ${f(Y(h.y2))} l S\n`;
+  }
+  const shown = text ? toWinAnsiText(text, { newlines: 'space' }) : '';
+  const tw = helveticaBreedte(shown, fs);
+  const il = inlineMaatlijn({
+    startX, startY, endX, endY, leaderStartX, leaderStartY, leaderEndX, leaderEndY,
+    lineWidth: lw, headSize: kop, startHead, endHead, tekstBreedte: tw, fontSize: fs,
+    tekstOffsetX: textOffsetX, tekstOffsetY: textOffsetY, draaiing,
+  });
+  for (const l of il.lijnstukken) {
+    s += `${f(X(l.x1))} ${f(Y(l.y1))} m ${f(X(l.x2))} ${f(Y(l.y2))} l S\n`;
+  }
+  for (const k of il.koppen) {
+    // Zoals drawDimensionLineEnding: cirkel, ruit en vierkant gecentreerd en
+    // ongevuld, de schuine streep 30° gedraaid.
+    const leeg = k.stijl === 'circle' || k.stijl === 'diamond' || k.stijl === 'square';
+    const schuif = k.stijl === 'circle' ? kop / 3 : leeg ? kop / 2 : 0;
+    const hoek = k.stijl === 'slash' ? k.hoek + Math.PI / 6 : k.hoek;
+    s += lineHeadOps(k.x + Math.cos(k.hoek) * schuif, k.y + Math.sin(k.hoek) * schuif, hoek, kop, k.stijl,
+      stroke, null, lw, X, Y, { hol: headFill === false || leeg });
+  }
+  if (shown) {
+    // Midden van de hoofdletters op het tekstpunt: de basislijn ligt een
+    // halve hoofdletterhoogte "onder" de tekst, het begin een halve breedte terug.
+    const a = il.tekst.hoek;
+    const dir = { x: Math.cos(a), y: Math.sin(a) };
+    const up = { x: Math.sin(a), y: -Math.cos(a) };
+    const half = fs * HOOFDLETTER_HOOGTE / 2;
+    const bx = il.tekst.x - dir.x * tw / 2 - up.x * half;
+    const by = il.tekst.y - dir.y * tw / 2 - up.y * half;
+    const kleur = labelColorHex ? hexToRgb(labelColorHex) : stroke;
+    const c = Math.cos(-a), sn = Math.sin(-a);
+    s += `BT\n/Helv ${f(fs)} Tf\n${f(kleur[0])} ${f(kleur[1])} ${f(kleur[2])} rg\n`;
+    s += `${f(c)} ${f(sn)} ${f(-sn)} ${f(c)} ${f(X(bx))} ${f(Y(by))} Tm\n`;
+    s += `(${escapePdfText(text)}) Tj\nET\n`;
+  }
+  return { content: s, needsFont: !!shown };
 }
 
 // wall: fill band (bg colour) + optional material hatch + outline. `bandPoints`
@@ -779,6 +871,190 @@ export function buildSplineArrowAP({ points, X, Y, strokeColorHex, fillColorHex,
     s += arrowheadOps(tip.x, tip.y, revAngle, size, startHead, stroke, fill, lw, X, Y);
   }
   return { content: s, needsFont: false };
+}
+
+// ── line / arrow / polyline ─────────────────────────────────────────────────
+// Other viewers do not draw a /Line or /PolyLine from /L, /LE or /Vertices
+// themselves (PDFium draws nothing), so these need an appearance like every
+// other type. The shapes follow the screen: annotations/rendering.js ('line',
+// 'arrow', 'polyline', 'spline') and rendering/decorations.js
+// drawArrowheadOnCanvas.
+
+const _TAN30 = Math.tan(Math.PI / 6);
+const _KAPPA = 0.5522847498;
+
+// One line ending at tip (tx,ty), pointing along `angle` (app space), as
+// drawArrowheadOnCanvas draws it. Filled shapes use the thin (≤1) outline the
+// screen uses so the visual tip stays on the end point. `hol`: a closed shape
+// without a fill (PDF /LE without /IC), only its outline at the full width.
+function lineHeadOps(tx, ty, angle, size, style, strokeRgb, fillRgb, lineWidth, X, Y, { hol = false } = {}) {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  const pt = (lx, ly) => `${f(X(tx + lx * cos - ly * sin))} ${f(Y(ty + lx * sin + ly * cos))}`;
+  const poly = (pts, close) => pts.map((p, i) => `${pt(p[0], p[1])} ${i ? 'l' : 'm'}`).join(' ') + (close ? ' h' : '');
+  const circle = (cx, cy, r) => {
+    const k = r * _KAPPA;
+    return `${pt(cx + r, cy)} m `
+      + `${pt(cx + r, cy + k)} ${pt(cx + k, cy + r)} ${pt(cx, cy + r)} c `
+      + `${pt(cx - k, cy + r)} ${pt(cx - r, cy + k)} ${pt(cx - r, cy)} c `
+      + `${pt(cx - r, cy - k)} ${pt(cx - k, cy - r)} ${pt(cx, cy - r)} c `
+      + `${pt(cx + k, cy - r)} ${pt(cx + r, cy - k)} ${pt(cx + r, cy)} c h`;
+  };
+  const s = size, w = size * _TAN30;
+  const fill = fillRgb || strokeRgb;
+  const stroked = (path, join = 0) =>
+    `${f(lineWidth)} w\n${join} j\n[] 0 d\n${path}\nS\n`;
+  const filled = (path) => (hol ? stroked(path)
+    : `${f(Math.min(lineWidth, 1))} w\n0 j\n[] 0 d\n${f(fill[0])} ${f(fill[1])} ${f(fill[2])} rg\n${path}\nB\n`);
+  switch (style) {
+    case 'open':
+    case 'stealth':        return stroked(poly([[-s, -w], [0, 0], [-s, w]]), 1);
+    case 'openReversed':   return stroked(poly([[s, -w], [0, 0], [s, w]]), 1);
+    case 'closed':         return filled(poly([[0, 0], [-s, -w], [-s, w]], true));
+    case 'closedReversed': return filled(poly([[0, 0], [s, -w], [s, w]], true));
+    case 'diamond':        return filled(poly([[0, 0], [-s / 2, -s * 0.3], [-s, 0], [-s / 2, s * 0.3]], true));
+    case 'circle':         return filled(circle(-s / 3, 0, s / 3));
+    case 'square': {
+      const h = s / 3;
+      return filled(poly([[-s / 2 - h, -h], [-s / 2 + h, -h], [-s / 2 + h, h], [-s / 2 - h, h]], true));
+    }
+    case 'openCircle':     return stroked(circle(0, 0, 4));
+    case 'butt':
+    case 'slash':          return stroked(poly([[0, -s / 2], [0, s / 2]]));
+    default:               return '';
+  }
+}
+
+const _FILLED_LINE_HEADS = new Set(['closed', 'closedReversed', 'diamond', 'square', 'circle']);
+
+// line + arrow: the stroke stops at the base of a filled head (and just short
+// of the tip of an open one), exactly as the screen shortens it. `headFill`
+// false: closed heads are hollow (outline only) and the line runs into them.
+export function buildLineAP({ startX, startY, endX, endY, X, Y, strokeColorHex, fillColorHex,
+  lineWidth, borderStyle, startHead, endHead, headSize, headFill }) {
+  const dx = endX - startX, dy = endY - startY;
+  const len = Math.hypot(dx, dy);
+  if (!(len > 0)) return null;
+  const stroke = hexToRgb(strokeColorHex || '#000000');
+  const fill = fillColorHex && fillColorHex !== 'none' && fillColorHex !== 'transparent'
+    ? hexToRgb(fillColorHex) : null;
+  const lw = lineWidth ?? 1;
+  const size = headSize || 8;
+  const kopBegin = startHead && startHead !== 'none' ? startHead : null;
+  const kopEind = endHead && endHead !== 'none' ? endHead : null;
+  const ux = dx / len, uy = dy / len;
+  const hol = headFill === false;
+  const inkorting = (kop) => (_FILLED_LINE_HEADS.has(kop) && !hol ? size : Math.min(lw * 0.5, 1));
+  const a = kopBegin ? inkorting(kopBegin) : 0;
+  const b = kopEind ? inkorting(kopEind) : 0;
+
+  let s = `${f(stroke[0])} ${f(stroke[1])} ${f(stroke[2])} RG\n${f(lw)} w\n0 J 0 j\n${dashOp(borderStyle)}`;
+  s += `${f(X(startX + ux * a))} ${f(Y(startY + uy * a))} m ${f(X(endX - ux * b))} ${f(Y(endY - uy * b))} l S\n`;
+  if (kopEind) s += lineHeadOps(endX, endY, Math.atan2(dy, dx), size, kopEind, stroke, fill, lw, X, Y, { hol });
+  if (kopBegin) s += lineHeadOps(startX, startY, Math.atan2(-dy, -dx), size, kopBegin, stroke, fill, lw, X, Y, { hol });
+  return { content: s, needsFont: false };
+}
+
+/**
+ * Leader of a textbox, as drawTextboxLeader (rendering.js) draws it: a solid
+ * line from the anchor via the knee to the tip, ending in a filled closed head
+ * of size 7 or a filled circle of radius 4 centred on the tip.
+ * @param {{points: {x:number,y:number}[], eindStijl: 'arrow'|'circle'}} o  points: anchor, knee, tip (app space)
+ */
+export function buildLeiderAP({ points, X, Y, strokeColorHex, lineWidth, eindStijl }) {
+  if (!points || points.length < 2) return null;
+  const stroke = hexToRgb(strokeColorHex || '#000000');
+  const lw = lineWidth ?? 1;
+  let s = `${f(stroke[0])} ${f(stroke[1])} ${f(stroke[2])} RG\n${f(lw)} w\n0 J 0 j 10 M\n[] 0 d\n`;
+  s += pathOps(points, X, Y, false) + 'S\n';
+  const tip = points[points.length - 1];
+  const knie = points[points.length - 2];
+  if (eindStijl === 'circle') {
+    const r = 4, k = r * _KAPPA;
+    const p = (dx, dy) => `${f(X(tip.x + dx))} ${f(Y(tip.y + dy))}`;
+    s += `${f(stroke[0])} ${f(stroke[1])} ${f(stroke[2])} rg\n`
+      + `${p(r, 0)} m ${p(r, k)} ${p(k, r)} ${p(0, r)} c ${p(-k, r)} ${p(-r, k)} ${p(-r, 0)} c `
+      + `${p(-r, -k)} ${p(-k, -r)} ${p(0, -r)} c ${p(k, -r)} ${p(r, -k)} ${p(r, 0)} c h\nf\n`;
+  } else {
+    s += lineHeadOps(tip.x, tip.y, Math.atan2(tip.y - knie.y, tip.x - knie.x), 7, 'closed', stroke, stroke, lw, X, Y);
+  }
+  return { content: s, needsFont: false };
+}
+
+/** The /Rect of a textbox leader in PDF space ([[x, y], ...], the tip last). */
+export function leiderOmhullende(pts, lineWidth, eindStijl) {
+  const lw = lineWidth ?? 1;
+  const [x1, y1, x2, y2] = polylijnOmhullende(pts, lw);
+  const [tx, ty] = pts[pts.length - 1];
+  const kop = (eindStijl === 'circle' ? 4 : 7 / Math.cos(Math.PI / 6)) + lw;
+  return [Math.min(x1, tx - kop), Math.min(y1, ty - kop), Math.max(x2, tx + kop), Math.max(y2, ty + kop)];
+}
+
+/**
+ * The line width the screen draws (rendering.js): width 0 without a fill
+ * becomes 0.5, and an arrow of width 0 always does. Only for the appearance;
+ * /BS keeps the real width so the file reopens with it.
+ */
+export function apLijndikte(lineWidth, { heeftVulling = false, isPijl = false } = {}) {
+  return lineWidth === 0 && (isPijl || !heeftVulling) ? 0.5 : lineWidth;
+}
+
+/**
+ * The /Rect of a line or arrow in PDF space. A head reaches at most
+ * headSize / cos(30°) from its end point (the prongs of an open or reversed
+ * head); one extra line width covers the stroke and its butt-cap corners.
+ */
+export function lijnOmhullende({ x1, y1, x2, y2, lineWidth, headSize, heeftKoppen }) {
+  const lw = lineWidth ?? 1;
+  const marge = heeftKoppen ? (headSize || 8) / Math.cos(Math.PI / 6) + lw : lw;
+  return [Math.min(x1, x2) - marge, Math.min(y1, y2) - marge, Math.max(x1, x2) + marge, Math.max(y1, y2) + marge];
+}
+
+// polyline (and a spline or arc, as its sampled curve): open path, butt caps
+// and mitred corners with the canvas miter limit of 10, like the screen.
+export function buildPolylineAP({ points, X, Y, strokeColorHex, lineWidth, borderStyle }) {
+  if (!points || points.length < 2) return null;
+  const stroke = hexToRgb(strokeColorHex || '#000000');
+  let s = `${f(stroke[0])} ${f(stroke[1])} ${f(stroke[2])} RG\n${f(lineWidth ?? 1)} w\n0 J 0 j 10 M\n${dashOp(borderStyle)}`;
+  s += pathOps(points, X, Y, false) + 'S\n';
+  return { content: s, needsFont: false };
+}
+
+/**
+ * The /Rect of an open polyline in PDF space ([[x, y], ...]): the points plus
+ * one line width, grown to include the tip of every mitred corner. The
+ * appearance BBox equals the /Rect, so a sharp corner would otherwise be cut
+ * off flat in other viewers. Corners past the miter limit (10) are bevelled
+ * and stay within the line width.
+ */
+export function polylijnOmhullende(punten, lineWidth) {
+  const lw = lineWidth ?? 1;
+  // Ook een platte lijst [x0, y0, x1, y1, ...] (zoals /Vertices).
+  const ruw = typeof punten?.[0] === 'number'
+    ? Array.from({ length: Math.floor(punten.length / 2) }, (_, i) => [punten[2 * i], punten[2 * i + 1]])
+    : punten;
+  // Dubbele punten weg: een segment van lengte nul verbergt anders de hoek.
+  const pts = ruw.filter((p, i) => i === 0 || p[0] !== ruw[i - 1][0] || p[1] !== ruw[i - 1][1]);
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  const neem = (x, y) => { x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x); y2 = Math.max(y2, y); };
+  for (const [x, y] of pts) { neem(x - lw, y - lw); neem(x + lw, y + lw); }
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, py] = pts[i];
+    const ua = [pts[i - 1][0] - px, pts[i - 1][1] - py];
+    const ub = [pts[i + 1][0] - px, pts[i + 1][1] - py];
+    const la = Math.hypot(ua[0], ua[1]), lb = Math.hypot(ub[0], ub[1]);
+    if (!(la > 0) || !(lb > 0)) continue;
+    const cos = Math.max(-1, Math.min(1, (ua[0] * ub[0] + ua[1] * ub[1]) / (la * lb)));
+    const halveHoek = Math.acos(cos) / 2;
+    if (!(Math.sin(halveHoek) > 0)) continue;
+    const r = 1 / Math.sin(halveHoek);
+    if (r > 10) continue;
+    const bis = [ua[0] / la + ub[0] / lb, ua[1] / la + ub[1] / lb];
+    const lbis = Math.hypot(bis[0], bis[1]);
+    if (!(lbis > 0)) continue;
+    const afstand = r * lw / 2;
+    neem(px - bis[0] / lbis * afstand, py - bis[1] / lbis * afstand);
+  }
+  return [x1, y1, x2, y2];
 }
 
 // ── stavenreeks (wapeningsstaven-reeks) ────────────────────────────────────

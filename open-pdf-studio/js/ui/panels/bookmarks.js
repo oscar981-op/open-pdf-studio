@@ -3,6 +3,7 @@ import { state, getActiveDocument } from '../../core/state.js';
 import { goToPage } from '../../pdf/renderer.js';
 import { markDocumentModified } from '../../ui/chrome/tabs.js';
 import { isPdfAReadOnly } from '../../pdf/loader.js';
+import { ingeklapteVoorouders } from './bladwijzer-zoeken.js';
 import {
   openDialog, setBookmarkTree as setTree, setBookmarkCountText as setCountText,
   setBookmarkEmptyMessage as setEmptyMessage, setBookmarkSelectedId as setSelectedId,
@@ -203,6 +204,19 @@ export function clearBookmarkSelection() {
 function navigateToBookmark(bm) {
   if (!bm || !getActiveDocument()?.pdfDoc) return;
   goToPage(bm.page);
+}
+
+// Klap de ouders van een bladwijzer open zodat hij in de boom te zien is
+// (zoekveld, #578). Alleen als er iets dicht zat wordt de lijst ververst.
+export function revealBookmark(id) {
+  const doc = getActiveDocument();
+  if (!doc || !doc.bookmarks) return;
+  const dicht = new Set(ingeklapteVoorouders(doc.bookmarks, id));
+  if (dicht.size === 0) return;
+  for (const bm of doc.bookmarks) {
+    if (dicht.has(bm.id)) bm.expanded = true;
+  }
+  updateBookmarksList();
 }
 
 // Toggle expand/collapse

@@ -14,7 +14,8 @@ import { cloneAnnotation } from '../../annotations/factory.js';
 import { ondersteuntKruis, kruisZichtbaarVoorSelectie } from '../../annotations/kruis-geometrie.js';
 import { redrawAnnotations, redrawContinuous } from '../../annotations/rendering.js';
 import { computeTextboxContentHeight } from '../../annotations/rendering/shapes.js';
-import { formatDate, getTypeDisplayName } from '../../utils/helpers.js';
+import { formatDate, getTypeDisplayName, getAnnotationDisplayName } from '../../utils/helpers.js';
+import { isTextAnchored, isFoldedChild } from '../../annotations/corrections/model.js';
 import { getAnnotationType } from '../../plugins/annotation-type-registry.js';
 import { getPropertyPanel } from '../../plugins/property-panel-registry.js';
 import { fireSelectionChange } from '../../plugins/selection-listener-registry.js';
@@ -24,25 +25,30 @@ import { syncDocScale } from '../../annotations/scale-bar.js';
 import { STAVENREEKS_DEFAULTS } from '../../annotations/stavenreeks.js';
 import { BETONBALK_DEFAULTS, BETONBALK_BREEDTE_RANGE, BETONBALK_HOOGTE_RANGE, BETONBALK_LIJNSTIJLEN } from '../../annotations/betonbalk.js';
 import { setBetonbalkLastProfiel } from './betonbalkStore.js';
+import { zetRanddikte } from '../../annotations/rendering/textbox-layout.js';
 import {
   SYSTEEMRASTER_DEFAULTS, SYSTEEMRASTER_PLAAT_RANGE, SYSTEEMRASTER_RANDCONDITIES,
   resolveSysteem, paneelKey, setEdgeProfiel, setPaneelType, setPaneelComponent,
   setRandProfiel, updateSparing, addSparing, systeemSparingen, sparingRegime,
-  buildSysteemraster,
+  sparingRegelsVoorType, buildSysteemraster,
 } from '../../annotations/systeemraster.js';
 import { systeemrasterBuildOpts } from '../../annotations/systeemraster-scale.js';
 import { createDefaultPaneelTypen } from '../../annotations/systeem-typen.js';
+import { kenSysteemTypeToe } from '../../annotations/systeem-instance-links.js';
 import {
   getSysteemTypeById, getSysteemTypenData, updateSysteemType,
 } from '../../annotations/systeem-typen-registry.js';
-import { recalculateAllMeasurements, calculateArea, calculatePerimeter, calculateDistance, formatMeasurement, formatDimensionText, getMeasureScale } from '../../annotations/measurement.js';
+import { recalculateAllMeasurements, calculateArea, calculatePerimeter, calculateDistance, formatMeasurement, formatDimensionText, getMeasureScale, herberekenVlakMaat, vlakLengteSchaal } from '../../annotations/measurement.js';
+import { lengteEenheid, schaalInEenheid } from '../../annotations/vlak-zijden.js';
 import {
   isRuimteVlak, isRuimteTag, ruimteVanTag, tagWeergaveParams, tagWijziging,
 } from '../../plattegrond/ruimte-koppeling.js';
 import { applyTemplateRealSize } from '../../symbols/real-size.js';
 import { applyStampLineWidth, applyStampColor, stampLineWidthOf } from '../../annotations/stamp-line-width.js';
 import { pendingParams, setPendingParams } from './parametricSymbolStore.js';
-import { klemMaat, leesMaatInvoer, toonMaat, veiligeVerhouding, RECHTHOEK_VORMEN } from '../../annotations/minimummaat.js';
+import { klemMaat, toonMaat, veiligeVerhouding, RECHTHOEK_VORMEN } from '../../annotations/minimummaat.js';
+import { nieuweAfbeeldingsMaat } from '../../annotations/papiermaat-eenheid.js';
+import { papierEenheid } from './papierEenheidStore.js';
 import { kanZonderRand } from '../../annotations/fill-utils.js';
 
 // Types whose single 'color' control IS their stroke colour and which render
@@ -135,6 +141,7 @@ const [annotProps, setAnnotProps] = createStore({
   dimExtension: true,
   dimShowUnit: true,
   measureShowLabel: true,
+  measureShowEdgeLengths: false,
   isRuimte: false,
   opsRuimteNummer: '',
   ruimteOppervlakte: '',
@@ -234,12 +241,13 @@ function redraw() {
 function computeSectionVisibility(type) {
   const isTextbox = ['textbox', 'callout'].includes(type);
   const isShape = ['line', 'arrow', 'box', 'circle', 'draw', 'textbox', 'callout'].includes(type);
-  const isTextContent = type === 'text' || type === 'comment';
+  // Een invoegteken (#508) heeft de ingevoegde tekst als inhoud.
+  const isTextContent = type === 'text' || type === 'comment' || type === 'caret';
   const isImage = type === 'image';
   const isArrow = type === 'arrow';
   const isLineOrArrow = type === 'arrow' || type === 'line';
-  const isTextMarkup = ['textHighlight', 'textStrikethrough', 'textUnderline'].includes(type);
-  const hideLineWidth = ['highlight', 'comment', 'image', 'textHighlight'].includes(type);
+  const isTextMarkup = isTextAnchored({ type });
+  const hideLineWidth = ['highlight', 'comment', 'image', 'textHighlight', 'caret'].includes(type);
   const hasFillColor = ['highlight', 'box', 'circle', 'polygon', 'cloud', 'textbox', 'callout', 'arrow', 'line', 'measureArea', 'filledArea'].includes(type);
   const hideColor = ['line', 'arrow', 'box', 'circle', 'draw', 'highlight', 'image', 'textbox', 'callout', 'polygon', 'cloud', 'measureDistance', 'measureArea', 'measurePerimeter', 'filledArea'].includes(type);
   const hasBorderStyle = ['textbox', 'callout', 'arrow', 'line', 'box', 'circle', 'polygon', 'cloud', 'draw', 'polyline', 'splineArrow', 'measureDistance', 'measureArea', 'measurePerimeter', 'filledArea'].includes(type);
@@ -285,8 +293,73 @@ function computeSectionVisibility(type) {
   });
 }
 
+// Paneelvelden van een systeem die van zijn TYPE (of de typebibliotheek)
+// afhangen. Bij een gekoppeld type gelden de TYPE-celmaten (strook: de
+// strookbreedte); een onbevestigde maat van het type is null en toont leeg
+// (#567: geen standaardmaat). Zonder type de instance-maat.
+function _systeemTypeVelden(annotation) {
+  const isSysteem = annotation.type === 'systeemraster';
+  const st = isSysteem ? getSysteemTypeById(annotation.systeemTypeId) : null;
+  const plaat = st
+    ? {
+      plaatBreedteMm: (st.layout === 'strook' ? st.strookBreedteMm : st.celXMm) ?? null,
+      plaatHoogteMm: st.celYMm ?? null,
+    }
+    : {
+      plaatBreedteMm: annotation.plaatBreedteMm ?? SYSTEEMRASTER_DEFAULTS.plaatBreedteMm,
+      plaatHoogteMm: annotation.plaatHoogteMm ?? SYSTEEMRASTER_DEFAULTS.plaatHoogteMm,
+    };
+  return {
+    ...plaat,
+    // Systeem: TYPE-verwijzing (systeemTypeId) + de type-bibliotheek voor de
+    // dropdown. Bij een gekoppeld type tonen de celmaat-/randprofiel-velden
+    // de TYPE-waarden (bewerken schrijft op het type → alle instanties
+    // veranderen mee).
+    sgTypeId: isSysteem ? (annotation.systeemTypeId || null) : null,
+    sgTypeList: isSysteem ? getSysteemTypenData().typen.map(t => ({ id: t.id, naam: t.naam })) : [],
+    // Layout-vorm van het type ('raster'|'strook') — stuurt de labels en
+    // sub-secties (strook/paneel) in de Systeem-sectie.
+    sgLayout: isSysteem ? (st?.layout || 'raster') : 'raster',
+    sgEdgeProfiel: isSysteem
+      ? (st?.edgeProfiel || resolveSysteem(annotation).layers[0].edge.profiel) : 'geen',
+    // Paneel-assortiment van het systeemtype (dropdown in de sub-sectie).
+    sgPaneelTypen: isSysteem
+      ? (st?.paneelTypen || createDefaultPaneelTypen()).map(p => ({ id: p.id, naam: p.naam }))
+      : [],
+    // IFC-pad van het component (onderdelen erven dit pad).
+    sgIfcPad: isSysteem
+      ? `${annotation.ifcCategory || 'IfcCovering'}${annotation.ifcPredefinedType
+        ? ` (${annotation.ifcPredefinedType})` : ''}`
+      : '',
+  };
+}
+
+/**
+ * Na een bevestigde wijziging van de typebibliotheek (#567): ververs alleen de
+ * type-afgeleide velden van het systeem dat het paneel nu toont. Geen nieuwe
+ * selectie, geen selectiemelding naar plugins en geen wissel van paneelmodus;
+ * bij een meervoudige selectie of een ander annotatietype gebeurt er niets.
+ * @returns {boolean} of er ververst is.
+ */
+export function storeVerversSysteemType() {
+  const ann = currentAnnotation;
+  if (!ann || ann.type !== 'systeemraster' || annotProps.multiCount > 0) return false;
+  setAnnotProps({
+    ..._systeemTypeVelden(ann),
+    // Omzetten in de editor wijzigt ook de IFC-kopie op de instance.
+    ifcCategory: ann.ifcCategory || '',
+  });
+  return true;
+}
+
 // Show properties for a single annotation
 export function storeShowProperties(annotation) {
+  // De doorhaling van een vervanging (#508) wordt getekend en opgeslagen in de
+  // kleur van haar invoegteken: het paneel bewerkt dus het invoegteken.
+  const _corrDoc = getActiveDocument();
+  if (_corrDoc && isFoldedChild(annotation, _corrDoc.annotations)) {
+    annotation = _corrDoc.annotations.find(a => a.id === annotation.inReplyTo) || annotation;
+  }
   currentAnnotation = annotation;
   // Fire plugin selection-listeners (separate from property-panel-registry):
   // gives plugins a direct channel to react to selection without scraping DOM.
@@ -296,7 +369,7 @@ export function storeShowProperties(annotation) {
   setAnnotProps({
     id: annotation.id || '',
     type: annotation.type,
-    typeDisplay: getTypeDisplayName(annotation.type),
+    typeDisplay: getAnnotationDisplayName(annotation, getActiveDocument()?.annotations),
     subject: annotation.subject || '',
     author: annotation.author || state.defaultAuthor,
     created: formatDate(annotation.createdAt),
@@ -341,9 +414,11 @@ export function storeShowProperties(annotation) {
     textAlign: annotation.textAlign || 'left',
     lineSpacing: annotation.lineSpacing || '1.5',
     rotation: annotation.rotation || 0,
-    // Met decimalen: een afbeelding van 0,4 pt toonde anders "0".
-    imageWidth: annotation.type === 'image' ? toonMaat(annotation.width) : 0,
-    imageHeight: annotation.type === 'image' ? toonMaat(annotation.height) : 0,
+    // In paginapunten, onafgerond: het paneel toont ze in de gekozen
+    // papiereenheid (#598) en rondt pas daar af, zodat ook een kleine maat
+    // in inch niet "0" wordt.
+    imageWidth: annotation.type === 'image' ? annotation.width : 0,
+    imageHeight: annotation.type === 'image' ? annotation.height : 0,
     imageRotation: annotation.type === 'image' ? Math.round(annotation.rotation || 0) : 0,
     lockAspectRatio: annotation.type === 'image' ? (annotation.lockAspectRatio || false) : false,
     linkedPath: annotation.linkedPath || '',
@@ -371,7 +446,9 @@ export function storeShowProperties(annotation) {
         })()
       : '',
     measureScale: annotation.measureScale || 0,
-    measureUnit: annotation.measureUnit || '',
+    // Een meetvlak bewaart zijn oppervlakte-eenheid ('mm²'); de keuzelijst
+    // kent lengte-eenheden (#536).
+    measureUnit: (annotation.type === 'measureArea' ? lengteEenheid(annotation.measureUnit) : annotation.measureUnit) || '',
     measurePrecision: annotation.measurePrecision !== undefined ? annotation.measurePrecision : 2,
     measureName: annotation.measureName || '',
     dimType: annotation.dimType || '',
@@ -381,6 +458,8 @@ export function storeShowProperties(annotation) {
     // alleen een expliciete false zet ze uit (maat-label.js).
     dimShowUnit: annotation.dimShowUnit !== false,
     measureShowLabel: annotation.measureShowLabel !== false,
+    // Zijdematen van een meetvlak: standaard uit (#536).
+    measureShowEdgeLengths: annotation.measureShowEdgeLengths === true,
     // Uitloop en hulplijnen in mm op papier; leeg = automatisch (oude beeld).
     dimLineOvershootMm: annotation.dimLineOvershootMm ?? '',
     dimExtGapMm: annotation.dimExtGapMm ?? '',
@@ -435,11 +514,11 @@ export function storeShowProperties(annotation) {
     toonHartlijn: annotation.toonHartlijn === true,
     tagTonen: annotation.tagTonen === true,
     tagTekst: annotation.tagTekst || '',
-    // Systeemraster — bij een gekoppeld systeemtype gelden de TYPE-celmaten.
-    plaatBreedteMm: getSysteemTypeById(annotation.systeemTypeId)?.celXMm
-      ?? annotation.plaatBreedteMm ?? SYSTEEMRASTER_DEFAULTS.plaatBreedteMm,
-    plaatHoogteMm: getSysteemTypeById(annotation.systeemTypeId)?.celYMm
-      ?? annotation.plaatHoogteMm ?? SYSTEEMRASTER_DEFAULTS.plaatHoogteMm,
+    // Systeemraster — plaatmaat (bij een type de TYPE-celmaten), type-
+    // verwijzing en -lijst, layout, randprofiel, assortiment en IFC-pad:
+    // dezelfde velden die storeVerversSysteemType na een typewijziging
+    // ververst.
+    ..._systeemTypeVelden(annotation),
     equalizeX: annotation.equalizeX === true,
     equalizeY: annotation.equalizeY === true,
     randConditie: annotation.randConditie || SYSTEEMRASTER_DEFAULTS.randConditie,
@@ -460,19 +539,8 @@ export function storeShowProperties(annotation) {
     // schrijft op het type → alle instanties veranderen mee).
     sgSysType: annotation.type === 'systeemraster'
       ? resolveSysteem(annotation).type : null,
-    sgTypeId: annotation.type === 'systeemraster'
-      ? (annotation.systeemTypeId || null) : null,
-    sgTypeList: annotation.type === 'systeemraster'
-      ? getSysteemTypenData().typen.map(t => ({ id: t.id, naam: t.naam })) : [],
     sgRasterHoek: annotation.type === 'systeemraster'
       ? (Number(annotation.rasterHoek) || 0) : 0,
-    // Layout-vorm van het type ('raster'|'strook') — stuurt de labels en
-    // sub-secties (strook/paneel) in de Systeem-sectie.
-    sgLayout: annotation.type === 'systeemraster'
-      ? (getSysteemTypeById(annotation.systeemTypeId)?.layout || 'raster') : 'raster',
-    sgEdgeProfiel: annotation.type === 'systeemraster'
-      ? (getSysteemTypeById(annotation.systeemTypeId)?.edgeProfiel
-        || resolveSysteem(annotation).layers[0].edge.profiel) : 'geen',
     // Geselecteerd SUB-ELEMENT (tweede klik): paneel, randsegment of
     // rasterlijn — met de weergavedata voor de "Onderdeel"-sub-sectie.
     sgSelectedSub: annotation.type === 'systeemraster' && annotation.selectedSub
@@ -492,20 +560,10 @@ export function storeShowProperties(annotation) {
         .panels[paneelKey(annotation.selectedSub.ix, annotation.selectedSub.iy)];
       return ov && typeof ov === 'object' ? { ...ov } : null;
     })(),
-    // Paneel-assortiment van het systeemtype (dropdown in de sub-sectie).
-    sgPaneelTypen: annotation.type === 'systeemraster'
-      ? (getSysteemTypeById(annotation.systeemTypeId)?.paneelTypen
-        || createDefaultPaneelTypen()).map(p => ({ id: p.id, naam: p.naam }))
-      : [],
     // Rand-override (raw) van het geselecteerde randsegment ('' = erft).
     sgRandOverride: annotation.type === 'systeemraster' && annotation.selectedSub
       && annotation.selectedSub.kind === 'rand'
       ? (resolveSysteem(annotation).layers[0].edges[String(annotation.selectedSub.seg)] || '')
-      : '',
-    // IFC-pad van het component (onderdelen erven dit pad).
-    sgIfcPad: annotation.type === 'systeemraster'
-      ? `${annotation.ifcCategory || 'IfcCovering'}${annotation.ifcPredefinedType
-        ? ` (${annotation.ifcPredefinedType})` : ''}`
       : '',
     replies: annotation.replies || [],
     multiCount: 0,
@@ -681,12 +739,11 @@ export function storeShowMultiSelection(selected) {
   const fillColorTypes = new Set(['highlight', 'box', 'circle', 'polygon', 'cloud', 'textbox', 'callout', 'arrow', 'line']);
   const strokeColorTypes = new Set(['line', 'arrow', 'box', 'circle', 'draw', 'textbox', 'callout', 'polygon', 'cloud']);
   const hideColorTypes = new Set(['line', 'arrow', 'box', 'circle', 'draw', 'highlight', 'image', 'textbox', 'callout', 'polygon', 'cloud']);
-  const hideLineWidthTypes = new Set(['highlight', 'comment', 'image', 'textHighlight']);
+  const hideLineWidthTypes = new Set(['highlight', 'comment', 'image', 'textHighlight', 'caret']);
   const borderStyleTypes = new Set(['textbox', 'callout', 'arrow', 'line', 'box', 'circle', 'polygon', 'cloud', 'draw', 'polyline', 'splineArrow']);
   const hatchPatternTypes = new Set(['box', 'circle', 'polygon', 'cloud', 'measureArea', 'filledArea']);
   const rotationTypes = new Set(['box', 'circle', 'polygon', 'cloud', 'highlight', 'redaction', 'comment', 'stamp', 'signature']);
   const textboxTypes = new Set(['textbox', 'callout']);
-  const textMarkupTypes = new Set(['textHighlight', 'textStrikethrough', 'textUnderline']);
 
   const allSameType = sharedType !== '';
 
@@ -706,7 +763,7 @@ export function storeShowMultiSelection(selected) {
     fillColorGroup: allMatch(t => fillColorTypes.has(t)),
     strokeColorGroup: allMatch(t => strokeColorTypes.has(t)),
     strokeNoneAllowed: allMatch(t => kanZonderRand(t)),
-    colorGroup: allMatch(t => !hideColorTypes.has(t) || textMarkupTypes.has(t)),
+    colorGroup: allMatch(t => !hideColorTypes.has(t) || isTextAnchored({ type: t })),
     lineWidthGroup: allMatch(t => !hideLineWidthTypes.has(t)),
     borderStyleGroup: allMatch(t => borderStyleTypes.has(t)),
     hatchPatternGroup: allMatch(t => hatchPatternTypes.has(t)),
@@ -918,15 +975,10 @@ function _clampFontSize(value) {
 function _applySysteemProp(ann, key, value) {
   const num = (v) => parseFloat(String(v).replace(',', '.'));
   switch (key) {
-    case 'sgTypeId': {
-      ann.systeemTypeId = value || undefined;
-      const st = getSysteemTypeById(ann.systeemTypeId);
-      if (st) {
-        ann.ifcCategory = st.ifcCategory;
-        ann.ifcPredefinedType = st.ifcPredefinedType;
-      }
+    case 'sgTypeId':
+      // Dezelfde regel als de plugin-API (#574): systeem-instance-links.js.
+      kenSysteemTypeToe(ann, value || undefined, getSysteemTypeById(value || undefined));
       break;
-    }
     case 'sgTypeCelX': case 'sgTypeCelY': {
       const n = num(value);
       if (!Number.isFinite(n) || !(n > 0)) break;
@@ -1027,7 +1079,7 @@ function _syncSparingSub(ann) {
   ann.selectedSub = {
     kind: 'sparing', id: sp.id,
     xMm: sp.xMm, yMm: sp.yMm, bMm: sp.bMm, hMm: sp.hMm,
-    regime: sparingRegime(sp.bMm, sp.hMm, st?.sparingRegels, st?.layout || 'raster'),
+    regime: sparingRegime(sp.bMm, sp.hMm, sparingRegelsVoorType(st), st?.layout || 'raster'),
   };
 }
 
@@ -1055,7 +1107,7 @@ function applyPropToAnnotation(ann, key, value) {
     case 'fillColor': ann.fillColor = value; break;
     case 'strokeColor': ann.strokeColor = value; break;
     case 'lineWidth':
-      ann.lineWidth = parseFloat(value);
+      zetRanddikte(ann, parseFloat(value));
       // Een stempel wordt als raster getekend en kent geen ctx.lineWidth; de
       // dikte moet in de SVG worden gezet. Synchroon, zodat undo de gewijzigde
       // stampSvg meekrijgt.
@@ -1091,7 +1143,7 @@ function applyPropToAnnotation(ann, key, value) {
     }
     case 'rotation': ann.rotation = Math.max(-360, Math.min(360, parseInt(value) || 0)); break;
     case 'measureScale': ann.measureScale = parseFloat(value) || 0; recomputeMeasureText(ann); break;
-    case 'measureUnit': ann.measureUnit = value; recomputeMeasureText(ann); break;
+    case 'measureUnit': zetMeetEenheid(ann, value); break;
     case 'measurePrecision': ann.measurePrecision = parseInt(value); recomputeMeasureText(ann); break;
     case 'measureName':
       ann.measureName = value;
@@ -1100,7 +1152,7 @@ function applyPropToAnnotation(ann, key, value) {
     case 'scaleBarUnit': ann.unit = value; break;
     case 'scaleBarTotalUnits': ann.totalUnits = parseFloat(value) || 1; break;
     case 'scaleBarDivisions': ann.divisions = Math.max(1, Math.min(20, parseInt(value) || 5)); break;
-    case 'scaleBarHeight': ann.height = Math.max(4, parseInt(value) || 14); break;
+    case 'scaleBarHeight': ann.height = _schaalbalkHoogte(value); break;
     // Stavenreeks — parameters; de geometrie wordt bij het renderen afgeleid
     // uit start/eind + deze waarden (geen coördinaten herberekenen hier).
     case 'srCount': ann.count = Math.max(1, Math.min(999, parseInt(value) || 1)); break;
@@ -1202,6 +1254,20 @@ function applyPropToAnnotation(ann, key, value) {
   }
 }
 
+// Eenheid van een meting kiezen. Bij een meetvlak (#536) blijft de echte maat
+// gelijk: een eigen schaal rekent mee om naar de nieuwe eenheid, en zonder
+// eigen schaal wordt de schaal van het document in die eenheid vastgelegd
+// (anders zette het herberekenen de eenheid meteen terug). Pixels hebben geen
+// vaste maat; daar blijft het schaalgetal staan.
+function zetMeetEenheid(ann, eenheid) {
+  if (ann?.type === 'measureArea' && eenheid) {
+    const huidig = vlakLengteSchaal(ann);
+    ann.measureScale = schaalInEenheid(huidig.perPt, huidig.unit, eenheid);
+  }
+  ann.measureUnit = eenheid;
+  recomputeMeasureText(ann);
+}
+
 // Recompute measurement text for a measurement annotation
 function recomputeMeasureText(ann) {
   if (!ann || !ann.type?.startsWith('measure')) return;
@@ -1226,10 +1292,8 @@ function recomputeMeasureText(ann) {
     ann.measureUnit = dist.unit;
     ann.measurePixels = dist.pixels;
   } else if (ann.type === 'measureArea' && ann.points && ann.points.length >= 3) {
-    const area = calculateArea(ann.points, ann.holes, ann.page);
-    ann.measureText = formatMeasurement(area);
-    ann.measureValue = area.value;
-    ann.measureUnit = area.unit;
+    // Met de eigen schaal (measureScale) als die er is (#536).
+    herberekenVlakMaat(ann);
   } else if (ann.type === 'measurePerimeter' && ann.points && ann.points.length >= 2) {
     const perim = calculatePerimeter(ann.points, ann.page);
     ann.measureText = formatMeasurement(perim);
@@ -1447,7 +1511,7 @@ function applyAnnotProp(key, value) {
       if (currentAnnotation.type === 'parametricSymbol') currentAnnotation.color = value;
       break;
     case 'lineWidth':
-      currentAnnotation.lineWidth = parseFloat(value);
+      zetRanddikte(currentAnnotation, parseFloat(value));
       // Zie applyPropToAnnotation: bij een stempel moet de dikte de SVG in.
       if (currentAnnotation.type === 'stamp') applyStampLineWidth(currentAnnotation);
       break;
@@ -1483,33 +1547,20 @@ function applyAnnotProp(key, value) {
       break;
     }
     case 'rotation': currentAnnotation.rotation = Math.max(-360, Math.min(360, parseInt(value) || 0)); break;
-    // Breedte/hoogte van een afbeelding: ELKE positieve waarde mag, met
-    // decimalen. Was geheeltallig met "leeg of 0 -> 20 pt" en een vloer van
-    // 1 pt (35 mm op 1:100) op de partner-as. Een tussenstand tijdens het
+    // Breedte/hoogte van een afbeelding: de getypte waarde staat in de
+    // gekozen papiereenheid (mm, cm, in of pt, #598) en wordt paginapunten.
+    // ELKE positieve waarde mag, met decimalen. Een tussenstand tijdens het
     // typen ("", "0", "0.") laat het model met rust. De partner-as volgt de
-    // verhouding exact (#315) en is alleen technisch begrensd.
-    case 'imageWidth': {
-      const newW = leesMaatInvoer(value);
-      if (newW == null) break;
-      currentAnnotation.width = newW;
-      const ratio = currentAnnotation.lockAspectRatio
-        ? veiligeVerhouding(currentAnnotation.originalWidth, currentAnnotation.originalHeight) : 0;
-      if (ratio) {
-        currentAnnotation.height = klemMaat(newW / ratio);
-        setAnnotProps('imageHeight', toonMaat(currentAnnotation.height));
-      }
-      break;
-    }
+    // verhouding exact (#315) en is alleen technisch begrensd. De store krijgt
+    // de maat in paginapunten, niet de getypte tekst.
+    case 'imageWidth':
     case 'imageHeight': {
-      const newH = leesMaatInvoer(value);
-      if (newH == null) break;
-      currentAnnotation.height = newH;
-      const ratio = currentAnnotation.lockAspectRatio
-        ? veiligeVerhouding(currentAnnotation.originalWidth, currentAnnotation.originalHeight) : 0;
-      if (ratio) {
-        currentAnnotation.width = klemMaat(newH * ratio);
-        setAnnotProps('imageWidth', toonMaat(currentAnnotation.width));
-      }
+      const maat = nieuweAfbeeldingsMaat(key === 'imageWidth' ? 'width' : 'height',
+        value, papierEenheid(), currentAnnotation);
+      if (!maat) break;
+      currentAnnotation.width = maat.width;
+      currentAnnotation.height = maat.height;
+      setAnnotProps({ imageWidth: maat.width, imageHeight: maat.height });
       break;
     }
     case 'imageRotation': currentAnnotation.rotation = parseInt(value) || 0; break;
@@ -1521,7 +1572,7 @@ function applyAnnotProp(key, value) {
         ? veiligeVerhouding(currentAnnotation.originalWidth, currentAnnotation.originalHeight) : 0;
       if (lockRatio) {
         currentAnnotation.height = klemMaat(currentAnnotation.width / lockRatio);
-        setAnnotProps('imageHeight', toonMaat(currentAnnotation.height));
+        setAnnotProps('imageHeight', currentAnnotation.height);
       }
       break;
     }
@@ -1544,8 +1595,18 @@ function applyAnnotProp(key, value) {
     case 'startHead': currentAnnotation.startHead = value; break;
     case 'endHead': currentAnnotation.endHead = value; break;
     case 'headSize': currentAnnotation.headSize = parseInt(value); break;
-    case 'measureScale': currentAnnotation.measureScale = parseFloat(value) || 0; recomputeMeasureText(currentAnnotation); break;
-    case 'measureUnit': currentAnnotation.measureUnit = value; recomputeMeasureText(currentAnnotation); break;
+    case 'measureScale':
+      currentAnnotation.measureScale = parseFloat(value) || 0;
+      recomputeMeasureText(currentAnnotation);
+      // Zonder eigen schaal volgt een meetvlak de eenheid van het document.
+      if (currentAnnotation.type === 'measureArea') {
+        setAnnotProps('measureUnit', lengteEenheid(currentAnnotation.measureUnit) || '');
+      }
+      break;
+    case 'measureUnit':
+      zetMeetEenheid(currentAnnotation, value);
+      if (currentAnnotation.type === 'measureArea') setAnnotProps('measureScale', currentAnnotation.measureScale || 0);
+      break;
     case 'measurePrecision': currentAnnotation.measurePrecision = parseInt(value); recomputeMeasureText(currentAnnotation); break;
     case 'measureName':
       currentAnnotation.measureName = value;
@@ -1584,8 +1645,8 @@ function applyAnnotProp(key, value) {
       break;
     }
     case 'scaleBarHeight': {
-      const newH = Math.max(4, parseInt(value) || 14);
-      currentAnnotation.height = newH;
+      currentAnnotation.height = _schaalbalkHoogte(value);
+      setAnnotProps('scaleBarHeight', currentAnnotation.height);
       break;
     }
     // ── Stavenreeks ────────────────────────────────────────────────────
@@ -1757,11 +1818,26 @@ function applyAnnotProp(key, value) {
     endUndoTransaction();
   }
 
-  if (!key.startsWith('tb') && !key.includes('.')) {
+  if (!key.startsWith('tb') && !key.includes('.') && !_EIGEN_STORE_SLEUTELS.has(key)) {
     setAnnotProps(key, value);
   }
 
   redraw();
+}
+
+// Sleutels waarvan de case hierboven zelf de store bijwerkt (in paginapunten)
+// in plaats van de getypte tekst in de gekozen eenheid (#598).
+const _EIGEN_STORE_SLEUTELS = new Set(['imageWidth', 'imageHeight', 'scaleBarHeight']);
+
+/** Kleinste balkhoogte van een schaalbalk, paginapunten. */
+export const SCHAALBALK_MIN_HOOGTE_PT = 4;
+
+// Balkhoogte in paginapunten (het paneel rekent de gekozen papiereenheid al
+// om, #598). Decimalen blijven staan: 5 mm is 14,17 pt, niet 14.
+function _schaalbalkHoogte(value) {
+  const n = typeof value === 'number' ? value : parseFloat(String(value ?? '').replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return 14;
+  return Math.max(SCHAALBALK_MIN_HOOGTE_PT, n);
 }
 
 // Apply a STYLE TYPE preset (generic concept — see annotations/style-types.js)

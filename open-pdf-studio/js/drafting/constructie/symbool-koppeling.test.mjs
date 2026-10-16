@@ -74,7 +74,7 @@ test('elke stalen profielfamilie wijst naar een bestaand symbool met die maat', 
 test('de vaardigheid staat als chip in het paneel', () => {
   const chip = ASSISTANT_SKILLS.find(s => s.id === 'structural-layout');
   assert.ok(chip, 'de chip structural-layout ontbreekt');
-  assert.ok(chip.label && chip.hint && chip.invoke);
+  assert.ok(chip.icon && chip.invoke);
   assert.equal(chip.needsInput, true);
 });
 

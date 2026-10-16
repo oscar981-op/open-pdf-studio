@@ -1,6 +1,7 @@
 import { state, getActiveDocument, selectAllOnPage, clearSelection } from '../core/state.js';
-import { undo, redo, recordAdd, recordBulkDelete, recordDelete, recordModify, recordBulkModify, recordClearPage } from '../core/undo-manager.js';
+import { undo, redo, recordAdd, recordModify, recordBulkModify, recordClearPage } from '../core/undo-manager.js';
 import { setTool } from './manager.js';
+import { heeftGekozenAfbeelding, wisAfbeeldingSelectie, deleteSelectedEmbeddedImage } from './tools/remove-image-tool.js';
 import { showPreferencesDialog, setAsDefaultStyle } from '../core/preferences.js';
 import { getAnnotationType } from '../plugins/annotation-type-registry.js';
 import { copyAndMove } from './edit-ops.js';
@@ -20,7 +21,8 @@ import { toggleAnnotationsListPanel } from '../ui/panels/annotations-list.js';
 import { toggleLeftPanel } from '../ui/panels/left-panel.js';
 import { switchRibbonTab as switchToTab } from '../bridge.js';
 import { openFindBar, closeFindBar, onFindNext } from '../search/find-bar.js';
-import { closeActiveTab } from '../ui/chrome/tabs.js';
+import { closeActiveTab, wisselTabMetSneltoets } from '../ui/chrome/tabs.js';
+import { isTextEntryTarget, tabSneltoetsRichting, maakTabSneltoetsHandler, maakTabWisselaar } from '../ui/chrome/tab-sneltoets.js';
 import { hideProperties, showProperties, showMultiSelectionProperties, togglePropertiesPanel } from '../ui/panels/properties-panel.js';
 import { wisselTagEnRuimte } from '../plattegrond/ruimte-selectie.js';
 import { openDialog, getDialogs } from '../bridge.js';
@@ -33,6 +35,9 @@ import { typeLengthActive, consumeKey as typeLengthConsumeKey, typeLengthCursor 
 import { startGripLengteInvoer, stopGripLengteInvoer, herstelStramienMeeslepen } from './tool-dispatcher.js';
 import { tabDoorOnderdelen, verwijderOnderdeel } from '../gevelelement/app-bewerking.js';
 import { gevelPreset } from '../gevelelement/herkenning.js';
+import { isTextAnchored, expandCorrectionGroups, replaceParentOf } from '../annotations/corrections/model.js';
+import { deleteAnnotationsWithUndo } from '../annotations/mutations.js';
+import { installProofreadingKeys } from './proofreading-mode.js';
 
 function redraw() {
   if (getActiveDocument()?.viewMode === 'continuous') redrawContinuous();
@@ -134,11 +139,8 @@ const CAD_CHORDS = {
   // max 1pt hairline instead of true widths. Pure display toggle —
   // annotation lineWidth values stay untouched.
   'tl': () => {
-    state.preferences.thinLines = !state.preferences.thinLines;
-    // '[render]' prefix lands in the MCP console ring → observable in tests.
-    console.log('[render] thinLines =', state.preferences.thinLines);
-    import('../core/preferences.js').then(m => m.savePreferences && m.savePreferences()).catch(() => {});
-    redraw();
+    // Also the PAGE content, not only the annotations (#595).
+    import('../pdf/thin-lines.js').then(m => m.toggleThinLines());
   },
   // 'co' = Copy: duplicate + move via the EDIT-OPS layer (edit-ops.js) —
   // the one place where target resolution, cloning and the move session
@@ -231,21 +233,59 @@ function _cadChordTry(letter) {
   return false;
 }
 
-// Handle keydown events
-// Typt de gebruiker in een tekstinvoer? Naast INPUT/TEXTAREA tellen ook
-// contenteditable-editors mee (o.a. de PDF-tekst-editor, die geen textarea
-// meer is). Losse letter-/cijfer-sneltoetsen en spatie mogen een lopende
-// tekstbewerking nooit onderbreken — een toolwissel sluit de editor.
-function isTextEntryTarget(t) {
-  if (!t) return false;
-  if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return true;
-  if (t.isContentEditable) return true;
-  return typeof t.closest === 'function' && !!t.closest('[contenteditable="true"]');
+// ── Tabblad wisselen: Ctrl+Tab / Ctrl+PageDown en terug (#539) ─────────────
+// Hangt in de capture-fase op window (zie initKeyboardHandlers): daar komt
+// de toets als eerste langs, waar de focus ook staat, en kan geen component
+// hem inslikken. Zelfde tekstinvoer-bewaking als de andere sneltoetsen
+// (isTextEntryTarget, tab-sneltoets.js). De rem laat bij ingedrukt houden
+// geen achterstand ontstaan: een volgende wissel start pas als de vorige in
+// beeld staat, en er wacht er hoogstens één.
+const _tabWisselaar = maakTabWisselaar({
+  wissel: (richting) => wisselTabMetSneltoets(richting),
+  // Na het eerstvolgende frame (requestAnimationFrame + taak erna), met een
+  // vangnet voor een verborgen venster waar geen frames komen.
+  naBeeld: () => new Promise((klaar) => {
+    let gedaan = false;
+    const af = () => { if (!gedaan) { gedaan = true; klaar(); } };
+    requestAnimationFrame(() => setTimeout(af, 0));
+    setTimeout(af, 250);
+  }),
+  wacht: (ms) => new Promise((klaar) => setTimeout(klaar, ms)),
+});
+
+const handleTabSneltoets = maakTabSneltoetsHandler({
+  wisselaar: _tabWisselaar,
+  bewaking: () => ({
+    modaalOpen: isModalOpen()
+      || (typeof getDialogs === 'function' && (getDialogs() || []).length > 0),
+    tekstBewerking: !!(state.isEditingText || state.pdfTextEditState),
+    // Verplaatsen/draaien (G), bijsnijden of een lengte intikken midden in
+    // een tekening: die sessie hoort bij het huidige document.
+    bezigeSessie: isGMoveModeActive() || isGRotateModeActive() || !!state.imageCropMode || typeLengthActive(),
+  }),
+});
+
+// Pijltoetsen die bij een besturingselement horen (#551): de lint-tabstrook
+// wisselt er tabbladen mee, een menu of keuzelijst kiest ermee. Zo'n toets
+// verschuift geen annotaties en bladert niet. Ook een toets die al is
+// afgehandeld (defaultPrevented) laat de selectie staan.
+const PIJL_BESTURING = '[role="tablist"], [role="tab"], [role="menu"], [role="menubar"], [role="listbox"], [role="radiogroup"], select, .ribbon-tabs';
+function pijlVoorBesturing(e) {
+  if (e.defaultPrevented) return true;
+  const t = e.target;
+  return typeof t?.closest === 'function' && !!t.closest(PIJL_BESTURING);
 }
 
 export async function handleKeydown(e) {
+  // De tabwissel-toetsen zijn al afgehandeld (of bewust geweigerd) door
+  // handleTabSneltoets; niets hieronder mag er nog op reageren.
+  if (tabSneltoetsRichting(e)) return;
+
   const ctrl = e.ctrlKey || e.metaKey;
   const shift = e.shiftKey;
+  // Letter van een Ctrl-sneltoets, altijd in kleine letters: met Caps Lock aan
+  // geeft e.key een hoofdletter zonder dat Shift is ingedrukt (#577). Alleen
+  // `shift` onderscheidt dus Ctrl+S van Ctrl+Shift+S.
   const shortcutKey = typeof e.key === 'string' ? e.key.toLowerCase() : '';
 
   // Allow certain shortcuts even when in input fields
@@ -275,7 +315,7 @@ export async function handleKeydown(e) {
   }
 
   // Handle find-related shortcuts even in inputs
-  if (ctrl && e.key === 'f') {
+  if (ctrl && !shift && shortcutKey === 'f') {
     e.preventDefault();
     openFindBar();
     return;
@@ -430,19 +470,19 @@ export async function handleKeydown(e) {
   }
 
   // File shortcuts
-  if (ctrl && e.key === 'n') {
+  if (ctrl && !shift && shortcutKey === 'n') {
     e.preventDefault();
     showNewDocDialog();
-  } else if (ctrl && e.key === 'o') {
+  } else if (ctrl && !shift && shortcutKey === 'o') {
     e.preventDefault();
     openPDFFile();
-  } else if (ctrl && shift && e.key === 'S') {
+  } else if (ctrl && shift && shortcutKey === 's') {
     e.preventDefault();
     savePDFAs();
-  } else if (ctrl && e.key === 's') {
+  } else if (ctrl && shortcutKey === 's') {
     e.preventDefault();
     savePDF();
-  } else if (ctrl && e.key === 'w') {
+  } else if (ctrl && !shift && shortcutKey === 'w') {
     e.preventDefault();
     closeActiveTab();
   }
@@ -460,7 +500,7 @@ export async function handleKeydown(e) {
   } else if (ctrl && shift && shortcutKey === 'z') {
     e.preventDefault();
     redo();
-  } else if (ctrl && !shift && e.key === 'a') {
+  } else if (ctrl && !shift && shortcutKey === 'a') {
     // Ctrl+A: Select all annotations on current page
     e.preventDefault();
     const _selDoc = getActiveDocument();
@@ -476,9 +516,16 @@ export async function handleKeydown(e) {
     }
   } else if (e.key === 'Delete') {
     e.preventDefault();
+    if (heeftGekozenAfbeelding()) {
+      // Afbeelding bewerken: Delete verwijdert de gekozen afbeelding uit de pagina.
+      if (!isPdfAReadOnly()) deleteSelectedEmbeddedImage();
+      return;
+    }
     if (isPdfAReadOnly()) { /* block */ }
     else if ((getActiveDocument()?.selectedAnnotations || []).length > 0) {
-      const selected = [...getActiveDocument().selectedAnnotations];
+      // Een vervanging (#508) telt met beide helften, ook in de vraag.
+      const selected = expandCorrectionGroups(getActiveDocument().annotations,
+        [...getActiveDocument().selectedAnnotations]);
       // Gevelelement met een geselecteerd onderdeel: Delete verwijdert de
       // STIJL (velden samengevoegd) of zet het standaardpaneel terug — nooit
       // per ongeluk het hele element.
@@ -513,8 +560,9 @@ export async function handleKeydown(e) {
         }
         return;
       }
-      // Single locked check
-      if (selected.length === 1 && selected[0].locked) return;
+      // Single locked check. Een vervanging (#508) telt als één annotatie:
+      // vergrendeld als een van beide helften vergrendeld is.
+      if ((selected.length === 1 || replaceParentOf(selected, getActiveDocument().annotations)) && selected.some(a => a.locked)) return;
 
       // Confirmation dialog
       {
@@ -527,14 +575,8 @@ export async function handleKeydown(e) {
         if (!confirmed) return;
       }
 
-      const doc = getActiveDocument();
-      if (selected.length > 1) {
-        recordBulkDelete(selected);
-      } else {
-        recordDelete(selected[0], (doc?.annotations || []).indexOf(selected[0]));
-      }
-      const toDelete = new Set(selected);
-      if (doc) doc.annotations = doc.annotations.filter(a => !toDelete.has(a));
+      // Een vervanging (#508) gaat in haar geheel, met één ongedaan-stap.
+      deleteAnnotationsWithUndo(getActiveDocument(), selected);
       clearSelection();
       hideProperties();
       redraw();
@@ -542,11 +584,12 @@ export async function handleKeydown(e) {
   }
   // Arrow keys: nudge selected annotations (skip when Ctrl held)
   else if (!ctrl && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-    if (isPdfAReadOnly()) { /* block nudge */ }
+    const voorBesturing = pijlVoorBesturing(e);
+    if (voorBesturing) { /* de tabstrook, het menu of de keuzelijst is aan zet */ }
+    else if (isPdfAReadOnly()) { /* block nudge */ }
     else if ((getActiveDocument()?.selectedAnnotations || []).length > 0 && getActiveDocument()?.pdfDoc) {
-      // Text markup annotations are anchored to text — skip nudge
-      const movable = getActiveDocument().selectedAnnotations.filter(a =>
-        !['textHighlight', 'textStrikethrough', 'textUnderline'].includes(a.type));
+      // Text markup annotations (and carets, #508) are anchored to text — skip nudge
+      const movable = getActiveDocument().selectedAnnotations.filter(a => !isTextAnchored(a));
       if (movable.length === 0) return;
 
       e.preventDefault();
@@ -575,7 +618,7 @@ export async function handleKeydown(e) {
     // Inhoudsopgave (TOC / bladwijzers) actief → met pijl omhoog/omlaag pagina-voor-
     // pagina door het document lopen i.p.v. de bladwijzerlijst te scrollen (GitHub #248).
     // Draait alleen als de nudge de toets niet al gebruikte (geen selectie) — ook read-only.
-    if (!e.defaultPrevented && (e.key === 'ArrowDown' || e.key === 'ArrowUp')
+    if (!voorBesturing && !e.defaultPrevented && (e.key === 'ArrowDown' || e.key === 'ArrowUp')
         && ['thumbnails', 'bookmarks'].includes(activeTab())
         && !['INPUT', 'TEXTAREA'].includes(e.target?.tagName) && !e.target?.isContentEditable) {
       e.preventDefault();
@@ -589,7 +632,7 @@ export async function handleKeydown(e) {
     }
   }
 
-  else if (ctrl && shift && e.key === 'C') {
+  else if (ctrl && shift && shortcutKey === 'c') {
     e.preventDefault();
     let confirmed = false;
     if (window.__TAURI__?.dialog?.ask) {
@@ -605,32 +648,27 @@ export async function handleKeydown(e) {
       hideProperties();
       redraw();
     }
-  } else if (ctrl && !shift && (e.key === 'x' || e.key === 'X')) {
+  } else if (ctrl && !shift && shortcutKey === 'x') {
     // Knippen: kopieer de selectie naar het interne klembord (en, voor
     // afbeeldingen, naar het systeemklembord) en verwijder haar daarna.
     // Zonder deze tak deed Ctrl+X niets — knippen bestond alleen als naam.
     // Geen bevestigingsdialoog: het geknipte zit op het klembord en de
     // verwijdering loopt via het gewone undo-pad.
     const cutDoc = getActiveDocument();
-    const cutSel = cutDoc ? [...(cutDoc.selectedAnnotations || [])] : [];
+    // Een vervanging (#508) wordt in haar geheel geknipt.
+    const cutSel = cutDoc ? expandCorrectionGroups(cutDoc.annotations, [...(cutDoc.selectedAnnotations || [])]) : [];
     if (cutSel.length > 0) {
       e.preventDefault();
       if (isPdfAReadOnly()) return;
       if (cutSel.some(a => a.locked)) return;
       if (cutSel.length > 1) copyAnnotations(cutSel);
       else copyAnnotation(cutSel[0]);
-      if (cutSel.length > 1) {
-        recordBulkDelete(cutSel);
-      } else {
-        recordDelete(cutSel[0], (cutDoc?.annotations || []).indexOf(cutSel[0]));
-      }
-      const cutSet = new Set(cutSel);
-      if (cutDoc) cutDoc.annotations = cutDoc.annotations.filter(a => !cutSet.has(a));
+      deleteAnnotationsWithUndo(cutDoc, cutSel);
       clearSelection();
       hideProperties();
       redraw();
     }
-  } else if (ctrl && !shift && e.key === 'c') {
+  } else if (ctrl && !shift && shortcutKey === 'c') {
     // Copy selected annotations (if none selected, let native copy handle text selection)
     const _copyDoc = getActiveDocument();
     const selected = _copyDoc ? _copyDoc.selectedAnnotations : [];
@@ -639,7 +677,7 @@ export async function handleKeydown(e) {
       if (selected.length > 1) copyAnnotations(selected);
       else copyAnnotation(selected[0]);
     }
-  } else if (ctrl && shift && (e.key === 'V' || e.key === 'v')) {
+  } else if (ctrl && shift && shortcutKey === 'v') {
     // Plakken op plaats (paste in place) — GitHub #269: plak het interne
     // clipboard op de HUIDIGE pagina op exact de gekopieerde coördinaten.
     // preventDefault mag hier wél — dit pad gebruikt alleen het interne
@@ -648,7 +686,7 @@ export async function handleKeydown(e) {
     if (!getActiveDocument()?.pdfDoc) return;
     if (isPdfAReadOnly()) return;
     import('../annotations/clipboard.js').then(({ pasteAnnotationsInPlace }) => pasteAnnotationsInPlace());
-  } else if (ctrl && !shift && e.key === 'v') {
+  } else if (ctrl && !shift && shortcutKey === 'v') {
     // An annotation copied inside the app must be pasted directly. Asking the
     // native Clipboard API first can open a WebView permission prompt and
     // indefinitely postpone the internal paste (notably for line annotations).
@@ -711,10 +749,10 @@ export async function handleKeydown(e) {
   } else if (ctrl && e.key === ',') {
     e.preventDefault();
     showPreferencesDialog();
-  } else if (ctrl && e.key === 'd') {
+  } else if (ctrl && !shift && shortcutKey === 'd') {
     e.preventDefault();
     showDocPropertiesDialog();
-  } else if (ctrl && (e.key === 'l' || e.key === 'L')) {
+  } else if (ctrl && shortcutKey === 'l') {
     e.preventDefault();
     toggleFullscreen();
   }
@@ -727,6 +765,11 @@ export async function handleKeydown(e) {
   //    doet (tool.onEscape → zelfde afrondroutines), daarna selectietool.
   // 3. Teken-tool actief zonder actieve tekening → selectietool.
   // 4. Selectietool actief → selectie legen (bestaand gedrag).
+  else if (e.key === 'Escape' && heeftGekozenAfbeelding()) {
+    // Afbeelding bewerken: Escape wist eerst de gekozen afbeelding.
+    wisAfbeeldingSelectie();
+    return;
+  }
   else if (e.key === 'Escape') {
     // Trede 1: modale dialogen (vanilla overlays + Solid dialogStore), de
     // Edit-Type-editor en de crop-modus handelen Escape volledig zelf af.
@@ -876,18 +919,12 @@ export async function handleKeydown(e) {
     fitPage();
   } else if (ctrl && e.key === '5') {
     e.preventDefault();
-    state.preferences.thinLines = !state.preferences.thinLines;
-    if (getActiveDocument()?.pdfDoc) {
-      if (getActiveDocument()?.viewMode === 'continuous') {
-        import('../pdf/renderer.js').then(m => m.renderContinuous());
-      } else {
-        import('../pdf/renderer.js').then(m => m.renderPage(getActiveDocument()?.currentPage || 1));
-      }
-    }
+    import('../pdf/thin-lines.js').then(m => m.toggleThinLines());
   }
 
-  // Tool shortcuts (only if PDF is loaded)
-  else if (getActiveDocument()?.pdfDoc) {
+  // Tool shortcuts (only if PDF is loaded). Nooit met Ctrl: een Ctrl-letter
+  // die hierboven niet is afgehandeld, wisselt geen gereedschap (#577).
+  else if (!ctrl && getActiveDocument()?.pdfDoc) {
     const pdfaLocked = isPdfAReadOnly();
     if (e.key === 'v' || e.key === 'V') {
       e.preventDefault();
@@ -996,6 +1033,12 @@ function handlePaste(e) {
 
 // Initialize keyboard handlers
 export function initKeyboardHandlers() {
+  // Capture-fase op window: vóór alle keydown-luisteraars op document en
+  // daaronder, ook de capture-luisteraars (#539).
+  // Proofreading mode (#508): F2, and while it is on every key it uses,
+  // before any other handler (also before the tab switch keys).
+  installProofreadingKeys();
+  window.addEventListener('keydown', handleTabSneltoets, true);
   document.addEventListener('keydown', handleKeydown);
   document.addEventListener('paste', handlePaste);
   // Focusverlies bijhouden voor de plak-voorrangsregel (zie Ctrl+V hierboven).

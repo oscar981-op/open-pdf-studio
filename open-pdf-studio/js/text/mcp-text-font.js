@@ -1,5 +1,7 @@
 import fontkit from '@pdf-lib/fontkit';
-import { embedOcrFont, loadDefaultOcrFontBytes } from '../pdf/saver/ocr-text-layer.js';
+import { embedOcrFont, loadBundledFontBytes } from '../pdf/saver/ocr-text-layer.js';
+import { CJK_FONTS } from '../pdf/saver/cjk-fonts.js';
+import { assetUrl } from '../core/basis-url.js';
 
 const latinFonts = {
   regular: 'LiberationSans-Regular.ttf',
@@ -12,7 +14,7 @@ const embeddedFonts = new WeakMap();
 
 async function liberationBytes(variant) {
   if (!fontBytes.has(variant)) {
-    fontBytes.set(variant, fetch(`/pdfjs/web/standard_fonts/${latinFonts[variant]}`)
+    fontBytes.set(variant, fetch(assetUrl(`pdfjs/web/standard_fonts/${latinFonts[variant]}`))
       .then(response => {
         if (!response.ok) throw new Error(`Could not load ${latinFonts[variant]}`);
         return response.arrayBuffer();
@@ -36,11 +38,16 @@ export async function embedMcpTextFont(pdfDocLib, text, { bold = false, italic =
     if (!embedded.has(name)) embedded.set(name, await embedOcrFont(pdfDocLib, latin));
     return { font: embedded.get(name), name, fallback: true };
   }
-  const cjk = await loadDefaultOcrFontBytes();
-  if (covers(fontkit.create(cjk), text)) {
-    const name = 'NotoSansTC-Regular';
-    if (!embedded.has(name)) embedded.set(name, await embedOcrFont(pdfDocLib, cjk));
-    return { font: embedded.get(name), name, fallback: true };
+  // CJK in the same order as text-box appearances (TC, then SC); a font file
+  // that is missing just drops out of the chain.
+  for (const { bestand } of CJK_FONTS) {
+    let cjk;
+    try { cjk = await loadBundledFontBytes(bestand); } catch { continue; }
+    if (covers(fontkit.create(cjk), text)) {
+      const name = bestand.replace(/\.(ttf|otf)$/, '');
+      if (!embedded.has(name)) embedded.set(name, await embedOcrFont(pdfDocLib, cjk));
+      return { font: embedded.get(name), name, fallback: true };
+    }
   }
   throw new Error('No bundled font contains every replacement glyph; the PDF was not changed');
 }

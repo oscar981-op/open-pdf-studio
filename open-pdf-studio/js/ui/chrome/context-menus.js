@@ -35,6 +35,8 @@ export function hideContextMenu() {
 
 export function initContextMenus() {
   document.addEventListener('contextmenu', (e) => {
+    // Right-dragging pans a 3D model (#599): no tool switch there.
+    if (e.target instanceof Element && e.target.closest('.threed-inline-clip, .threed-view')) return;
     // Shift+right-click = 2D-cursor gesture (tool-dispatcher) — never a menu
     // and never a tool switch.
     if (e.shiftKey) {

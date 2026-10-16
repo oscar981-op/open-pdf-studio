@@ -168,6 +168,16 @@ async function maakMiniPdf(bronBytes, paginaIndex, extraRotatie, geladenBron) {
   return await mini.save();
 }
 
+// Een lege pagina die pdf-lib zelf aanmaakte (nieuw document, ingevoegde lege
+// pagina) heeft geen /Contents. embedPage gooit daarop pas bij het opslaan, en
+// dan mislukt elke volgende save van het document. Een lege inhoudsstroom
+// verandert niets aan het beeld. pushOperators() zonder operatoren maakt die
+// stroom aan; alleen doen als hij ontbreekt, anders komt er een extra bij.
+export function metInhoud(pagina) {
+  if (!pagina.node.Contents()) pagina.pushOperators();
+  return pagina;
+}
+
 /**
  * Bedt het gekozen vak van een bronpagina in als Form XObject in `doelDoc`.
  *
@@ -184,10 +194,10 @@ async function maakMiniPdf(bronBytes, paginaIndex, extraRotatie, geladenBron) {
 // Per doel-document: bronobjecten mogen nooit PDFRefs tussen saves delen.
 const gedeeldeBronnen = new WeakMap();
 
-export async function bedKnipselIn(doelDoc, bronBytes, srcBox, paginaIndex = 0) {
+export async function bedKnipselIn(doelDoc, bronBytes, srcBox, paginaIndex = 0, { alsGroep = false } = {}) {
   const vak = normaliseerVak(srcBox);
   if (!vak) throw new Error('vak te klein of ontaard');
-  const { PDFDocument, PDFPage, drawObject } = await import('pdf-lib');
+  const { PDFDocument, PDFPage, PDFName, drawObject } = await import('pdf-lib');
   let bronnen = gedeeldeBronnen.get(doelDoc);
   if (!bronnen) gedeeldeBronnen.set(doelDoc, bronnen = new WeakMap());
   let bladen = bronnen.get(bronBytes);
@@ -195,7 +205,7 @@ export async function bedKnipselIn(doelDoc, bronBytes, srcBox, paginaIndex = 0) 
   if (!bladen.has(paginaIndex)) {
     const laden = (async () => {
       const bron = await PDFDocument.load(bronBytes);
-      const pagina = bron.getPage(paginaIndex);
+      const pagina = metInhoud(bron.getPage(paginaIndex));
       const box = pagina.getMediaBox();
       const crop = pagina.getCropBox();
       const volledig = {
@@ -211,7 +221,9 @@ export async function bedKnipselIn(doelDoc, bronBytes, srcBox, paginaIndex = 0) 
     laden.catch(() => bladen.delete(paginaIndex));
   }
   const bron = await bladen.get(paginaIndex);
-  const key = [vak.left, vak.bottom, vak.right, vak.top].join('|');
+  // Een groep hoort alleen bij een doorzichtig knipsel (zie hieronder): een
+  // dekkend en een doorzichtig knipsel van hetzelfde vak delen geen wrapper.
+  const key = [vak.left, vak.bottom, vak.right, vak.top, alsGroep ? 'groep' : ''].join('|');
   if (!bron.vakken.has(key)) {
     const bouwen = (async () => {
       const { matrix, breedte, hoogte, rotatie } = knipselMatrix(vak, bron.rotatie);
@@ -221,6 +233,17 @@ export async function bedKnipselIn(doelDoc, bronBytes, srcBox, paginaIndex = 0) 
       wrapper.pushOperators(drawObject(naam));
       const ingebed = await doelDoc.embedPage(wrapper, vak, matrix);
       doelDoc.context.delete(wrapper.ref); // helperpagina hoort niet in de paginaboom
+      // Een doorzichtige onderlegger als transparantiegroep (#512): zijn alfa staat
+      // vóór de `Do`, en zonder groep zet een `gs` in de brontekening die alfa voor
+      // de rest terug op 1. Alleen dan: pdf.js isoleert elke groep, waardoor
+      // overvloeimodi in de bron niet meer met de pagina mengen. De groep staat op
+      // de wrapper: de Form die de AP met de buitenste alfa tekent.
+      if (alsGroep) {
+        await ingebed.embed();
+        doelDoc.context.lookup(ingebed.ref).dict.set(
+          PDFName.of('Group'), doelDoc.context.obj({ Type: 'Group', S: 'Transparency' }),
+        );
+      }
       return { ingebed, breedte, hoogte, rotatie };
     })();
     bron.vakken.set(key, bouwen);

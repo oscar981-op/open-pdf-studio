@@ -3,6 +3,7 @@ import { useTranslation } from '../../../i18n/useTranslation.js';
 import PrefColorPicker from './PrefColorPicker.jsx';
 import PrefComboBox from './PrefComboBox.jsx';
 import PrefSelect from './PrefSelect.jsx';
+import { PAPIER_EENHEDEN } from '../../../annotations/papiermaat-eenheid.js';
 
 const SUB_TABS = [
   { id: 'general', key: 'annotations.subtabGeneral' },
@@ -122,6 +123,12 @@ export default function AnnotationsTab(props) {
               <div class="pref-row">
                 <label>{t('annotations.defaultFontSize')}</label>
                 <PrefComboBox value={p.defaultFontSize[0]} setValue={p.defaultFontSize[1]} options={[7,8,9,10,11,12,14,16,18,20,22,24,26,28,36,48,72]} min={1} max={200} fallback={16} suffix="pt" />
+              </div>
+              {/* Eenheid van papiermaten in het eigenschappenpaneel (#598). */}
+              <div class="pref-row">
+                <label>{t('annotations.paperSizeUnit')}</label>
+                <PrefSelect value={p.paperSizeUnit[0]} setValue={p.paperSizeUnit[1]}
+                  options={PAPIER_EENHEDEN.map(u => ({ value: u, label: u }))} style={{ width: '80px' }} />
               </div>
               <div class="pref-row">
                 <label>{t('annotations.highlightOpacity')}</label>
@@ -550,6 +557,14 @@ export default function AnnotationsTab(props) {
                   <PrefSelect value={p.measureAreaDimPrecision[0]} setValue={p.measureAreaDimPrecision[1]} options={precisionOpts} />
                 </div>
               </fieldset>
+
+              {/* Zijdematen (#536): standaard voor nieuwe meetvlakken, uit. */}
+              <div class="pref-row pref-checkbox-row">
+                <label class="pref-checkbox-label">
+                  <input type="checkbox" checked={p.measureAreaShowEdgeLengths[0]()} onChange={e => p.measureAreaShowEdgeLengths[1](e.target.checked)} />
+                  <span>{t('measurement.showEdgeLengths')}</span>
+                </label>
+              </div>
             </fieldset>
 
             <fieldset class="pref-fieldset">

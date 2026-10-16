@@ -11,7 +11,7 @@
   "update": "Bijwerken",
   "yes": "Ja",
   "no": "Nee",
-  "none": "None",
+  "none": "Geen",
   "export": "Exporteren",
   "import": "Importeren",
   "print": "Afdrukken",
@@ -32,6 +32,7 @@
   "saved": "Opgeslagen",
   "documentChangedDuringSave": "Het document is gewijzigd tijdens het opslaan. Sla opnieuw op.",
   "documentChangedDuringExport": "Het document is gewijzigd tijdens het exporteren. Start opnieuw.",
+  "snippetOutputFailed": "Een vectorknipsel kon niet worden weergegeven, daarom is de export of afdruk gestopt. Probeer het opnieuw.",
   "search": "Zoeken",
   "find": "Zoeken",
   "page": "Pagina",
@@ -45,6 +46,64 @@
   "percent": "%",
   "webSessionStartsEmpty": "Een herlaadbeurt begint leeg: in de browser blijft je document op je eigen computer en wordt het niet bewaard.",
   "desktopOnly": "{{feature}} werkt alleen in de bureaubladversie. Deze pagina is de webversie.",
+  "assistantTitle": "OpenAEC-assistent",
+  "assistant": {
+    "greeting": "Hallo! Ik ben de **{{title}}**. Ik kan: 🌐 vertalen, 📝 samenvatten, ✏️ tekenen op de tekening, en 🚪 deuren herkennen. Kies hieronder een vaardigheid of stel je vraag.",
+    "workingIn": "werkt in",
+    "viaClaude": "via Claude",
+    "notConnected": "niet verbonden",
+    "keyButton": "Claude (Anthropic) API-sleutel instellen",
+    "keyPlaceholder": "Claude (Anthropic) API-sleutel — sk-ant-…",
+    "thinking": "Denken…",
+    "inputPlaceholder": "Vraag iets over deze PDF…",
+    "send": "Versturen",
+    "noAnswer": "Geen antwoord ontvangen.",
+    "errorInvalidKey": "Ongeldige Claude (Anthropic) API-sleutel. Controleer de sleutel via het 🔑-knopje bovenin het paneel.",
+    "errorApi": "De Claude-API gaf een fout.",
+    "errorNoConnection": "Geen verbinding met de AI-dienst.",
+    "errorTimeout": "Geen MCP-client beantwoordde de vraag op tijd.",
+    "errorFailed": "AI-aanroep mislukt.",
+    "detail": "Detail",
+    "unknownError": "onbekende fout",
+    "skills": {
+      "translate": {
+        "label": "Vertaal",
+        "hint": "Vertaal de tekst van het document",
+        "prompt": "Vertaal de tekst van het geopende document."
+      },
+      "summarize": {
+        "label": "Vat samen",
+        "hint": "Vat het document of de tekening samen",
+        "prompt": "Vat het geopende document of de tekening samen."
+      },
+      "draw": {
+        "label": "Teken",
+        "hint": "Teken een element of annotatie op de tekening",
+        "prompt": "Teken op de tekening: "
+      },
+      "detect-doors": {
+        "label": "Herken deuren",
+        "hint": "Detecteer de deuren in de plattegrond en markeer ze",
+        "prompt": "Herken de deuren in de plattegrond en markeer ze."
+      },
+      "structural-layout": {
+        "label": "Zet constructie uit",
+        "hint": "Stramien, kolommen, balken, vloervelden met overspanningsrichting en de constructiestaat",
+        "prompt": "Zet de draagstructuur uit op de tekening. Opgave: "
+      },
+      "structural-overview": {
+        "label": "Constructieoverzicht",
+        "hint": "Constructieoverzicht per bouwlaag op de plattegronden van de architect: fundering, vloeren met overspanning, onderliggende dragende wanden, liggers en kolommen, legenda en toelichting",
+        "prompt": "Maak een constructieoverzicht op dit blad met knipsels uit de plattegronden van de architect. Bron, bouwlagen en constructieprincipe: "
+      },
+      "floorplan": {
+        "label": "Plattegrond",
+        "hint": "Teken een bouwkundige plattegrond: wanden, kozijnen, ruimten, maatvoering en inrichting (sanitair, keuken)",
+        "prompt": "Teken een bouwkundige plattegrond. Wat er getekend moet worden: "
+      }
+    }
+  },
+  "onlineSymbolLibrary": "Online symboolbibliotheek",
   "noDocumentOpen": "Er is geen document geopend.",
   "invalidPageRange": "Ongeldig paginabereik. Voer geldige paginanummers in.",
   "appName": "Open PDF Studio",
@@ -53,11 +112,11 @@
   "solid": "Doorlopend",
   "dashed": "Gestreept",
   "dotted": "Gestippeld",
-  "dashDot": "Dash-Dot",
-  "dashDotDot": "Dash-Dot-Dot",
-  "longDash": "Long Dash",
-  "longDashDot": "Long Dash-Dot",
-  "longDashDotDot": "Long Dash-Dot-Dot",
+  "dashDot": "Streep-punt",
+  "dashDotDot": "Streep-punt-punt",
+  "longDash": "Lang gestreept",
+  "longDashDot": "Lange streep-punt",
+  "longDashDotDot": "Lange streep-punt-punt",
   "portrait": "Staand",
   "landscape": "Liggend",
   "custom": "Aangepast",
@@ -156,7 +215,9 @@
     "dragFileGone": "Dit bestand bestaat niet meer op schijf — de tab kan niet verplaatst worden.",
     "dragNotStarted": "De tab kon niet naar een ander venster gesleept worden. Probeer het opnieuw, of gebruik rechtsklik → openen in nieuw venster.",
     "openInNewWindow": "Open in nieuw venster",
-    "closeTab": "Tab sluiten"
+    "closeTab": "Tab sluiten",
+    "nextTab": "Volgend tabblad",
+    "previousTab": "Vorig tabblad"
   },
   "quickAccess": {
     "exportRaster": "Exporteer als raster-PDF (opent in nieuw tabblad)"
@@ -166,5 +227,36 @@
     "copied": "Knipsel gekopieerd — plak het in een andere tekening",
     "failed": "Knippen mislukt",
     "clipboardEmpty": "Geen knipsel op het klembord"
+  },
+  "protectedPdfReadOnly": "Dit document is met een wachtwoord geopend en is alleen-lezen. Het kan niet worden opgeslagen.",
+  "threeD": {
+    "title": "3D-weergave",
+    "view": "Aanzicht",
+    "fit": "Passend",
+    "display": "Weergave",
+    "modeSolid": "Massief",
+    "modeEdges": "Massief met randen",
+    "modeWire": "Draadmodel",
+    "modeXray": "Transparant",
+    "tree": "Modelboom",
+    "hint": "Links slepen: draaien, rechts slepen: schuiven, wiel: zoomen",
+    "loading": "3D-model laden... {{pct}}%",
+    "stats": "{{models}} objecten, {{tris}} driehoeken",
+    "unsupported": "Dit 3D-model gebruikt het {{fmt}}-formaat, dat nog niet wordt ondersteund (alleen U3D).",
+    "activate": "3D activeren",
+    "expand": "Hele documentgebied vullen",
+    "shrink": "Terug naar de pagina",
+    "deactivate": "3D-weergave uitzetten",
+    "markupView": "Markeringsaanzicht",
+    "edit": "Bewerken",
+    "editTip": "Maak een markeerpagina van dit aanzicht; de 3D-pagina blijft vrij draaibaar",
+    "creating": "Pagina maken...",
+    "markupPages": "Markeerpagina's",
+    "pageN": "pagina {{n}}",
+    "snapshotBar": "3D-markeerpagina: {{name}}",
+    "backTo3D": "Terug naar 3D-model",
+    "readFailed": "Het 3D-model kon niet worden gelezen.",
+    "partial": "Een deel van het 3D-model kon niet worden gelezen ({{n}} overgeslagen).",
+    "viewerFailed": "De 3D-weergave kon niet worden gestart."
   }
 }
