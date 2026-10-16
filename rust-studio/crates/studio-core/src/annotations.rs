@@ -27,7 +27,19 @@ pub enum Kind {
     Rectangle {
         color_rgb: [u8; 3],
     },
+    Ellipse {
+        color_rgb: [u8; 3],
+    },
+    /// The Tauri shape tool's default six-sided polygon, fitted to bounds.
+    Polygon {
+        color_rgb: [u8; 3],
+    },
     Line {
+        start: [f64; 2],
+        end: [f64; 2],
+        color_rgb: [u8; 3],
+    },
+    Arrow {
         start: [f64; 2],
         end: [f64; 2],
         color_rgb: [u8; 3],
@@ -55,7 +67,37 @@ pub enum TextAlign {
 pub const TEXT_FONT_SIZES: [u16; 16] =
     [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72];
 pub const DEFAULT_TEXT_FONT_SIZE: u16 = 16;
-pub const MAX_POLYLINE_POINTS: usize = 64;
+pub const MAX_POLYLINE_POINTS: usize = 512;
+
+pub fn polygon_vertices(bounds: Rect) -> [[f64; 2]; 6] {
+    let cx = bounds.x + bounds.width / 2.0;
+    let cy = bounds.y + bounds.height / 2.0;
+    let rx = bounds.width / 2.0;
+    let ry = bounds.height / 2.0;
+    std::array::from_fn(|index| {
+        let angle = index as f64 * std::f64::consts::PI / 3.0 - std::f64::consts::FRAC_PI_2;
+        [cx + rx * angle.cos(), cy + ry * angle.sin()]
+    })
+}
+
+/// Open arrowhead in page coordinates; shared by hit testing, UI and PDF export.
+pub fn arrow_wings(start: [f64; 2], end: [f64; 2]) -> Option<[[f64; 2]; 2]> {
+    let dx = end[0] - start[0];
+    let dy = end[1] - start[1];
+    let length = dx.hypot(dy);
+    if !length.is_finite() || length < 6.0 {
+        return None;
+    }
+    let ux = dx / length;
+    let uy = dy / length;
+    let head = length.mul_add(0.4, 0.0).min(10.0);
+    let base = [end[0] - ux * head, end[1] - uy * head];
+    let spread = head * 0.5;
+    Some([
+        [base[0] - uy * spread, base[1] + ux * spread],
+        [base[0] + uy * spread, base[1] - ux * spread],
+    ])
+}
 
 fn distance_to_segment(point: [f64; 2], start: [f64; 2], end: [f64; 2]) -> f64 {
     let dx = end[0] - start[0];
@@ -80,8 +122,21 @@ pub struct Annotation {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Edit {
     Add(Annotation),
+    /// Add a bounded group as one atomic, undoable document edit.
+    AddMany(Vec<Annotation>),
     Replace(Annotation),
     Remove(u64),
+    /// Internal inverse of AddMany; callers may not submit this as a new edit.
+    RemoveMany(Vec<u64>),
+    /// Atomically remove native annotations from one page or the whole document.
+    Clear {
+        page: Option<usize>,
+    },
+    /// Undo data produced by Clear; callers may not submit this as a new edit.
+    Restore {
+        page: Option<usize>,
+        items: Vec<Annotation>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,7 +146,32 @@ pub enum EditError {
     InvalidPage,
     InvalidGeometry,
     InvalidTextSize,
+    InvalidRestore,
+    InvalidBatch,
     GenerationExhausted,
+}
+
+/// A document command may run only against the state that was observed when
+/// it was made. The render generation and annotation revision are separate:
+/// editing an overlay must not invalidate an in-flight page bitmap.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DocumentVersion {
+    pub id: DocumentId,
+    pub generation: u64,
+    pub annotation_revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum DocumentCommand {
+    Edit(Edit),
+    Undo,
+    Redo,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandError {
+    StaleDocument,
+    Edit(EditError),
 }
 
 impl From<ViewError> for EditError {
@@ -108,6 +188,7 @@ impl From<ViewError> for EditError {
 #[derive(Clone, Debug)]
 pub struct DocumentModel {
     view: DocumentView,
+    annotation_revision: u64,
     items: BTreeMap<u64, Annotation>,
     used_ids: std::collections::BTreeSet<u64>,
     undo: Vec<Edit>,
@@ -118,6 +199,7 @@ impl DocumentModel {
     pub fn new(id: DocumentId, pages: usize) -> Result<Self, ViewError> {
         Ok(Self {
             view: DocumentView::new(id, pages)?,
+            annotation_revision: 0,
             items: BTreeMap::new(),
             used_ids: Default::default(),
             undo: Vec::new(),
@@ -132,6 +214,37 @@ impl DocumentModel {
     }
     pub fn view(&self) -> &DocumentView {
         &self.view
+    }
+    /// Changes on every committed annotation edit, including undo and redo.
+    /// Overlay edits deliberately do not invalidate the PDF render ticket.
+    pub fn annotation_revision(&self) -> u64 {
+        self.annotation_revision
+    }
+    pub fn version(&self) -> DocumentVersion {
+        DocumentVersion {
+            id: self.view.document_id(),
+            generation: self.view.generation(),
+            annotation_revision: self.annotation_revision,
+        }
+    }
+    /// Shared transaction entry point for UI and future external commands.
+    /// A stale command has no effect on annotations or undo history.
+    pub fn execute(
+        &mut self,
+        expected: DocumentVersion,
+        command: DocumentCommand,
+    ) -> Result<bool, CommandError> {
+        if self.version() != expected {
+            return Err(CommandError::StaleDocument);
+        }
+        match command {
+            DocumentCommand::Edit(edit) => {
+                self.apply(edit).map_err(CommandError::Edit)?;
+                Ok(true)
+            }
+            DocumentCommand::Undo => self.undo().map_err(CommandError::Edit),
+            DocumentCommand::Redo => self.redo().map_err(CommandError::Edit),
+        }
     }
     pub fn items(&self) -> impl Iterator<Item = &Annotation> {
         self.items.values()
@@ -157,9 +270,37 @@ impl DocumentModel {
                 return None;
             }
             match &annotation.kind {
+                Kind::Ellipse { .. } => {
+                    let rx = bounds.width / 2.0;
+                    let ry = bounds.height / 2.0;
+                    let dx = point[0] - bounds.x - rx;
+                    let dy = point[1] - bounds.y - ry;
+                    let normalized = (dx / rx).hypot(dy / ry);
+                    (normalized > 0.0
+                        && ((1.0 - 1.0 / normalized) * dx.hypot(dy)).abs() <= tolerance + 1.0)
+                        .then_some(*id)
+                }
+                Kind::Polygon { .. } => {
+                    let vertices = polygon_vertices(bounds);
+                    vertices
+                        .iter()
+                        .zip(vertices.iter().cycle().skip(1))
+                        .take(vertices.len())
+                        .any(|(start, end)| {
+                            distance_to_segment(point, *start, *end) <= tolerance + 1.0
+                        })
+                        .then_some(*id)
+                }
                 Kind::Line { start, end, .. } => {
                     (distance_to_segment(point, *start, *end) <= tolerance + 1.0).then_some(*id)
                 }
+                Kind::Arrow { start, end, .. } => arrow_wings(*start, *end).and_then(|wings| {
+                    (distance_to_segment(point, *start, *end) <= tolerance + 1.0
+                        || wings
+                            .iter()
+                            .any(|wing| distance_to_segment(point, *wing, *end) <= tolerance + 1.0))
+                    .then_some(*id)
+                }),
                 Kind::Polyline { points, .. } => points
                     .windows(2)
                     .any(|pair| distance_to_segment(point, pair[0], pair[1]) <= tolerance + 1.0)
@@ -222,7 +363,7 @@ impl DocumentModel {
                 return Err(EditError::InvalidTextSize);
             }
         }
-        if let Kind::Line { start, end, .. } = &item.kind {
+        if let Kind::Line { start, end, .. } | Kind::Arrow { start, end, .. } = &item.kind {
             if !start
                 .iter()
                 .chain(end.iter())
@@ -236,6 +377,19 @@ impl DocumentModel {
                 })
             {
                 return Err(EditError::InvalidGeometry);
+            }
+            if matches!(item.kind, Kind::Arrow { .. }) {
+                let Some(wings) = arrow_wings(*start, *end) else {
+                    return Err(EditError::InvalidGeometry);
+                };
+                if wings.iter().any(|point| {
+                    point[0] < item.bounds.x
+                        || point[0] > item.bounds.x + item.bounds.width
+                        || point[1] < item.bounds.y
+                        || point[1] > item.bounds.y + item.bounds.height
+                }) {
+                    return Err(EditError::InvalidGeometry);
+                }
             }
         }
         if let Kind::Polyline { points, .. } = &item.kind {
@@ -267,6 +421,22 @@ impl DocumentModel {
                 }
                 Edit::Remove(item.id)
             }
+            Edit::AddMany(items) => {
+                if items.is_empty() || items.len() > 4096 {
+                    return Err(EditError::InvalidBatch);
+                }
+                let mut ids = std::collections::BTreeSet::new();
+                for item in items {
+                    self.check(item)?;
+                    if !ids.insert(item.id)
+                        || self.items.contains_key(&item.id)
+                        || (self.used_ids.contains(&item.id) && !replay)
+                    {
+                        return Err(EditError::DuplicateId);
+                    }
+                }
+                Edit::RemoveMany(items.iter().map(|item| item.id).collect())
+            }
             Edit::Replace(item) => {
                 self.check(item)?;
                 Edit::Replace(
@@ -277,7 +447,56 @@ impl DocumentModel {
                 )
             }
             Edit::Remove(id) => Edit::Add(self.items.get(id).ok_or(EditError::UnknownId)?.clone()),
+            Edit::RemoveMany(ids) => {
+                if !replay || ids.is_empty() || ids.len() > 4096 {
+                    return Err(EditError::InvalidBatch);
+                }
+                let mut seen = std::collections::BTreeSet::new();
+                let mut items = Vec::with_capacity(ids.len());
+                for id in ids {
+                    if !seen.insert(*id) {
+                        return Err(EditError::InvalidBatch);
+                    }
+                    items.push(self.items.get(id).ok_or(EditError::UnknownId)?.clone());
+                }
+                Edit::AddMany(items)
+            }
+            Edit::Clear { page } => {
+                if page.is_some_and(|page| page >= self.view.page_count()) {
+                    return Err(EditError::InvalidPage);
+                }
+                Edit::Restore {
+                    page: *page,
+                    items: self
+                        .items
+                        .values()
+                        .filter(|item| page.is_none_or(|page| item.page == page))
+                        .cloned()
+                        .collect(),
+                }
+            }
+            Edit::Restore { page, items } => {
+                if !replay || page.is_some_and(|page| page >= self.view.page_count()) {
+                    return Err(EditError::InvalidRestore);
+                }
+                let mut ids = std::collections::BTreeSet::new();
+                for item in items {
+                    self.check(item)?;
+                    if page.is_some_and(|page| item.page != page)
+                        || !ids.insert(item.id)
+                        || self.items.contains_key(&item.id)
+                        || !self.used_ids.contains(&item.id)
+                    {
+                        return Err(EditError::InvalidRestore);
+                    }
+                }
+                Edit::Clear { page: *page }
+            }
         };
+        let next_revision = self
+            .annotation_revision
+            .checked_add(1)
+            .ok_or(EditError::GenerationExhausted)?;
         // The PDF bitmap and the native annotation overlay are separate.
         // Editing the overlay must not discard an in-flight page render.
         match edit {
@@ -285,13 +504,34 @@ impl DocumentModel {
                 self.used_ids.insert(item.id);
                 self.items.insert(item.id, item);
             }
+            Edit::AddMany(items) => {
+                for item in items {
+                    self.used_ids.insert(item.id);
+                    self.items.insert(item.id, item);
+                }
+            }
             Edit::Replace(item) => {
                 self.items.insert(item.id, item);
             }
             Edit::Remove(id) => {
                 self.items.remove(&id);
             }
+            Edit::RemoveMany(ids) => {
+                for id in ids {
+                    self.items.remove(&id);
+                }
+            }
+            Edit::Clear { page } => {
+                self.items
+                    .retain(|_, item| page.is_some_and(|page| item.page != page));
+            }
+            Edit::Restore { items, .. } => {
+                for item in items {
+                    self.items.insert(item.id, item);
+                }
+            }
         }
+        self.annotation_revision = next_revision;
         Ok(inverse)
     }
 }
@@ -316,6 +556,205 @@ mod tests {
                 align: TextAlign::Left,
             },
         }
+    }
+    #[test]
+    fn ellipse_is_a_real_editable_annotation_with_outline_hit_testing() {
+        let mut doc = DocumentModel::new(DocumentId(42), 1).unwrap();
+        let mut item = annotation(1);
+        item.kind = Kind::Ellipse {
+            color_rgb: [231, 76, 60],
+        };
+        doc.execute(doc.version(), DocumentCommand::Edit(Edit::Add(item)))
+            .unwrap();
+        assert_eq!(doc.hit_test(0, [12.0, 13.0], 0.0), Some(1));
+        assert_eq!(doc.hit_test(0, [7.0, 13.0], 0.0), None);
+        assert!(doc.execute(doc.version(), DocumentCommand::Undo).unwrap());
+        assert!(doc.get(1).is_none());
+        assert!(doc.execute(doc.version(), DocumentCommand::Redo).unwrap());
+        assert!(matches!(doc.get(1).unwrap().kind, Kind::Ellipse { .. }));
+    }
+    #[test]
+    fn arrow_requires_its_open_head_inside_bounds_and_is_undoable() {
+        let mut doc = DocumentModel::new(DocumentId(43), 1).unwrap();
+        let start = [20.0, 20.0];
+        let end = [80.0, 20.0];
+        let wings = arrow_wings(start, end).unwrap();
+        let mut item = annotation(1);
+        item.bounds = Rect {
+            x: 18.0,
+            y: 13.0,
+            width: 64.0,
+            height: 14.0,
+        };
+        item.kind = Kind::Arrow {
+            start,
+            end,
+            color_rgb: [231, 76, 60],
+        };
+        doc.execute(
+            doc.version(),
+            DocumentCommand::Edit(Edit::Add(item.clone())),
+        )
+        .unwrap();
+        assert_eq!(doc.hit_test(0, wings[0], 0.0), Some(1));
+        assert!(doc.execute(doc.version(), DocumentCommand::Undo).unwrap());
+        assert!(doc.get(1).is_none());
+        assert!(doc.execute(doc.version(), DocumentCommand::Redo).unwrap());
+        let mut clipped = item;
+        clipped.id = 2;
+        clipped.bounds = Rect {
+            x: 18.0,
+            y: 18.0,
+            width: 64.0,
+            height: 4.0,
+        };
+        assert_eq!(
+            doc.apply(Edit::Add(clipped)),
+            Err(EditError::InvalidGeometry)
+        );
+    }
+
+    #[test]
+    fn add_many_is_atomic_stale_checked_and_one_undo_step() {
+        let mut doc = DocumentModel::new(DocumentId(31), 2).unwrap();
+        let before = doc.version();
+        let first = annotation(10);
+        let second = annotation(11);
+        doc.execute(
+            before,
+            DocumentCommand::Edit(Edit::AddMany(vec![first.clone(), second.clone()])),
+        )
+        .unwrap();
+        assert_eq!(doc.items().count(), 2);
+        assert_eq!(
+            doc.execute(
+                before,
+                DocumentCommand::Edit(Edit::AddMany(vec![annotation(12)]))
+            ),
+            Err(CommandError::StaleDocument)
+        );
+        assert!(doc.execute(doc.version(), DocumentCommand::Undo).unwrap());
+        assert_eq!(doc.items().count(), 0);
+        assert!(!doc.can_undo());
+        assert!(doc.execute(doc.version(), DocumentCommand::Redo).unwrap());
+        assert_eq!(doc.get(10), Some(&first));
+        assert_eq!(doc.get(11), Some(&second));
+
+        let version = doc.version();
+        let mut invalid = annotation(13);
+        invalid.page = 2;
+        assert_eq!(
+            doc.execute(
+                version,
+                DocumentCommand::Edit(Edit::AddMany(vec![annotation(12), invalid]))
+            ),
+            Err(CommandError::Edit(EditError::InvalidPage))
+        );
+        assert_eq!(doc.version(), version);
+        assert!(doc.get(12).is_none());
+        assert_eq!(
+            doc.execute(
+                version,
+                DocumentCommand::Edit(Edit::AddMany(vec![annotation(12), annotation(12)]))
+            ),
+            Err(CommandError::Edit(EditError::DuplicateId))
+        );
+        assert_eq!(doc.version(), version);
+        assert_eq!(
+            doc.execute(
+                version,
+                DocumentCommand::Edit(Edit::RemoveMany(vec![10, 11]))
+            ),
+            Err(CommandError::Edit(EditError::InvalidBatch))
+        );
+    }
+    #[test]
+    fn delayed_document_commands_cannot_change_a_newer_document_or_undo_history() {
+        let mut doc = DocumentModel::new(DocumentId(41), 2).unwrap();
+        let before_page_change = doc.version();
+        doc.go_to_page(1).unwrap();
+        assert_eq!(
+            doc.execute(
+                before_page_change,
+                DocumentCommand::Edit(Edit::Add(annotation(7)))
+            ),
+            Err(CommandError::StaleDocument)
+        );
+        let before_edit = doc.version();
+        assert!(doc
+            .execute(before_edit, DocumentCommand::Edit(Edit::Add(annotation(7))))
+            .unwrap());
+        assert_eq!(
+            doc.execute(before_edit, DocumentCommand::Undo),
+            Err(CommandError::StaleDocument)
+        );
+        assert!(doc.get(7).is_some());
+        assert!(doc.can_undo());
+        let newer = doc.version();
+        assert!(doc.execute(newer, DocumentCommand::Undo).unwrap());
+        assert!(doc.get(7).is_none());
+        assert!(doc.can_redo());
+        let other_document = DocumentVersion {
+            id: DocumentId(40),
+            ..doc.version()
+        };
+        assert_eq!(
+            doc.execute(other_document, DocumentCommand::Redo),
+            Err(CommandError::StaleDocument)
+        );
+        assert!(doc.can_redo());
+        let current = doc.version();
+        assert!(doc.execute(current, DocumentCommand::Redo).unwrap());
+        assert!(doc.get(7).is_some());
+    }
+    #[test]
+    fn clear_page_and_all_are_single_undoable_stale_checked_transactions() {
+        let mut doc = DocumentModel::new(DocumentId(42), 2).unwrap();
+        for (id, page) in [(1, 0), (2, 0), (3, 1)] {
+            let mut item = annotation(id);
+            item.page = page;
+            doc.execute(doc.version(), DocumentCommand::Edit(Edit::Add(item)))
+                .unwrap();
+        }
+        let stale = doc.version();
+        doc.execute(stale, DocumentCommand::Edit(Edit::Clear { page: Some(0) }))
+            .unwrap();
+        assert!(doc.get(1).is_none() && doc.get(2).is_none());
+        assert!(doc.get(3).is_some());
+        assert_eq!(
+            doc.execute(stale, DocumentCommand::Undo),
+            Err(CommandError::StaleDocument)
+        );
+        doc.execute(doc.version(), DocumentCommand::Undo).unwrap();
+        assert_eq!(doc.items().count(), 3);
+        doc.execute(doc.version(), DocumentCommand::Redo).unwrap();
+        assert_eq!(doc.items().count(), 1);
+        doc.execute(
+            doc.version(),
+            DocumentCommand::Edit(Edit::Clear { page: None }),
+        )
+        .unwrap();
+        assert_eq!(doc.items().count(), 0);
+        doc.execute(doc.version(), DocumentCommand::Undo).unwrap();
+        assert!(doc.get(3).is_some());
+        assert_eq!(
+            doc.execute(
+                doc.version(),
+                DocumentCommand::Edit(Edit::Restore {
+                    page: None,
+                    items: vec![annotation(1)],
+                })
+            ),
+            Err(CommandError::Edit(EditError::InvalidRestore))
+        );
+        assert_eq!(doc.items().count(), 1);
+        assert_eq!(
+            doc.execute(
+                doc.version(),
+                DocumentCommand::Edit(Edit::Clear { page: Some(2) })
+            ),
+            Err(CommandError::Edit(EditError::InvalidPage))
+        );
     }
     #[test]
     fn undo_redo_and_new_edit_clear_redo() {
@@ -399,6 +838,29 @@ mod tests {
         assert_eq!(doc.hit_test(0, [5.0, 5.0], 0.0), Some(2));
         assert_eq!(doc.hit_test(1, [5.0, 5.0], 0.0), None);
         assert_eq!(doc.hit_test(0, [f64::NAN, 5.0], 1.0), None);
+    }
+
+    #[test]
+    fn polygon_hit_test_uses_edges_and_rejects_the_empty_center() {
+        let mut doc = DocumentModel::new(DocumentId(12), 1).unwrap();
+        let bounds = Rect {
+            x: 10.0,
+            y: 20.0,
+            width: 80.0,
+            height: 60.0,
+        };
+        doc.apply(Edit::Add(Annotation {
+            id: 42,
+            page: 0,
+            bounds,
+            kind: Kind::Polygon {
+                color_rgb: [231, 76, 60],
+            },
+        }))
+        .unwrap();
+        assert_eq!(polygon_vertices(bounds)[0], [50.0, 20.0]);
+        assert_eq!(doc.hit_test(0, [50.0, 20.0], 1.0), Some(42));
+        assert_eq!(doc.hit_test(0, [50.0, 50.0], 1.0), None);
     }
 
     #[test]

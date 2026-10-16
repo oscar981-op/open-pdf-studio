@@ -1,29 +1,38 @@
 //! First native window; UI structure follows the current Open PDF Studio app.
 #![forbid(unsafe_code)]
 mod annotation_layer;
+mod blank_pdf;
+mod extension_builder;
 mod hakan_ui;
+mod image_export;
 mod inline_text;
 mod keystrokes;
+mod mcp_server;
 #[cfg(feature = "dynlex-experimental")]
 mod native_text_scene;
 mod pdf_save;
 mod reader_mode;
+mod recent_files;
+use recent_files::RecentFile;
 mod text_layout;
 mod virtual_ipp;
+mod xfdf_export;
+mod xfdf_import;
 mod zoom_area;
 use iced::widget::{image, scrollable};
 use iced::{color, window, Element, Task, Theme};
 use opds_dynlex_backend::{Backend, RenderOutcome};
 use opds_engine_probe::{ParsedPdf, Raster};
 use opds_native_core::annotations::{
-    Annotation, DocumentModel, Edit, Kind, Rect, TextAlign, DEFAULT_TEXT_FONT_SIZE,
-    MAX_POLYLINE_POINTS, TEXT_FONT_SIZES,
+    Annotation, CommandError, DocumentCommand, DocumentModel, DocumentVersion, Edit, Kind, Rect,
+    TextAlign, DEFAULT_TEXT_FONT_SIZE, MAX_POLYLINE_POINTS, TEXT_FONT_SIZES,
 };
 use opds_native_core::{DocumentId, RenderTicket};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -34,12 +43,53 @@ fn render_page_selected(
     scale: f32,
     backend: Backend,
 ) -> Result<RenderOutcome, String> {
-    if backend == Backend::Dynlex {
-        return opds_dynlex_backend::DynlexDocument::new(Arc::new(source.to_vec()))
-            .render_strict(pdf, page, scale);
+    opds_dynlex_backend::render_selected_strict(pdf, source, page, scale, backend)
+}
+
+// A fit scale can be outside DynLex's proven subset even when the same page
+// renders at 100%. Keep startup on the selected native backend in both cases.
+fn render_initial_dynlex_page(
+    pdf: &ParsedPdf,
+    document: &opds_dynlex_backend::DynlexDocument,
+    page: usize,
+    fit: f32,
+) -> (f32, Result<RenderOutcome, String>) {
+    match document.render_strict(pdf, page, fit) {
+        Ok(outcome) => (fit, Ok(outcome)),
+        Err(fit_error) if fit != 1.0 => match document.render_strict(pdf, page, 1.0) {
+            Ok(outcome) => (1.0, Ok(outcome)),
+            Err(_) => (fit, Err(fit_error)),
+        },
+        Err(error) => (fit, Err(error)),
     }
-    opds_dynlex_backend::render_with_report(pdf, source, page, scale, backend)
-        .map_err(|error| error.to_string())
+}
+
+fn render_initial_selected_page(
+    pdf: &ParsedPdf,
+    source: &[u8],
+    page: usize,
+    scale: f32,
+    backend: Backend,
+) -> (f32, Result<RenderOutcome, String>) {
+    match render_page_selected(pdf, source, page, scale, backend) {
+        Ok(outcome) => (scale, Ok(outcome)),
+        Err(first_error) if scale != 1.0 && backend != Backend::Hayro => {
+            match render_page_selected(pdf, source, page, 1.0, backend) {
+                Ok(outcome) => (1.0, Ok(outcome)),
+                Err(_) => (scale, Err(first_error)),
+            }
+        }
+        Err(error) => (scale, Err(error)),
+    }
+}
+
+#[derive(Clone)]
+struct DynlexOpen(Arc<opds_dynlex_backend::DynlexDocument>);
+
+impl std::fmt::Debug for DynlexOpen {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("DynlexOpen")
+    }
 }
 
 #[cfg(all(test, feature = "dynlex-experimental"))]
@@ -76,10 +126,10 @@ fn render_page_with_content_layer(
 
 const MAX_PAGE_CACHE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_THUMBNAILS: usize = 12;
-const THUMBNAIL_WIDTH: f32 = 96.0;
+const THUMBNAIL_WIDTH: f32 = 140.0;
 const THUMBNAIL_HEIGHT: f32 = 128.0;
-const THUMBNAIL_ROW_STEP: f32 = 164.0;
-const THUMBNAIL_CARD_HEIGHT: f32 = 158.0;
+const THUMBNAIL_ROW_STEP: f32 = 144.0;
+const THUMBNAIL_CARD_HEIGHT: f32 = 140.0;
 const THUMBNAIL_HEADER_HEIGHT: f32 = 30.0;
 const THUMBNAIL_WINDOW_SIZE: usize = 12;
 const BROWSER_ROW_STEP: f32 = 36.0;
@@ -119,6 +169,51 @@ fn line_bounds(start: [f64; 2], end: [f64; 2], page: (f32, f32)) -> Option<Rect>
     let top = (start[1].min(end[1]) - 2.0).max(0.0);
     let right = (start[0].max(end[0]) + 2.0).min(size[0]);
     let bottom = (start[1].max(end[1]) + 2.0).min(size[1]);
+    (right > left && bottom > top).then_some(Rect {
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+    })
+}
+
+fn arrow_bounds(start: [f64; 2], end: [f64; 2], page: (f32, f32)) -> Option<Rect> {
+    let wings = opds_native_core::annotations::arrow_wings(start, end)?;
+    let page = [f64::from(page.0), f64::from(page.1)];
+    if [start, end, wings[0], wings[1]].iter().any(|point| {
+        !point.iter().all(|value| value.is_finite())
+            || point[0] < 0.0
+            || point[1] < 0.0
+            || point[0] > page[0]
+            || point[1] > page[1]
+    }) {
+        return None;
+    }
+    let points = [start, end, wings[0], wings[1]];
+    let left = (points
+        .iter()
+        .map(|point| point[0])
+        .fold(f64::INFINITY, f64::min)
+        - 4.0)
+        .max(0.0);
+    let top = (points
+        .iter()
+        .map(|point| point[1])
+        .fold(f64::INFINITY, f64::min)
+        - 4.0)
+        .max(0.0);
+    let right = (points
+        .iter()
+        .map(|point| point[0])
+        .fold(f64::NEG_INFINITY, f64::max)
+        + 4.0)
+        .min(page[0]);
+    let bottom = (points
+        .iter()
+        .map(|point| point[1])
+        .fold(f64::NEG_INFINITY, f64::max)
+        + 4.0)
+        .min(page[1]);
     (right > left && bottom > top).then_some(Rect {
         x: left,
         y: top,
@@ -291,8 +386,82 @@ fn theme(_: &App) -> Theme {
     )
 }
 
+fn initial_window_size() -> iced::Size {
+    if std::env::var_os("OPDS_UI_SCREENSHOT_RGBA").is_some() {
+        if let Ok(value) = std::env::var("OPDS_UI_SCREENSHOT_SIZE") {
+            if let Some((width, height)) = value.split_once('x') {
+                if let (Ok(width), Ok(height)) = (width.parse::<u32>(), height.parse::<u32>()) {
+                    if (760..=4096).contains(&width) && (500..=2160).contains(&height) {
+                        return iced::Size::new(width as f32, height as f32);
+                    }
+                }
+            }
+        }
+    }
+    iced::Size::new(1200.0, 832.0)
+}
+
 fn boot() -> (App, Task<Message>) {
     let mut app = App::default();
+    if !cfg!(test) && std::env::var_os("OPDS_UI_SCREENSHOT_RGBA").is_none() {
+        app.recent_store_path = recent_files::default_path();
+        if let Some(path) = &app.recent_store_path {
+            app.recent_files = recent_files::read(path);
+        }
+    }
+    let screenshot_task = if std::env::var_os("OPDS_UI_SCREENSHOT_RGBA").is_some() {
+        app.file_menu_open = std::env::var("OPDS_UI_SCREENSHOT_FILE_MENU")
+            .ok()
+            .as_deref()
+            == Some("1");
+        if std::env::var("OPDS_UI_SCREENSHOT_DRAWING_TAB")
+            .ok()
+            .as_deref()
+            == Some("1")
+        {
+            app.active_ribbon = RibbonTab::Drawing;
+        }
+        if std::env::var("OPDS_UI_SCREENSHOT_ANNOTATION_TAB")
+            .ok()
+            .as_deref()
+            == Some("1")
+        {
+            app.active_ribbon = RibbonTab::Comment;
+        }
+        app.about_dialog = std::env::var("OPDS_UI_SCREENSHOT_ABOUT").ok().as_deref() == Some("1");
+        if std::env::var("OPDS_UI_SCREENSHOT_EXTENSIONS")
+            .ok()
+            .as_deref()
+            == Some("1")
+        {
+            app.extensions_dialog = true;
+            app.extension_id = "example_extension".into();
+            app.extension_name = "Example extension".into();
+            app.extension_output = "/tmp/example_extension.oppx".into();
+            app.extension_html =
+                iced::widget::text_editor::Content::with_text(extension_builder::default_html());
+            app.extension_javascript = iced::widget::text_editor::Content::with_text(
+                extension_builder::default_javascript(),
+            );
+        }
+        if std::env::var("OPDS_UI_SCREENSHOT_EXTENSION_IMPORT")
+            .ok()
+            .as_deref()
+            == Some("1")
+        {
+            app.extension_import_dialog = true;
+        }
+        app.hide_properties = std::env::var("OPDS_UI_SCREENSHOT_COLLAPSED_PROPERTIES")
+            .ok()
+            .as_deref()
+            == Some("1");
+        Task::perform(
+            async { std::thread::sleep(Duration::from_millis(800)) },
+            |()| Message::CaptureUiScreenshot,
+        )
+    } else {
+        Task::none()
+    };
     if cfg!(feature = "dynlex-experimental")
         && std::env::var("OPDS_RENDER_BACKEND").ok().as_deref() == Some("dynlex")
     {
@@ -309,38 +478,62 @@ fn boot() -> (App, Task<Message>) {
     {
         app.backend = Backend::OwnRust;
     }
+    if opds_dynlex_backend::pdfcraft_available()
+        && std::env::var("OPDS_RENDER_BACKEND").ok().as_deref() == Some("pdfcraft")
+    {
+        app.backend = Backend::PdfCraft;
+    }
+    mcp_server::publish_backend(app.backend);
     app.text_font_size = DEFAULT_TEXT_FONT_SIZE;
-    app.window_size = (1200.0, 832.0);
-    if let Some(path) = std::env::args().nth(1) {
+    let initial_size = initial_window_size();
+    app.window_size = (initial_size.width, initial_size.height);
+    if let Some(path) = mcp_server::document_argument() {
         app.path_input = path;
         let task = app.update(Message::Open);
-        (app, task)
+        (app, Task::batch([task, screenshot_task]))
     } else {
-        (app, Task::none())
+        (app, screenshot_task)
     }
 }
 
 fn main() -> iced::Result {
+    if let Some(port) = mcp_server::requested_port() {
+        if let Err(error) = mcp_server::start(port) {
+            eprintln!("MCP server: {error}");
+            std::process::exit(2);
+        }
+    }
+    let app_icon = {
+        let decoder = png::Decoder::new(std::io::Cursor::new(include_bytes!(
+            "../../../assets/ui/app-icon-png.bin"
+        )));
+        decoder.read_info().ok().and_then(|mut reader| {
+            let mut rgba = vec![0; reader.output_buffer_size()];
+            let frame = reader.next_frame(&mut rgba).ok()?;
+            (frame.color_type == png::ColorType::Rgba)
+                .then(|| iced::window::icon::from_rgba(rgba, frame.width, frame.height).ok())
+                .flatten()
+        })
+    };
     iced::application(boot, App::update, App::view)
         .title("Open PDF Studio Rust")
         .theme(theme)
-        .subscription(|app| {
-            let window_events = iced::event::listen_with(window_event_to_message);
-            if app.keystrokes.visible {
-                iced::Subscription::batch([
-                    window_events,
-                    iced::event::listen_with(keystroke_event_to_message),
-                ])
-            } else {
-                window_events
-            }
+        .subscription(|_| {
+            // Keyboard commands are needed even while the optional screencast
+            // labels are hidden. The label recorder itself remains opt-in.
+            iced::Subscription::batch([
+                iced::event::listen_with(window_event_to_message),
+                iced::event::listen_with(keystroke_event_to_message),
+                iced::Subscription::run(mcp_server::request_stream).map(Message::ExternalRequest),
+            ])
         })
         .exit_on_close_request(false)
         .font(include_bytes!("../../../assets/fonts/LiberationSans-Regular.ttf").as_slice())
         .window(window::Settings {
-            size: iced::Size::new(1200.0, 832.0),
+            size: initial_window_size(),
             min_size: Some(iced::Size::new(760.0, 500.0)),
             decorations: false,
+            icon: app_icon,
             ..Default::default()
         })
         .run()
@@ -363,6 +556,11 @@ fn window_event_to_message(
         iced::Event::Keyboard(iced::keyboard::Event::ModifiersChanged(modifiers)) => {
             Some(Message::KeyboardModifiersChanged(modifiers))
         }
+        iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
+            key: iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape),
+            repeat: false,
+            ..
+        }) => Some(Message::EscapeOverlay),
         iced::Event::Keyboard(iced::keyboard::Event::KeyPressed {
             key,
             modifiers,
@@ -412,6 +610,10 @@ fn zoom_timeout(delay: Duration) -> Task<Message> {
     Task::perform(async move { std::thread::sleep(delay) }, |()| {
         Message::ZoomRenderDue
     })
+}
+
+fn zoom_render_delay(timer_active: bool) -> Duration {
+    Duration::from_millis(if timer_active { 160 } else { 24 })
 }
 
 fn zoom_preview_size(
@@ -502,11 +704,366 @@ fn scroll_browser_to(y: f32) -> Task<Message> {
     )
 }
 
+fn remember_recent(recent_files: &mut VecDeque<RecentFile>, path: &str) {
+    if path.is_empty() || path.len() > crate::recent_files::MAX_PATH_BYTES || path.contains('\0') {
+        return;
+    }
+    let pinned = recent_files
+        .iter()
+        .find(|recent| recent.path == path)
+        .is_some_and(|recent| recent.pinned);
+    recent_files.retain(|recent| recent.path != path);
+    recent_files.push_front(RecentFile {
+        path: path.to_owned(),
+        pinned,
+    });
+    while recent_files.len() > crate::recent_files::MAX_ENTRIES {
+        if let Some(index) = recent_files.iter().rposition(|entry| !entry.pinned) {
+            recent_files.remove(index);
+        } else {
+            recent_files.pop_back();
+        }
+    }
+}
+
+fn recent_file_matches(path: &str, query: &str) -> bool {
+    path.to_lowercase().contains(&query.trim().to_lowercase())
+}
+
+// Tauri's Drawing > Copy duplicates the selected annotation 20 screen pixels
+// down and right. Keep the offset in page coordinates and ensure a new native
+// annotation can still be exported when the selection touches a page edge.
+fn duplicate_annotation(
+    source: &Annotation,
+    id: u64,
+    scale: f64,
+    page_size: (f32, f32),
+) -> Option<Annotation> {
+    copy_annotation_with_offset(source, id, scale, page_size, 20.0)
+}
+
+fn copy_annotation_with_offset(
+    source: &Annotation,
+    id: u64,
+    scale: f64,
+    page_size: (f32, f32),
+    offset_px: f64,
+) -> Option<Annotation> {
+    if !scale.is_finite() || scale <= 0.0 {
+        return None;
+    }
+    let step = offset_px / scale;
+    let (width, height) = (f64::from(page_size.0), f64::from(page_size.1));
+    let bounds = source.bounds;
+    if ![
+        step,
+        width,
+        height,
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+    ]
+    .iter()
+    .all(|value| value.is_finite())
+        || step < 0.0
+        || bounds.x < 0.0
+        || bounds.y < 0.0
+        || bounds.x + bounds.width > width
+        || bounds.y + bounds.height > height
+    {
+        return None;
+    }
+    let shift = |start: f64, extent: f64, limit: f64| {
+        if start + extent + step <= limit {
+            Some(step)
+        } else if start >= step {
+            Some(-step)
+        } else {
+            None
+        }
+    };
+    let dx = shift(bounds.x, bounds.width, width)?;
+    let dy = shift(bounds.y, bounds.height, height)?;
+    let mut copy = source.clone();
+    copy.id = id;
+    copy.bounds.x += dx;
+    copy.bounds.y += dy;
+    match &mut copy.kind {
+        Kind::Line { start, end, .. } | Kind::Arrow { start, end, .. } => {
+            for point in [start, end] {
+                point[0] += dx;
+                point[1] += dy;
+            }
+        }
+        Kind::Polyline { points, .. } => {
+            for point in points {
+                point[0] += dx;
+                point[1] += dy;
+            }
+        }
+        _ => {}
+    }
+    Some(copy)
+}
+
+// The GUI drag and external move must use identical page-point geometry.
+// Keep line/polyline points and their bounds in sync before the shared
+// DocumentCommand validation and undo history see the replacement.
+fn translated_annotation(
+    source: &Annotation,
+    delta: [f64; 2],
+    page_size: (f32, f32),
+) -> Option<Annotation> {
+    let (width, height) = (f64::from(page_size.0), f64::from(page_size.1));
+    if !delta.iter().all(|value| value.is_finite())
+        || !width.is_finite()
+        || !height.is_finite()
+        || width <= 0.0
+        || height <= 0.0
+    {
+        return None;
+    }
+    let mut item = source.clone();
+    let previous = item.bounds;
+    let max_x = (width - previous.width).max(0.0);
+    let max_y = (height - previous.height).max(0.0);
+    item.bounds.x = (previous.x + delta[0]).clamp(0.0, max_x);
+    item.bounds.y = (previous.y + delta[1]).clamp(0.0, max_y);
+    if item.bounds == previous {
+        return None;
+    }
+    let actual = [item.bounds.x - previous.x, item.bounds.y - previous.y];
+    match &mut item.kind {
+        Kind::Line { start, end, .. } | Kind::Arrow { start, end, .. } => {
+            for point in [start, end] {
+                point[0] += actual[0];
+                point[1] += actual[1];
+            }
+        }
+        Kind::Polyline { points, .. } => {
+            for point in points {
+                point[0] += actual[0];
+                point[1] += actual[1];
+            }
+        }
+        _ => {}
+    }
+    Some(item)
+}
+
+// The resize handles and external API share one bounded replacement. Point
+// geometry cannot be resized by changing the rectangle alone.
+fn resized_annotation(
+    source: &Annotation,
+    bounds: Rect,
+    page_size: (f32, f32),
+) -> Option<Annotation> {
+    let (page_width, page_height) = (f64::from(page_size.0), f64::from(page_size.1));
+    if ![
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        bounds.height,
+        page_width,
+        page_height,
+    ]
+    .iter()
+    .all(|value| value.is_finite())
+        || bounds.width <= 0.0
+        || bounds.height <= 0.0
+        || bounds.x < 0.0
+        || bounds.y < 0.0
+        || bounds.x + bounds.width > page_width + 1e-6
+        || bounds.y + bounds.height > page_height + 1e-6
+        || bounds == source.bounds
+        || matches!(
+            source.kind,
+            Kind::Line { .. } | Kind::Arrow { .. } | Kind::Polyline { .. }
+        )
+    {
+        return None;
+    }
+    let mut item = source.clone();
+    item.bounds = bounds;
+    Some(item)
+}
+
+fn annotation_color(kind: &Kind) -> [u8; 3] {
+    match kind {
+        Kind::Rectangle { color_rgb }
+        | Kind::Ellipse { color_rgb }
+        | Kind::Polygon { color_rgb }
+        | Kind::Line { color_rgb, .. }
+        | Kind::Arrow { color_rgb, .. }
+        | Kind::Polyline { color_rgb, .. }
+        | Kind::Text { color_rgb, .. } => *color_rgb,
+    }
+}
+
+fn recolored_annotation(source: &Annotation, color: [u8; 3]) -> Option<Annotation> {
+    if annotation_color(&source.kind) == color {
+        return None;
+    }
+    let mut item = source.clone();
+    match &mut item.kind {
+        Kind::Rectangle { color_rgb }
+        | Kind::Ellipse { color_rgb }
+        | Kind::Polygon { color_rgb }
+        | Kind::Line { color_rgb, .. }
+        | Kind::Arrow { color_rgb, .. }
+        | Kind::Polyline { color_rgb, .. }
+        | Kind::Text { color_rgb, .. } => *color_rgb = color,
+    }
+    Some(item)
+}
+
+// Reflect native point geometry about its own bounds. The current annotation
+// schema has no flip flags for stamps/text/shapes, so only point-based kinds
+// can be mirrored without claiming a transform that export cannot preserve.
+fn mirror_annotation(
+    source: &Annotation,
+    horizontal: bool,
+    page_size: (f32, f32),
+) -> Option<Annotation> {
+    let coordinate = usize::from(!horizontal);
+    let axis_sum = match &source.kind {
+        Kind::Line { start, end, .. } | Kind::Arrow { start, end, .. } => {
+            start[coordinate] + end[coordinate]
+        }
+        Kind::Polyline { points, .. } if points.len() >= 2 => {
+            let min = points
+                .iter()
+                .map(|point| point[coordinate])
+                .reduce(f64::min)?;
+            let max = points
+                .iter()
+                .map(|point| point[coordinate])
+                .reduce(f64::max)?;
+            min + max
+        }
+        _ => return None,
+    };
+    if !axis_sum.is_finite() {
+        return None;
+    }
+    let mut result = source.clone();
+    match &mut result.kind {
+        Kind::Line { start, end, .. } | Kind::Arrow { start, end, .. } => {
+            for point in [start, end] {
+                point[coordinate] = axis_sum - point[coordinate];
+            }
+        }
+        Kind::Polyline { points, .. } => {
+            for point in points {
+                point[coordinate] = axis_sum - point[coordinate];
+            }
+        }
+        _ => return None,
+    }
+    if result.kind == source.kind {
+        return None;
+    }
+    result.bounds = match &result.kind {
+        Kind::Line { start, end, .. } => line_bounds(*start, *end, page_size)?,
+        Kind::Arrow { start, end, .. } => arrow_bounds(*start, *end, page_size)?,
+        Kind::Polyline { points, .. } => polyline_bounds(points, page_size)?,
+        _ => unreachable!(),
+    };
+    Some(result)
+}
+
+fn rotate_annotation_clockwise_90(
+    source: &Annotation,
+    page_size: (f32, f32),
+) -> Option<Annotation> {
+    let center = match &source.kind {
+        Kind::Line { start, end, .. } | Kind::Arrow { start, end, .. } => {
+            [(start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0]
+        }
+        Kind::Polyline { points, .. } if points.len() >= 2 => {
+            let min_x = points.iter().map(|point| point[0]).reduce(f64::min)?;
+            let max_x = points.iter().map(|point| point[0]).reduce(f64::max)?;
+            let min_y = points.iter().map(|point| point[1]).reduce(f64::min)?;
+            let max_y = points.iter().map(|point| point[1]).reduce(f64::max)?;
+            [(min_x + max_x) / 2.0, (min_y + max_y) / 2.0]
+        }
+        _ => return None,
+    };
+    if !center.iter().all(|value| value.is_finite()) {
+        return None;
+    }
+    let rotate = |point: &mut [f64; 2]| {
+        let dx = point[0] - center[0];
+        let dy = point[1] - center[1];
+        *point = [center[0] - dy, center[1] + dx];
+    };
+    let mut result = source.clone();
+    match &mut result.kind {
+        Kind::Line { start, end, .. } | Kind::Arrow { start, end, .. } => {
+            rotate(start);
+            rotate(end);
+        }
+        Kind::Polyline { points, .. } => {
+            for point in points {
+                rotate(point);
+            }
+        }
+        _ => unreachable!(),
+    }
+    result.bounds = match &result.kind {
+        Kind::Line { start, end, .. } => line_bounds(*start, *end, page_size)?,
+        Kind::Arrow { start, end, .. } => arrow_bounds(*start, *end, page_size)?,
+        Kind::Polyline { points, .. } => polyline_bounds(points, page_size)?,
+        _ => unreachable!(),
+    };
+    Some(result)
+}
+
+fn export_page_path(
+    document_path: &str,
+    page_number: usize,
+    format: image_export::ImageFormat,
+) -> String {
+    let source_path = Path::new(document_path);
+    let stem = source_path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+    source_path
+        .with_file_name(format!("{stem}-page-{page_number}.{}", format.extension()))
+        .to_string_lossy()
+        .into_owned()
+}
+
+fn export_pages_folder(document_path: &str, format: image_export::ImageFormat) -> String {
+    let source_path = Path::new(document_path);
+    let stem = source_path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+    let suffix = match format {
+        image_export::ImageFormat::Png => "images",
+        image_export::ImageFormat::Jpeg => "jpeg-images",
+        image_export::ImageFormat::Tiff => "tiff-images",
+    };
+    source_path
+        .with_file_name(format!("{stem}-{suffix}"))
+        .to_string_lossy()
+        .into_owned()
+}
+
 #[derive(Default)]
 struct App {
     backend: Backend,
     backend_generation: u64,
+    dynlex_switch_retry: Option<(u64, RenderTicket)>,
     path_input: String,
+    recent_files: VecDeque<RecentFile>,
+    recent_query: String,
+    pinned_recents_collapsed: bool,
+    unpinned_recents_collapsed: bool,
+    recent_store_path: Option<PathBuf>,
     browser_dir: PathBuf,
     browser_entries: Vec<BrowserEntry>,
     browser_busy: bool,
@@ -516,6 +1073,8 @@ struct App {
     next_browse: u64,
     active_ribbon: RibbonTab,
     document: Option<OpenDocument>,
+    clipboard_annotation: Option<Annotation>,
+    clipboard_paste_count: u32,
     next_load: u64,
     busy: bool,
     opening_document: bool,
@@ -523,13 +1082,53 @@ struct App {
     zoom_render_due: Option<Instant>,
     zoom_timer_active: bool,
     message: String,
+    file_menu_open: bool,
+    about_dialog: bool,
+    extensions_dialog: bool,
+    extension_import_dialog: bool,
+    extension_id: String,
+    extension_name: String,
+    extension_output: String,
+    extension_import_path: String,
+    extension_html: iced::widget::text_editor::Content,
+    extension_javascript: iced::widget::text_editor::Content,
+    extension_error: String,
     open_dialog: bool,
+    new_dialog: bool,
+    new_paper: blank_pdf::Paper,
+    new_landscape: bool,
+    new_pages_input: String,
+    new_custom_width_mm: String,
+    new_custom_height_mm: String,
+    new_error: String,
     confirm_discard: Option<PendingAction>,
+    pending_delete_annotation: Option<(DocumentVersion, u64)>,
+    pending_clear_annotations: Option<(DocumentVersion, Option<usize>)>,
     allow_discard_once: bool,
     save_dialog: bool,
     save_path_input: String,
+    saved_target: Option<(String, u64)>,
     save_busy: bool,
     save_scroll_offset: Option<scrollable::AbsoluteOffset>,
+    import_dialog: bool,
+    import_path_input: String,
+    xfdf_export_dialog: bool,
+    xfdf_export_path_input: String,
+    export_dialog: bool,
+    export_path_input: String,
+    export_page: usize,
+    export_page_input: String,
+    export_range: image_export::ImagePageRange,
+    export_custom_pages: String,
+    export_dpi: image_export::ImageDpi,
+    export_format: image_export::ImageFormat,
+    export_jpeg_quality: image_export::JpegQuality,
+    export_include_annotations: bool,
+    export_busy: bool,
+    export_cancel: Option<Arc<AtomicBool>>,
+    export_completed: usize,
+    export_total: usize,
+    export_scroll_offset: Option<scrollable::AbsoluteOffset>,
     print_dialog: bool,
     print_path_input: String,
     print_busy: bool,
@@ -559,9 +1158,12 @@ struct App {
     text_align: TextAlign,
     pending_text_bounds: Option<Rect>,
     editing_text_id: Option<u64>,
+    text_dialog_version: Option<DocumentVersion>,
     text_scroll_offset: Option<scrollable::AbsoluteOffset>,
     hide_pages: bool,
     hide_properties: bool,
+    hide_symbol_palette: bool,
+    properties_collapsed: [bool; 3],
     show_annotation_list: bool,
     reader_mode_active: bool,
     reader_shutdown: ReaderShutdown,
@@ -575,9 +1177,11 @@ struct App {
     annotation_tool_activated: bool,
     next_annotation_id: u64,
     page_scroll_offset: scrollable::AbsoluteOffset,
+    pan_drag: Option<PanDrag>,
     pending_zoom_offset: Option<scrollable::AbsoluteOffset>,
     keyboard_modifiers: iced::keyboard::Modifiers,
     window_size: (f32, f32),
+    window_maximized: bool,
 }
 
 #[derive(Default)]
@@ -599,11 +1203,68 @@ impl Drop for ReaderShutdown {
 enum AnnotationTool {
     #[default]
     Select,
+    Hand,
     Rectangle,
+    Circle,
+    Ellipse,
+    Polygon,
+    Freehand,
     Line,
+    Arrow,
     Polyline,
     Highlight,
     Text,
+}
+
+impl AnnotationTool {
+    fn from_mcp_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "select" => Self::Select,
+            "hand" => Self::Hand,
+            "box" => Self::Rectangle,
+            "circle" => Self::Circle,
+            "ellipse" => Self::Ellipse,
+            "polygon" => Self::Polygon,
+            "freehand" => Self::Freehand,
+            "line" => Self::Line,
+            "arrow" => Self::Arrow,
+            "polyline" => Self::Polyline,
+            "highlight" => Self::Highlight,
+            "textbox" => Self::Text,
+            _ => return None,
+        })
+    }
+
+    fn mcp_name(self) -> &'static str {
+        match self {
+            Self::Select => "select",
+            Self::Hand => "hand",
+            Self::Rectangle => "box",
+            Self::Circle => "circle",
+            Self::Ellipse => "ellipse",
+            Self::Polygon => "polygon",
+            Self::Freehand => "freehand",
+            Self::Line => "line",
+            Self::Arrow => "arrow",
+            Self::Polyline => "polyline",
+            Self::Highlight => "highlight",
+            Self::Text => "textbox",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PanDrag {
+    button: iced::mouse::Button,
+    start: [f32; 2],
+    scroll_start: scrollable::AbsoluteOffset,
+}
+
+fn dragged_scroll_offset(drag: PanDrag, pointer: [f32; 2]) -> scrollable::AbsoluteOffset {
+    scrollable::AbsoluteOffset {
+        x: (drag.scroll_start.x - (pointer[0] - drag.start[0])).max(0.0),
+        y: (drag.scroll_start.y - (pointer[1] - drag.start[1])).max(0.0),
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -612,25 +1273,48 @@ enum FitMode {
     Page,
 }
 
+// Tauri's docked ToolPalette switches to one column when its content area
+// reaches the 635 px small-icon threshold. Keep page fitting and centering in
+// sync with the actual palette width when the window is maximized.
+fn drawing_palette_two_columns(window_height: f32, ribbon_collapsed: bool) -> bool {
+    let workspace_height = window_height
+        - 30.0 // title bar
+        - 28.0 // ribbon tabs
+        - if ribbon_collapsed { 0.0 } else { 94.0 }
+        - 28.0 // document tabs
+        - 22.0; // status bar
+    workspace_height - 46.0 < 635.0
+}
+
+fn drawing_palette_width(window_height: f32, ribbon_collapsed: bool) -> f32 {
+    if drawing_palette_two_columns(window_height, ribbon_collapsed) {
+        80.0
+    } else {
+        44.0
+    }
+}
+
 fn fit_scale(
     mode: FitMode,
     page_size: (f32, f32),
     window_size: (f32, f32),
     pages_visible: bool,
     properties_visible: bool,
+    symbol_palette_visible: bool,
     ribbon_collapsed: bool,
 ) -> Option<f64> {
     let available_width = window_size.0
-        - if pages_visible { 200.0 } else { 0.0 }
-        - if properties_visible { 230.0 } else { 0.0 }
-        - 48.0;
+        - 32.0 // left icon rail
+        - if pages_visible { 172.0 } else { 0.0 } // pages + resize handle
+        - if properties_visible { 300.0 } else { 28.0 }
+        - drawing_palette_width(window_size.1, ribbon_collapsed)
+        - if symbol_palette_visible { 220.0 } else { 0.0 };
     let available_height = window_size.1
         - 30.0 // title bar
         - 28.0 // ribbon tabs
         - if ribbon_collapsed { 0.0 } else { 94.0 }
         - 28.0 // document tabs
-        - 28.0 // status bar
-        - 48.0; // page padding
+        - 22.0; // status bar; Tauri's fit math uses zero page padding
     if page_size.0 <= 0.0 || page_size.1 <= 0.0 || available_width <= 0.0 || available_height <= 0.0
     {
         return None;
@@ -643,6 +1327,36 @@ fn fit_scale(
     scale
         .is_finite()
         .then_some(f64::from(scale).clamp(0.1, 8.0))
+}
+
+fn centered_page_offset(
+    window_size: (f32, f32),
+    bitmap_size: (u32, u32),
+    pages_visible: bool,
+    properties_visible: bool,
+    symbol_palette_visible: bool,
+    ribbon_collapsed: bool,
+) -> scrollable::AbsoluteOffset {
+    let viewport_width = window_size.0
+        - 32.0 // left icon rail
+        - if pages_visible { 172.0 } else { 0.0 } // pages + resize handle
+        - drawing_palette_width(window_size.1, ribbon_collapsed)
+        - if symbol_palette_visible { 220.0 } else { 0.0 }
+        - if properties_visible { 300.0 } else { 28.0 };
+    let viewport_height = window_size.1
+        - 30.0 // title bar
+        - 28.0 // ribbon tabs
+        - if ribbon_collapsed { 0.0 } else { 94.0 }
+        - 28.0 // document tabs
+        - 22.0; // status bar
+    scrollable::AbsoluteOffset {
+        x: (HORIZONTAL_PAN_MARGIN + PAGE_PADDING
+            - ((viewport_width - bitmap_size.0 as f32) / 2.0).max(0.0))
+        .max(0.0),
+        y: (VERTICAL_PAN_MARGIN + PAGE_PADDING
+            - ((viewport_height - bitmap_size.1 as f32) / 2.0).max(0.0))
+        .max(0.0),
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -670,6 +1384,7 @@ enum PrintDestination {
 
 #[derive(Debug, Clone)]
 enum PendingAction {
+    New,
     Open,
     Close,
     Exit,
@@ -819,18 +1534,30 @@ mod thumbnail_tests {
 
 #[cfg(test)]
 mod fit_view_tests {
-    use super::{fit_scale, zoom_preview_size, App, FitMode, Message};
+    use super::{
+        centered_page_offset, fit_scale, zoom_preview_size, zoom_render_delay, App, FitMode,
+        Message,
+    };
     use std::time::{Duration, Instant};
 
     #[test]
     fn fit_uses_document_area_and_reacts_to_panels() {
-        let page = (1000.0, 1400.0);
+        let page = (1000.0, 2000.0);
         let window = (1200.0, 832.0);
-        let width = fit_scale(FitMode::Width, page, window, true, true, false).unwrap();
-        let full = fit_scale(FitMode::Page, page, window, true, true, false).unwrap();
-        assert!((width - 0.722).abs() < 1e-5);
-        assert!(full < width);
-        assert!(fit_scale(FitMode::Width, page, window, false, false, false).unwrap() > width);
+        let width = fit_scale(FitMode::Width, page, window, true, true, true, false).unwrap();
+        let full = fit_scale(FitMode::Page, page, window, true, true, true, false).unwrap();
+        assert!((width - 0.396).abs() < 1e-5);
+        assert!((full - 0.315).abs() < 1e-5);
+        assert!(
+            fit_scale(FitMode::Width, page, window, false, false, true, false).unwrap() > width
+        );
+    }
+
+    #[test]
+    fn initial_page_is_centered_in_the_docked_tauri_layout() {
+        let offset = centered_page_offset((1200.0, 832.0), (256, 192), true, true, true, false);
+        assert_eq!(offset.x, 466.0);
+        assert_eq!(offset.y, 317.0);
     }
 
     #[test]
@@ -863,11 +1590,34 @@ mod fit_view_tests {
         assert!(!app.zoom_timer_active);
         assert!(app.zoom_render_due.is_none());
     }
+
+    #[test]
+    fn first_zoom_step_sharpens_before_repeated_wheel_steps() {
+        assert_eq!(zoom_render_delay(false), Duration::from_millis(24));
+        assert_eq!(zoom_render_delay(true), Duration::from_millis(160));
+    }
 }
 
 #[cfg(test)]
 mod zoom_interaction_tests {
     use super::*;
+
+    #[test]
+    fn held_mouse_drag_moves_scroll_opposite_to_pointer_and_clamps() {
+        let drag = PanDrag {
+            button: iced::mouse::Button::Middle,
+            start: [120.0, 80.0],
+            scroll_start: scrollable::AbsoluteOffset { x: 300.0, y: 500.0 },
+        };
+        assert_eq!(
+            dragged_scroll_offset(drag, [170.0, 50.0]),
+            scrollable::AbsoluteOffset { x: 250.0, y: 530.0 }
+        );
+        assert_eq!(
+            dragged_scroll_offset(drag, [600.0, 900.0]),
+            scrollable::AbsoluteOffset { x: 0.0, y: 0.0 }
+        );
+    }
 
     #[test]
     fn pointer_stays_fixed_with_pan_margins_and_scrolled_page() {
@@ -918,6 +1668,35 @@ mod zoom_interaction_tests {
     }
 
     #[test]
+    fn drawing_palette_uses_one_column_when_full_height_and_fit_uses_its_width() {
+        assert!(drawing_palette_two_columns(832.0, false));
+        assert_eq!(drawing_palette_width(832.0, false), 80.0);
+        assert!(!drawing_palette_two_columns(1040.0, false));
+        assert_eq!(drawing_palette_width(1040.0, false), 44.0);
+        let two_col = fit_scale(
+            FitMode::Width,
+            (600.0, 800.0),
+            (1200.0, 832.0),
+            true,
+            true,
+            true,
+            false,
+        )
+        .unwrap();
+        let one_col = fit_scale(
+            FitMode::Width,
+            (600.0, 800.0),
+            (1200.0, 1040.0),
+            true,
+            true,
+            true,
+            false,
+        )
+        .unwrap();
+        assert!(one_col > two_col);
+    }
+
+    #[test]
     fn stale_render_clears_busy_until_debounced_zoom_starts() {
         let bytes = Arc::new(
             include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec(),
@@ -928,6 +1707,7 @@ mod zoom_interaction_tests {
         let mut app = App {
             document: Some(OpenDocument {
                 path: "fixture.pdf".into(),
+                is_new: false,
                 source_bytes: bytes,
                 dynlex_document: None,
                 pdf,
@@ -973,7 +1753,10 @@ mod zoom_interaction_tests {
 
 #[cfg(test)]
 mod line_geometry_tests {
-    use super::line_bounds;
+    use super::{
+        annotation_color, line_bounds, recolored_annotation, resized_annotation, Annotation, Kind,
+        Rect,
+    };
 
     #[test]
     fn line_bounds_include_stroke_without_leaving_page() {
@@ -985,6 +1768,75 @@ mod line_geometry_tests {
         assert!(line_bounds([20.0, 20.0], [20.0, 20.0], (200.0, 150.0)).is_none());
         assert!(line_bounds([f64::NAN, 0.0], [30.0, 40.0], (200.0, 150.0)).is_none());
         assert!(line_bounds([10.0, 10.0], [201.0, 10.0], (200.0, 150.0)).is_none());
+    }
+
+    #[test]
+    fn resize_rejects_point_geometry_and_out_of_page_rectangles() {
+        let source = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 10.0,
+                y: 10.0,
+                width: 20.0,
+                height: 20.0,
+            },
+            kind: Kind::Line {
+                start: [10.0, 10.0],
+                end: [30.0, 30.0],
+                color_rgb: [0, 0, 0],
+            },
+        };
+        let target = Rect {
+            x: 12.0,
+            y: 13.0,
+            width: 24.0,
+            height: 25.0,
+        };
+        assert!(resized_annotation(&source, target, (100.0, 100.0)).is_none());
+        let shape = Annotation {
+            kind: Kind::Ellipse {
+                color_rgb: [0, 0, 0],
+            },
+            ..source
+        };
+        assert_eq!(
+            resized_annotation(&shape, target, (100.0, 100.0))
+                .unwrap()
+                .bounds,
+            target
+        );
+        assert!(resized_annotation(&shape, Rect { x: 90.0, ..target }, (100.0, 100.0)).is_none());
+        assert!(resized_annotation(&shape, shape.bounds, (100.0, 100.0)).is_none());
+    }
+
+    #[test]
+    fn color_change_preserves_shape_geometry_and_rejects_no_op() {
+        let source = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 10.0,
+                y: 10.0,
+                width: 20.0,
+                height: 20.0,
+            },
+            kind: Kind::Arrow {
+                start: [12.0, 12.0],
+                end: [28.0, 28.0],
+                color_rgb: [255, 0, 0],
+            },
+        };
+        assert!(recolored_annotation(&source, [255, 0, 0]).is_none());
+        let changed = recolored_annotation(&source, [0, 102, 204]).unwrap();
+        assert_eq!(changed.bounds, source.bounds);
+        assert_eq!(annotation_color(&changed.kind), [0, 102, 204]);
+        if let Kind::Arrow { start, end, .. } = changed.kind {
+            assert_eq!(start, [12.0, 12.0]);
+            assert_eq!(end, [28.0, 28.0]);
+        } else {
+            panic!("arrow kind must remain an arrow");
+        }
     }
 }
 
@@ -1065,9 +1917,10 @@ mod unsaved_annotation_tests {
         app.next_load = 2;
         app.save_busy = true;
         app.message = "Current document".into();
-        let _ = app.update(Message::Saved(1, Ok(("old.pdf".into(), Vec::new()))));
-        assert!(!app.save_busy);
+        let _ = app.update(Message::Saved(1, Ok(("old.pdf".into(), Vec::new(), 0))));
+        assert!(app.save_busy);
         assert_eq!(app.message, "Current document");
+        assert!(app.saved_target.is_none());
     }
 
     #[test]
@@ -1095,6 +1948,7 @@ mod unsaved_annotation_tests {
         let mut app = App {
             document: Some(OpenDocument {
                 path: "source.pdf".into(),
+                is_new: false,
                 source_bytes: bytes,
                 dynlex_document: None,
                 pdf,
@@ -1121,6 +1975,15 @@ mod unsaved_annotation_tests {
             }),
             ..App::default()
         };
+        let _ = app.update(Message::Save);
+        assert!(app.save_dialog);
+        assert!(app.save_path_input.ends_with("source-annotated.pdf"));
+        let _ = app.update(Message::CancelSave);
+        let _ = app.update(Message::ShowNew);
+        let _ = app.update(Message::NewBlank);
+        assert!(matches!(app.confirm_discard, Some(PendingAction::New)));
+        assert!(app.document.is_some());
+        let _ = app.update(Message::CancelDiscard);
         app.path_input = "next.pdf".into();
         let _ = app.update(Message::Open);
         assert!(matches!(app.confirm_discard, Some(PendingAction::Open)));
@@ -1139,10 +2002,858 @@ mod unsaved_annotation_tests {
         let _ = app.update(Message::ConfirmDiscard);
         assert!(app.document.is_none());
     }
+
+    #[test]
+    fn clear_annotations_requires_confirmation_and_rejects_stale_document() {
+        let bytes = Arc::new(
+            include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let mut model = DocumentModel::new(DocumentId(91), pdf.page_count()).unwrap();
+        let make_annotation = |id| Annotation {
+            id,
+            page: 0,
+            bounds: Rect {
+                x: 10.0 + id as f64 * 20.0,
+                y: 10.0,
+                width: 12.0,
+                height: 12.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [255, 0, 0],
+            },
+        };
+        model.apply(Edit::Add(make_annotation(1))).unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "clear-test.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: Some(1),
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            ..App::default()
+        };
+        let _ = app.update(Message::RequestClearAnnotations(Some(0)));
+        assert!(app.pending_clear_annotations.is_some());
+        let _ = app.update(Message::CancelClearAnnotations);
+        assert!(app.document.as_ref().unwrap().model.get(1).is_some());
+        let _ = app.update(Message::RequestClearAnnotations(Some(0)));
+        let document = app.document.as_mut().unwrap();
+        document
+            .model
+            .execute(
+                document.model.version(),
+                DocumentCommand::Edit(Edit::Add(make_annotation(2))),
+            )
+            .unwrap();
+        let _ = app.update(Message::ConfirmClearAnnotations);
+        assert!(app.message.contains("StaleDocument"));
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 2);
+        let _ = app.update(Message::RequestClearAnnotations(Some(0)));
+        let _ = app.update(Message::ConfirmClearAnnotations);
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 0);
+        assert!(app.document.as_ref().unwrap().selected_annotation.is_none());
+        let _ = app.update(Message::Undo);
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 2);
+        app.document.as_mut().unwrap().selected_annotation = Some(1);
+        let _ = app.update(Message::RequestDeleteAnnotation);
+        assert!(app.pending_delete_annotation.is_some());
+        let _ = app.update(Message::CancelDeleteAnnotation);
+        assert!(app.document.as_ref().unwrap().model.get(1).is_some());
+        let _ = app.update(Message::RequestDeleteAnnotation);
+        let document = app.document.as_mut().unwrap();
+        document
+            .model
+            .execute(
+                document.model.version(),
+                DocumentCommand::Edit(Edit::Add(make_annotation(3))),
+            )
+            .unwrap();
+        let _ = app.update(Message::ConfirmDeleteAnnotation);
+        assert!(app.document.as_ref().unwrap().model.get(1).is_some());
+        let _ = app.update(Message::RequestDeleteAnnotation);
+        let _ = app.update(Message::ConfirmDeleteAnnotation);
+        assert!(app.document.as_ref().unwrap().model.get(1).is_none());
+    }
+
+    #[test]
+    fn external_delete_requires_exact_live_version_and_replies_after_edit() {
+        let bytes = Arc::new(
+            include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let mut model = DocumentModel::new(DocumentId(930), pdf.page_count()).unwrap();
+        model
+            .apply(Edit::Add(Annotation {
+                id: 45,
+                page: 0,
+                bounds: Rect {
+                    x: 10.0,
+                    y: 10.0,
+                    width: 20.0,
+                    height: 20.0,
+                },
+                kind: Kind::Ellipse {
+                    color_rgb: [255, 0, 0],
+                },
+            }))
+            .unwrap();
+        let version = model.version();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "external-delete-test.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: Some(45),
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            ..App::default()
+        };
+        let tool_request = |revision, old, old_epoch, requested| {
+            mcp_server::ExternalRequest::new(
+                [930, version.generation, revision],
+                mcp_server::ExternalAction::SelectTool {
+                    expected: old,
+                    expected_epoch: old_epoch,
+                    requested,
+                },
+            )
+        };
+        let (cancelled, response) =
+            tool_request(version.annotation_revision, "select", 0, "ellipse");
+        drop(response);
+        let _ = app.update(Message::ExternalRequest(cancelled));
+        assert_eq!(app.annotation_tool, AnnotationTool::Select);
+        let (stale, response) =
+            tool_request(version.annotation_revision + 1, "select", 0, "ellipse");
+        let _ = app.update(Message::ExternalRequest(stale));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        let (valid, response) = tool_request(version.annotation_revision, "select", 0, "ellipse");
+        let _ = app.update(Message::ExternalRequest(valid));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["tool"],
+            "ellipse"
+        );
+        assert_eq!(app.annotation_tool, AnnotationTool::Ellipse);
+        assert!(app.annotation_tool_activated);
+        let (replay, response) = tool_request(version.annotation_revision, "select", 0, "ellipse");
+        let _ = app.update(Message::ExternalRequest(replay));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale current tool"
+        );
+        let (restore, response) = tool_request(version.annotation_revision, "ellipse", 1, "select");
+        let _ = app.update(Message::ExternalRequest(restore));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["tool"],
+            "select"
+        );
+        assert_eq!(app.document.as_ref().unwrap().model.version(), version);
+        let (old_cycle, response) =
+            tool_request(version.annotation_revision, "select", 0, "ellipse");
+        let _ = app.update(Message::ExternalRequest(old_cycle));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale current tool"
+        );
+        assert_eq!(app.annotation_tool, AnnotationTool::Select);
+        let make_request = |id, revision| {
+            mcp_server::ExternalRequest::delete([id, version.generation, revision], 45)
+        };
+        let (cancelled, result) = make_request(930, version.annotation_revision);
+        drop(result);
+        let _ = app.update(Message::ExternalRequest(cancelled));
+        assert!(app.document.as_ref().unwrap().model.get(45).is_some());
+
+        let (stale_id, result) = make_request(931, version.annotation_revision);
+        let _ = app.update(Message::ExternalRequest(stale_id));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["ok"],
+            false
+        );
+        let (stale_revision, result) = make_request(930, version.annotation_revision + 1);
+        let _ = app.update(Message::ExternalRequest(stale_revision));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["error"],
+            "stale document version"
+        );
+        assert_eq!(app.document.as_ref().unwrap().model.version(), version);
+
+        let external_selection = |revision, action| {
+            mcp_server::ExternalRequest::new([930, version.generation, revision], action)
+        };
+        let (clear, result) = external_selection(
+            version.annotation_revision,
+            mcp_server::ExternalAction::ClearSelection,
+        );
+        let _ = app.update(Message::ExternalRequest(clear));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["selectedId"],
+            serde_json::Value::Null
+        );
+        assert!(app.document.as_ref().unwrap().selected_annotation.is_none());
+        let (stale_select, result) = external_selection(
+            version.annotation_revision + 1,
+            mcp_server::ExternalAction::Select(45),
+        );
+        let _ = app.update(Message::ExternalRequest(stale_select));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["error"],
+            "stale document version"
+        );
+        let (unknown, result) = external_selection(
+            version.annotation_revision,
+            mcp_server::ExternalAction::Select(999),
+        );
+        let _ = app.update(Message::ExternalRequest(unknown));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["ok"],
+            false
+        );
+        let (select, result) = external_selection(
+            version.annotation_revision,
+            mcp_server::ExternalAction::Select(45),
+        );
+        let _ = app.update(Message::ExternalRequest(select));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["selectedId"],
+            "45"
+        );
+        assert_eq!(app.document.as_ref().unwrap().selected_annotation, Some(45));
+        assert_eq!(app.document.as_ref().unwrap().model.version(), version);
+
+        let (valid, result) = make_request(930, version.annotation_revision);
+        let _ = app.update(Message::ExternalRequest(valid));
+        let response = iced::futures::executor::block_on(result).unwrap();
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["deletedId"], "45");
+        assert!(app.document.as_ref().unwrap().model.get(45).is_none());
+        assert!(app.document.as_ref().unwrap().selected_annotation.is_none());
+        let next = app.document.as_ref().unwrap().model.version();
+        assert_eq!(response["annotationRevision"], next.annotation_revision);
+        assert!(next.annotation_revision > version.annotation_revision);
+
+        let (replayed, result) = make_request(930, version.annotation_revision);
+        let _ = app.update(Message::ExternalRequest(replayed));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["ok"],
+            false
+        );
+        assert_eq!(app.document.as_ref().unwrap().model.version(), next);
+
+        let external = |revision, action| {
+            mcp_server::ExternalRequest::new([930, next.generation, revision], action)
+        };
+        let (stale_undo, result) = external(
+            version.annotation_revision,
+            mcp_server::ExternalAction::Undo,
+        );
+        let _ = app.update(Message::ExternalRequest(stale_undo));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["ok"],
+            false
+        );
+        assert!(app.document.as_ref().unwrap().model.get(45).is_none());
+        let (undo, result) = external(next.annotation_revision, mcp_server::ExternalAction::Undo);
+        let _ = app.update(Message::ExternalRequest(undo));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["action"],
+            "undo"
+        );
+        assert!(app.document.as_ref().unwrap().model.get(45).is_some());
+        let after_undo = app.document.as_ref().unwrap().model.version();
+        let (stale_redo, result) =
+            external(next.annotation_revision, mcp_server::ExternalAction::Redo);
+        let _ = app.update(Message::ExternalRequest(stale_redo));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["ok"],
+            false
+        );
+        let (redo, result) = external(
+            after_undo.annotation_revision,
+            mcp_server::ExternalAction::Redo,
+        );
+        let _ = app.update(Message::ExternalRequest(redo));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["action"],
+            "redo"
+        );
+        assert!(app.document.as_ref().unwrap().model.get(45).is_none());
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(45).is_some());
+        let switch_version = app.document.as_ref().unwrap().model.version();
+        let renderer_request = |revision, old, requested| {
+            mcp_server::ExternalRequest::new(
+                [930, switch_version.generation, revision],
+                mcp_server::ExternalAction::SelectBackend {
+                    expected: old,
+                    requested,
+                },
+            )
+        };
+        let (cancelled, response) = renderer_request(
+            switch_version.annotation_revision,
+            Backend::Hayro,
+            Backend::Dynlex,
+        );
+        drop(response);
+        let _ = app.update(Message::ExternalRequest(cancelled));
+        assert_eq!(app.backend, Backend::Hayro);
+        let (stale, response) = renderer_request(
+            switch_version.annotation_revision + 1,
+            Backend::Hayro,
+            Backend::Dynlex,
+        );
+        let _ = app.update(Message::ExternalRequest(stale));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        assert_eq!(app.backend, Backend::Hayro);
+        let (valid, response) = renderer_request(
+            switch_version.annotation_revision,
+            Backend::Hayro,
+            Backend::Dynlex,
+        );
+        let _ = app.update(Message::ExternalRequest(valid));
+        let response = iced::futures::executor::block_on(response).unwrap();
+        assert_eq!(response["selected"], "dynlex");
+        assert_eq!(response["renderPending"], true);
+        assert_eq!(app.backend, Backend::Dynlex);
+        let (replay, response) = renderer_request(
+            switch_version.annotation_revision,
+            Backend::Hayro,
+            Backend::Dynlex,
+        );
+        let _ = app.update(Message::ExternalRequest(replay));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale renderer selection"
+        );
+        assert_eq!(app.backend, Backend::Dynlex);
+
+        let restored = app.document.as_ref().unwrap().model.version();
+        let clear_request = |revision, page| {
+            mcp_server::ExternalRequest::new(
+                [930, restored.generation, revision],
+                mcp_server::ExternalAction::ClearAnnotations(page),
+            )
+        };
+        let (cancelled, result) = clear_request(restored.annotation_revision, Some(0));
+        drop(result);
+        let _ = app.update(Message::ExternalRequest(cancelled));
+        assert!(app.document.as_ref().unwrap().model.get(45).is_some());
+        let (stale, result) = clear_request(restored.annotation_revision - 1, Some(0));
+        let _ = app.update(Message::ExternalRequest(stale));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["error"],
+            "stale document version"
+        );
+        assert!(app.document.as_ref().unwrap().model.get(45).is_some());
+        let (invalid_page, result) = clear_request(restored.annotation_revision, Some(1));
+        let _ = app.update(Message::ExternalRequest(invalid_page));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["ok"],
+            false
+        );
+        assert!(app.document.as_ref().unwrap().model.get(45).is_some());
+        let (clear, result) = clear_request(restored.annotation_revision, Some(0));
+        let _ = app.update(Message::ExternalRequest(clear));
+        let response = iced::futures::executor::block_on(result).unwrap();
+        assert_eq!(response["action"], "clear_annotations");
+        assert_eq!(response["page"], 1);
+        assert!(app.document.as_ref().unwrap().model.get(45).is_none());
+        let empty_version = app.document.as_ref().unwrap().model.version();
+        let (empty, result) = clear_request(empty_version.annotation_revision, None);
+        let _ = app.update(Message::ExternalRequest(empty));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["error"],
+            "no annotations in requested scope"
+        );
+        assert_eq!(
+            app.document.as_ref().unwrap().model.version(),
+            empty_version
+        );
+        let (replay, result) = clear_request(restored.annotation_revision, Some(0));
+        let _ = app.update(Message::ExternalRequest(replay));
+        assert_eq!(
+            iced::futures::executor::block_on(result).unwrap()["error"],
+            "stale document version"
+        );
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(45).is_some());
+        let before_all = app.document.as_ref().unwrap().model.version();
+        let (clear_all, result) = clear_request(before_all.annotation_revision, None);
+        let _ = app.update(Message::ExternalRequest(clear_all));
+        let response = iced::futures::executor::block_on(result).unwrap();
+        assert_eq!(response["action"], "clear_annotations");
+        assert!(response["page"].is_null());
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 0);
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(45).is_some());
+
+        let before_move = app.document.as_ref().unwrap().model.version();
+        let old_bounds = app.document.as_ref().unwrap().model.get(45).unwrap().bounds;
+        let move_request = |revision, id, delta| {
+            mcp_server::ExternalRequest::new(
+                [930, before_move.generation, revision],
+                mcp_server::ExternalAction::MoveAnnotation { id, delta },
+            )
+        };
+        let (cancelled, response) = move_request(before_move.annotation_revision, 45, [10.0, 5.0]);
+        drop(response);
+        let _ = app.update(Message::ExternalRequest(cancelled));
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(45).unwrap().bounds,
+            old_bounds
+        );
+        let (stale, response) = move_request(before_move.annotation_revision + 1, 45, [10.0, 5.0]);
+        let _ = app.update(Message::ExternalRequest(stale));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        let (unknown, response) = move_request(before_move.annotation_revision, 999, [10.0, 5.0]);
+        let _ = app.update(Message::ExternalRequest(unknown));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "annotation not found"
+        );
+        let (no_op, response) = move_request(before_move.annotation_revision, 45, [0.0, 0.0]);
+        let _ = app.update(Message::ExternalRequest(no_op));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "move did not change annotation"
+        );
+        let (valid, response) = move_request(before_move.annotation_revision, 45, [10.0, 5.0]);
+        let _ = app.update(Message::ExternalRequest(valid));
+        let result = iced::futures::executor::block_on(response).unwrap();
+        assert_eq!(result["action"], "move_annotation");
+        assert_eq!(result["id"], "45");
+        assert_eq!(
+            result["annotationRevision"],
+            before_move.annotation_revision + 1
+        );
+        let moved = app.document.as_ref().unwrap().model.get(45).unwrap().bounds;
+        assert_eq!(moved.x, old_bounds.x + 10.0);
+        assert_eq!(moved.y, old_bounds.y + 5.0);
+        let (replay, response) = move_request(before_move.annotation_revision, 45, [10.0, 5.0]);
+        let _ = app.update(Message::ExternalRequest(replay));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        let _ = app.update(Message::Undo);
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(45).unwrap().bounds,
+            old_bounds
+        );
+        app.document.as_mut().unwrap().displayed_page = 1;
+        let waiting = app.document.as_ref().unwrap().model.version();
+        let (hidden, response) = mcp_server::ExternalRequest::new(
+            [930, waiting.generation, waiting.annotation_revision],
+            mcp_server::ExternalAction::MoveAnnotation {
+                id: 45,
+                delta: [10.0, 0.0],
+            },
+        );
+        let _ = app.update(Message::ExternalRequest(hidden));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "annotation is not on the current displayed page"
+        );
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(45).unwrap().bounds,
+            old_bounds
+        );
+        app.document.as_mut().unwrap().displayed_page = 0;
+
+        let before_resize = app.document.as_ref().unwrap().model.version();
+        let resized_bounds = Rect {
+            x: old_bounds.x + 3.0,
+            y: old_bounds.y + 4.0,
+            width: old_bounds.width + 8.0,
+            height: old_bounds.height + 6.0,
+        };
+        let resize_request = |revision, bounds| {
+            mcp_server::ExternalRequest::new(
+                [930, before_resize.generation, revision],
+                mcp_server::ExternalAction::ResizeAnnotation { id: 45, bounds },
+            )
+        };
+        let (cancelled, response) =
+            resize_request(before_resize.annotation_revision, resized_bounds);
+        drop(response);
+        let _ = app.update(Message::ExternalRequest(cancelled));
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(45).unwrap().bounds,
+            old_bounds
+        );
+        let (stale, response) =
+            resize_request(before_resize.annotation_revision + 1, resized_bounds);
+        let _ = app.update(Message::ExternalRequest(stale));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        let (outside, response) = resize_request(
+            before_resize.annotation_revision,
+            Rect {
+                x: 1_000_000.0,
+                ..resized_bounds
+            },
+        );
+        let _ = app.update(Message::ExternalRequest(outside));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["ok"],
+            false
+        );
+        let (unchanged, response) = resize_request(before_resize.annotation_revision, old_bounds);
+        let _ = app.update(Message::ExternalRequest(unchanged));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["ok"],
+            false
+        );
+        let (valid, response) = resize_request(before_resize.annotation_revision, resized_bounds);
+        let _ = app.update(Message::ExternalRequest(valid));
+        let result = iced::futures::executor::block_on(response).unwrap();
+        assert_eq!(result["action"], "resize_annotation");
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(45).unwrap().bounds,
+            resized_bounds
+        );
+        let (replay, response) = resize_request(before_resize.annotation_revision, resized_bounds);
+        let _ = app.update(Message::ExternalRequest(replay));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        let _ = app.update(Message::Undo);
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(45).unwrap().bounds,
+            old_bounds
+        );
+        let _ = app.update(Message::Redo);
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(45).unwrap().bounds,
+            resized_bounds
+        );
+        let _ = app.update(Message::SelectAnnotation(Some(45)));
+        let before_color = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::SetFormatColor([0, 102, 204]));
+        let current = app.document.as_ref().unwrap();
+        assert_eq!(
+            annotation_color(&current.model.get(45).unwrap().kind),
+            [0, 102, 204]
+        );
+        assert_eq!(
+            current.model.version().annotation_revision,
+            before_color.annotation_revision + 1
+        );
+        let _ = app.update(Message::Undo);
+        assert_eq!(
+            annotation_color(&app.document.as_ref().unwrap().model.get(45).unwrap().kind),
+            [255, 0, 0]
+        );
+        let _ = app.update(Message::Redo);
+        assert_eq!(
+            annotation_color(&app.document.as_ref().unwrap().model.get(45).unwrap().kind),
+            [0, 102, 204]
+        );
+    }
+
+    /// Run alone because the MCP request stream and snapshot are process-wide:
+    /// cargo test -p opds-native-app --all-features live_http_external_delete -- --ignored
+    #[test]
+    #[ignore]
+    fn live_http_external_delete_rejects_stale_version() {
+        use iced::futures::StreamExt;
+        use std::io::{Read, Write};
+        use std::net::{TcpListener, TcpStream};
+
+        let bytes = Arc::new(
+            include_bytes!("../../../../test pdf-bestanden/tekstrotatie-extern.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let mut model = DocumentModel::new(DocumentId(931), pdf.page_count()).unwrap();
+        model
+            .apply(Edit::Add(Annotation {
+                id: 46,
+                page: 0,
+                bounds: Rect {
+                    x: 10.0,
+                    y: 10.0,
+                    width: 20.0,
+                    height: 20.0,
+                },
+                kind: Kind::Rectangle {
+                    color_rgb: [255, 0, 0],
+                },
+            }))
+            .unwrap();
+        let version = model.version();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "http-delete-test.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: Some(46),
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            ..App::default()
+        };
+        let probe = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = probe.local_addr().unwrap().port();
+        drop(probe);
+        mcp_server::start(port).unwrap();
+        let mut requests = mcp_server::request_stream();
+        let call = |tool: &'static str, revision: u64| {
+            std::thread::spawn(move || {
+                let mut arguments = serde_json::json!({
+                    "documentId":"931","generation":version.generation,
+                    "annotationRevision":revision});
+                if tool == "app_delete_annotation"
+                    || tool == "app_select_annotation"
+                    || tool == "app_resize_annotation"
+                {
+                    arguments["id"] = serde_json::json!("46");
+                }
+                if tool == "app_resize_annotation" {
+                    arguments["x"] = serde_json::json!(13.0);
+                    arguments["y"] = serde_json::json!(14.0);
+                    arguments["width"] = serde_json::json!(28.0);
+                    arguments["height"] = serde_json::json!(26.0);
+                }
+                if tool == "app_clear_annotations" {
+                    arguments["scope"] = serde_json::json!("page");
+                    arguments["page"] = serde_json::json!(1);
+                }
+                if tool == "app_select_native_renderer" {
+                    arguments["expectedRenderer"] = serde_json::json!("hayro");
+                    arguments["renderer"] = serde_json::json!("dynlex");
+                }
+                let body = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                    "params":{"name":tool,"arguments":arguments}})
+                .to_string();
+                let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                write!(stream, "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                let mut response = Vec::new();
+                stream.read_to_end(&mut response).unwrap();
+                let split = response
+                    .windows(4)
+                    .position(|part| part == b"\r\n\r\n")
+                    .unwrap()
+                    + 4;
+                let result: serde_json::Value = serde_json::from_slice(&response[split..]).unwrap();
+                serde_json::from_str::<serde_json::Value>(
+                    result["result"]["content"][0]["text"].as_str().unwrap(),
+                )
+                .unwrap()
+            })
+        };
+
+        let client = call("app_clear_selection", version.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert!(client.join().unwrap()["selectedId"].is_null());
+        assert!(app.document.as_ref().unwrap().selected_annotation.is_none());
+
+        let client = call("app_select_annotation", version.annotation_revision + 1);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["error"], "stale document version");
+        assert!(app.document.as_ref().unwrap().selected_annotation.is_none());
+
+        let client = call("app_select_annotation", version.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["selectedId"], "46");
+        assert_eq!(app.document.as_ref().unwrap().selected_annotation, Some(46));
+
+        let client = call("app_delete_annotation", version.annotation_revision + 1);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["error"], "stale document version");
+        assert!(app.document.as_ref().unwrap().model.get(46).is_some());
+
+        let client = call("app_delete_annotation", version.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["deletedId"], "46");
+        assert!(app.document.as_ref().unwrap().model.get(46).is_none());
+
+        let deleted = app.document.as_ref().unwrap().model.version();
+        let client = call("app_undo", version.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["error"], "stale document version");
+        assert!(app.document.as_ref().unwrap().model.get(46).is_none());
+
+        let client = call("app_undo", deleted.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["action"], "undo");
+        assert!(app.document.as_ref().unwrap().model.get(46).is_some());
+        let undone = app.document.as_ref().unwrap().model.version();
+
+        let client = call("app_redo", deleted.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["error"], "stale document version");
+        assert!(app.document.as_ref().unwrap().model.get(46).is_some());
+
+        let client = call("app_redo", undone.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["action"], "redo");
+        assert!(app.document.as_ref().unwrap().model.get(46).is_none());
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(46).is_some());
+        let before_resize = app.document.as_ref().unwrap().model.version();
+        let original_bounds = app.document.as_ref().unwrap().model.get(46).unwrap().bounds;
+        let client = call(
+            "app_resize_annotation",
+            before_resize.annotation_revision + 1,
+        );
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["error"], "stale document version");
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(46).unwrap().bounds,
+            original_bounds
+        );
+        let client = call("app_resize_annotation", before_resize.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["action"], "resize_annotation");
+        assert_eq!(
+            app.document
+                .as_ref()
+                .unwrap()
+                .model
+                .get(46)
+                .unwrap()
+                .bounds
+                .width,
+            28.0
+        );
+        let _ = app.update(Message::Undo);
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(46).unwrap().bounds,
+            original_bounds
+        );
+        let renderer_version = app.document.as_ref().unwrap().model.version();
+        let client = call(
+            "app_select_native_renderer",
+            renderer_version.annotation_revision + 1,
+        );
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["error"], "stale document version");
+        assert_eq!(app.backend, Backend::Hayro);
+        let client = call(
+            "app_select_native_renderer",
+            renderer_version.annotation_revision,
+        );
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["selected"], "dynlex");
+        assert_eq!(app.backend, Backend::Dynlex);
+        let client = call(
+            "app_select_native_renderer",
+            renderer_version.annotation_revision,
+        );
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["error"], "stale renderer selection");
+        let restored = app.document.as_ref().unwrap().model.version();
+        let client = call("app_clear_annotations", restored.annotation_revision + 1);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        assert_eq!(client.join().unwrap()["error"], "stale document version");
+        assert!(app.document.as_ref().unwrap().model.get(46).is_some());
+        let client = call("app_clear_annotations", restored.annotation_revision);
+        let request = iced::futures::executor::block_on(requests.next()).unwrap();
+        let _ = app.update(Message::ExternalRequest(request));
+        let response = client.join().unwrap();
+        assert_eq!(response["action"], "clear_annotations");
+        assert_eq!(response["page"], 1);
+        assert!(app.document.as_ref().unwrap().model.get(46).is_none());
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(46).is_some());
+    }
 }
 
 struct OpenDocument {
     path: String,
+    is_new: bool,
     source_bytes: Arc<Vec<u8>>,
     dynlex_document: Option<Arc<opds_dynlex_backend::DynlexDocument>>,
     pdf: Arc<ParsedPdf>,
@@ -1205,6 +2916,15 @@ struct CachedPage {
 }
 
 impl OpenDocument {
+    /// Route synchronous UI edits through the same versioned transaction used
+    /// by undo/redo and external document commands.
+    fn apply_edit(&mut self, edit: Edit) -> Result<(), CommandError> {
+        let expected = self.model.version();
+        self.model
+            .execute(expected, DocumentCommand::Edit(edit))
+            .map(|_| ())
+    }
+
     fn is_dirty(&self) -> bool {
         annotations_changed(&self.model, &self.last_saved_annotations)
     }
@@ -1632,7 +3352,7 @@ impl OpenDocument {
         outcome: RenderOutcome,
         #[cfg(feature = "dynlex-experimental")] content_layer: Option<Raster>,
     ) {
-        let raster = outcome.raster;
+        let mut raster = outcome.raster;
         #[cfg(feature = "dynlex-experimental")]
         {
             self.content_layer_in_flight = None;
@@ -1644,6 +3364,40 @@ impl OpenDocument {
         self.bitmap_page_points = (raster.page_width_pt, raster.page_height_pt);
         self.bitmap_scale = scale;
         self.displayed_page = page;
+        // Give the current page its own small thumbnail handle. Reusing the
+        // full-page image handle in two widgets can lose the thumbnail texture
+        // when a modal overlay is removed by Iced's widget-tree diff.
+        if !self.thumbnails.iter().any(|(cached, _)| *cached == page)
+            && raster.width > 0
+            && raster.height > 0
+            && (raster.width as usize)
+                .checked_mul(raster.height as usize)
+                .and_then(|size| size.checked_mul(4))
+                == Some(raster.rgba.len())
+        {
+            let pixels = std::mem::take(&mut raster.rgba);
+            let source = ::image::RgbaImage::from_raw(raster.width, raster.height, pixels)
+                .expect("validated RGBA dimensions");
+            let thumb = ::image::imageops::thumbnail(
+                &source,
+                THUMBNAIL_WIDTH as u32,
+                THUMBNAIL_HEIGHT as u32,
+            );
+            self.thumbnails.push_back((
+                page,
+                image::Handle::from_rgba(thumb.width(), thumb.height(), thumb.into_raw()),
+            ));
+            raster.rgba = source.into_raw();
+            while self.thumbnails.len() > MAX_THUMBNAILS {
+                let window = thumbnail_window(self.thumbnail_focus, self.pdf.page_count());
+                let evict = self
+                    .thumbnails
+                    .iter()
+                    .position(|(cached, _)| !window.contains(cached))
+                    .unwrap_or(0);
+                self.thumbnails.remove(evict);
+            }
+        }
         let bitmap_bytes = raster.rgba.len();
         let bitmap = image::Handle::from_rgba(raster.width, raster.height, raster.rgba);
         self.bitmap = Some(bitmap.clone());
@@ -2569,6 +4323,7 @@ mod dynlex_annotation_overlay_tests {
             }
             let mut document = OpenDocument {
                 path: "large-tiled-text.pdf".into(),
+                is_new: false,
                 source_bytes: Arc::new(bytes),
                 dynlex_document: None,
                 pdf,
@@ -2576,7 +4331,9 @@ mod dynlex_annotation_overlay_tests {
                 last_saved_annotations: Vec::new(),
                 bitmap: None,
                 annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
                 content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
                 content_layer_in_flight: None,
                 bitmap_size: (0, 0),
                 bitmap_page_points: (0.0, 0.0),
@@ -2683,6 +4440,7 @@ mod dynlex_annotation_overlay_tests {
         model.apply(Edit::Add(second.clone())).unwrap();
         let mut document = OpenDocument {
             path: "blank-two-text.pdf".into(),
+            is_new: false,
             source_bytes: Arc::new(bytes),
             dynlex_document: None,
             pdf,
@@ -2773,6 +4531,7 @@ mod dynlex_annotation_overlay_tests {
         model.apply(Edit::Add(mark.clone())).unwrap();
         let mut document = OpenDocument {
             path: "opaque-color.pdf".into(),
+            is_new: false,
             source_bytes: Arc::new(bytes),
             dynlex_document: None,
             pdf,
@@ -3005,6 +4764,7 @@ mod dynlex_annotation_overlay_tests {
         model.apply(Edit::Add(text.clone())).unwrap();
         let mut document = OpenDocument {
             path: "fixture.pdf".into(),
+            is_new: false,
             source_bytes: Arc::new(source),
             dynlex_document: None,
             pdf,
@@ -3171,6 +4931,7 @@ mod dynlex_annotation_overlay_tests {
         model.apply(Edit::Add(mark.clone())).unwrap();
         let mut document = OpenDocument {
             path: "fixture.pdf".into(),
+            is_new: false,
             source_bytes: Arc::new(source),
             dynlex_document: None,
             pdf,
@@ -3502,6 +5263,7 @@ mod dynlex_annotation_overlay_tests {
             .unwrap();
         let mut document = OpenDocument {
             path: "fixture.pdf".into(),
+            is_new: false,
             source_bytes: Arc::new(source),
             dynlex_document: None,
             pdf,
@@ -3544,7 +5306,8 @@ mod dynlex_annotation_overlay_tests {
             x: 22.0,
             ..original
         };
-        let _ = app.update(Message::AnnotationGesturePreview(1, moved));
+        let version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AnnotationGesturePreview(version, 1, moved));
         let document = app.document.as_ref().unwrap();
         assert_eq!(document.model.get(1).unwrap().bounds, original);
         let preview = app
@@ -3556,6 +5319,7 @@ mod dynlex_annotation_overlay_tests {
         assert_eq!(&pixels[((16 * 256 + 22) * 4)..][..4], &[31, 136, 255, 255]);
 
         let _ = app.update(Message::AnnotationGesturePreview(
+            version,
             1,
             Rect { x: 22.5, ..moved },
         ));
@@ -3563,6 +5327,7 @@ mod dynlex_annotation_overlay_tests {
             .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
             .is_none());
         let _ = app.update(Message::AnnotationGesturePreview(
+            version,
             1,
             Rect {
                 width: 41.0,
@@ -3572,7 +5337,7 @@ mod dynlex_annotation_overlay_tests {
         assert!(app
             .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
             .is_none());
-        let _ = app.update(Message::AnnotationGesturePreview(1, moved));
+        let _ = app.update(Message::AnnotationGesturePreview(version, 1, moved));
         assert!(app
             .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
             .is_some());
@@ -3587,7 +5352,10 @@ mod dynlex_annotation_overlay_tests {
         assert!(app
             .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
             .is_none());
-        let _ = app.update(Message::AnnotationGesturePreview(1, moved));
+        let _ = app.update(Message::AnnotationGesturePreview(version, 1, moved));
+        assert!(app.annotation_gesture_preview.is_none());
+        let current_version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AnnotationGesturePreview(current_version, 1, moved));
         assert!(app
             .dynlex_live_gesture_bitmap(app.document.as_ref().unwrap())
             .is_some());
@@ -3598,6 +5366,178 @@ mod dynlex_annotation_overlay_tests {
             .is_none());
         let _ = app.update(Message::AnnotationGestureEnded);
         assert!(app.annotation_gesture_preview.is_none());
+        let current_bounds = app.document.as_ref().unwrap().model.get(1).unwrap().bounds;
+        let _ = app.update(Message::MoveAnnotation(version, 1, [10.0, 0.0]));
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(1).unwrap().bounds,
+            current_bounds,
+            "a gesture from an older annotation revision must not edit the page"
+        );
+        let current_version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::MoveAnnotation(current_version, 1, [10.0, 0.0]));
+        assert_eq!(
+            app.document
+                .as_ref()
+                .unwrap()
+                .model
+                .get(1)
+                .unwrap()
+                .bounds
+                .x,
+            current_bounds.x + 10.0
+        );
+        app.annotation_tool = AnnotationTool::Rectangle;
+        app.next_annotation_id = 2;
+        let added_bounds = Rect {
+            x: 70.0,
+            y: 40.0,
+            width: 20.0,
+            height: 20.0,
+        };
+        let _ = app.update(Message::AddAnnotation(current_version, added_bounds));
+        assert!(app.document.as_ref().unwrap().model.get(2).is_none());
+        let current_version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AddAnnotation(current_version, added_bounds));
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(2).unwrap().bounds,
+            added_bounds
+        );
+        app.annotation_tool = AnnotationTool::Text;
+        app.next_annotation_id = 3;
+        let current_version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AddAnnotation(current_version, added_bounds));
+        assert!(app.text_dialog);
+        app.text_draft = iced::widget::text_editor::Content::with_text("stale draft");
+        let mut changed = app.document.as_ref().unwrap().model.get(2).unwrap().clone();
+        changed.bounds.x += 1.0;
+        app.document
+            .as_mut()
+            .unwrap()
+            .model
+            .apply(Edit::Replace(changed))
+            .unwrap();
+        let _ = app.update(Message::CommitText);
+        assert!(app.document.as_ref().unwrap().model.get(3).is_none());
+        assert!(app.message.contains("StaleDocument"));
+    }
+
+    #[test]
+    fn ellipse_palette_action_adds_an_undoable_ellipse() {
+        let bytes = Arc::new(
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let model = DocumentModel::new(DocumentId(92), pdf.page_count()).unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "ellipse-fixture.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: None,
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            next_annotation_id: 1,
+            ..App::default()
+        };
+        let _ = app.update(Message::SelectAnnotationTool(AnnotationTool::Ellipse));
+        assert_eq!(app.annotation_tool.mcp_name(), "ellipse");
+        let bounds = Rect {
+            x: 15.0,
+            y: 18.0,
+            width: 60.0,
+            height: 28.0,
+        };
+        let version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AddAnnotation(version, bounds));
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(1).unwrap().kind,
+            Kind::Ellipse { .. }
+        ));
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(1).is_none());
+        let _ = app.update(Message::Redo);
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(1).unwrap().kind,
+            Kind::Ellipse { .. }
+        ));
+        app.document.as_mut().unwrap().bitmap_page_points = (256.0, 192.0);
+        let _ = app.update(Message::SelectAnnotationTool(AnnotationTool::Freehand));
+        let version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AddPolyline(
+            version,
+            vec![[25.0, 35.0], [40.0, 42.0], [57.0, 49.0]],
+        ));
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(2).unwrap().kind,
+            Kind::Polyline { .. }
+        ));
+        let _ = app.update(Message::SelectAnnotationTool(AnnotationTool::Arrow));
+        assert_eq!(app.annotation_tool.mcp_name(), "arrow");
+        let version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AddLine(version, [60.0, 70.0], [140.0, 70.0]));
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(3).unwrap().kind,
+            Kind::Arrow { .. }
+        ));
+        let _ = app.update(Message::SelectAnnotationTool(AnnotationTool::Circle));
+        assert_eq!(app.annotation_tool.mcp_name(), "circle");
+        let version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AddAnnotation(
+            version,
+            Rect {
+                x: 30.0,
+                y: 30.0,
+                width: 25.0,
+                height: 25.0,
+            },
+        ));
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(4).unwrap().kind,
+            Kind::Ellipse { .. }
+        ));
+        let _ = app.update(Message::SelectAnnotationTool(AnnotationTool::Polygon));
+        assert_eq!(app.annotation_tool.mcp_name(), "polygon");
+        let version = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::AddAnnotation(
+            version,
+            Rect {
+                x: 45.0,
+                y: 45.0,
+                width: 60.0,
+                height: 40.0,
+            },
+        ));
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(5).unwrap().kind,
+            Kind::Polygon { .. }
+        ));
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(5).is_none());
+        let _ = app.update(Message::Redo);
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(5).unwrap().kind,
+            Kind::Polygon { .. }
+        ));
     }
 }
 
@@ -3634,19 +5574,60 @@ impl RibbonTab {
     }
 }
 
+enum ExportEvent {
+    Progress(usize),
+    Finished(Result<String, String>),
+}
+
 #[derive(Debug, Clone)]
 enum Message {
+    ExternalRequest(mcp_server::ExternalRequest),
+    ShowNew,
+    CancelNew,
+    NewPaperSelected(blank_pdf::Paper),
+    NewLandscape(bool),
+    NewPagesChanged(String),
+    NewCustomWidthChanged(String),
+    NewCustomHeightChanged(String),
+    NewBlank,
     ShowOpen,
     BrowseDirectory(PathBuf),
     Browsed(u64, Result<Vec<BrowserEntry>, String>),
     SelectPdf(PathBuf),
+    RecentSearchChanged(String),
+    TogglePinnedRecents,
+    ToggleUnpinnedRecents,
+    ToggleRecentPinned(String),
+    RemoveRecent(String),
     BrowserSearchChanged(String),
     BrowserScrolled(scrollable::Viewport),
     ShowSave,
+    Save,
     CancelSave,
     SavePathChanged(String),
     SaveAs,
-    Saved(u64, Result<(String, Vec<Annotation>), String>),
+    Saved(u64, Result<(String, Vec<Annotation>, u64), String>),
+    ShowImport,
+    ImportPathChanged(String),
+    ImportXfdf,
+    CancelImport,
+    ShowXfdfExport,
+    XfdfExportPathChanged(String),
+    ExportXfdf,
+    CancelXfdfExport,
+    ShowExport,
+    ExportPathChanged(String),
+    SelectExportDpi(image_export::ImageDpi),
+    SelectExportFormat(image_export::ImageFormat),
+    SelectJpegQuality(u8),
+    SetExportAnnotations(bool),
+    ExportPageChanged(String),
+    SelectExportRange(image_export::ImagePageRange),
+    ExportCustomPagesChanged(String),
+    ExportPng,
+    ExportProgress(usize),
+    Exported(Result<String, String>),
+    CancelExport,
     ShowPrint,
     CancelPrint,
     PrintPathChanged(String),
@@ -3670,6 +5651,9 @@ enum Message {
     CancelDiscard,
     TogglePages,
     ToggleProperties,
+    ToggleSymbolPalette,
+    ShowProperties,
+    TogglePropertySection(usize),
     ToggleAnnotationList,
     ToggleReaderMode,
     ToggleFullscreen,
@@ -3685,10 +5669,12 @@ enum Message {
                 String,
                 Arc<Vec<u8>>,
                 Arc<ParsedPdf>,
+                Option<DynlexOpen>,
                 usize,
                 f32,
                 Option<reader_mode::Position>,
                 Result<RenderOutcome, String>,
+                bool,
             ),
             String,
         >,
@@ -3696,11 +5682,15 @@ enum Message {
     Zoom(f64),
     FitView(FitMode),
     WindowResized((f32, f32)),
+    WindowMaximized(bool),
     KeyboardModifiersChanged(iced::keyboard::Modifiers),
     WheelZoom {
         amount: f32,
         anchor: [f32; 2],
     },
+    PanStarted(iced::mouse::Button, [f32; 2]),
+    PanMoved([f32; 2]),
+    PanEnded,
     ZoomRenderDue,
     PageScrolled(scrollable::Viewport),
     ThumbnailsScrolled(scrollable::Viewport),
@@ -3721,26 +5711,63 @@ enum Message {
     ThumbnailRendered(u64, u64, usize, Result<Raster, String>),
     SelectBackend(Backend),
     SelectRibbon(RibbonTab),
+    ToggleFileMenu,
+    SelectFileOpenPanel,
+    CloseFileMenu,
+    ShowAbout,
+    CloseAbout,
+    ShowExtensions,
+    ShowExtensionImport,
+    CloseExtensions,
+    CloseExtensionImport,
+    ExtensionIdChanged(String),
+    ExtensionNameChanged(String),
+    ExtensionOutputChanged(String),
+    ExtensionImportPathChanged(String),
+    ImportExtension,
+    ExtensionHtmlEdited(iced::widget::text_editor::Action),
+    ExtensionJavascriptEdited(iced::widget::text_editor::Action),
+    BuildExtension,
+    EscapeOverlay,
+    CaptureUiScreenshot,
+    UiScreenshotCaptured(window::Screenshot),
     ToggleRibbonCollapsed,
     DragWindow,
+    ResizeWindow,
     MinimizeWindow,
     MaximizeWindow,
     CloseWindow,
     SelectAnnotationTool(AnnotationTool),
     SelectAnnotation(Option<u64>),
+    DuplicateSelectedAnnotation,
+    MirrorSelectedAnnotation {
+        horizontal: bool,
+    },
+    RotateSelectedAnnotation,
+    CopySelectedAnnotation,
+    CutSelectedAnnotation,
+    PasteAnnotation {
+        in_place: bool,
+    },
     AnnotationGestureStarted,
-    AnnotationGesturePreview(u64, Rect),
+    AnnotationGesturePreview(DocumentVersion, u64, Rect),
     AnnotationGestureEnded,
-    MoveAnnotation(u64, [f64; 2]),
-    MoveLineEndpoint(u64, bool, [f64; 2]),
-    ResizeAnnotation(u64, Rect),
+    MoveAnnotation(DocumentVersion, u64, [f64; 2]),
+    MoveLineEndpoint(DocumentVersion, u64, bool, [f64; 2]),
+    ResizeAnnotation(DocumentVersion, u64, Rect),
     RemoveSelectedAnnotation,
-    AddAnnotation(Rect),
-    AddLine([f64; 2], [f64; 2]),
-    AddPolyline(Vec<[f64; 2]>),
+    RequestDeleteAnnotation,
+    ConfirmDeleteAnnotation,
+    CancelDeleteAnnotation,
+    RequestClearAnnotations(Option<usize>),
+    ConfirmClearAnnotations,
+    CancelClearAnnotations,
+    AddAnnotation(DocumentVersion, Rect),
+    AddLine(DocumentVersion, [f64; 2], [f64; 2]),
+    AddPolyline(DocumentVersion, Vec<[f64; 2]>),
     TextEdited(iced::widget::text_editor::Action),
     TextPointer(iced::advanced::text::editor::Cursor, bool),
-    SetTextColor([u8; 3]),
+    SetFormatColor([u8; 3]),
     SetTextFontSize(u16),
     SetTextAlign(TextAlign),
     CommitText,
@@ -3756,6 +5783,98 @@ mod view_panel_tests {
     use super::*;
 
     #[test]
+    fn recent_files_are_deduplicated_searchable_and_open_through_the_normal_route() {
+        let mut recent = VecDeque::new();
+        for index in 0..25 {
+            remember_recent(&mut recent, &format!("/tmp/document-{index}.pdf"));
+        }
+        assert_eq!(recent.len(), recent_files::MAX_ENTRIES);
+        assert_eq!(recent.front().unwrap().path, "/tmp/document-24.pdf");
+        remember_recent(&mut recent, "/tmp/document-12.pdf");
+        assert_eq!(recent.front().unwrap().path, "/tmp/document-12.pdf");
+        assert_eq!(
+            recent
+                .iter()
+                .filter(|entry| entry.path == "/tmp/document-12.pdf")
+                .count(),
+            1
+        );
+        let oldest = recent.back_mut().unwrap();
+        oldest.pinned = true;
+        let oldest_path = oldest.path.clone();
+        remember_recent(&mut recent, "/tmp/new.pdf");
+        assert_eq!(recent.len(), recent_files::MAX_ENTRIES);
+        assert!(recent
+            .iter()
+            .any(|entry| entry.path == oldest_path && entry.pinned));
+        assert!(recent_file_matches("/tmp/Tekst.PDF", " tekst "));
+
+        let mut app = App {
+            file_menu_open: true,
+            ..App::default()
+        };
+        let _ = app.update(Message::SelectPdf(PathBuf::from("/tmp/document-12.pdf")));
+        assert!(!app.file_menu_open);
+        assert_eq!(app.path_input, "/tmp/document-12.pdf");
+        assert!(app.opening_document);
+    }
+
+    #[test]
+    fn app_recent_file_record_survives_a_new_app_instance() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir =
+            std::env::temp_dir().join(format!("opds-app-recents-{}-{unique}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("recent.json");
+        let mut app = App {
+            recent_store_path: Some(path.clone()),
+            ..App::default()
+        };
+        app.record_recent_file("/tmp/one.pdf");
+        app.record_recent_file("/tmp/two.pdf");
+        let restored = recent_files::read(&path);
+        assert_eq!(restored, app.recent_files);
+        assert_eq!(restored.front().unwrap().path, "/tmp/two.pdf");
+        let _ = app.update(Message::ToggleRecentPinned("/tmp/one.pdf".into()));
+        assert!(
+            recent_files::read(&path)
+                .iter()
+                .find(|entry| entry.path == "/tmp/one.pdf")
+                .unwrap()
+                .pinned
+        );
+        app.record_recent_file("/tmp/one.pdf");
+        assert!(app.recent_files.front().unwrap().pinned);
+        let _ = app.update(Message::RemoveRecent("/tmp/two.pdf".into()));
+        assert!(!recent_files::read(&path)
+            .iter()
+            .any(|entry| entry.path == "/tmp/two.pdf"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn recent_groups_toggle_without_changing_files_or_persisted_state() {
+        let mut app = App::default();
+        app.recent_files.push_back(RecentFile {
+            path: "/tmp/one.pdf".into(),
+            pinned: true,
+        });
+        let before = app.recent_files.clone();
+        let _ = app.update(Message::TogglePinnedRecents);
+        let _ = app.update(Message::ToggleUnpinnedRecents);
+        assert!(app.pinned_recents_collapsed);
+        assert!(app.unpinned_recents_collapsed);
+        assert_eq!(app.recent_files, before);
+        let _ = app.update(Message::TogglePinnedRecents);
+        let _ = app.update(Message::ToggleUnpinnedRecents);
+        assert!(!app.pinned_recents_collapsed);
+        assert!(!app.unpinned_recents_collapsed);
+    }
+
+    #[test]
     fn annotation_list_and_properties_are_exclusive() {
         let mut app = App::default();
         assert!(!app.hide_properties);
@@ -3769,6 +5888,1003 @@ mod view_panel_tests {
         let _ = app.update(Message::ToggleAnnotationList);
         assert!(!app.show_annotation_list);
         assert!(app.hide_properties);
+    }
+
+    #[test]
+    fn symbol_palette_toggle_reclaims_document_width() {
+        let mut app = App::default();
+        let shown = fit_scale(
+            FitMode::Width,
+            (600.0, 800.0),
+            (1200.0, 832.0),
+            true,
+            true,
+            true,
+            false,
+        )
+        .unwrap();
+        let _ = app.update(Message::ToggleSymbolPalette);
+        assert!(app.hide_symbol_palette);
+        let hidden = fit_scale(
+            FitMode::Width,
+            (600.0, 800.0),
+            (1200.0, 832.0),
+            true,
+            true,
+            !app.hide_symbol_palette,
+            false,
+        )
+        .unwrap();
+        assert!(hidden > shown);
+        let _ = app.update(Message::ToggleSymbolPalette);
+        assert!(!app.hide_symbol_palette);
+    }
+
+    #[test]
+    fn duplicate_offsets_every_point_and_stays_on_page() {
+        let source = Annotation {
+            id: 7,
+            page: 0,
+            bounds: Rect {
+                x: 170.0,
+                y: 20.0,
+                width: 25.0,
+                height: 20.0,
+            },
+            kind: Kind::Polyline {
+                points: vec![[170.0, 20.0], [195.0, 40.0]],
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let copy = duplicate_annotation(&source, 8, 1.0, (200.0, 100.0)).unwrap();
+        assert_eq!(copy.id, 8);
+        assert_eq!(
+            copy.bounds.x, 150.0,
+            "right edge requires a leftward offset"
+        );
+        assert_eq!(copy.bounds.y, 40.0);
+        let Kind::Polyline { points, .. } = copy.kind else {
+            panic!("a duplicate must retain the annotation kind");
+        };
+        assert_eq!(points, vec![[150.0, 40.0], [175.0, 60.0]]);
+        assert!(duplicate_annotation(&source, 8, 0.0, (200.0, 100.0)).is_none());
+        assert!(duplicate_annotation(&source, 8, 1.0, (25.0, 100.0)).is_none());
+        let line = Annotation {
+            kind: Kind::Arrow {
+                start: [170.0, 20.0],
+                end: [195.0, 40.0],
+                color_rgb: [231, 76, 60],
+            },
+            ..source.clone()
+        };
+        let shifted = duplicate_annotation(&line, 9, 2.0, (200.0, 100.0)).unwrap();
+        assert_eq!(shifted.bounds.x, 160.0);
+        assert_eq!(shifted.bounds.y, 30.0);
+        assert!(matches!(
+            shifted.kind,
+            Kind::Arrow {
+                start: [160.0, 30.0],
+                end: [185.0, 50.0],
+                ..
+            }
+        ));
+        assert_eq!(source.id, 7);
+    }
+
+    #[test]
+    fn moved_point_geometry_uses_clamped_actual_delta() {
+        let source = Annotation {
+            id: 7,
+            page: 0,
+            bounds: Rect {
+                x: 170.0,
+                y: 20.0,
+                width: 25.0,
+                height: 20.0,
+            },
+            kind: Kind::Polyline {
+                points: vec![[170.0, 20.0], [195.0, 40.0]],
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let moved = translated_annotation(&source, [100.0, -5.0], (200.0, 100.0)).unwrap();
+        assert_eq!((moved.bounds.x, moved.bounds.y), (175.0, 15.0));
+        let Kind::Polyline { points, .. } = moved.kind else {
+            panic!("expected polyline");
+        };
+        assert_eq!(points, vec![[175.0, 15.0], [200.0, 35.0]]);
+        assert_eq!(source.bounds.x, 170.0);
+        let line = Annotation {
+            kind: Kind::Line {
+                start: [170.0, 20.0],
+                end: [195.0, 40.0],
+                color_rgb: [231, 76, 60],
+            },
+            ..source
+        };
+        let shifted = translated_annotation(&line, [-10.0, 10.0], (200.0, 100.0)).unwrap();
+        assert!(matches!(
+            shifted.kind,
+            Kind::Line {
+                start: [160.0, 30.0],
+                end: [185.0, 50.0],
+                ..
+            }
+        ));
+        assert!(translated_annotation(&line, [f64::NAN, 0.0], (200.0, 100.0)).is_none());
+        assert!(translated_annotation(&line, [0.0, 0.0], (200.0, 100.0)).is_none());
+    }
+
+    #[test]
+    fn mirror_point_geometry_recomputes_bounds_and_undo_restores_source() {
+        let page_size = (200.0, 100.0);
+        let start = [20.0, 30.0];
+        let end = [60.0, 50.0];
+        let source = Annotation {
+            id: 1,
+            page: 0,
+            bounds: arrow_bounds(start, end, page_size).unwrap(),
+            kind: Kind::Arrow {
+                start,
+                end,
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let mirrored = mirror_annotation(&source, true, page_size).unwrap();
+        assert!(matches!(
+            mirrored.kind,
+            Kind::Arrow {
+                start: [60.0, 30.0],
+                end: [20.0, 50.0],
+                ..
+            }
+        ));
+        let mut model = DocumentModel::new(DocumentId(96), 1).unwrap();
+        model.apply(Edit::Add(source.clone())).unwrap();
+        let version = model.version();
+        assert!(model
+            .execute(version, DocumentCommand::Edit(Edit::Replace(mirrored)))
+            .unwrap());
+        assert_eq!(model.get(1).unwrap().id, 1);
+        assert!(model
+            .execute(model.version(), DocumentCommand::Undo)
+            .unwrap());
+        assert_eq!(model.get(1), Some(&source));
+
+        let polyline = Annotation {
+            id: 2,
+            page: 0,
+            bounds: polyline_bounds(&[[10.0, 10.0], [30.0, 40.0], [50.0, 20.0]], page_size)
+                .unwrap(),
+            kind: Kind::Polyline {
+                points: vec![[10.0, 10.0], [30.0, 40.0], [50.0, 20.0]],
+                color_rgb: [0, 0, 255],
+            },
+        };
+        let vertical = mirror_annotation(&polyline, false, page_size).unwrap();
+        assert!(matches!(
+            vertical.kind,
+            Kind::Polyline { ref points, .. }
+                if points == &[[10.0, 40.0], [30.0, 10.0], [50.0, 30.0]]
+        ));
+        assert_eq!(
+            mirror_annotation(&vertical, false, page_size).unwrap().kind,
+            polyline.kind
+        );
+        let rotated = rotate_annotation_clockwise_90(&polyline, page_size).unwrap();
+        assert!(matches!(
+            rotated.kind,
+            Kind::Polyline { ref points, .. }
+                if points == &[[45.0, 5.0], [15.0, 25.0], [35.0, 45.0]]
+        ));
+        assert!(rotate_annotation_clockwise_90(&polyline, (30.0, 30.0)).is_none());
+        let rectangle = Annotation {
+            kind: Kind::Rectangle {
+                color_rgb: [0, 0, 0],
+            },
+            ..source
+        };
+        assert!(mirror_annotation(&rectangle, true, page_size).is_none());
+    }
+
+    #[test]
+    fn drawing_mirror_button_uses_versioned_document_command() {
+        let bytes = Arc::new(
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let page_size = pdf.page_dimensions(1).unwrap();
+        let source = Annotation {
+            id: 1,
+            page: 0,
+            bounds: arrow_bounds([20.0, 30.0], [60.0, 50.0], page_size).unwrap(),
+            kind: Kind::Arrow {
+                start: [20.0, 30.0],
+                end: [60.0, 50.0],
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let mut model = DocumentModel::new(DocumentId(97), pdf.page_count()).unwrap();
+        model.apply(Edit::Add(source.clone())).unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "mirror-fixture.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: vec![source.clone()],
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: Some(1),
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            ..App::default()
+        };
+        let _ = app.update(Message::MirrorSelectedAnnotation { horizontal: true });
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(1).unwrap().kind,
+            Kind::Arrow {
+                start: [60.0, 30.0],
+                end: [20.0, 50.0],
+                ..
+            }
+        ));
+        let _ = app.update(Message::Undo);
+        assert_eq!(app.document.as_ref().unwrap().model.get(1), Some(&source));
+        let _ = app.update(Message::Redo);
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(1).unwrap().kind,
+            Kind::Arrow {
+                start: [60.0, 30.0],
+                end: [20.0, 50.0],
+                ..
+            }
+        ));
+        let _ = app.update(Message::RotateSelectedAnnotation);
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(1).unwrap().kind,
+            Kind::Arrow {
+                start: [50.0, 60.0],
+                end: [30.0, 20.0],
+                ..
+            }
+        ));
+        let _ = app.update(Message::Undo);
+        assert!(matches!(
+            app.document.as_ref().unwrap().model.get(1).unwrap().kind,
+            Kind::Arrow {
+                start: [60.0, 30.0],
+                end: [20.0, 50.0],
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn drawing_copy_duplicates_selection_in_one_undoable_transaction() {
+        let bytes = Arc::new(
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let source = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 40.0,
+                height: 25.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let mut model = DocumentModel::new(DocumentId(94), pdf.page_count()).unwrap();
+        model.apply(Edit::Add(source.clone())).unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "copy-fixture.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: vec![source.clone()],
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: Some(1),
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            next_annotation_id: 2,
+            ..App::default()
+        };
+        let _ = app.update(Message::DuplicateSelectedAnnotation);
+        let document = app.document.as_ref().unwrap();
+        assert_eq!(document.selected_annotation, Some(2));
+        assert_eq!(document.model.get(1), Some(&source));
+        assert_eq!(document.model.get(2).unwrap().bounds.x, 40.0);
+        assert_eq!(document.model.get(2).unwrap().bounds.y, 50.0);
+        assert_eq!(app.next_annotation_id, 3);
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(2).is_none());
+        assert_eq!(app.document.as_ref().unwrap().model.get(1), Some(&source));
+        let _ = app.update(Message::Redo);
+        assert!(app.document.as_ref().unwrap().model.get(2).is_some());
+    }
+
+    #[test]
+    fn clipboard_copy_paste_and_paste_in_place_are_separate_undoable_edits() {
+        let bytes = Arc::new(
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let source = Annotation {
+            id: 1,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 40.0,
+                height: 25.0,
+            },
+            kind: Kind::Rectangle {
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let mut model = DocumentModel::new(DocumentId(95), pdf.page_count()).unwrap();
+        model.apply(Edit::Add(source.clone())).unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "clipboard-fixture.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: vec![source.clone()],
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: Some(1),
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            next_annotation_id: 2,
+            ..App::default()
+        };
+        let _ = app.update(Message::CopySelectedAnnotation);
+        assert_eq!(app.clipboard_annotation, Some(source.clone()));
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 1);
+        let _ = app.update(Message::PasteAnnotation { in_place: false });
+        let _ = app.update(Message::PasteAnnotation { in_place: false });
+        let _ = app.update(Message::PasteAnnotation { in_place: true });
+        let document = app.document.as_ref().unwrap();
+        assert_eq!(document.model.get(2).unwrap().bounds.x, 40.0);
+        assert_eq!(document.model.get(3).unwrap().bounds.x, 60.0);
+        assert_eq!(document.model.get(4).unwrap().bounds, source.bounds);
+        assert_eq!(document.selected_annotation, Some(4));
+        assert_eq!(app.clipboard_paste_count, 2);
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(4).is_none());
+        assert!(app.document.as_ref().unwrap().model.get(3).is_some());
+        let _ = app.update(Message::Redo);
+        assert!(app.document.as_ref().unwrap().model.get(4).is_some());
+        app.document.as_mut().unwrap().selected_annotation = Some(4);
+        let _ = app.update(Message::CutSelectedAnnotation);
+        assert!(app.document.as_ref().unwrap().model.get(4).is_none());
+        assert_eq!(
+            app.clipboard_annotation.as_ref().unwrap().bounds,
+            source.bounds
+        );
+        assert_eq!(app.document.as_ref().unwrap().selected_annotation, None);
+        let _ = app.update(Message::Undo);
+        assert!(app.document.as_ref().unwrap().model.get(4).is_some());
+        let _ = app.update(Message::PasteAnnotation { in_place: true });
+        assert_eq!(
+            app.document.as_ref().unwrap().model.get(5).unwrap().bounds,
+            source.bounds
+        );
+    }
+
+    #[test]
+    fn file_document_properties_always_opens_properties() {
+        let mut app = App::default();
+        app.hide_properties = true;
+        app.show_annotation_list = true;
+        app.file_menu_open = true;
+        let _ = app.update(Message::ShowProperties);
+        assert!(!app.file_menu_open);
+        assert!(!app.show_annotation_list);
+        assert!(!app.hide_properties);
+        let _ = app.update(Message::ShowProperties);
+        assert!(!app.hide_properties);
+    }
+
+    #[test]
+    fn file_menu_opens_without_opening_a_pdf_dialog() {
+        let mut app = App::default();
+        let _ = app.update(Message::ToggleFileMenu);
+        assert!(app.file_menu_open);
+        assert!(!app.open_dialog);
+        let _ = app.update(Message::SelectFileOpenPanel);
+        assert!(app.file_menu_open);
+        assert!(!app.open_dialog);
+        let _ = app.update(Message::CloseFileMenu);
+        assert!(!app.file_menu_open);
+        let _ = app.update(Message::ToggleFileMenu);
+        let _ = app.update(Message::ShowOpen);
+        assert!(!app.file_menu_open);
+        assert!(app.open_dialog);
+    }
+
+    #[test]
+    fn cancel_export_signals_worker_and_waits_for_its_completion() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut app = App {
+            export_busy: true,
+            export_dialog: true,
+            export_cancel: Some(Arc::clone(&cancel)),
+            export_total: 3,
+            ..App::default()
+        };
+        let _ = app.update(Message::ExportProgress(1));
+        assert_eq!(app.export_completed, 1);
+        assert_eq!(app.message, "Exporting 1/3 pages…");
+        let _ = app.update(Message::ExportProgress(4));
+        assert_eq!(app.export_completed, 1);
+        let _ = app.update(Message::CancelExport);
+        assert!(cancel.load(Ordering::Relaxed));
+        assert!(app.export_busy);
+        assert!(app.export_dialog);
+        let _ = app.update(Message::ExportProgress(2));
+        assert_eq!(app.export_completed, 2);
+        assert_eq!(
+            app.message,
+            "Cancelling image export after the current page…"
+        );
+        let _ = app.update(Message::Exported(Err("Export cancelled".into())));
+        assert!(!app.export_busy);
+        assert!(!app.export_dialog);
+        assert!(app.export_cancel.is_none());
+        assert_eq!(app.message, "Export cancelled");
+    }
+
+    #[test]
+    fn external_page_navigation_rejects_stale_and_replay_and_uses_live_ui_action() {
+        let bytes = Arc::new(blank_pdf::create(100.0, 100.0, 2).unwrap());
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let model = DocumentModel::new(DocumentId(122), 2).unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "/tmp/two-pages-navigation.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: None,
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            ..App::default()
+        };
+        let version = app.document.as_ref().unwrap().model.version();
+        let request = |generation, expected_page, page| {
+            mcp_server::ExternalRequest::new(
+                [122, generation, version.annotation_revision],
+                mcp_server::ExternalAction::GoToPage {
+                    expected_page,
+                    page,
+                },
+            )
+        };
+        let (cancelled, response) = request(version.generation, 0, 1);
+        drop(response);
+        let _ = app.update(Message::ExternalRequest(cancelled));
+        assert_eq!(app.document.as_ref().unwrap().model.view().page(), 0);
+        let (invalid, response) = request(version.generation, 0, 2);
+        let _ = app.update(Message::ExternalRequest(invalid));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["ok"],
+            false
+        );
+        let (valid, response) = request(version.generation, 0, 1);
+        let _ = app.update(Message::ExternalRequest(valid));
+        let result = iced::futures::executor::block_on(response).unwrap();
+        assert_eq!(result["page"], 2);
+        assert_eq!(result["renderPending"], true);
+        assert_eq!(app.document.as_ref().unwrap().model.view().page(), 1);
+        assert_eq!(app.document.as_ref().unwrap().thumbnail_focus, 1);
+        let (replay, response) = request(version.generation, 0, 1);
+        let _ = app.update(Message::ExternalRequest(replay));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        assert_eq!(app.document.as_ref().unwrap().model.view().page(), 1);
+    }
+
+    #[test]
+    fn external_fit_view_uses_native_geometry_and_rejects_stale_zoom() {
+        let bytes = Arc::new(blank_pdf::create(100.0, 100.0, 1).unwrap());
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let model = DocumentModel::new(DocumentId(123), 1).unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "/tmp/fit-view-test.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 0,
+                selected_annotation: None,
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 0,
+            }),
+            window_size: (1200.0, 350.0),
+            ..App::default()
+        };
+        let version = app.document.as_ref().unwrap().model.version();
+        let request = |generation, expected_zoom, mode| {
+            mcp_server::ExternalRequest::new(
+                [123, generation, version.annotation_revision],
+                mcp_server::ExternalAction::FitView {
+                    expected_zoom,
+                    mode,
+                },
+            )
+        };
+        let (cancelled, response) = request(version.generation, 1.0, "width");
+        drop(response);
+        let _ = app.update(Message::ExternalRequest(cancelled));
+        assert_eq!(
+            app.document
+                .as_ref()
+                .unwrap()
+                .model
+                .view()
+                .viewport()
+                .scale(),
+            1.0
+        );
+        let (stale, response) = request(version.generation + 1, 1.0, "width");
+        let _ = app.update(Message::ExternalRequest(stale));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        let (width, response) = request(version.generation, 1.0, "width");
+        let _ = app.update(Message::ExternalRequest(width));
+        let result = iced::futures::executor::block_on(response).unwrap();
+        let width_zoom = result["zoom"].as_f64().unwrap();
+        assert!(width_zoom > 1.0);
+        assert_eq!(result["renderPending"], true);
+        let (replay, response) = request(version.generation, 1.0, "width");
+        let _ = app.update(Message::ExternalRequest(replay));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale document version"
+        );
+        let width_generation = app.document.as_ref().unwrap().model.version().generation;
+        let (page, response) = request(width_generation, width_zoom, "page");
+        let _ = app.update(Message::ExternalRequest(page));
+        let result = iced::futures::executor::block_on(response).unwrap();
+        assert_eq!(result["mode"], "page");
+        assert!(result["zoom"].as_f64().unwrap() < width_zoom);
+        let zoom = app
+            .document
+            .as_ref()
+            .unwrap()
+            .model
+            .view()
+            .viewport()
+            .scale();
+        let page_generation = app.document.as_ref().unwrap().model.version().generation;
+        let (stale_zoom, response) = request(page_generation, width_zoom, "width");
+        let _ = app.update(Message::ExternalRequest(stale_zoom));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "stale current zoom"
+        );
+        let (no_op, response) = request(page_generation, zoom, "page");
+        let _ = app.update(Message::ExternalRequest(no_op));
+        assert_eq!(
+            iced::futures::executor::block_on(response).unwrap()["error"],
+            "fit did not change zoom"
+        );
+    }
+
+    #[test]
+    fn export_page_input_tracks_selection_and_rejects_invalid_pages() {
+        let bytes = Arc::new(blank_pdf::create(100.0, 100.0, 2).unwrap());
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let mut model = DocumentModel::new(DocumentId(121), 2).unwrap();
+        model.go_to_page(1).unwrap();
+        let mut app = App {
+            document: Some(OpenDocument {
+                path: "/tmp/two-pages.pdf".into(),
+                is_new: false,
+                source_bytes: bytes,
+                dynlex_document: None,
+                pdf,
+                model,
+                last_saved_annotations: Vec::new(),
+                bitmap: None,
+                annotation_overlay_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_cache: RefCell::new(None),
+                #[cfg(feature = "dynlex-experimental")]
+                content_layer_in_flight: None,
+                bitmap_size: (0, 0),
+                bitmap_page_points: (0.0, 0.0),
+                bitmap_scale: 1.0,
+                bitmap_backend: Backend::Hayro,
+                imported_annotations_dynlex: false,
+                displayed_page: 1,
+                selected_annotation: None,
+                page_cache: VecDeque::new(),
+                thumbnails: VecDeque::new(),
+                thumbnail_in_flight: None,
+                thumbnail_failed: HashSet::new(),
+                thumbnail_focus: 1,
+            }),
+            ..App::default()
+        };
+        let _ = app.update(Message::ShowExport);
+        assert_eq!(app.export_page_input, "2");
+        assert!(app.export_include_annotations);
+        assert_eq!(app.export_jpeg_quality.value(), 92);
+        let _ = app.update(Message::SetExportAnnotations(false));
+        assert!(!app.export_include_annotations);
+        let _ = app.update(Message::SelectJpegQuality(10));
+        assert_eq!(app.export_jpeg_quality.value(), 10);
+        let _ = app.update(Message::SelectJpegQuality(101));
+        assert_eq!(app.export_jpeg_quality.value(), 10);
+        assert_eq!(app.export_path_input, "/tmp/two-pages-page-2.png");
+        let _ = app.update(Message::SelectExportFormat(image_export::ImageFormat::Jpeg));
+        assert_eq!(app.export_path_input, "/tmp/two-pages-page-2.jpg");
+        let _ = app.update(Message::SelectExportFormat(image_export::ImageFormat::Tiff));
+        assert_eq!(app.export_path_input, "/tmp/two-pages-page-2.tiff");
+        let _ = app.update(Message::SelectExportFormat(image_export::ImageFormat::Png));
+        assert_eq!(app.export_path_input, "/tmp/two-pages-page-2.png");
+        let _ = app.update(Message::ExportPageChanged("1".into()));
+        assert_eq!(app.export_page, 0);
+        assert_eq!(app.export_path_input, "/tmp/two-pages-page-1.png");
+        let _ = app.update(Message::ExportPathChanged("/tmp/custom.png".into()));
+        let _ = app.update(Message::ExportPageChanged("2".into()));
+        assert_eq!(app.export_page, 1);
+        assert_eq!(app.export_path_input, "/tmp/custom.png");
+        let _ = app.update(Message::ExportPageChanged("3".into()));
+        let _ = app.update(Message::ExportPng);
+        assert!(!app.export_busy);
+        assert!(app.message.contains("Choose a page from 1 to 2"));
+        let _ = app.update(Message::ShowExport);
+        let _ = app.update(Message::SelectExportRange(
+            image_export::ImagePageRange::All,
+        ));
+        assert_eq!(app.export_path_input, "/tmp/two-pages-images");
+        let _ = app.update(Message::SelectExportFormat(image_export::ImageFormat::Jpeg));
+        assert_eq!(app.export_path_input, "/tmp/two-pages-jpeg-images");
+        let _ = app.update(Message::SelectExportFormat(image_export::ImageFormat::Tiff));
+        assert_eq!(app.export_path_input, "/tmp/two-pages-tiff-images");
+        let _ = app.update(Message::SelectExportFormat(image_export::ImageFormat::Png));
+        assert_eq!(app.export_path_input, "/tmp/two-pages-images");
+        let _ = app.update(Message::SelectExportRange(
+            image_export::ImagePageRange::Custom,
+        ));
+        let _ = app.update(Message::ExportCustomPagesChanged("1-3".into()));
+        let _ = app.update(Message::ExportPng);
+        assert!(!app.export_busy);
+        assert!(app.message.contains("Choose pages from 1 to 2"));
+        let _ = app.update(Message::SelectExportRange(
+            image_export::ImagePageRange::Current,
+        ));
+        assert_eq!(app.export_path_input, "/tmp/two-pages-page-2.png");
+    }
+
+    #[test]
+    fn new_blank_uses_an_unsaved_source_without_recent_or_reader_position() {
+        let mut app = App {
+            backend: Backend::Dynlex,
+            window_size: (1200.0, 832.0),
+            ..App::default()
+        };
+        let _ = app.update(Message::ShowNew);
+        let _ = app.update(Message::NewBlank);
+        assert!(app.opening_document);
+        assert_eq!(app.next_load, 1);
+        let bytes = Arc::new(blank_pdf::a4_portrait().unwrap());
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let dynlex = Arc::new(opds_dynlex_backend::DynlexDocument::new(Arc::clone(&bytes)));
+        let (scale, outcome) = render_initial_dynlex_page(&pdf, &dynlex, 1, 1.0);
+        assert!(outcome.is_ok());
+        let _ = app.update(Message::Loaded(
+            1,
+            Ok((
+                "Untitled.pdf".into(),
+                bytes,
+                pdf,
+                Some(DynlexOpen(dynlex)),
+                1,
+                scale,
+                None,
+                outcome,
+                true,
+            )),
+        ));
+        assert!(!app.opening_document);
+        assert!(app.document.as_ref().unwrap().is_new);
+        assert!(app.recent_files.is_empty());
+        let _ = app.update(Message::ToggleReaderMode);
+        assert!(app.reader_position().is_none());
+        let _ = app.update(Message::ShowSave);
+        assert_eq!(app.save_path_input, "Untitled.pdf");
+        assert!(app.save_dialog);
+        let _ = app.update(Message::ToggleReaderMode);
+        let destination = "/tmp/opds-new-saved.pdf".to_owned();
+        let _ = app.update(Message::Saved(1, Ok((destination.clone(), Vec::new(), 42))));
+        assert_eq!(app.document.as_ref().unwrap().path, destination);
+        assert!(!app.document.as_ref().unwrap().is_new);
+        assert_eq!(app.recent_files.front().unwrap().path, destination);
+    }
+
+    #[test]
+    fn file_xfdf_import_adds_supported_shapes_as_one_undoable_edit() {
+        let mut app = App {
+            backend: Backend::Dynlex,
+            window_size: (1200.0, 832.0),
+            ..App::default()
+        };
+        let _ = app.update(Message::ShowNew);
+        let _ = app.update(Message::NewBlank);
+        let bytes = Arc::new(blank_pdf::a4_portrait().unwrap());
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&bytes)).unwrap());
+        let dynlex = Arc::new(opds_dynlex_backend::DynlexDocument::new(Arc::clone(&bytes)));
+        let (scale, outcome) = render_initial_dynlex_page(&pdf, &dynlex, 1, 1.0);
+        let _ = app.update(Message::Loaded(
+            1,
+            Ok((
+                "Untitled.pdf".into(),
+                bytes,
+                pdf,
+                Some(DynlexOpen(dynlex)),
+                1,
+                scale,
+                None,
+                outcome,
+                true,
+            )),
+        ));
+        let path =
+            std::env::temp_dir().join(format!("opds-xfdf-import-{}.xfdf", std::process::id()));
+        std::fs::write(
+            &path,
+            r##"<xfdf xmlns="http://ns.adobe.com/xfdf/"><annots>
+            <square page="0" rect="10,10,50,50" color="#ff9800"/>
+            <circle page="0" rect="60,10,100,50" color="#102030"/>
+            </annots></xfdf>"##,
+        )
+        .unwrap();
+        let _ = app.update(Message::ShowImport);
+        assert!(app.import_dialog);
+        let _ = app.update(Message::ImportPathChanged(path.display().to_string()));
+        let _ = app.update(Message::ImportXfdf);
+        assert!(!app.import_dialog, "{}", app.message);
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 2);
+        assert_eq!(app.next_annotation_id, 2);
+        let _ = app.update(Message::Undo);
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 0);
+        assert!(!app.document.as_ref().unwrap().model.can_undo());
+        let _ = app.update(Message::Redo);
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 2);
+        let export_path =
+            std::env::temp_dir().join(format!("opds-xfdf-export-{}.xfdf", std::process::id()));
+        let _ = std::fs::remove_file(&export_path);
+        let _ = app.update(Message::ShowXfdfExport);
+        assert!(app.xfdf_export_dialog);
+        let _ = app.update(Message::XfdfExportPathChanged(
+            export_path.display().to_string(),
+        ));
+        let _ = app.update(Message::ExportXfdf);
+        assert!(!app.xfdf_export_dialog, "{}", app.message);
+        let exported = std::fs::read_to_string(&export_path).unwrap();
+        let roundtrip = xfdf_import::parse(&exported, 1, 10).unwrap();
+        assert_eq!(roundtrip.len(), 2);
+        assert!(matches!(roundtrip[0].kind, Kind::Rectangle { .. }));
+        assert!(matches!(roundtrip[1].kind, Kind::Ellipse { .. }));
+        let _ = app.update(Message::ShowXfdfExport);
+        let _ = app.update(Message::XfdfExportPathChanged(
+            export_path.display().to_string(),
+        ));
+        let _ = app.update(Message::ExportXfdf);
+        assert!(app.xfdf_export_dialog);
+        assert!(app.message.contains("File exists") || app.message.contains("exists"));
+        assert_eq!(std::fs::read_to_string(&export_path).unwrap(), exported);
+        std::fs::remove_file(export_path).unwrap();
+        let _ = app.update(Message::CancelXfdfExport);
+        std::fs::write(
+            &path,
+            r##"<xfdf><annots><square page="0" rect="10,10,50,50" color="#ff9800"/>
+            <stamp page="0" rect="60,10,100,50"/></annots></xfdf>"##,
+        )
+        .unwrap();
+        let before = app.document.as_ref().unwrap().model.version();
+        let _ = app.update(Message::ShowImport);
+        let _ = app.update(Message::ImportPathChanged(path.display().to_string()));
+        let _ = app.update(Message::ImportXfdf);
+        assert!(app.import_dialog);
+        assert!(app.message.contains("Unsupported XFDF annotation"));
+        assert_eq!(app.document.as_ref().unwrap().model.version(), before);
+        assert_eq!(app.document.as_ref().unwrap().model.items().count(), 2);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn new_dialog_checks_pages_and_custom_size_before_replacing_document() {
+        let mut app = App::default();
+        let _ = app.update(Message::ShowNew);
+        assert!(app.new_dialog);
+        assert_eq!(app.new_paper, blank_pdf::Paper::A4);
+        let _ = app.update(Message::NewPagesChanged("0".into()));
+        let _ = app.update(Message::NewBlank);
+        assert!(app.new_dialog);
+        assert_eq!(app.next_load, 0);
+        let _ = app.update(Message::NewPagesChanged("3".into()));
+        let _ = app.update(Message::NewPaperSelected(blank_pdf::Paper::Custom));
+        let _ = app.update(Message::NewCustomWidthChanged("9".into()));
+        let _ = app.update(Message::NewBlank);
+        assert!(app.new_dialog);
+        assert_eq!(app.next_load, 0);
+        let _ = app.update(Message::NewCustomWidthChanged("210".into()));
+        let _ = app.update(Message::NewBlank);
+        assert!(!app.new_dialog);
+        assert!(app.opening_document);
+        assert_eq!(app.next_load, 1);
+    }
+
+    #[test]
+    fn file_about_opens_and_closes_without_changing_document_state() {
+        let mut app = App::default();
+        app.file_menu_open = true;
+        let _ = app.update(Message::ShowAbout);
+        assert!(app.about_dialog);
+        assert!(!app.file_menu_open);
+        assert!(app.document.is_none());
+        let _ = app.update(Message::EscapeOverlay);
+        assert!(!app.about_dialog);
+        let _ = app.update(Message::ShowAbout);
+        let _ = app.update(Message::CloseAbout);
+        assert!(!app.about_dialog);
+    }
+
+    #[test]
+    fn extension_builder_opens_from_file_menu_and_writes_package() {
+        let mut app = App::default();
+        app.file_menu_open = true;
+        let _ = app.update(Message::ShowExtensions);
+        assert!(app.extensions_dialog);
+        assert!(!app.file_menu_open);
+        assert!(app.extension_html.text().contains("<html"));
+        assert!(app.extension_javascript.text().contains("activate"));
+        let html_before = app.extension_html.text();
+        let javascript_before = app.extension_javascript.text();
+        let _ = app.update(Message::ExtensionHtmlEdited(
+            iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Insert('X')),
+        ));
+        let _ = app.update(Message::ExtensionJavascriptEdited(
+            iced::widget::text_editor::Action::Edit(iced::widget::text_editor::Edit::Insert('Y')),
+        ));
+        assert_ne!(app.extension_html.text(), html_before);
+        assert_ne!(app.extension_javascript.text(), javascript_before);
+        let path = std::env::temp_dir().join(format!(
+            "opds-extension-ui-test-{}.oppx",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let _ = app.update(Message::ExtensionIdChanged("ui_test".into()));
+        let _ = app.update(Message::ExtensionNameChanged("UI Test".into()));
+        let _ = app.update(Message::ExtensionOutputChanged(path.display().to_string()));
+        let _ = app.update(Message::BuildExtension);
+        assert!(app.extension_error.is_empty(), "{}", app.extension_error);
+        assert!(path.is_file());
+        let _ = app.update(Message::ExtensionIdChanged("changed".into()));
+        let _ = app.update(Message::ShowExtensionImport);
+        assert!(app.extension_import_dialog);
+        assert!(!app.extensions_dialog);
+        let _ = app.update(Message::ExtensionImportPathChanged(
+            "/definitely-not-an-extension.oppx".into(),
+        ));
+        let _ = app.update(Message::ImportExtension);
+        assert!(app.extension_import_dialog);
+        assert!(!app.extension_error.is_empty());
+        let _ = app.update(Message::ExtensionImportPathChanged(
+            path.display().to_string(),
+        ));
+        let _ = app.update(Message::ImportExtension);
+        assert!(app.extension_error.is_empty(), "{}", app.extension_error);
+        assert!(!app.extension_import_dialog);
+        assert!(app.extensions_dialog);
+        assert_eq!(app.extension_id, "ui_test");
+        assert!(app.extension_html.text().contains('X'));
+        assert!(app.extension_javascript.text().contains('Y'));
+        assert!(app.extension_output.is_empty());
+        std::fs::remove_file(path).unwrap();
+        let _ = app.update(Message::EscapeOverlay);
+        assert!(!app.extensions_dialog);
     }
 }
 
@@ -3802,6 +6918,9 @@ impl App {
             return None;
         }
         let document = self.document.as_ref()?;
+        if document.is_new {
+            return None;
+        }
         let preview_size = zoom_preview_size(
             document.bitmap_page_points,
             document.bitmap_size,
@@ -3870,17 +6989,696 @@ impl App {
         self.text_dialog || self.document.as_ref().is_some_and(OpenDocument::is_dirty)
     }
 
+    fn record_recent_file(&mut self, path: &str) {
+        remember_recent(&mut self.recent_files, path);
+        self.persist_recent_files();
+    }
+
+    fn persist_recent_files(&self) {
+        if let Some(store) = &self.recent_store_path {
+            if let Err(error) = recent_files::write(store, &self.recent_files) {
+                eprintln!("Could not persist recent PDFs: {error}");
+            }
+        }
+    }
+
     fn update(&mut self, message: Message) -> Task<Message> {
-        let task = self.update_inner(message);
+        let (task, external_response) = match message {
+            Message::ExternalRequest(request) => {
+                let (task, result) = self.apply_external_command(&request);
+                (task, Some((request, result)))
+            }
+            message => (self.update_inner(message), None),
+        };
+        mcp_server::publish_tool(self.annotation_tool.mcp_name(), self.annotation_tool_epoch);
+        mcp_server::publish_backend(self.backend);
+        if let Some(document) = self.document.as_ref() {
+            mcp_server::publish_model(&document.model);
+            mcp_server::publish_tab_state(
+                &document.model,
+                &document.path,
+                document.is_new,
+                document.is_dirty(),
+                document.selected_annotation,
+            );
+            mcp_server::publish_page_geometry(
+                &document.model,
+                document
+                    .pdf
+                    .page_dimensions(document.model.view().page() + 1)
+                    .ok(),
+            );
+        } else {
+            mcp_server::publish_document(None);
+        }
+        // Publish the resulting document version before returning the MCP
+        // reply, so a client can immediately re-read a coherent snapshot.
+        if let Some((request, result)) = external_response {
+            request.respond(result);
+        }
         self.reader_shutdown.position = self
             .reader_position()
             .map(|(path, position)| (path.to_path_buf(), position));
         task
     }
 
+    fn apply_external_command(
+        &mut self,
+        request: &mcp_server::ExternalRequest,
+    ) -> (Task<Message>, serde_json::Value) {
+        if request.was_cancelled() {
+            return (
+                Task::none(),
+                serde_json::json!({"ok":false,"error":"request cancelled"}),
+            );
+        }
+        let Some(document) = self.document.as_ref() else {
+            return (
+                Task::none(),
+                serde_json::json!({"ok":false,"error":"no active document"}),
+            );
+        };
+        let expected = DocumentVersion {
+            id: DocumentId(request.expected_document_id),
+            generation: request.expected_generation,
+            annotation_revision: request.expected_annotation_revision,
+        };
+        if document.model.version() != expected {
+            return (
+                Task::none(),
+                serde_json::json!({"ok":false,"error":"stale document version"}),
+            );
+        }
+        if let mcp_server::ExternalAction::Select(id) = request.action {
+            if !document
+                .model
+                .get(id)
+                .is_some_and(|item| item.page == document.displayed_page)
+            {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"annotation is not on the displayed page"}),
+                );
+            }
+            let task = self.update_inner(Message::SelectAnnotation(Some(id)));
+            return (
+                task,
+                serde_json::json!({"ok":true,"selectedId":id.to_string(),
+                "documentId":expected.id.0.to_string(),"generation":expected.generation,
+                "annotationRevision":expected.annotation_revision}),
+            );
+        }
+        if let mcp_server::ExternalAction::ClearSelection = request.action {
+            let task = self.update_inner(Message::SelectAnnotation(None));
+            return (
+                task,
+                serde_json::json!({"ok":true,"selectedId":null,
+                "documentId":expected.id.0.to_string(),"generation":expected.generation,
+                "annotationRevision":expected.annotation_revision}),
+            );
+        }
+        if let mcp_server::ExternalAction::SelectBackend {
+            expected: expected_backend,
+            requested: backend,
+        } = request.action
+        {
+            if self.backend != expected_backend {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"stale renderer selection"}),
+                );
+            }
+            if self.opening_document || self.backend == backend {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"renderer selection did not change"}),
+                );
+            }
+            let available = match backend {
+                Backend::Hayro => true,
+                Backend::Dynlex => cfg!(feature = "dynlex-experimental"),
+                Backend::Pdfium => opds_dynlex_backend::pdfium_available(),
+                Backend::OwnRust => opds_dynlex_backend::own_rust_available(),
+                Backend::PdfCraft => opds_dynlex_backend::pdfcraft_available(),
+            };
+            if !available {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"renderer is unavailable"}),
+                );
+            }
+            let task = self.update_inner(Message::SelectBackend(backend));
+            return (
+                task,
+                serde_json::json!({"ok":true,"selected":mcp_server::backend_id(backend),
+                    "renderPending":true,"documentId":expected.id.0.to_string(),
+                    "generation":expected.generation,
+                    "annotationRevision":expected.annotation_revision}),
+            );
+        }
+        if let mcp_server::ExternalAction::GoToPage {
+            expected_page,
+            page,
+        } = request.action
+        {
+            if self.opening_document {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"document is opening"}),
+                );
+            }
+            if document.model.view().page() != expected_page {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"stale current page"}),
+                );
+            }
+            if page >= document.model.view().page_count() || page == expected_page {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"page selection did not change"}),
+                );
+            }
+            let task = self.update_inner(Message::GoToPage(page));
+            let version = self.document.as_ref().unwrap().model.version();
+            return (
+                task,
+                serde_json::json!({"ok":true,"page":page+1,"renderPending":true,
+                    "documentId":version.id.0.to_string(),"generation":version.generation,
+                    "annotationRevision":version.annotation_revision}),
+            );
+        }
+        if let mcp_server::ExternalAction::FitView {
+            expected_zoom,
+            mode,
+        } = request.action
+        {
+            if self.opening_document {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"document is opening"}),
+                );
+            }
+            if document.model.view().viewport().scale().to_bits() != expected_zoom.to_bits() {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"stale current zoom"}),
+                );
+            }
+            let fit_mode = if mode == "width" {
+                FitMode::Width
+            } else {
+                FitMode::Page
+            };
+            let page = document.model.view().page() + 1;
+            let scale = document.pdf.page_dimensions(page).ok().and_then(|size| {
+                fit_scale(
+                    fit_mode,
+                    size,
+                    self.window_size,
+                    !self.hide_pages,
+                    !self.hide_properties,
+                    !self.hide_symbol_palette,
+                    self.ribbon_collapsed,
+                )
+            });
+            let Some(scale) = scale else {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"page cannot be fitted"}),
+                );
+            };
+            if scale.to_bits() == expected_zoom.to_bits() {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"fit did not change zoom"}),
+                );
+            }
+            if request.was_cancelled() {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"request cancelled"}),
+                );
+            }
+            let task = self.update_inner(Message::FitView(fit_mode));
+            let version = self.document.as_ref().unwrap().model.version();
+            let zoom = self
+                .document
+                .as_ref()
+                .unwrap()
+                .model
+                .view()
+                .viewport()
+                .scale();
+            return (
+                task,
+                serde_json::json!({"ok":true,"mode":mode,"zoom":zoom,"renderPending":true,
+                    "documentId":version.id.0.to_string(),"generation":version.generation,
+                    "annotationRevision":version.annotation_revision}),
+            );
+        }
+        if let mcp_server::ExternalAction::SelectTool {
+            expected: expected_tool,
+            expected_epoch,
+            requested,
+        } = request.action
+        {
+            if self.opening_document
+                || self.new_dialog
+                || self.open_dialog
+                || self.file_menu_open
+                || self.about_dialog
+                || self.save_dialog
+                || self.import_dialog
+                || self.xfdf_export_dialog
+                || self.export_dialog
+                || self.print_dialog
+                || self.text_dialog
+                || self.confirm_discard.is_some()
+                || self.pending_clear_annotations.is_some()
+                || self.pending_delete_annotation.is_some()
+            {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"tool selection is unavailable during modal work"}),
+                );
+            }
+            if self.annotation_tool.mcp_name() != expected_tool
+                || self.annotation_tool_epoch != expected_epoch
+            {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"stale current tool"}),
+                );
+            }
+            let Some(tool) = AnnotationTool::from_mcp_name(requested) else {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"tool is not implemented"}),
+                );
+            };
+            if self.annotation_tool == tool {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"tool selection did not change"}),
+                );
+            }
+            let task = self.update_inner(Message::SelectAnnotationTool(tool));
+            return (
+                task,
+                serde_json::json!({"ok":true,"tool":self.annotation_tool.mcp_name(),
+                    "toolEpoch":self.annotation_tool_epoch,
+                    "documentId":expected.id.0.to_string(),"generation":expected.generation,
+                    "annotationRevision":expected.annotation_revision}),
+            );
+        }
+        if let mcp_server::ExternalAction::MoveAnnotation { id, delta } = request.action {
+            let Some(item) = document.model.get(id) else {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"annotation not found"}),
+                );
+            };
+            if self.opening_document
+                || item.page != document.displayed_page
+                || item.page != document.model.view().page()
+            {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"annotation is not on the current displayed page"}),
+                );
+            }
+            let Ok(page_size) = document.pdf.page_dimensions(item.page + 1) else {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"page dimensions unavailable"}),
+                );
+            };
+            let Some(moved) = translated_annotation(item, delta, page_size) else {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"move did not change annotation"}),
+                );
+            };
+            if request.was_cancelled() {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"request cancelled"}),
+                );
+            }
+            let bounds = moved.bounds;
+            let document = self.document.as_mut().expect("document checked above");
+            return match document
+                .model
+                .execute(expected, DocumentCommand::Edit(Edit::Replace(moved)))
+            {
+                Ok(true) => {
+                    self.annotation_gesture_active = false;
+                    self.annotation_gesture_preview = None;
+                    self.message = "Annotation moved".into();
+                    let version = document.model.version();
+                    (
+                        self.render_content_layer_if_needed(),
+                        serde_json::json!({"ok":true,"action":"move_annotation",
+                            "id":id.to_string(),"bounds":{"x":bounds.x,"y":bounds.y,
+                                "width":bounds.width,"height":bounds.height},
+                            "documentId":version.id.0.to_string(),"generation":version.generation,
+                            "annotationRevision":version.annotation_revision}),
+                    )
+                }
+                Ok(false) => (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"move did not change annotation"}),
+                ),
+                Err(CommandError::StaleDocument) => (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"stale document version"}),
+                ),
+                Err(CommandError::Edit(error)) => (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":format!("annotation edit failed: {error:?}")}),
+                ),
+            };
+        }
+        if let mcp_server::ExternalAction::ResizeAnnotation { id, bounds } = request.action {
+            let Some(item) = document.model.get(id) else {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"annotation not found"}),
+                );
+            };
+            if self.opening_document
+                || item.page != document.displayed_page
+                || item.page != document.model.view().page()
+            {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"annotation is not on the current displayed page"}),
+                );
+            }
+            let Ok(page_size) = document.pdf.page_dimensions(item.page + 1) else {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"page dimensions unavailable"}),
+                );
+            };
+            let Some(resized) = resized_annotation(item, bounds, page_size) else {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"resize is unsupported, outside page or unchanged"}),
+                );
+            };
+            if request.was_cancelled() {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"request cancelled"}),
+                );
+            }
+            let document = self.document.as_mut().expect("document checked above");
+            return match document
+                .model
+                .execute(expected, DocumentCommand::Edit(Edit::Replace(resized)))
+            {
+                Ok(true) => {
+                    self.annotation_gesture_active = false;
+                    self.annotation_gesture_preview = None;
+                    self.message = "Annotation resized".into();
+                    let version = document.model.version();
+                    (
+                        self.render_content_layer_if_needed(),
+                        serde_json::json!({"ok":true,"action":"resize_annotation",
+                            "id":id.to_string(),"bounds":{"x":bounds.x,"y":bounds.y,
+                                "width":bounds.width,"height":bounds.height},
+                            "documentId":version.id.0.to_string(),"generation":version.generation,
+                            "annotationRevision":version.annotation_revision}),
+                    )
+                }
+                Ok(false) => (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"resize did not change annotation"}),
+                ),
+                Err(CommandError::StaleDocument) => (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"stale document version"}),
+                ),
+                Err(CommandError::Edit(error)) => (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":format!("annotation edit failed: {error:?}")}),
+                ),
+            };
+        }
+        if let mcp_server::ExternalAction::ClearAnnotations(page) = request.action {
+            if page.is_some_and(|page| page >= document.model.view().page_count()) {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"page is outside the document"}),
+                );
+            }
+            let affected = document
+                .model
+                .items()
+                .filter(|item| page.is_none_or(|page| item.page == page))
+                .count();
+            if affected == 0 {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"no annotations in requested scope"}),
+                );
+            }
+            if affected > 4096 {
+                return (
+                    Task::none(),
+                    serde_json::json!({"ok":false,"error":"too many annotations for one external transaction"}),
+                );
+            }
+        }
+        let document = self.document.as_mut().expect("document checked above");
+        let command = match request.action {
+            mcp_server::ExternalAction::Delete(id) => DocumentCommand::Edit(Edit::Remove(id)),
+            mcp_server::ExternalAction::MoveAnnotation { .. } => {
+                unreachable!("annotation move handled above")
+            }
+            mcp_server::ExternalAction::ResizeAnnotation { .. } => {
+                unreachable!("annotation resize handled above")
+            }
+            mcp_server::ExternalAction::ClearAnnotations(page) => {
+                DocumentCommand::Edit(Edit::Clear { page })
+            }
+            mcp_server::ExternalAction::Undo => DocumentCommand::Undo,
+            mcp_server::ExternalAction::Redo => DocumentCommand::Redo,
+            mcp_server::ExternalAction::Select(_) | mcp_server::ExternalAction::ClearSelection => {
+                unreachable!("selection handled above")
+            }
+            mcp_server::ExternalAction::SelectBackend { .. } => {
+                unreachable!("renderer selection handled above")
+            }
+            mcp_server::ExternalAction::GoToPage { .. } => {
+                unreachable!("page selection handled above")
+            }
+            mcp_server::ExternalAction::FitView { .. } => {
+                unreachable!("fit view handled above")
+            }
+            mcp_server::ExternalAction::SelectTool { .. } => {
+                unreachable!("tool selection handled above")
+            }
+        };
+        match document.model.execute(expected, command) {
+            Ok(true) => {
+                self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
+                if document
+                    .selected_annotation
+                    .is_some_and(|id| document.model.get(id).is_none())
+                {
+                    document.selected_annotation = None;
+                    if self.active_ribbon == RibbonTab::Format {
+                        self.active_ribbon = RibbonTab::Comment;
+                    }
+                }
+                let (action, detail) = match request.action {
+                    mcp_server::ExternalAction::Delete(id) => {
+                        self.message = format!("Annotation {id} deleted");
+                        ("delete", serde_json::json!({"deletedId":id.to_string()}))
+                    }
+                    mcp_server::ExternalAction::MoveAnnotation { .. } => {
+                        unreachable!("annotation move handled above")
+                    }
+                    mcp_server::ExternalAction::ResizeAnnotation { .. } => {
+                        unreachable!("annotation resize handled above")
+                    }
+                    mcp_server::ExternalAction::ClearAnnotations(page) => {
+                        self.message = if page.is_some() {
+                            "Page annotations cleared".into()
+                        } else {
+                            "All annotations cleared".into()
+                        };
+                        (
+                            "clear_annotations",
+                            serde_json::json!({"page":page.map(|page| page+1)}),
+                        )
+                    }
+                    mcp_server::ExternalAction::Undo => {
+                        self.message = "Undo".into();
+                        ("undo", serde_json::json!({}))
+                    }
+                    mcp_server::ExternalAction::Redo => {
+                        self.message = "Redo".into();
+                        ("redo", serde_json::json!({}))
+                    }
+                    mcp_server::ExternalAction::Select(_)
+                    | mcp_server::ExternalAction::ClearSelection => {
+                        unreachable!("selection handled above")
+                    }
+                    mcp_server::ExternalAction::SelectBackend { .. } => {
+                        unreachable!("renderer selection handled above")
+                    }
+                    mcp_server::ExternalAction::GoToPage { .. } => {
+                        unreachable!("page selection handled above")
+                    }
+                    mcp_server::ExternalAction::FitView { .. } => {
+                        unreachable!("fit view handled above")
+                    }
+                    mcp_server::ExternalAction::SelectTool { .. } => {
+                        unreachable!("tool selection handled above")
+                    }
+                };
+                let version = document.model.version();
+                let mut payload = serde_json::json!({"ok":true,"action":action,
+                    "documentId":version.id.0.to_string(),"generation":version.generation,
+                    "annotationRevision":version.annotation_revision});
+                if let (Some(payload), Some(detail)) = (payload.as_object_mut(), detail.as_object())
+                {
+                    payload.extend(detail.clone());
+                }
+                (self.render_content_layer_if_needed(), payload)
+            }
+            Ok(false) => (
+                Task::none(),
+                serde_json::json!({"ok":false,"error":"no change"}),
+            ),
+            Err(CommandError::StaleDocument) => (
+                Task::none(),
+                serde_json::json!({"ok":false,"error":"stale document version"}),
+            ),
+            Err(CommandError::Edit(error)) => (
+                Task::none(),
+                serde_json::json!({"ok":false,"error":format!("annotation edit failed: {error:?}")}),
+            ),
+        }
+    }
+
     fn update_inner(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::ExternalRequest(_) => return Task::none(),
+            Message::ToggleFileMenu => self.file_menu_open = !self.file_menu_open,
+            Message::SelectFileOpenPanel => self.file_menu_open = true,
+            Message::CloseFileMenu => self.file_menu_open = false,
+            Message::ShowAbout => {
+                self.file_menu_open = false;
+                self.about_dialog = true;
+            }
+            Message::CloseAbout => self.about_dialog = false,
+            Message::ShowExtensions => {
+                self.file_menu_open = false;
+                self.extension_import_dialog = false;
+                self.extensions_dialog = true;
+                if self.extension_html.text().is_empty() {
+                    self.extension_html = iced::widget::text_editor::Content::with_text(
+                        extension_builder::default_html(),
+                    );
+                }
+                if self.extension_javascript.text().is_empty() {
+                    self.extension_javascript = iced::widget::text_editor::Content::with_text(
+                        extension_builder::default_javascript(),
+                    );
+                }
+            }
+            Message::ShowExtensionImport => {
+                self.file_menu_open = false;
+                self.extensions_dialog = false;
+                self.extension_import_dialog = true;
+                self.extension_error.clear();
+            }
+            Message::CloseExtensions => self.extensions_dialog = false,
+            Message::CloseExtensionImport => self.extension_import_dialog = false,
+            Message::ExtensionIdChanged(value) => self.extension_id = value,
+            Message::ExtensionNameChanged(value) => self.extension_name = value,
+            Message::ExtensionOutputChanged(value) => self.extension_output = value,
+            Message::ExtensionImportPathChanged(value) => self.extension_import_path = value,
+            Message::ImportExtension => {
+                match extension_builder::import(Path::new(self.extension_import_path.trim())) {
+                    Ok(draft) => {
+                        self.extension_id = draft.id;
+                        self.extension_name = draft.name;
+                        self.extension_html =
+                            iced::widget::text_editor::Content::with_text(&draft.html);
+                        self.extension_javascript =
+                            iced::widget::text_editor::Content::with_text(&draft.javascript);
+                        self.extension_output.clear();
+                        self.extension_error.clear();
+                        self.extension_import_dialog = false;
+                        self.extensions_dialog = true;
+                    }
+                    Err(error) => self.extension_error = error,
+                }
+            }
+            Message::ExtensionHtmlEdited(action) => self.extension_html.perform(action),
+            Message::ExtensionJavascriptEdited(action) => self.extension_javascript.perform(action),
+            Message::BuildExtension => {
+                let output = PathBuf::from(self.extension_output.trim());
+                match extension_builder::build(
+                    &output,
+                    self.extension_id.trim(),
+                    &self.extension_name,
+                    &self.extension_html.text(),
+                    &self.extension_javascript.text(),
+                ) {
+                    Ok(()) => {
+                        self.extension_error.clear();
+                        self.message = format!("Extension package created: {}", output.display());
+                    }
+                    Err(error) => self.extension_error = error,
+                }
+            }
+            Message::EscapeOverlay => {
+                if self.new_dialog {
+                    self.new_dialog = false;
+                } else if self.pending_delete_annotation.is_some() {
+                    self.pending_delete_annotation = None;
+                } else if self.pending_clear_annotations.is_some() {
+                    self.pending_clear_annotations = None;
+                } else if self.extension_import_dialog {
+                    self.extension_import_dialog = false;
+                } else if self.extensions_dialog {
+                    self.extensions_dialog = false;
+                } else if self.about_dialog {
+                    self.about_dialog = false;
+                } else if self.import_dialog {
+                    self.import_dialog = false;
+                } else if self.xfdf_export_dialog {
+                    self.xfdf_export_dialog = false;
+                } else if self.file_menu_open {
+                    self.file_menu_open = false;
+                }
+            }
+            Message::CaptureUiScreenshot => {
+                return window::oldest()
+                    .and_then(window::screenshot)
+                    .map(Message::UiScreenshotCaptured);
+            }
+            Message::UiScreenshotCaptured(screenshot) => {
+                if let Some(path) = std::env::var_os("OPDS_UI_SCREENSHOT_RGBA") {
+                    let path = PathBuf::from(path);
+                    let _ = std::fs::write(&path, screenshot.rgba.as_ref());
+                    let _ = std::fs::write(
+                        path.with_extension("size"),
+                        format!("{} {}\n", screenshot.size.width, screenshot.size.height),
+                    );
+                }
+                return window::oldest().and_then(window::close);
+            }
             Message::ShowOpen => {
+                self.file_menu_open = false;
                 self.open_dialog = true;
                 let initial = self
                     .document
@@ -3922,8 +7720,33 @@ impl App {
                 return scroll_browser_to(0.0);
             }
             Message::SelectPdf(path) => {
+                self.file_menu_open = false;
                 self.path_input = path.to_string_lossy().into_owned();
                 return self.update(Message::Open);
+            }
+            Message::RecentSearchChanged(query) => self.recent_query = query,
+            Message::TogglePinnedRecents => {
+                self.pinned_recents_collapsed = !self.pinned_recents_collapsed;
+            }
+            Message::ToggleUnpinnedRecents => {
+                self.unpinned_recents_collapsed = !self.unpinned_recents_collapsed;
+            }
+            Message::ToggleRecentPinned(path) => {
+                if let Some(entry) = self
+                    .recent_files
+                    .iter_mut()
+                    .find(|entry| entry.path == path)
+                {
+                    entry.pinned = !entry.pinned;
+                    self.persist_recent_files();
+                }
+            }
+            Message::RemoveRecent(path) => {
+                let before = self.recent_files.len();
+                self.recent_files.retain(|entry| entry.path != path);
+                if self.recent_files.len() != before {
+                    self.persist_recent_files();
+                }
             }
             Message::BrowserSearchChanged(query) => {
                 self.browser_query = query;
@@ -3934,16 +7757,51 @@ impl App {
                 self.browser_scroll_y = viewport.absolute_offset().y;
             }
             Message::ShowSave => {
+                self.file_menu_open = false;
                 if let Some(document) = &self.document {
                     let path = std::path::Path::new(&document.path);
                     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-                    self.save_path_input = path
-                        .with_file_name(format!("{stem}-annotated.pdf"))
-                        .to_string_lossy()
-                        .into_owned();
+                    self.save_path_input = if document.is_new {
+                        "Untitled.pdf".into()
+                    } else {
+                        path.with_file_name(format!("{stem}-annotated.pdf"))
+                            .to_string_lossy()
+                            .into_owned()
+                    };
                     self.save_dialog = true;
                     self.save_scroll_offset = Some(self.page_scroll_offset);
                 }
+            }
+            Message::Save => {
+                if self.save_busy {
+                    return Task::none();
+                }
+                let Some((path, expected_digest)) = self.saved_target.clone() else {
+                    return self.update(Message::ShowSave);
+                };
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                let source = Arc::clone(&document.source_bytes);
+                let annotations: Vec<_> = document.model.items().cloned().collect();
+                let saved_annotations = annotations.clone();
+                let token = self.next_load;
+                self.file_menu_open = false;
+                self.save_busy = true;
+                self.message = "Saving PDF…".into();
+                return Task::perform(
+                    async move {
+                        let bytes = pdf_save::export_annotations(&source, &annotations)?;
+                        pdf_save::replace_unchanged(
+                            std::path::Path::new(&path),
+                            expected_digest,
+                            &bytes,
+                        )?;
+                        let digest = pdf_save::saved_bytes_digest(&bytes);
+                        Ok((path, saved_annotations, digest))
+                    },
+                    move |result| Message::Saved(token, result),
+                );
             }
             Message::CancelSave => {
                 self.save_dialog = false;
@@ -3965,7 +7823,9 @@ impl App {
                     self.message = "Enter a destination PDF path".into();
                     return Task::none();
                 }
-                if std::path::Path::new(&path) == std::path::Path::new(&document.path) {
+                if !document.is_new
+                    && std::path::Path::new(&path) == std::path::Path::new(&document.path)
+                {
                     self.message = "Choose a different path for Save As".into();
                     return Task::none();
                 }
@@ -3980,7 +7840,8 @@ impl App {
                     async move {
                         let bytes = pdf_save::export_annotations(&source, &annotations)?;
                         pdf_save::save_new(std::path::Path::new(&path), &bytes)?;
-                        Ok((path, saved_annotations))
+                        let digest = pdf_save::saved_bytes_digest(&bytes);
+                        Ok((path, saved_annotations, digest))
                     },
                     move |result| Message::Saved(token, result),
                 );
@@ -3991,21 +7852,388 @@ impl App {
                 return save;
             }
             Message::Saved(token, result) => {
-                self.save_busy = false;
                 if token != self.next_load {
                     return Task::none();
                 }
+                self.save_busy = false;
                 match result {
-                    Ok((path, annotations)) => {
+                    Ok((path, annotations, digest)) => {
+                        let mut record_new_path = false;
                         if let Some(document) = &mut self.document {
                             document.last_saved_annotations = annotations;
+                            if document.is_new {
+                                document.path = path.clone();
+                                document.is_new = false;
+                                record_new_path = true;
+                            }
+                            self.saved_target = Some((path.clone(), digest));
+                            self.message = format!("Saved PDF: {path}");
                         }
-                        self.message = format!("Saved PDF: {path}");
+                        if record_new_path {
+                            self.record_recent_file(&path);
+                        }
                     }
                     Err(error) => self.message = format!("Save As failed: {error}"),
                 }
             }
+            Message::ShowImport => {
+                if self.opening_document || self.save_busy {
+                    return Task::none();
+                }
+                self.file_menu_open = false;
+                if let Some(document) = &self.document {
+                    self.import_path_input = Path::new(&document.path)
+                        .with_extension("xfdf")
+                        .to_string_lossy()
+                        .into_owned();
+                    self.import_dialog = true;
+                }
+            }
+            Message::ImportPathChanged(value) => self.import_path_input = value,
+            Message::CancelImport => self.import_dialog = false,
+            Message::ImportXfdf => {
+                if self.opening_document || self.save_busy {
+                    return Task::none();
+                }
+                let Some(document) = &mut self.document else {
+                    return Task::none();
+                };
+                let path = self.import_path_input.trim();
+                if path.is_empty() {
+                    self.message = "Choose an XFDF file".into();
+                    return Task::none();
+                }
+                let expected = document.model.version();
+                let items = match xfdf_import::read(
+                    Path::new(path),
+                    document.model.view().page_count(),
+                    self.next_annotation_id,
+                ) {
+                    Ok(items) => items,
+                    Err(error) => {
+                        self.message = format!("XFDF import failed: {error}");
+                        return Task::none();
+                    }
+                };
+                let Some(next_id) = self.next_annotation_id.checked_add(items.len() as u64) else {
+                    self.message = "XFDF annotation IDs exhausted".into();
+                    return Task::none();
+                };
+                if document.model.items().count().saturating_add(items.len()) > 4096 {
+                    self.message = "XFDF would exceed the 4096-annotation native limit".into();
+                    return Task::none();
+                }
+                let count = items.len();
+                match document
+                    .model
+                    .execute(expected, DocumentCommand::Edit(Edit::AddMany(items)))
+                {
+                    Ok(true) => {
+                        self.next_annotation_id = next_id;
+                        self.import_dialog = false;
+                        self.message = format!("Imported {count} XFDF annotations");
+                        return self.render_content_layer_if_needed();
+                    }
+                    Ok(false) => {}
+                    Err(error) => self.message = format!("XFDF import failed: {error:?}"),
+                }
+            }
+            Message::ShowXfdfExport => {
+                if self.opening_document || self.save_busy {
+                    return Task::none();
+                }
+                self.file_menu_open = false;
+                if let Some(document) = &self.document {
+                    self.xfdf_export_path_input = Path::new(&document.path)
+                        .with_extension("xfdf")
+                        .to_string_lossy()
+                        .into_owned();
+                    self.xfdf_export_dialog = true;
+                }
+            }
+            Message::XfdfExportPathChanged(value) => self.xfdf_export_path_input = value,
+            Message::CancelXfdfExport => self.xfdf_export_dialog = false,
+            Message::ExportXfdf => {
+                if self.opening_document || self.save_busy {
+                    return Task::none();
+                }
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                let path = self.xfdf_export_path_input.trim();
+                if path.is_empty() {
+                    self.message = "Choose an XFDF destination".into();
+                    return Task::none();
+                }
+                let items: Vec<_> = document.model.items().cloned().collect();
+                let name = Path::new(&document.path)
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("document.pdf");
+                match xfdf_export::serialize(&items, name)
+                    .and_then(|bytes| pdf_save::save_new(Path::new(path), &bytes))
+                {
+                    Ok(()) => {
+                        self.xfdf_export_dialog = false;
+                        self.message = format!("Exported {} XFDF annotations", items.len());
+                    }
+                    Err(error) => self.message = format!("XFDF export failed: {error}"),
+                }
+            }
+            Message::ShowExport => {
+                if self.export_busy {
+                    return Task::none();
+                }
+                self.file_menu_open = false;
+                if let Some(document) = &self.document {
+                    self.export_include_annotations = true;
+                    self.export_page = document.model.view().page();
+                    self.export_page_input = (self.export_page + 1).to_string();
+                    self.export_range = image_export::ImagePageRange::Current;
+                    self.export_custom_pages = self.export_page_input.clone();
+                    self.export_path_input =
+                        export_page_path(&document.path, self.export_page + 1, self.export_format);
+                    self.export_dialog = true;
+                    self.export_scroll_offset = Some(self.page_scroll_offset);
+                }
+            }
+            Message::ExportPathChanged(value) => self.export_path_input = value,
+            Message::SelectExportDpi(dpi) => self.export_dpi = dpi,
+            Message::SelectJpegQuality(value) => {
+                if let Ok(quality) = image_export::JpegQuality::new(value) {
+                    self.export_jpeg_quality = quality;
+                }
+            }
+            Message::SetExportAnnotations(value) => self.export_include_annotations = value,
+            Message::SelectExportFormat(format) => {
+                if let Some(document) = &self.document {
+                    let old_default = match self.export_range {
+                        image_export::ImagePageRange::Current => export_page_path(
+                            &document.path,
+                            self.export_page + 1,
+                            self.export_format,
+                        ),
+                        _ => export_pages_folder(&document.path, self.export_format),
+                    };
+                    if self.export_path_input == old_default {
+                        self.export_path_input = match self.export_range {
+                            image_export::ImagePageRange::Current => {
+                                export_page_path(&document.path, self.export_page + 1, format)
+                            }
+                            _ => export_pages_folder(&document.path, format),
+                        };
+                    }
+                }
+                self.export_format = format;
+            }
+            Message::SelectExportRange(range) => {
+                if let Some(document) = &self.document {
+                    let old_default = match self.export_range {
+                        image_export::ImagePageRange::Current => export_page_path(
+                            &document.path,
+                            self.export_page + 1,
+                            self.export_format,
+                        ),
+                        _ => export_pages_folder(&document.path, self.export_format),
+                    };
+                    if self.export_path_input == old_default {
+                        self.export_path_input = match range {
+                            image_export::ImagePageRange::Current => export_page_path(
+                                &document.path,
+                                self.export_page + 1,
+                                self.export_format,
+                            ),
+                            _ => export_pages_folder(&document.path, self.export_format),
+                        };
+                    }
+                    self.export_range = range;
+                }
+            }
+            Message::ExportCustomPagesChanged(value) => self.export_custom_pages = value,
+            Message::ExportPageChanged(value) => {
+                self.export_page_input = value;
+                if let Some(document) = &self.document {
+                    if let Ok(page_number) = self.export_page_input.parse::<usize>() {
+                        if (1..=document.pdf.page_count()).contains(&page_number) {
+                            let old_default = export_page_path(
+                                &document.path,
+                                self.export_page + 1,
+                                self.export_format,
+                            );
+                            if self.export_range == image_export::ImagePageRange::Current
+                                && self.export_path_input == old_default
+                            {
+                                self.export_path_input = export_page_path(
+                                    &document.path,
+                                    page_number,
+                                    self.export_format,
+                                );
+                            }
+                            self.export_page = page_number - 1;
+                        }
+                    }
+                }
+            }
+            Message::ExportPng => {
+                if self.export_busy {
+                    return Task::none();
+                }
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                let pages = match self.export_range {
+                    image_export::ImagePageRange::Current => {
+                        if self.export_page_input.parse::<usize>().ok()
+                            != Some(self.export_page + 1)
+                            || self.export_page >= document.pdf.page_count()
+                        {
+                            self.message =
+                                format!("Choose a page from 1 to {}", document.pdf.page_count());
+                            return Task::none();
+                        }
+                        vec![self.export_page]
+                    }
+                    image_export::ImagePageRange::All => (0..document.pdf.page_count()).collect(),
+                    image_export::ImagePageRange::Custom => {
+                        match image_export::parse_page_range(
+                            &self.export_custom_pages,
+                            document.pdf.page_count(),
+                        ) {
+                            Ok(pages) => pages,
+                            Err(error) => {
+                                self.message = error;
+                                return Task::none();
+                            }
+                        }
+                    }
+                };
+                let path = self.export_path_input.trim().to_owned();
+                if path.is_empty() {
+                    self.message = "Enter a destination path".into();
+                    return Task::none();
+                }
+                let source = Arc::clone(&document.source_bytes);
+                let annotations: Vec<_> = if self.export_include_annotations {
+                    document.model.items().cloned().collect()
+                } else {
+                    Vec::new()
+                };
+                let backend = self.backend;
+                let dpi = self.export_dpi;
+                let format = self.export_format;
+                let quality = self.export_jpeg_quality;
+                let range = self.export_range;
+                let source_name = document.path.clone();
+                let progress_interval = (pages.len() / 100).max(1);
+                let progress_total = pages.len();
+                let cancel = Arc::new(AtomicBool::new(false));
+                self.export_cancel = Some(Arc::clone(&cancel));
+                self.export_busy = true;
+                self.export_completed = 0;
+                self.export_total = pages.len();
+                self.message = format!("Exporting {} page(s) as {format}…", pages.len());
+                let (sender, receiver) = iced::futures::channel::mpsc::unbounded();
+                std::thread::spawn(move || {
+                    let result = (|| {
+                        if range == image_export::ImagePageRange::Current {
+                            image_export::current_page_image_cancellable(
+                                source,
+                                &annotations,
+                                pages[0],
+                                backend,
+                                dpi,
+                                format,
+                                quality,
+                                Path::new(&path),
+                                &cancel,
+                            )?;
+                            let _ = sender.unbounded_send(ExportEvent::Progress(1));
+                            Ok(format!("Exported page {format}: {path}"))
+                        } else {
+                            let count = image_export::selected_pages_image_with_progress(
+                                source,
+                                &annotations,
+                                &pages,
+                                backend,
+                                dpi,
+                                format,
+                                quality,
+                                Path::new(&path),
+                                &source_name,
+                                &cancel,
+                                |completed| {
+                                    if (completed % progress_interval == 0
+                                        || completed == progress_total)
+                                        && sender
+                                            .unbounded_send(ExportEvent::Progress(completed))
+                                            .is_err()
+                                    {
+                                        cancel.store(true, Ordering::Relaxed);
+                                    }
+                                },
+                            )?;
+                            Ok(format!("Exported {count} {format} images to {path}"))
+                        }
+                    })();
+                    let _ = sender.unbounded_send(ExportEvent::Finished(result));
+                });
+                return Task::run(receiver, |event| match event {
+                    ExportEvent::Progress(completed) => Message::ExportProgress(completed),
+                    ExportEvent::Finished(result) => Message::Exported(result),
+                });
+            }
+            Message::ExportProgress(completed) => {
+                if self.export_busy && completed <= self.export_total {
+                    self.export_completed = completed;
+                    if !self
+                        .export_cancel
+                        .as_ref()
+                        .is_some_and(|cancel| cancel.load(Ordering::Relaxed))
+                    {
+                        self.message =
+                            format!("Exporting {completed}/{} pages…", self.export_total);
+                    }
+                }
+            }
+            Message::Exported(result) => {
+                self.export_busy = false;
+                self.export_cancel = None;
+                match result {
+                    Ok(message) => {
+                        self.export_dialog = false;
+                        self.message = message;
+                        if let Some(offset) = self.export_scroll_offset.take() {
+                            self.page_scroll_offset = offset;
+                            return scroll_page_to(offset);
+                        }
+                    }
+                    Err(error) if error == "Export cancelled" => {
+                        self.export_dialog = false;
+                        self.message = error;
+                        if let Some(offset) = self.export_scroll_offset.take() {
+                            self.page_scroll_offset = offset;
+                            return scroll_page_to(offset);
+                        }
+                    }
+                    Err(error) => self.message = format!("Image export failed: {error}"),
+                }
+            }
+            Message::CancelExport => {
+                if self.export_busy {
+                    if let Some(cancel) = &self.export_cancel {
+                        cancel.store(true, Ordering::Relaxed);
+                        self.message = "Cancelling image export after the current page…".into();
+                    }
+                    return Task::none();
+                }
+                self.export_dialog = false;
+                if let Some(offset) = self.export_scroll_offset.take() {
+                    self.page_scroll_offset = offset;
+                    return scroll_page_to(offset);
+                }
+            }
             Message::ShowPrint => {
+                self.file_menu_open = false;
                 if let Some(document) = &self.document {
                     let path = std::path::Path::new(&document.path);
                     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
@@ -4264,6 +8492,10 @@ impl App {
                     return Task::none();
                 };
                 return match action {
+                    PendingAction::New => {
+                        self.allow_discard_once = true;
+                        self.update(Message::NewBlank)
+                    }
                     PendingAction::Open => {
                         self.allow_discard_once = true;
                         self.update(Message::Open)
@@ -4283,11 +8515,25 @@ impl App {
                 return self.render_nearby_thumbnail();
             }
             Message::ToggleProperties => {
+                self.file_menu_open = false;
                 if self.show_annotation_list {
                     self.show_annotation_list = false;
                     self.hide_properties = false;
                 } else {
                     self.hide_properties = !self.hide_properties;
+                }
+            }
+            Message::ToggleSymbolPalette => {
+                self.hide_symbol_palette = !self.hide_symbol_palette;
+            }
+            Message::ShowProperties => {
+                self.file_menu_open = false;
+                self.show_annotation_list = false;
+                self.hide_properties = false;
+            }
+            Message::TogglePropertySection(index) => {
+                if let Some(collapsed) = self.properties_collapsed.get_mut(index) {
+                    *collapsed = !*collapsed;
                 }
             }
             Message::ToggleAnnotationList => {
@@ -4330,11 +8576,86 @@ impl App {
             }
             Message::ToggleKeystrokes => self.keystrokes.toggle(),
             Message::KeystrokePressed(key, modifiers, captured) => {
-                let modal_open = self.open_dialog
+                if self.file_menu_open
+                    && matches!(
+                        key,
+                        iced::keyboard::Key::Named(iced::keyboard::key::Named::Escape)
+                    )
+                {
+                    self.file_menu_open = false;
+                    return Task::none();
+                }
+                let modal_open = self.new_dialog
+                    || self.open_dialog
+                    || self.file_menu_open
+                    || self.about_dialog
                     || self.save_dialog
+                    || self.import_dialog
+                    || self.xfdf_export_dialog
+                    || self.export_dialog
                     || self.print_dialog
                     || self.text_dialog
                     || self.confirm_discard.is_some();
+                let modal_open = modal_open
+                    || self.pending_clear_annotations.is_some()
+                    || self.pending_delete_annotation.is_some();
+                if !captured
+                    && !modal_open
+                    && !modifiers.control()
+                    && matches!(
+                        key,
+                        iced::keyboard::Key::Named(iced::keyboard::key::Named::Delete)
+                    )
+                    && self
+                        .document
+                        .as_ref()
+                        .and_then(|document| document.selected_annotation)
+                        .is_some()
+                {
+                    return self.update(Message::RequestDeleteAnnotation);
+                }
+                // Match the Tauri Drawing workflow: keyboard undo/redo must
+                // reach the same validated DocumentCommand path as the toolbar.
+                // Captured keys belong to an active text field or other widget.
+                if !captured && !modal_open && modifiers.control() && self.document.is_some() {
+                    if let iced::keyboard::Key::Character(character) = &key {
+                        if character.eq_ignore_ascii_case("s") {
+                            return self.update(if modifiers.shift() {
+                                Message::ShowSave
+                            } else {
+                                Message::Save
+                            });
+                        }
+                        if character.eq_ignore_ascii_case("z") {
+                            return self.update(if modifiers.shift() {
+                                Message::Redo
+                            } else {
+                                Message::Undo
+                            });
+                        }
+                        if character.eq_ignore_ascii_case("y") {
+                            return self.update(Message::Redo);
+                        }
+                        if character.eq_ignore_ascii_case("c") && !modifiers.shift() {
+                            return self.update(Message::CopySelectedAnnotation);
+                        }
+                        if character.eq_ignore_ascii_case("x") && !modifiers.shift() {
+                            return self.update(Message::CutSelectedAnnotation);
+                        }
+                        if character.eq_ignore_ascii_case("v") {
+                            return self.update(Message::PasteAnnotation {
+                                in_place: modifiers.shift(),
+                            });
+                        }
+                    }
+                }
+                if !captured && !modal_open && modifiers.control() {
+                    if let iced::keyboard::Key::Character(character) = &key {
+                        if character.eq_ignore_ascii_case("n") {
+                            return self.update(Message::ShowNew);
+                        }
+                    }
+                }
                 if let Some(label) = keystrokes::label(&key, modifiers, captured, modal_open) {
                     if let Some(delay) = self.keystrokes.record(label, Instant::now()) {
                         return keystroke_timeout(delay);
@@ -4352,6 +8673,7 @@ impl App {
                     || (backend == Backend::Dynlex && !cfg!(feature = "dynlex-experimental"))
                     || (backend == Backend::Pdfium && !opds_dynlex_backend::pdfium_available())
                     || (backend == Backend::OwnRust && !opds_dynlex_backend::own_rust_available())
+                    || (backend == Backend::PdfCraft && !opds_dynlex_backend::pdfcraft_available())
                 {
                     return Task::none();
                 }
@@ -4362,6 +8684,13 @@ impl App {
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
                 self.backend_generation = self.backend_generation.wrapping_add(1);
+                self.dynlex_switch_retry = if backend == Backend::Dynlex {
+                    self.document
+                        .as_ref()
+                        .map(|document| (self.backend_generation, document.model.view().ticket()))
+                } else {
+                    None
+                };
                 if let Some(document) = &mut self.document {
                     // The temporary empty bitmap lets Iced clamp the horizontal
                     // scroll offset. Restore the previous viewport only after
@@ -4388,6 +8717,27 @@ impl App {
             Message::PageScrolled(viewport) => {
                 self.page_scroll_offset = viewport.absolute_offset();
             }
+            Message::PanStarted(button, pointer) => {
+                if self.document.is_some() && pointer.iter().all(|n| n.is_finite()) {
+                    self.pan_drag = Some(PanDrag {
+                        button,
+                        start: pointer,
+                        scroll_start: self.page_scroll_offset,
+                    });
+                }
+            }
+            Message::PanMoved(pointer) => {
+                if let Some(drag) = self.pan_drag {
+                    if pointer.iter().all(|n| n.is_finite()) {
+                        let offset = dragged_scroll_offset(drag, pointer);
+                        if offset != self.page_scroll_offset {
+                            self.page_scroll_offset = offset;
+                            return scroll_page_to(offset);
+                        }
+                    }
+                }
+            }
+            Message::PanEnded => self.pan_drag = None,
             Message::ThumbnailsScrolled(viewport) => {
                 let Some(document) = &mut self.document else {
                     return Task::none();
@@ -4402,11 +8752,23 @@ impl App {
             Message::SelectRibbon(tab) => self.active_ribbon = tab,
             Message::ToggleRibbonCollapsed => self.ribbon_collapsed = !self.ribbon_collapsed,
             Message::DragWindow => return window::oldest().and_then(window::drag),
+            Message::ResizeWindow => {
+                if !self.window_maximized {
+                    return window::oldest()
+                        .and_then(|id| window::drag_resize(id, window::Direction::SouthEast));
+                }
+            }
             Message::MinimizeWindow => {
                 return window::oldest().and_then(|id| window::minimize(id, true));
             }
-            Message::MaximizeWindow => return window::oldest().and_then(window::toggle_maximize),
+            Message::MaximizeWindow => {
+                return window::oldest().and_then(|id| {
+                    window::toggle_maximize::<Message>(id)
+                        .chain(window::is_maximized(id).map(Message::WindowMaximized))
+                });
+            }
             Message::CloseWindow => {
+                self.file_menu_open = false;
                 if self.save_busy {
                     self.message = "Wait for Save As to finish".into();
                     return Task::none();
@@ -4419,6 +8781,7 @@ impl App {
                 return window::oldest().and_then(window::close);
             }
             Message::SelectAnnotationTool(tool) => {
+                self.pan_drag = None;
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
                 self.annotation_tool = tool;
@@ -4426,6 +8789,11 @@ impl App {
                 self.annotation_tool_activated = true;
                 if tool == AnnotationTool::Polyline {
                     self.message = "Polyline: click vertices; double-click, Enter or right-click to finish; Esc cancels".into();
+                } else if tool == AnnotationTool::Freehand {
+                    self.message = "Freehand: hold the mouse button and draw".into();
+                } else if tool == AnnotationTool::Hand {
+                    self.message =
+                        "Hand: drag to pan; middle-button drag works with any tool".into();
                 }
             }
             Message::TextEdited(action) => self.text_draft.perform(action),
@@ -4437,20 +8805,26 @@ impl App {
                     ));
                 }
             }
-            Message::SetTextColor(color) => {
-                self.text_color = color;
-                if !self.text_dialog {
-                    if let Some(document) = &mut self.document {
-                        if let Some(id) = document.selected_annotation {
-                            if let Some(mut item) = document.model.get(id).cloned() {
-                                if let Kind::Text { color_rgb, .. } = &mut item.kind {
-                                    if *color_rgb != color {
-                                        *color_rgb = color;
-                                        if document.model.apply(Edit::Replace(item)).is_ok() {
-                                            self.message = "Text color updated".into();
-                                        }
+            Message::SetFormatColor(color) => {
+                if self.text_dialog {
+                    self.text_color = color;
+                } else if let Some(document) = &mut self.document {
+                    if let Some(source) = document
+                        .selected_annotation
+                        .and_then(|id| document.model.get(id))
+                        .filter(|item| item.page == document.displayed_page)
+                    {
+                        if let Some(item) = recolored_annotation(source, color) {
+                            let is_text = matches!(item.kind, Kind::Text { .. });
+                            match document.apply_edit(Edit::Replace(item)) {
+                                Ok(()) => {
+                                    if is_text {
+                                        self.text_color = color;
                                     }
+                                    self.message = "Annotation color updated".into();
+                                    return self.render_content_layer_if_needed();
                                 }
+                                Err(error) => self.message = format!("Color failed: {error:?}"),
                             }
                         }
                     }
@@ -4468,7 +8842,7 @@ impl App {
                                 if let Kind::Text { font_size, .. } = &mut item.kind {
                                     if *font_size != size {
                                         *font_size = size;
-                                        if document.model.apply(Edit::Replace(item)).is_ok() {
+                                        if document.apply_edit(Edit::Replace(item)).is_ok() {
                                             self.message = "Text size updated".into();
                                         }
                                     }
@@ -4487,7 +8861,7 @@ impl App {
                                 if let Kind::Text { align, .. } = &mut item.kind {
                                     if *align != value {
                                         *align = value;
-                                        if document.model.apply(Edit::Replace(item)).is_ok() {
+                                        if document.apply_edit(Edit::Replace(item)).is_ok() {
                                             self.message = "Text alignment updated".into();
                                         }
                                     }
@@ -4506,6 +8880,7 @@ impl App {
                 };
                 self.pending_text_bounds = None;
                 self.editing_text_id = None;
+                self.text_dialog_version = None;
                 self.text_draft = iced::widget::text_editor::Content::new();
                 if let Some(offset) = self.text_scroll_offset.take() {
                     self.page_scroll_offset = offset;
@@ -4536,6 +8911,7 @@ impl App {
                             self.text_align = *align;
                             self.editing_text_id = Some(id);
                             self.pending_text_bounds = None;
+                            self.text_dialog_version = Some(document.model.version());
                             self.text_dialog = true;
                             self.active_ribbon = RibbonTab::Format;
                             self.text_scroll_offset = Some(self.page_scroll_offset);
@@ -4554,7 +8930,8 @@ impl App {
                     return Task::none();
                 }
                 if let Some(document) = &mut self.document {
-                    if let Some(id) = self.editing_text_id {
+                    let expected = self.text_dialog_version;
+                    if let (Some(expected), Some(id)) = (expected, self.editing_text_id) {
                         if let Some(mut item) = document.model.get(id).cloned() {
                             if matches!(item.kind, Kind::Text { .. }) {
                                 item.kind = Kind::Text {
@@ -4563,15 +8940,21 @@ impl App {
                                     font_size: self.text_font_size,
                                     align: self.text_align,
                                 };
-                                match document.model.apply(Edit::Replace(item)) {
-                                    Ok(()) => self.message = "Text annotation updated".into(),
+                                match document
+                                    .model
+                                    .execute(expected, DocumentCommand::Edit(Edit::Replace(item)))
+                                {
+                                    Ok(true) => self.message = "Text annotation updated".into(),
+                                    Ok(false) => {}
                                     Err(error) => {
                                         self.message = format!("Text edit failed: {error:?}")
                                     }
                                 }
                             }
                         }
-                    } else if let Some(bounds) = self.pending_text_bounds {
+                    } else if let (Some(expected), Some(bounds)) =
+                        (expected, self.pending_text_bounds)
+                    {
                         let item = Annotation {
                             id: self.next_annotation_id,
                             page: document.displayed_page,
@@ -4583,12 +8966,16 @@ impl App {
                                 align: self.text_align,
                             },
                         };
-                        match document.model.apply(Edit::Add(item)) {
-                            Ok(()) => {
+                        match document
+                            .model
+                            .execute(expected, DocumentCommand::Edit(Edit::Add(item)))
+                        {
+                            Ok(true) => {
                                 document.selected_annotation = Some(self.next_annotation_id);
                                 self.next_annotation_id += 1;
                                 self.message = "Text annotation added".into();
                             }
+                            Ok(false) => {}
                             Err(error) => {
                                 self.message = format!("Text annotation failed: {error:?}")
                             }
@@ -4599,6 +8986,7 @@ impl App {
                 self.active_ribbon = RibbonTab::Format;
                 self.pending_text_bounds = None;
                 self.editing_text_id = None;
+                self.text_dialog_version = None;
                 self.text_draft = iced::widget::text_editor::Content::new();
                 if let Some(offset) = self.text_scroll_offset.take() {
                     self.page_scroll_offset = offset;
@@ -4635,8 +9023,6 @@ impl App {
                             self.text_font_size = *font_size;
                             self.text_align = *align;
                             self.active_ribbon = RibbonTab::Format;
-                        } else if self.active_ribbon == RibbonTab::Format {
-                            self.active_ribbon = RibbonTab::Comment;
                         }
                     } else if self.active_ribbon == RibbonTab::Format && !self.text_dialog {
                         self.active_ribbon = RibbonTab::Comment;
@@ -4644,15 +9030,238 @@ impl App {
                 }
                 return self.render_content_layer_if_needed();
             }
+            Message::DuplicateSelectedAnnotation => {
+                self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
+                if let Some(document) = &mut self.document {
+                    let Some(selected) = document
+                        .selected_annotation
+                        .and_then(|id| document.model.get(id))
+                        .filter(|item| item.page == document.displayed_page)
+                    else {
+                        return Task::none();
+                    };
+                    let Ok(page_size) = document.pdf.page_dimensions(document.displayed_page + 1)
+                    else {
+                        self.message = "Could not read the page size".into();
+                        return Task::none();
+                    };
+                    let Some(next_id) = self.next_annotation_id.checked_add(1) else {
+                        self.message = "Annotation ID limit reached".into();
+                        return Task::none();
+                    };
+                    let scale = document.model.view().viewport().scale();
+                    let Some(copy) =
+                        duplicate_annotation(selected, self.next_annotation_id, scale, page_size)
+                    else {
+                        self.message = "No room to duplicate the annotation on this page".into();
+                        return Task::none();
+                    };
+                    let expected = document.model.version();
+                    match document
+                        .model
+                        .execute(expected, DocumentCommand::Edit(Edit::Add(copy)))
+                    {
+                        Ok(true) => {
+                            document.selected_annotation = Some(self.next_annotation_id);
+                            self.next_annotation_id = next_id;
+                            self.message = "Annotation duplicated".into();
+                        }
+                        Ok(false) => {}
+                        Err(error) => self.message = format!("Duplicate failed: {error:?}"),
+                    }
+                }
+                return self.render_content_layer_if_needed();
+            }
+            Message::MirrorSelectedAnnotation { horizontal } => {
+                self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
+                let Some(document) = self.document.as_mut() else {
+                    return Task::none();
+                };
+                let Some(source) = document
+                    .selected_annotation
+                    .and_then(|id| document.model.get(id))
+                    .filter(|item| item.page == document.displayed_page)
+                else {
+                    return Task::none();
+                };
+                let Ok(page_size) = document.pdf.page_dimensions(document.displayed_page + 1)
+                else {
+                    self.message = "Could not read the page size".into();
+                    return Task::none();
+                };
+                let Some(mirrored) = mirror_annotation(source, horizontal, page_size) else {
+                    return Task::none();
+                };
+                let expected = document.model.version();
+                match document
+                    .model
+                    .execute(expected, DocumentCommand::Edit(Edit::Replace(mirrored)))
+                {
+                    Ok(true) => self.message = "Annotation mirrored".into(),
+                    Ok(false) => {}
+                    Err(error) => self.message = format!("Mirror failed: {error:?}"),
+                }
+                return self.render_content_layer_if_needed();
+            }
+            Message::RotateSelectedAnnotation => {
+                self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
+                let Some(document) = self.document.as_mut() else {
+                    return Task::none();
+                };
+                let Some(source) = document
+                    .selected_annotation
+                    .and_then(|id| document.model.get(id))
+                    .filter(|item| item.page == document.displayed_page)
+                else {
+                    return Task::none();
+                };
+                let Ok(page_size) = document.pdf.page_dimensions(document.displayed_page + 1)
+                else {
+                    self.message = "Could not read the page size".into();
+                    return Task::none();
+                };
+                let Some(rotated) = rotate_annotation_clockwise_90(source, page_size) else {
+                    self.message = "No room to rotate the annotation on this page".into();
+                    return Task::none();
+                };
+                let expected = document.model.version();
+                match document
+                    .model
+                    .execute(expected, DocumentCommand::Edit(Edit::Replace(rotated)))
+                {
+                    Ok(true) => self.message = "Annotation rotated 90°".into(),
+                    Ok(false) => {}
+                    Err(error) => self.message = format!("Rotate failed: {error:?}"),
+                }
+                return self.render_content_layer_if_needed();
+            }
+            Message::CopySelectedAnnotation => {
+                let selected = self.document.as_ref().and_then(|document| {
+                    document
+                        .selected_annotation
+                        .and_then(|id| document.model.get(id))
+                        .filter(|item| item.page == document.displayed_page)
+                });
+                if let Some(annotation) = selected {
+                    self.clipboard_annotation = Some(annotation.clone());
+                    self.clipboard_paste_count = 0;
+                    self.message = "Annotation copied".into();
+                }
+            }
+            Message::CutSelectedAnnotation => {
+                if self.text_dialog
+                    || self.save_busy
+                    || self.pending_delete_annotation.is_some()
+                    || self.pending_clear_annotations.is_some()
+                {
+                    return Task::none();
+                }
+                self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
+                let Some(document) = self.document.as_mut() else {
+                    return Task::none();
+                };
+                let Some(source) = document
+                    .selected_annotation
+                    .and_then(|id| document.model.get(id))
+                    .filter(|item| item.page == document.displayed_page)
+                    .cloned()
+                else {
+                    return Task::none();
+                };
+                let expected = document.model.version();
+                match document
+                    .model
+                    .execute(expected, DocumentCommand::Edit(Edit::Remove(source.id)))
+                {
+                    Ok(true) => {
+                        document.selected_annotation = None;
+                        self.clipboard_annotation = Some(source);
+                        self.clipboard_paste_count = 0;
+                        if self.active_ribbon == RibbonTab::Format {
+                            self.active_ribbon = RibbonTab::Comment;
+                        }
+                        self.message = "Annotation cut".into();
+                    }
+                    Ok(false) => {}
+                    Err(error) => self.message = format!("Cut failed: {error:?}"),
+                }
+                return self.render_content_layer_if_needed();
+            }
+            Message::PasteAnnotation { in_place } => {
+                self.annotation_gesture_active = false;
+                self.annotation_gesture_preview = None;
+                let Some(source) = self.clipboard_annotation.as_ref() else {
+                    return Task::none();
+                };
+                let Some(document) = self.document.as_mut() else {
+                    return Task::none();
+                };
+                let Ok(page_size) = document.pdf.page_dimensions(document.displayed_page + 1)
+                else {
+                    self.message = "Could not read the page size".into();
+                    return Task::none();
+                };
+                let Some(next_id) = self.next_annotation_id.checked_add(1) else {
+                    self.message = "Annotation ID limit reached".into();
+                    return Task::none();
+                };
+                let sequence = if in_place {
+                    self.clipboard_paste_count
+                } else {
+                    let Some(sequence) = self.clipboard_paste_count.checked_add(1) else {
+                        self.message = "Paste limit reached".into();
+                        return Task::none();
+                    };
+                    sequence
+                };
+                let offset_px = if in_place {
+                    0.0
+                } else {
+                    20.0 * f64::from(sequence)
+                };
+                let scale = document.model.view().viewport().scale();
+                let Some(mut copy) = copy_annotation_with_offset(
+                    source,
+                    self.next_annotation_id,
+                    scale,
+                    page_size,
+                    offset_px,
+                ) else {
+                    self.message = "No room to paste the annotation on this page".into();
+                    return Task::none();
+                };
+                copy.page = document.displayed_page;
+                let expected = document.model.version();
+                match document
+                    .model
+                    .execute(expected, DocumentCommand::Edit(Edit::Add(copy)))
+                {
+                    Ok(true) => {
+                        document.selected_annotation = Some(self.next_annotation_id);
+                        self.next_annotation_id = next_id;
+                        self.clipboard_paste_count = sequence;
+                        self.message = "Annotation pasted".into();
+                    }
+                    Ok(false) => {}
+                    Err(error) => self.message = format!("Paste failed: {error:?}"),
+                }
+                return self.render_content_layer_if_needed();
+            }
             Message::AnnotationGestureStarted => {
                 self.annotation_gesture_active = true;
                 self.annotation_gesture_preview = None;
             }
-            Message::AnnotationGesturePreview(id, bounds) => {
+            Message::AnnotationGesturePreview(expected, id, bounds) => {
                 self.annotation_gesture_preview = None;
                 if self.annotation_gesture_active && self.backend == Backend::Dynlex {
                     if let Some(document) = self.document.as_ref() {
-                        if document.selected_annotation == Some(id) {
+                        if document.model.version() == expected
+                            && document.selected_annotation == Some(id)
+                        {
                             let annotations: Vec<_> = document
                                 .model
                                 .items()
@@ -4679,57 +9288,42 @@ impl App {
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
             }
-            Message::MoveAnnotation(id, delta) => {
+            Message::MoveAnnotation(expected, id, delta) => {
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
                 if let Some(document) = &mut self.document {
-                    if document.selected_annotation == Some(id)
+                    if document.model.version() == expected
+                        && document.selected_annotation == Some(id)
                         && delta.iter().all(|value| value.is_finite())
                     {
-                        if let Some(mut item) = document.model.get(id).cloned() {
-                            let previous = item.bounds;
-                            let max_x = (f64::from(document.bitmap_page_points.0)
-                                - item.bounds.width)
-                                .max(0.0);
-                            let max_y = (f64::from(document.bitmap_page_points.1)
-                                - item.bounds.height)
-                                .max(0.0);
-                            item.bounds.x = (item.bounds.x + delta[0]).clamp(0.0, max_x);
-                            item.bounds.y = (item.bounds.y + delta[1]).clamp(0.0, max_y);
-                            if let Kind::Line { start, end, .. } = &mut item.kind {
-                                let dx = item.bounds.x - previous.x;
-                                let dy = item.bounds.y - previous.y;
-                                for point in [start, end] {
-                                    point[0] += dx;
-                                    point[1] += dy;
-                                }
-                            }
-                            if let Kind::Polyline { points, .. } = &mut item.kind {
-                                let dx = item.bounds.x - previous.x;
-                                let dy = item.bounds.y - previous.y;
-                                for point in points {
-                                    point[0] += dx;
-                                    point[1] += dy;
-                                }
-                            }
-                            if item.bounds != previous {
-                                match document.model.apply(Edit::Replace(item)) {
-                                    Ok(()) => self.message = "Annotation moved".into(),
-                                    Err(error) => self.message = format!("Move failed: {error:?}"),
-                                }
+                        if let Some(item) = document.model.get(id).and_then(|item| {
+                            translated_annotation(item, delta, document.bitmap_page_points)
+                        }) {
+                            match document
+                                .model
+                                .execute(expected, DocumentCommand::Edit(Edit::Replace(item)))
+                            {
+                                Ok(true) => self.message = "Annotation moved".into(),
+                                Ok(false) => {}
+                                Err(error) => self.message = format!("Move failed: {error:?}"),
                             }
                         }
                     }
                 }
             }
-            Message::MoveLineEndpoint(id, move_start, target) => {
+            Message::MoveLineEndpoint(expected, id, move_start, target) => {
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
                 if let Some(document) = &mut self.document {
-                    if document.selected_annotation == Some(id) {
+                    if document.model.version() == expected
+                        && document.selected_annotation == Some(id)
+                    {
                         if let Some(mut item) = document.model.get(id).cloned() {
                             if item.page == document.displayed_page {
-                                if let Kind::Line { start, end, .. } = &mut item.kind {
+                                let is_arrow = matches!(item.kind, Kind::Arrow { .. });
+                                if let Kind::Line { start, end, .. }
+                                | Kind::Arrow { start, end, .. } = &mut item.kind
+                                {
                                     let original = if move_start { *start } else { *end };
                                     if move_start {
                                         *start = target;
@@ -4737,14 +9331,20 @@ impl App {
                                         *end = target;
                                     }
                                     if target != original {
-                                        if let Some(bounds) =
+                                        if let Some(bounds) = if is_arrow {
+                                            arrow_bounds(*start, *end, document.bitmap_page_points)
+                                        } else {
                                             line_bounds(*start, *end, document.bitmap_page_points)
-                                        {
+                                        } {
                                             item.bounds = bounds;
-                                            match document.model.apply(Edit::Replace(item)) {
-                                                Ok(()) => {
+                                            match document.model.execute(
+                                                expected,
+                                                DocumentCommand::Edit(Edit::Replace(item)),
+                                            ) {
+                                                Ok(true) => {
                                                     self.message = "Line endpoint moved".into()
                                                 }
+                                                Ok(false) => {}
                                                 Err(error) => {
                                                     self.message =
                                                         format!("Endpoint failed: {error:?}")
@@ -4761,32 +9361,36 @@ impl App {
                     }
                 }
             }
-            Message::ResizeAnnotation(id, bounds) => {
+            Message::ResizeAnnotation(expected, id, bounds) => {
                 self.annotation_gesture_active = false;
                 self.annotation_gesture_preview = None;
                 if let Some(document) = &mut self.document {
-                    if document.selected_annotation == Some(id) {
-                        let page_width = f64::from(document.bitmap_page_points.0);
-                        let page_height = f64::from(document.bitmap_page_points.1);
-                        if bounds.x < 0.0
+                    if document.model.version() == expected
+                        && document.selected_annotation == Some(id)
+                    {
+                        if let Some(item) = document.model.get(id).and_then(|item| {
+                            (item.page == document.displayed_page)
+                                .then(|| {
+                                    resized_annotation(item, bounds, document.bitmap_page_points)
+                                })
+                                .flatten()
+                        }) {
+                            match document
+                                .model
+                                .execute(expected, DocumentCommand::Edit(Edit::Replace(item)))
+                            {
+                                Ok(true) => self.message = "Annotation resized".into(),
+                                Ok(false) => {}
+                                Err(error) => self.message = format!("Resize failed: {error:?}"),
+                            }
+                        } else if bounds.x < 0.0
                             || bounds.y < 0.0
-                            || bounds.x + bounds.width > page_width + 1e-6
-                            || bounds.y + bounds.height > page_height + 1e-6
+                            || bounds.x + bounds.width
+                                > f64::from(document.bitmap_page_points.0) + 1e-6
+                            || bounds.y + bounds.height
+                                > f64::from(document.bitmap_page_points.1) + 1e-6
                         {
                             self.message = "Resize outside page".into();
-                        } else if let Some(mut item) = document.model.get(id).cloned() {
-                            if matches!(item.kind, Kind::Line { .. } | Kind::Polyline { .. }) {
-                                return Task::none();
-                            }
-                            if item.page == document.displayed_page && item.bounds != bounds {
-                                item.bounds = bounds;
-                                match document.model.apply(Edit::Replace(item)) {
-                                    Ok(()) => self.message = "Annotation resized".into(),
-                                    Err(error) => {
-                                        self.message = format!("Resize failed: {error:?}")
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -4795,23 +9399,111 @@ impl App {
                 self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
                     if let Some(id) = document.selected_annotation {
-                        match document.model.apply(Edit::Remove(id)) {
-                            Ok(()) => {
+                        let expected = document.model.version();
+                        match document
+                            .model
+                            .execute(expected, DocumentCommand::Edit(Edit::Remove(id)))
+                        {
+                            Ok(true) => {
                                 document.selected_annotation = None;
                                 if self.active_ribbon == RibbonTab::Format {
                                     self.active_ribbon = RibbonTab::Comment;
                                 }
                                 self.message = "Annotation removed".into();
                             }
+                            Ok(false) => {}
                             Err(error) => self.message = format!("Delete failed: {error:?}"),
                         }
                     }
                 }
             }
-            Message::AddAnnotation(bounds) => {
+            Message::RequestDeleteAnnotation => {
+                if self.text_dialog
+                    || self.save_busy
+                    || self.pending_delete_annotation.is_some()
+                    || self.pending_clear_annotations.is_some()
+                {
+                    return Task::none();
+                }
+                if let Some(document) = &self.document {
+                    if let Some(id) = document.selected_annotation {
+                        self.pending_delete_annotation = Some((document.model.version(), id));
+                    }
+                }
+            }
+            Message::CancelDeleteAnnotation => self.pending_delete_annotation = None,
+            Message::ConfirmDeleteAnnotation => {
+                let Some((expected, id)) = self.pending_delete_annotation.take() else {
+                    return Task::none();
+                };
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                if document.model.version() != expected || document.selected_annotation != Some(id)
+                {
+                    self.message = "Delete cancelled: document or selection changed".into();
+                    return Task::none();
+                }
+                return self.update(Message::RemoveSelectedAnnotation);
+            }
+            Message::RequestClearAnnotations(page) => {
+                if self.text_dialog || self.save_busy || self.pending_clear_annotations.is_some() {
+                    return Task::none();
+                }
+                let Some(document) = &self.document else {
+                    return Task::none();
+                };
+                if page.is_some_and(|page| page != document.model.view().page()) {
+                    return Task::none();
+                }
+                if !document
+                    .model
+                    .items()
+                    .any(|item| page.is_none_or(|page| item.page == page))
+                {
+                    return Task::none();
+                }
+                self.pending_clear_annotations = Some((document.model.version(), page));
+            }
+            Message::CancelClearAnnotations => self.pending_clear_annotations = None,
+            Message::ConfirmClearAnnotations => {
+                let Some((expected, page)) = self.pending_clear_annotations.take() else {
+                    return Task::none();
+                };
+                let Some(document) = &mut self.document else {
+                    return Task::none();
+                };
+                match document
+                    .model
+                    .execute(expected, DocumentCommand::Edit(Edit::Clear { page }))
+                {
+                    Ok(true) => {
+                        document.selected_annotation = None;
+                        self.annotation_gesture_active = false;
+                        self.annotation_gesture_preview = None;
+                        self.message = if page.is_some() {
+                            "Page annotations cleared".into()
+                        } else {
+                            "All annotations cleared".into()
+                        };
+                    }
+                    Ok(false) => {}
+                    Err(error) => self.message = format!("Clear failed: {error:?}"),
+                }
+            }
+            Message::AddAnnotation(expected, bounds) => {
+                if self
+                    .document
+                    .as_ref()
+                    .map(|document| document.model.version())
+                    != Some(expected)
+                {
+                    return Task::none();
+                }
                 if self.annotation_tool == AnnotationTool::Text {
                     self.pending_text_bounds = Some(bounds);
                     self.editing_text_id = None;
+                    self.text_dialog_version = Some(expected);
                     self.text_draft = iced::widget::text_editor::Content::new();
                     self.text_color = [0, 0, 0];
                     self.text_font_size = DEFAULT_TEXT_FONT_SIZE;
@@ -4823,62 +9515,107 @@ impl App {
                 }
                 if let Some(document) = &mut self.document {
                     let color_rgb = match self.annotation_tool {
-                        AnnotationTool::Rectangle => [231, 76, 60],
-                        AnnotationTool::Line => return Task::none(),
-                        AnnotationTool::Polyline => return Task::none(),
+                        AnnotationTool::Rectangle
+                        | AnnotationTool::Circle
+                        | AnnotationTool::Ellipse
+                        | AnnotationTool::Polygon => [231, 76, 60],
+                        AnnotationTool::Line | AnnotationTool::Arrow => return Task::none(),
+                        AnnotationTool::Polyline | AnnotationTool::Freehand => return Task::none(),
                         AnnotationTool::Highlight => [255, 226, 67],
                         AnnotationTool::Select => return Task::none(),
+                        AnnotationTool::Hand => return Task::none(),
                         AnnotationTool::Text => unreachable!("handled above"),
                     };
                     let item = Annotation {
                         id: self.next_annotation_id,
                         page: document.displayed_page,
                         bounds,
-                        kind: Kind::Rectangle { color_rgb },
+                        kind: if self.annotation_tool == AnnotationTool::Polygon {
+                            Kind::Polygon { color_rgb }
+                        } else if matches!(
+                            self.annotation_tool,
+                            AnnotationTool::Circle | AnnotationTool::Ellipse
+                        ) {
+                            Kind::Ellipse { color_rgb }
+                        } else {
+                            Kind::Rectangle { color_rgb }
+                        },
                     };
-                    match document.model.apply(Edit::Add(item)) {
-                        Ok(()) => {
+                    match document
+                        .model
+                        .execute(expected, DocumentCommand::Edit(Edit::Add(item)))
+                    {
+                        Ok(true) => {
                             document.selected_annotation = Some(self.next_annotation_id);
                             self.next_annotation_id += 1;
                             self.message = "Annotation added".into();
                         }
+                        Ok(false) => {}
                         Err(error) => self.message = format!("Annotation failed: {error:?}"),
                     }
                 }
             }
-            Message::AddLine(start, end) => {
-                if self.annotation_tool != AnnotationTool::Line {
+            Message::AddLine(expected, start, end) => {
+                if !matches!(
+                    self.annotation_tool,
+                    AnnotationTool::Line | AnnotationTool::Arrow
+                ) {
                     return Task::none();
                 }
                 if let Some(document) = &mut self.document {
-                    let Some(bounds) = line_bounds(start, end, document.bitmap_page_points) else {
+                    if document.model.version() != expected {
+                        return Task::none();
+                    }
+                    let Some(bounds) = (if self.annotation_tool == AnnotationTool::Arrow {
+                        arrow_bounds(start, end, document.bitmap_page_points)
+                    } else {
+                        line_bounds(start, end, document.bitmap_page_points)
+                    }) else {
                         return Task::none();
                     };
                     let item = Annotation {
                         id: self.next_annotation_id,
                         page: document.displayed_page,
                         bounds,
-                        kind: Kind::Line {
-                            start,
-                            end,
-                            color_rgb: [231, 76, 60],
+                        kind: if self.annotation_tool == AnnotationTool::Arrow {
+                            Kind::Arrow {
+                                start,
+                                end,
+                                color_rgb: [231, 76, 60],
+                            }
+                        } else {
+                            Kind::Line {
+                                start,
+                                end,
+                                color_rgb: [231, 76, 60],
+                            }
                         },
                     };
-                    match document.model.apply(Edit::Add(item)) {
-                        Ok(()) => {
+                    match document
+                        .model
+                        .execute(expected, DocumentCommand::Edit(Edit::Add(item)))
+                    {
+                        Ok(true) => {
                             document.selected_annotation = Some(self.next_annotation_id);
                             self.next_annotation_id += 1;
                             self.message = "Line added".into();
                         }
+                        Ok(false) => {}
                         Err(error) => self.message = format!("Line failed: {error:?}"),
                     }
                 }
             }
-            Message::AddPolyline(points) => {
-                if self.annotation_tool != AnnotationTool::Polyline {
+            Message::AddPolyline(expected, points) => {
+                if !matches!(
+                    self.annotation_tool,
+                    AnnotationTool::Polyline | AnnotationTool::Freehand
+                ) {
                     return Task::none();
                 }
                 if let Some(document) = &mut self.document {
+                    if document.model.version() != expected {
+                        return Task::none();
+                    }
                     let Some(bounds) = polyline_bounds(&points, document.bitmap_page_points) else {
                         self.message = "Invalid polyline geometry".into();
                         return Task::none();
@@ -4892,12 +9629,20 @@ impl App {
                             color_rgb: [231, 76, 60],
                         },
                     };
-                    match document.model.apply(Edit::Add(item)) {
-                        Ok(()) => {
+                    match document
+                        .model
+                        .execute(expected, DocumentCommand::Edit(Edit::Add(item)))
+                    {
+                        Ok(true) => {
                             document.selected_annotation = Some(self.next_annotation_id);
                             self.next_annotation_id += 1;
-                            self.message = "Polyline added".into();
+                            self.message = if self.annotation_tool == AnnotationTool::Freehand {
+                                "Freehand stroke added".into()
+                            } else {
+                                "Polyline added".into()
+                            };
                         }
+                        Ok(false) => {}
                         Err(error) => self.message = format!("Polyline failed: {error:?}"),
                     }
                 }
@@ -4905,7 +9650,8 @@ impl App {
             Message::Undo => {
                 self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
-                    if let Err(error) = document.model.undo() {
+                    let expected = document.model.version();
+                    if let Err(error) = document.model.execute(expected, DocumentCommand::Undo) {
                         self.message = format!("Undo failed: {error:?}");
                     }
                     if document
@@ -4923,11 +9669,130 @@ impl App {
             Message::Redo => {
                 self.annotation_gesture_active = false;
                 if let Some(document) = &mut self.document {
-                    if let Err(error) = document.model.redo() {
+                    let expected = document.model.version();
+                    if let Err(error) = document.model.execute(expected, DocumentCommand::Redo) {
                         self.message = format!("Redo failed: {error:?}");
                     }
                 }
                 return self.render_content_layer_if_needed();
+            }
+            Message::ShowNew => {
+                if self.save_busy || self.opening_document {
+                    return Task::none();
+                }
+                self.file_menu_open = false;
+                self.new_dialog = true;
+                self.new_paper = blank_pdf::Paper::A4;
+                self.new_landscape = false;
+                self.new_pages_input = "1".into();
+                self.new_custom_width_mm = "210".into();
+                self.new_custom_height_mm = "297".into();
+                self.new_error.clear();
+            }
+            Message::CancelNew => self.new_dialog = false,
+            Message::NewPaperSelected(paper) => {
+                self.new_paper = paper;
+                self.new_error.clear();
+            }
+            Message::NewLandscape(landscape) => self.new_landscape = landscape,
+            Message::NewPagesChanged(value) => self.new_pages_input = value,
+            Message::NewCustomWidthChanged(value) => self.new_custom_width_mm = value,
+            Message::NewCustomHeightChanged(value) => self.new_custom_height_mm = value,
+            Message::NewBlank => {
+                if self.save_busy {
+                    self.message = "Wait for Save As to finish".into();
+                    return Task::none();
+                }
+                let page_count = match self.new_pages_input.trim().parse::<u16>() {
+                    Ok(count) if (1..=999).contains(&count) => count,
+                    _ => {
+                        self.new_error = "Page count must be 1–999".into();
+                        return Task::none();
+                    }
+                };
+                let custom_mm = if self.new_paper == blank_pdf::Paper::Custom {
+                    let width = self.new_custom_width_mm.trim().parse::<f64>();
+                    let height = self.new_custom_height_mm.trim().parse::<f64>();
+                    match (width, height) {
+                        (Ok(width), Ok(height)) => (width, height),
+                        _ => {
+                            self.new_error = "Enter numeric custom dimensions in mm".into();
+                            return Task::none();
+                        }
+                    }
+                } else {
+                    (0.0, 0.0)
+                };
+                let size =
+                    match blank_pdf::dimensions(self.new_paper, self.new_landscape, custom_mm) {
+                        Ok(size) => size,
+                        Err(error) => {
+                            self.new_error = error;
+                            return Task::none();
+                        }
+                    };
+                self.new_dialog = false;
+                if !self.allow_discard_once && self.has_unsaved_work() {
+                    self.confirm_discard = Some(PendingAction::New);
+                    return Task::none();
+                }
+                self.allow_discard_once = false;
+                self.file_menu_open = false;
+                self.next_load += 1;
+                let token = self.next_load;
+                let backend = self.backend;
+                let window_size = self.window_size;
+                let pages_visible = !self.hide_pages;
+                let properties_visible = !self.hide_properties;
+                let symbols_visible = !self.hide_symbol_palette;
+                let ribbon_collapsed = self.ribbon_collapsed;
+                self.busy = true;
+                self.opening_document = true;
+                self.render_queued = false;
+                self.zoom_render_due = None;
+                self.message = "Creating blank PDF…".into();
+                return Task::perform(
+                    async move {
+                        let bytes = Arc::new(blank_pdf::create(size.0, size.1, page_count)?);
+                        let pdf = Arc::new(
+                            ParsedPdf::open(Arc::clone(&bytes))
+                                .map_err(|error| error.to_string())?,
+                        );
+                        let size = pdf.page_dimensions(1).map_err(|error| error.to_string())?;
+                        let scale = fit_scale(
+                            FitMode::Page,
+                            size,
+                            window_size,
+                            pages_visible,
+                            properties_visible,
+                            symbols_visible,
+                            ribbon_collapsed,
+                        )
+                        .unwrap_or(1.0) as f32;
+                        let dynlex_document = (backend == Backend::Dynlex).then(|| {
+                            DynlexOpen(Arc::new(opds_dynlex_backend::DynlexDocument::new(
+                                Arc::clone(&bytes),
+                            )))
+                        });
+                        let (scale, outcome) = if let Some(document) = &dynlex_document {
+                            render_initial_dynlex_page(&pdf, &document.0, 1, scale)
+                        } else {
+                            render_initial_selected_page(&pdf, &bytes, 1, scale, backend)
+                        };
+                        Ok((
+                            "Untitled.pdf".to_owned(),
+                            bytes,
+                            pdf,
+                            dynlex_document,
+                            1,
+                            scale,
+                            None,
+                            outcome,
+                            true,
+                        ))
+                    },
+                    move |result| Message::Loaded(token, result),
+                );
             }
             Message::Open => {
                 if self.save_busy {
@@ -4948,6 +9813,11 @@ impl App {
                 self.next_load += 1;
                 let token = self.next_load;
                 let backend = self.backend;
+                let window_size = self.window_size;
+                let pages_visible = !self.hide_pages;
+                let properties_visible = !self.hide_properties;
+                let symbol_palette_visible = !self.hide_symbol_palette;
+                let ribbon_collapsed = self.ribbon_collapsed;
                 self.busy = true;
                 self.opening_document = true;
                 self.render_queued = false;
@@ -4965,31 +9835,45 @@ impl App {
                         let initial_page = saved
                             .map(|position| position.page.min(pdf.page_count()))
                             .unwrap_or(1);
-                        let (page_width, _) = pdf
+                        let page_size = pdf
                             .page_dimensions(initial_page)
                             .map_err(|error| error.to_string())?;
-                        let initial_scale = if backend == Backend::Dynlex {
-                            1.0
+                        // The original viewer opens a page fitted to the available
+                        // canvas. Use the same dock-aware fit calculation as the
+                        // visible Fit Page button, rather than a fixed 550 px
+                        // target that leaves small PDFs tiny on a large screen.
+                        let fit = fit_scale(
+                            FitMode::Page,
+                            page_size,
+                            window_size,
+                            pages_visible,
+                            properties_visible,
+                            symbol_palette_visible,
+                            ribbon_collapsed,
+                        )
+                        .unwrap_or_else(|| (550.0 / page_size.0).clamp(0.1, 1.0) as f64)
+                            as f32;
+                        let dynlex_document = (backend == Backend::Dynlex).then(|| {
+                            DynlexOpen(Arc::new(opds_dynlex_backend::DynlexDocument::new(
+                                Arc::clone(&bytes),
+                            )))
+                        });
+                        let (initial_scale, outcome) = if let Some(document) = &dynlex_document {
+                            render_initial_dynlex_page(&pdf, &document.0, initial_page, fit)
                         } else {
-                            saved.map_or((550.0 / page_width).clamp(0.1, 1.0), |position| {
-                                position.scale as f32
-                            })
+                            let scale = saved.map_or(fit, |position| position.scale as f32);
+                            render_initial_selected_page(&pdf, &bytes, initial_page, scale, backend)
                         };
-                        let outcome = render_page_selected(
-                            &pdf,
-                            &bytes,
-                            initial_page,
-                            initial_scale,
-                            backend,
-                        );
                         Ok((
                             path,
                             bytes,
                             pdf,
+                            dynlex_document,
                             initial_page,
                             initial_scale,
                             saved,
                             outcome,
+                            false,
                         ))
                     },
                     move |result| Message::Loaded(token, result),
@@ -5003,7 +9887,17 @@ impl App {
                 self.busy = false;
                 self.opening_document = false;
                 match result {
-                    Ok((path, source_bytes, pdf, initial_page, initial_scale, saved, outcome)) => {
+                    Ok((
+                        path,
+                        source_bytes,
+                        pdf,
+                        dynlex_document,
+                        initial_page,
+                        initial_scale,
+                        saved,
+                        outcome,
+                        is_new,
+                    )) => {
                         let _ = self.persist_reader_position();
                         let restored_scroll_height = outcome
                             .as_ref()
@@ -5018,6 +9912,9 @@ impl App {
                         if model.go_to_page(initial_page - 1).is_err() {
                             return Task::none();
                         }
+                        if !is_new {
+                            self.record_recent_file(&path);
+                        }
                         self.message = match &outcome {
                             Ok(outcome) => format!(
                                 "{} pages • {}×{} px",
@@ -5029,8 +9926,9 @@ impl App {
                         };
                         let mut document = OpenDocument {
                             path,
+                            is_new,
                             source_bytes,
-                            dynlex_document: None,
+                            dynlex_document: dynlex_document.map(|document| document.0),
                             pdf,
                             model,
                             last_saved_annotations: Vec::new(),
@@ -5062,15 +9960,27 @@ impl App {
                                 None,
                             );
                         }
-                        self.document = Some(document);
                         self.reader_mode_active = saved.is_some();
-                        self.page_scroll_offset = scrollable::AbsoluteOffset {
-                            x: HORIZONTAL_PAN_MARGIN,
-                            y: VERTICAL_PAN_MARGIN
-                                + saved.map_or(0.0, |position| {
-                                    position.restored_scroll_top(restored_scroll_height)
-                                }),
+                        self.page_scroll_offset = if saved.is_some() || document.bitmap.is_none() {
+                            scrollable::AbsoluteOffset {
+                                x: HORIZONTAL_PAN_MARGIN,
+                                y: VERTICAL_PAN_MARGIN
+                                    + saved.map_or(0.0, |position| {
+                                        position.restored_scroll_top(restored_scroll_height)
+                                    }),
+                            }
+                        } else {
+                            centered_page_offset(
+                                self.window_size,
+                                document.bitmap_size,
+                                !self.hide_pages,
+                                !self.hide_properties,
+                                !self.hide_symbol_palette,
+                                self.ribbon_collapsed,
+                            )
                         };
+                        self.saved_target = None;
+                        self.document = Some(document);
                         self.pending_zoom_offset = None;
                         return Task::batch([
                             scroll_page_to(self.page_scroll_offset),
@@ -5107,13 +10017,19 @@ impl App {
                     self.window_size,
                     !self.hide_pages,
                     !self.hide_properties,
+                    !self.hide_symbol_palette,
                     self.ribbon_collapsed,
                 ) else {
                     return Task::none();
                 };
                 return self.update(Message::Zoom(scale));
             }
-            Message::WindowResized(size) => self.window_size = size,
+            Message::WindowResized(size) => {
+                self.window_size = size;
+                return window::oldest()
+                    .and_then(|id| window::is_maximized(id).map(Message::WindowMaximized));
+            }
+            Message::WindowMaximized(maximized) => self.window_maximized = maximized,
             Message::KeyboardModifiersChanged(modifiers) => {
                 self.keyboard_modifiers = modifiers;
             }
@@ -5171,22 +10087,37 @@ impl App {
                     {
                         return Task::none();
                     }
-                    let anchor = [
-                        self.page_scroll_offset.x + anchor[0]
-                            - HORIZONTAL_PAN_MARGIN
-                            - PAGE_PADDING,
-                        self.page_scroll_offset.y + anchor[1] - VERTICAL_PAN_MARGIN - PAGE_PADDING,
-                    ];
-                    let old_size =
-                        zoom_preview_size(document.bitmap_page_points, document.bitmap_size, scale);
-                    let new_size =
-                        zoom_preview_size(document.bitmap_page_points, document.bitmap_size, next);
-                    self.pending_zoom_offset = Some(zoom_scroll_offset(
-                        self.page_scroll_offset,
-                        anchor,
-                        old_size,
-                        new_size,
-                    ));
+                    if document.bitmap.is_none() {
+                        self.pending_zoom_offset = Some(scrollable::AbsoluteOffset {
+                            x: HORIZONTAL_PAN_MARGIN,
+                            y: VERTICAL_PAN_MARGIN,
+                        });
+                    } else {
+                        let anchor = [
+                            self.page_scroll_offset.x + anchor[0]
+                                - HORIZONTAL_PAN_MARGIN
+                                - PAGE_PADDING,
+                            self.page_scroll_offset.y + anchor[1]
+                                - VERTICAL_PAN_MARGIN
+                                - PAGE_PADDING,
+                        ];
+                        let old_size = zoom_preview_size(
+                            document.bitmap_page_points,
+                            document.bitmap_size,
+                            scale,
+                        );
+                        let new_size = zoom_preview_size(
+                            document.bitmap_page_points,
+                            document.bitmap_size,
+                            next,
+                        );
+                        self.pending_zoom_offset = Some(zoom_scroll_offset(
+                            self.page_scroll_offset,
+                            anchor,
+                            old_size,
+                            new_size,
+                        ));
+                    }
                 } else {
                     return Task::none();
                 }
@@ -5295,6 +10226,9 @@ impl App {
                     return Task::none();
                 };
                 if !document.model.view().accepts(ticket) {
+                    if self.dynlex_switch_retry == Some((generation, ticket)) {
+                        self.dynlex_switch_retry = None;
+                    }
                     self.busy = false;
                     if self.render_queued {
                         self.render_queued = false;
@@ -5304,6 +10238,10 @@ impl App {
                 }
                 self.busy = false;
                 self.render_queued = false;
+                let retry_at_100 = self.dynlex_switch_retry == Some((generation, ticket));
+                if retry_at_100 {
+                    self.dynlex_switch_retry = None;
+                }
                 match result {
                     Ok((outcome, _content_layer)) => {
                         let raster = &outcome.raster;
@@ -5311,6 +10249,14 @@ impl App {
                         let view = document.model.view();
                         let page = view.page();
                         let scale = view.viewport().scale() as f32;
+                        // An empty error workspace has no meaningful pixel
+                        // anchor. Restore the page at its top-left after recovery.
+                        if document.bitmap.is_none() {
+                            self.pending_zoom_offset = Some(scrollable::AbsoluteOffset {
+                                x: HORIZONTAL_PAN_MARGIN,
+                                y: VERTICAL_PAN_MARGIN,
+                            });
+                        }
                         document.cache_bitmap(
                             page,
                             scale,
@@ -5324,17 +10270,49 @@ impl App {
                             return Task::batch([
                                 scroll_page_to(offset),
                                 self.render_content_layer_if_needed(),
+                                self.render_nearby_thumbnail(),
                             ]);
                         }
-                        return self.render_content_layer_if_needed();
+                        return Task::batch([
+                            self.render_content_layer_if_needed(),
+                            self.render_nearby_thumbnail(),
+                        ]);
                     }
                     Err(error) => {
-                        self.pending_zoom_offset = None;
-                        if self.backend == Backend::Dynlex {
+                        if retry_at_100
+                            && self.backend == Backend::Dynlex
+                            && document.model.view().viewport().scale() != 1.0
+                            && document.model.zoom_at(1.0, [0.0, 0.0]).is_ok()
+                        {
+                            // A renderer switch may inherit an unproven fit
+                            // scale. Retry once at 100% with the *same* strict
+                            // DynLex kernel; never show the old renderer's pixels.
                             document.bitmap = None;
                             document.annotation_overlay_cache.borrow_mut().take();
+                            self.pending_zoom_offset = Some(scrollable::AbsoluteOffset {
+                                x: HORIZONTAL_PAN_MARGIN,
+                                y: VERTICAL_PAN_MARGIN,
+                            });
+                            self.message = "DynLex: trying this page at 100%…".into();
+                            return self.render_current_page();
+                        }
+                        self.pending_zoom_offset = None;
+                        // A temporary zoom preview is valid only while sharpening
+                        // is pending. Strict DynLex failure must not leave an old
+                        // bitmap displayed as the unsupported requested zoom.
+                        if self.backend == Backend::Dynlex
+                            || document.displayed_page != document.model.view().page()
+                            || document.bitmap_backend != self.backend
+                        {
+                            document.bitmap = None;
+                            document.annotation_overlay_cache.borrow_mut().take();
+                            if self.backend == Backend::Dynlex {
+                                let page = document.model.view().page();
+                                document.thumbnails.retain(|(cached, _)| *cached != page);
+                            }
                         }
                         self.message = format!("Render failed: {error}");
+                        return self.render_nearby_thumbnail();
                     }
                 }
             }
@@ -5351,6 +10329,7 @@ impl App {
                 let _ = self.persist_reader_position();
                 self.next_load += 1;
                 self.document = None;
+                self.saved_target = None;
                 self.reader_mode_active = false;
                 self.active_ribbon = RibbonTab::Home;
                 self.page_scroll_offset = scrollable::AbsoluteOffset::default();
@@ -5366,6 +10345,10 @@ impl App {
     }
 
     fn render_nearby_thumbnail(&mut self) -> Task<Message> {
+        // Foreground sharpening takes precedence over speculative page previews.
+        if self.busy || self.zoom_render_due.is_some() {
+            return Task::none();
+        }
         let Some(document) = &mut self.document else {
             return Task::none();
         };
@@ -5382,15 +10365,31 @@ impl App {
         let token = self.next_load;
         let generation = self.backend_generation;
         let selected_backend = self.backend;
+        let dynlex_document = if selected_backend == Backend::Dynlex {
+            Some(Arc::clone(document.dynlex_document.get_or_insert_with(
+                || {
+                    Arc::new(opds_dynlex_backend::DynlexDocument::new(Arc::clone(
+                        &source,
+                    )))
+                },
+            )))
+        } else {
+            None
+        };
         Task::perform(
             async move {
-                if selected_backend == Backend::Dynlex {
-                    // Native DynLex pixels; Iced only scales this navigation image.
-                    return render_page_selected(&pdf, &source, page + 1, 1.0, Backend::Dynlex)
-                        .map(|outcome| outcome.raster);
-                }
                 let (width, height) = pdf.page_dimensions(page + 1).map_err(|e| e.to_string())?;
                 let scale = thumbnail_scale(width, height)?;
+                if let Some(document) = dynlex_document {
+                    // Share prepared pages and JPEG decoding with the main view.
+                    if let Ok(outcome) = document.render_strict(&pdf, page + 1, scale) {
+                        return Ok(outcome.raster);
+                    }
+                    // Legacy vector scenes may still require aligned pixel edges.
+                    return document
+                        .render_strict(&pdf, page + 1, 1.0)
+                        .map(|outcome| outcome.raster);
+                }
                 // PDFium is substantially faster for complex vector-page
                 // previews. The actual document page still uses the selected
                 // renderer; if PDFium is unavailable this falls back to Hayro.
@@ -5504,7 +10503,11 @@ impl App {
             self.zoom_render_due = None;
             return self.render_current_page();
         }
-        self.zoom_render_due = Some(Instant::now() + Duration::from_millis(160));
+        // A single zoom step should start sharpening promptly. Once another
+        // step arrives, keep the longer quiet period to avoid rendering every
+        // intermediate wheel position.
+        let delay = zoom_render_delay(self.zoom_timer_active);
+        self.zoom_render_due = Some(Instant::now() + delay);
         if let Some(document) = &self.document {
             self.message = format!(
                 "Zoom {:.0}% • sharpening…",
@@ -5515,7 +10518,7 @@ impl App {
             Task::none()
         } else {
             self.zoom_timer_active = true;
-            zoom_timeout(Duration::from_millis(160))
+            zoom_timeout(delay)
         }
     }
 
@@ -5532,6 +10535,7 @@ impl App {
             .iter()
             .find(|item| item.page == page - 1 && item.scale_bits == scale.to_bits())
         {
+            let restoring_empty = document.bitmap.is_none();
             document.bitmap = Some(cached.bitmap.clone());
             document.bitmap_size = cached.bitmap_size;
             document.bitmap_page_points = cached.page_points;
@@ -5551,7 +10555,20 @@ impl App {
             }
             self.busy = false;
             self.message = format!("Page {page} • {:.0}% (cached)", scale * 100.0);
-            return self.render_content_layer_if_needed();
+            let restore_scroll = if restoring_empty {
+                self.page_scroll_offset = scrollable::AbsoluteOffset {
+                    x: HORIZONTAL_PAN_MARGIN,
+                    y: VERTICAL_PAN_MARGIN,
+                };
+                scroll_page_to(self.page_scroll_offset)
+            } else {
+                Task::none()
+            };
+            return Task::batch([
+                restore_scroll,
+                self.render_content_layer_if_needed(),
+                self.render_nearby_thumbnail(),
+            ]);
         }
         let pdf = Arc::clone(&document.pdf);
         let source = Arc::clone(&document.source_bytes);
@@ -5660,9 +10677,174 @@ impl App {
     }
 }
 
+#[cfg(all(test, feature = "own-rust-experimental"))]
+mod strict_own_rust_start_tests {
+    use super::*;
+
+    #[test]
+    fn unsupported_fit_uses_same_kernel_at_a_supported_scale() {
+        let source = include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf");
+        let pdf = ParsedPdf::open(Arc::new(source.to_vec())).unwrap();
+        let (scale, outcome) =
+            render_initial_selected_page(&pdf, source, 1, 1.36, Backend::OwnRust);
+        let outcome = outcome.unwrap();
+        assert_eq!(scale, 1.0);
+        assert_eq!(outcome.used, Backend::OwnRust);
+        assert_eq!(outcome.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
+    }
+}
+
 #[cfg(all(test, feature = "dynlex-experimental"))]
 mod strict_dynlex_tests {
     use super::*;
+
+    #[test]
+    fn opening_at_unproven_fit_keeps_a_supported_page_visible_on_dynlex() {
+        let source = Arc::new(
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec(),
+        );
+        let pdf = ParsedPdf::open(Arc::clone(&source)).unwrap();
+        let document = opds_dynlex_backend::DynlexDocument::new(source);
+        let (scale, outcome) = render_initial_dynlex_page(&pdf, &document, 1, 1.36);
+        let outcome = outcome.unwrap();
+        assert_eq!(scale, 1.0);
+        assert_eq!(outcome.used, Backend::Dynlex);
+        assert_eq!(outcome.raster.rgba, pdf.render_page(1, 1.0).unwrap().rgba);
+    }
+
+    #[test]
+    fn loaded_page_keeps_its_prepared_dynlex_document_for_later_zooms() {
+        let source = Arc::new(
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&source)).unwrap());
+        let prepared = Arc::new(opds_dynlex_backend::DynlexDocument::new(Arc::clone(
+            &source,
+        )));
+        let (scale, outcome) = render_initial_dynlex_page(&pdf, &prepared, 1, 1.36);
+        let mut app = App {
+            backend: Backend::Dynlex,
+            next_load: 9,
+            ..Default::default()
+        };
+        let _ = app.update(Message::Loaded(
+            9,
+            Ok((
+                "test.pdf".into(),
+                source,
+                pdf,
+                Some(DynlexOpen(Arc::clone(&prepared))),
+                1,
+                scale,
+                None,
+                outcome,
+                false,
+            )),
+        ));
+        let opened = app.document.as_ref().unwrap();
+        assert_eq!(opened.bitmap_scale, 1.0);
+        assert!(Arc::ptr_eq(
+            opened.dynlex_document.as_ref().unwrap(),
+            &prepared
+        ));
+    }
+
+    #[test]
+    fn switching_to_dynlex_retries_unproven_fit_at_100_with_only_dynlex_pixels() {
+        let source = Arc::new(
+            include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf").to_vec(),
+        );
+        let pdf = Arc::new(ParsedPdf::open(Arc::clone(&source)).unwrap());
+        let hayro = render_page_selected(&pdf, &source, 1, 1.55, Backend::Hayro).unwrap();
+        let mut app = App {
+            next_load: 91,
+            ..Default::default()
+        };
+        let _ = app.update(Message::Loaded(
+            91,
+            Ok((
+                "test.pdf".into(),
+                Arc::clone(&source),
+                Arc::clone(&pdf),
+                None,
+                1,
+                1.55,
+                None,
+                Ok(hayro),
+                false,
+            )),
+        ));
+        assert_eq!(
+            app.document.as_ref().unwrap().bitmap_backend,
+            Backend::Hayro
+        );
+        let _ = app.update(Message::SelectBackend(Backend::Dynlex));
+        assert!(app.document.as_ref().unwrap().bitmap.is_none());
+        let first = app.document.as_ref().unwrap().model.view().ticket();
+        let _ = app.update(Message::Rendered(
+            app.backend_generation,
+            first,
+            Err("unsupported fit zoom".into()),
+        ));
+        assert_eq!(app.backend, Backend::Dynlex);
+        assert_eq!(
+            app.document
+                .as_ref()
+                .unwrap()
+                .model
+                .view()
+                .viewport()
+                .scale(),
+            1.0
+        );
+        assert!(app.document.as_ref().unwrap().bitmap.is_none());
+        assert!(app.dynlex_switch_retry.is_none());
+        let second = app.document.as_ref().unwrap().model.view().ticket();
+        assert_ne!(first, second);
+        let rendered = app
+            .document
+            .as_ref()
+            .unwrap()
+            .dynlex_document
+            .as_ref()
+            .unwrap()
+            .render_strict(&pdf, 1, 1.0)
+            .unwrap();
+        let expected = pdf.render_page(1, 1.0).unwrap();
+        assert_eq!(rendered.raster.rgba, expected.rgba);
+        let _ = app.update(Message::Rendered(
+            app.backend_generation,
+            second,
+            Ok((rendered, None)),
+        ));
+        let document = app.document.as_ref().unwrap();
+        assert_eq!(document.bitmap_backend, Backend::Dynlex);
+        assert!(document.bitmap.is_some());
+        assert_eq!(document.bitmap_scale, 1.0);
+        app.document
+            .as_mut()
+            .unwrap()
+            .model
+            .zoom_at(1.25, [0.0, 0.0])
+            .unwrap();
+        let unsupported_zoom = app.document.as_ref().unwrap().model.view().ticket();
+        let _ = app.update(Message::Rendered(
+            app.backend_generation,
+            unsupported_zoom,
+            Err("unsupported zoom".into()),
+        ));
+        assert_eq!(
+            app.document
+                .as_ref()
+                .unwrap()
+                .model
+                .view()
+                .viewport()
+                .scale(),
+            1.25
+        );
+        assert!(app.document.as_ref().unwrap().bitmap.is_none());
+    }
 
     #[test]
     fn selected_dynlex_is_strict_for_supported_text_and_zoom() {
@@ -5700,10 +10882,12 @@ mod strict_dynlex_tests {
                 "test.pdf".into(),
                 source.clone(),
                 pdf.clone(),
+                None,
                 1,
                 1.0,
                 None,
                 Err("Unsupported DynLex page".into()),
+                false,
             )),
         ));
         assert!(app.document.as_ref().unwrap().bitmap.is_none());
@@ -5726,7 +10910,7 @@ mod strict_dynlex_tests {
             Ok(pdf.render_page(1, 1.0).unwrap()),
         ));
         assert!(app.document.as_ref().unwrap().thumbnails.is_empty());
-        // A failed zoom must clear the prior (even genuine DynLex) page image.
+        // A failed strict zoom clears even the same-page DynLex preview.
         let outcome = render_page_selected(&pdf, &source, 1, 1.0, Backend::Dynlex).unwrap();
         let doc = app.document.as_mut().unwrap();
         doc.cache_bitmap(0, 1.0, outcome, None);
@@ -5743,5 +10927,43 @@ mod strict_dynlex_tests {
             .unwrap()
             .content_layer_in_flight
             .is_none());
+        app.document.as_mut().unwrap().thumbnail_in_flight = None;
+        assert_eq!(next_thumbnail(app.document.as_ref().unwrap()), Some(0));
+        app.busy = true;
+        let _ = app.render_nearby_thumbnail();
+        assert!(app.document.as_ref().unwrap().thumbnail_in_flight.is_none());
+        app.busy = false;
+        app.zoom_render_due = Some(Instant::now());
+        let _ = app.render_nearby_thumbnail();
+        assert!(app.document.as_ref().unwrap().thumbnail_in_flight.is_none());
+        app.zoom_render_due = None;
+        let _ = app.render_nearby_thumbnail();
+        assert_eq!(app.document.as_ref().unwrap().thumbnail_in_flight, Some(0));
+        // The empty/error workspace must remain zoomable to recover without
+        // changing renderer or showing a substitute bitmap.
+        let before = app
+            .document
+            .as_ref()
+            .unwrap()
+            .model
+            .view()
+            .viewport()
+            .scale();
+        let _ = app.update(Message::WheelZoom {
+            amount: -1.0,
+            anchor: [200., 200.],
+        });
+        assert!(
+            app.document
+                .as_ref()
+                .unwrap()
+                .model
+                .view()
+                .viewport()
+                .scale()
+                < before
+        );
+        assert!(app.zoom_render_due.is_some());
+        assert!(app.document.as_ref().unwrap().bitmap.is_none());
     }
 }

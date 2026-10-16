@@ -4,12 +4,14 @@
 use super::text_layout;
 use lopdf::{Dictionary, Document, IncrementalDocument, Object, ObjectId, Stream, StringFormat};
 use opds_native_core::annotations::{
-    Annotation, Kind, TextAlign, MAX_POLYLINE_POINTS, TEXT_FONT_SIZES,
+    arrow_wings, polygon_vertices, Annotation, Kind, TextAlign, MAX_POLYLINE_POINTS,
+    TEXT_FONT_SIZES,
 };
 use std::collections::BTreeMap;
 use std::fmt::Write as FmtWrite;
 use std::io::Write;
 use std::path::Path;
+use std::{hash::Hasher, io::Read};
 use ttf_parser::{Face, GlyphId};
 
 const FONT_BYTES: &[u8] = text_layout::FONT_BYTES;
@@ -342,9 +344,22 @@ fn annotation_object(
             .map(|point| point[1])
             .fold(f64::NEG_INFINITY, f64::max),
     ];
+    // A polygon's first and opposite vertices touch its bounds. Leave room
+    // for the centered stroke in the annotation appearance on every side.
+    let appearance_margin = if matches!(annotation.kind, Kind::Polygon { .. }) {
+        2.0
+    } else {
+        0.0
+    };
+    let annotation_rect = [
+        rect[0] - appearance_margin,
+        rect[1] - appearance_margin,
+        rect[2] + appearance_margin,
+        rect[3] + appearance_margin,
+    ];
     let mut dictionary = Dictionary::new();
     dictionary.set("Type", Object::Name(b"Annot".to_vec()));
-    dictionary.set("Rect", array(&rect));
+    dictionary.set("Rect", array(&annotation_rect));
     dictionary.set("F", 4_i64); // Print flag
     dictionary.set(
         "NM",
@@ -358,7 +373,12 @@ fn annotation_object(
     appearance.set("Subtype", Object::Name(b"Form".to_vec()));
     appearance.set(
         "BBox",
-        array(&[0.0, 0.0, rect[2] - rect[0], rect[3] - rect[1]]),
+        array(&[
+            0.0,
+            0.0,
+            rect[2] - rect[0] + 2.0 * appearance_margin,
+            rect[3] - rect[1] + 2.0 * appearance_margin,
+        ]),
     );
     let content = match &annotation.kind {
         Kind::Rectangle { color_rgb } if *color_rgb == [255, 226, 67] => {
@@ -405,6 +425,84 @@ fn annotation_object(
             )
             .into_bytes()
         }
+        Kind::Ellipse { color_rgb } => {
+            dictionary.set("Subtype", Object::Name(b"Circle".to_vec()));
+            let rgb = color_rgb.map(|v| f64::from(v) / 255.0);
+            dictionary.set("C", array(&rgb));
+            let local_width = rect[2] - rect[0];
+            let local_height = rect[3] - rect[1];
+            let inset = 1.0_f64.min(local_width / 4.0).min(local_height / 4.0);
+            let stroke = 2.0 * inset;
+            let cx = local_width / 2.0;
+            let cy = local_height / 2.0;
+            let rx = cx - inset;
+            let ry = cy - inset;
+            let k = 0.552_284_749_830_793_6;
+            format!(
+                "q {:.6} {:.6} {:.6} RG {:.6} w \
+                 {:.6} {:.6} m \
+                 {:.6} {:.6} {:.6} {:.6} {:.6} {:.6} c \
+                 {:.6} {:.6} {:.6} {:.6} {:.6} {:.6} c \
+                 {:.6} {:.6} {:.6} {:.6} {:.6} {:.6} c \
+                 {:.6} {:.6} {:.6} {:.6} {:.6} {:.6} c S Q",
+                rgb[0],
+                rgb[1],
+                rgb[2],
+                stroke,
+                cx + rx,
+                cy,
+                cx + rx,
+                cy + k * ry,
+                cx + k * rx,
+                cy + ry,
+                cx,
+                cy + ry,
+                cx - k * rx,
+                cy + ry,
+                cx - rx,
+                cy + k * ry,
+                cx - rx,
+                cy,
+                cx - rx,
+                cy - k * ry,
+                cx - k * rx,
+                cy - ry,
+                cx,
+                cy - ry,
+                cx + k * rx,
+                cy - ry,
+                cx + rx,
+                cy - k * ry,
+                cx + rx,
+                cy,
+            )
+            .into_bytes()
+        }
+        Kind::Polygon { color_rgb } => {
+            let vertices = polygon_vertices(b);
+            let mut pdf_vertices = Vec::with_capacity(12);
+            for [x, y] in vertices {
+                pdf_vertices.extend(display_to_pdf(crop, rotation, x, y));
+            }
+            dictionary.set("Subtype", Object::Name(b"Polygon".to_vec()));
+            dictionary.set("Vertices", array(&pdf_vertices));
+            let rgb = color_rgb.map(|v| f64::from(v) / 255.0);
+            dictionary.set("C", array(&rgb));
+            let mut border = Dictionary::new();
+            border.set("W", number(2.0));
+            dictionary.set("BS", border);
+            let mut content = format!(
+                "q {:.6} {:.6} {:.6} RG 2 w 0 J 0 j ",
+                rgb[0], rgb[1], rgb[2]
+            );
+            for (index, [x, y]) in vertices.iter().enumerate() {
+                let op = if index == 0 { "m" } else { "l" };
+                write!(content, "{:.6} {:.6} {op} ", x - b.x, b.y + b.height - y)
+                    .map_err(|error| error.to_string())?;
+            }
+            content.push_str("h S Q");
+            content.into_bytes()
+        }
         Kind::Line {
             start,
             end,
@@ -445,6 +543,68 @@ fn annotation_object(
                 b.y + b.height - start[1],
                 end[0] - b.x,
                 b.y + b.height - end[1],
+            )
+            .into_bytes()
+        }
+        Kind::Arrow {
+            start,
+            end,
+            color_rgb,
+        } => {
+            let wings = arrow_wings(*start, *end).ok_or("Invalid arrow endpoints")?;
+            if [*start, *end, wings[0], wings[1]].iter().any(|point| {
+                !point.iter().all(|value| value.is_finite())
+                    || point[0] < b.x
+                    || point[0] > b.x + b.width
+                    || point[1] < b.y
+                    || point[1] > b.y + b.height
+            }) {
+                return Err("Arrowhead outside annotation bounds".into());
+            }
+            let pdf_start = display_to_pdf(crop, rotation, start[0], start[1]);
+            let pdf_end = display_to_pdf(crop, rotation, end[0], end[1]);
+            let rgb = color_rgb.map(|value| f64::from(value) / 255.0);
+            dictionary.set("Subtype", Object::Name(b"Line".to_vec()));
+            dictionary.set(
+                "L",
+                array(&[pdf_start[0], pdf_start[1], pdf_end[0], pdf_end[1]]),
+            );
+            dictionary.set(
+                "LE",
+                Object::Array(vec![
+                    Object::Name(b"None".to_vec()),
+                    Object::Name(b"OpenArrow".to_vec()),
+                ]),
+            );
+            dictionary.set("C", array(&rgb));
+            let mut border = Dictionary::new();
+            border.set("W", number(2.0));
+            dictionary.set("BS", border);
+            let local = |point: [f64; 2]| [point[0] - b.x, b.y + b.height - point[1]];
+            let a = local(*start);
+            let z = local(*end);
+            let left = local(wings[0]);
+            let right = local(wings[1]);
+            format!(
+                "q {:.3} {:.3} {:.3} RG 2 w 0 J \
+                 {:.6} {:.6} m {:.6} {:.6} l S \
+                 {:.6} {:.6} m {:.6} {:.6} l S \
+                 {:.6} {:.6} m {:.6} {:.6} l S Q",
+                rgb[0],
+                rgb[1],
+                rgb[2],
+                a[0],
+                a[1],
+                z[0],
+                z[1],
+                z[0],
+                z[1],
+                left[0],
+                left[1],
+                z[0],
+                z[1],
+                right[0],
+                right[1],
             )
             .into_bytes()
         }
@@ -552,6 +712,15 @@ fn annotation_object(
         wrapped.extend_from_slice(&content);
         wrapped.extend_from_slice(b"\nQ\n");
         wrapped
+    } else {
+        content
+    };
+    let content = if appearance_margin > 0.0 {
+        let mut padded =
+            format!("q 1 0 0 1 {appearance_margin} {appearance_margin} cm\n").into_bytes();
+        padded.extend_from_slice(&content);
+        padded.extend_from_slice(b"\nQ\n");
+        padded
     } else {
         content
     };
@@ -930,11 +1099,317 @@ pub fn save_new(path: &Path, bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+/// Detect changes to a PDF that this process previously wrote. The digest is
+/// only an accidental-change guard for a local Save target, not an authenticity
+/// check or a substitute for permission checks.
+pub fn saved_bytes_digest(bytes: &[u8]) -> u64 {
+    let mut digest = std::collections::hash_map::DefaultHasher::new();
+    digest.write(bytes);
+    digest.finish()
+}
+
+fn unchanged_target(path: &Path, expected_digest: u64) -> Result<std::fs::Metadata, String> {
+    let current = std::fs::symlink_metadata(path).map_err(|e| e.to_string())?;
+    if !current.file_type().is_file() {
+        return Err("Save target is no longer a regular PDF file".into());
+    }
+    if current.permissions().readonly() {
+        return Err("Save target is read-only; use Save As".into());
+    }
+    let mut source = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let opened = source.metadata().map_err(|e| e.to_string())?;
+        if (current.dev(), current.ino()) != (opened.dev(), opened.ino()) {
+            return Err("Save target changed while opening it; use Save As".into());
+        }
+    }
+    let mut digest = std::collections::hash_map::DefaultHasher::new();
+    let mut chunk = [0_u8; 64 * 1024];
+    loop {
+        let size = source.read(&mut chunk).map_err(|e| e.to_string())?;
+        if size == 0 {
+            break;
+        }
+        digest.write(&chunk[..size]);
+    }
+    if digest.finish() != expected_digest {
+        return Err("Save target changed outside Open PDF Studio; use Save As".into());
+    }
+    Ok(current)
+}
+
+pub fn replace_unchanged(path: &Path, expected_digest: u64, bytes: &[u8]) -> Result<(), String> {
+    let current = unchanged_target(path, expected_digest)?;
+    // A same-directory temporary file makes the final replacement atomic.
+    // create_new also avoids replacing an unrelated file on a name collision.
+    let mut temporary = None;
+    for sequence in 0..16 {
+        let name = format!(
+            ".{}.opds-{}-{}.tmp",
+            path.file_name().unwrap_or_default().to_string_lossy(),
+            std::process::id(),
+            sequence
+        );
+        let candidate = path.with_file_name(name);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => {
+                temporary = Some((candidate, file));
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    let (temporary_path, mut file) = temporary.ok_or("Could not create a temporary Save file")?;
+    let write_result = file
+        .write_all(bytes)
+        .and_then(|_| file.set_permissions(current.permissions()))
+        .and_then(|_| file.sync_all());
+    drop(file);
+    if let Err(error) = write_result {
+        let _ = std::fs::remove_file(&temporary_path);
+        return Err(error.to_string());
+    }
+    let still_current = unchanged_target(path, expected_digest);
+    #[cfg(unix)]
+    let still_current = still_current.and_then(|still_current| {
+        use std::os::unix::fs::MetadataExt;
+        if (current.dev(), current.ino()) != (still_current.dev(), still_current.ino()) {
+            Err("Save target was replaced while saving; use Save As".into())
+        } else {
+            Ok(still_current)
+        }
+    });
+    if let Err(error) = still_current {
+        let _ = std::fs::remove_file(&temporary_path);
+        return Err(error);
+    }
+    if let Err(error) = std::fs::rename(&temporary_path, path) {
+        let _ = std::fs::remove_file(&temporary_path);
+        return Err(error.to_string());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use lopdf::dictionary;
+    use opds_engine_probe::ParsedPdf;
     use opds_native_core::annotations::Rect;
+
+    #[test]
+    fn polygon_exports_six_pdf_vertices_and_a_closed_appearance() {
+        let polygon = Annotation {
+            id: 10,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 80.0,
+                height: 40.0,
+            },
+            kind: Kind::Polygon {
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let (dict, appearance) = annotation_object(&polygon, [0.0, 0.0, 200.0, 200.0], 0, None)
+            .expect("valid polygon appearance");
+        assert_eq!(dict.get(b"Subtype").unwrap().as_name().unwrap(), b"Polygon");
+        let coordinates = dict.get(b"Vertices").unwrap().as_array().unwrap();
+        assert_eq!(coordinates.len(), 12);
+        assert_eq!(numeric(&coordinates[0]).unwrap(), 60.0);
+        assert_eq!(numeric(&coordinates[1]).unwrap(), 170.0);
+        let content = std::str::from_utf8(&appearance.content).unwrap();
+        assert_eq!(content.matches(" l ").count(), 5);
+        assert!(content.contains("h S Q"));
+    }
+
+    #[test]
+    fn polygon_saved_appearance_matches_direct_strokes_on_rotated_pages() {
+        fn pdf(rotation: i64, content: Vec<u8>) -> Vec<u8> {
+            let mut doc = Document::with_version("1.4");
+            let pages = doc.new_object_id();
+            let stream = doc.add_object(Stream::new(Dictionary::new(), content));
+            let page = doc.add_object(dictionary! {
+                "Type" => "Page", "Parent" => pages, "Contents" => stream,
+                "MediaBox" => vec![0.into(), 0.into(), 200.into(), 150.into()],
+                "Rotate" => rotation,
+            });
+            doc.objects.insert(
+                pages,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1,
+                }),
+            );
+            let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+            doc.trailer.set("Root", Object::Reference(catalog));
+            let mut bytes = Vec::new();
+            doc.save_to(&mut bytes).unwrap();
+            bytes
+        }
+        let bounds = Rect {
+            x: 20.0,
+            y: 30.0,
+            width: 80.0,
+            height: 40.0,
+        };
+        for rotation in [0_u16, 90, 180, 270] {
+            let source = pdf(i64::from(rotation), Vec::new());
+            let annotation = Annotation {
+                id: 10,
+                page: 0,
+                bounds,
+                kind: Kind::Polygon {
+                    color_rgb: [231, 76, 60],
+                },
+            };
+            let saved = export_annotations(&source, &[annotation]).unwrap();
+            let vertices = polygon_vertices(bounds);
+            let mut content = String::from("q 0.905882 0.298039 0.235294 RG 2 w 0 J 0 j ");
+            for (index, [x, y]) in vertices.iter().enumerate() {
+                let [px, py] = display_to_pdf([0.0, 0.0, 200.0, 150.0], rotation, *x, *y);
+                write!(
+                    content,
+                    "{px:.6} {py:.6} {} ",
+                    if index == 0 { "m" } else { "l" }
+                )
+                .unwrap();
+            }
+            content.push_str("h S Q");
+            let reference = pdf(i64::from(rotation), content.into_bytes());
+            let saved = ParsedPdf::open(std::sync::Arc::new(saved)).unwrap();
+            let reference = ParsedPdf::open(std::sync::Arc::new(reference)).unwrap();
+            for scale in [0.5, 1.0, 2.0] {
+                let actual = saved.render_page(1, scale).unwrap();
+                let expected = reference.render_page(1, scale).unwrap();
+                let different = actual
+                    .rgba
+                    .chunks_exact(4)
+                    .zip(expected.rgba.chunks_exact(4))
+                    .filter(|(left, right)| left != right)
+                    .count();
+                assert_eq!(
+                    different, 0,
+                    "rotation {rotation}, scale {scale}: {different} differing pixels"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ellipse_exports_as_pdf_circle_with_closed_bezier_appearance() {
+        let ellipse = Annotation {
+            id: 9,
+            page: 0,
+            bounds: Rect {
+                x: 20.0,
+                y: 30.0,
+                width: 80.0,
+                height: 40.0,
+            },
+            kind: Kind::Ellipse {
+                color_rgb: [231, 76, 60],
+            },
+        };
+        let (dict, appearance) = annotation_object(&ellipse, [0.0, 0.0, 200.0, 200.0], 0, None)
+            .expect("valid ellipse appearance");
+        assert_eq!(dict.get(b"Subtype").unwrap().as_name().unwrap(), b"Circle");
+        let content = std::str::from_utf8(&appearance.content).unwrap();
+        assert_eq!(content.matches(" c ").count(), 4);
+        assert!(content.ends_with("c S Q"));
+        let (rotated, rotated_appearance) =
+            annotation_object(&ellipse, [0.0, 0.0, 200.0, 200.0], 90, None)
+                .expect("rotated ellipse appearance");
+        assert_eq!(
+            rotated.get(b"Subtype").unwrap().as_name().unwrap(),
+            b"Circle"
+        );
+        let bbox = rotated_appearance
+            .dict
+            .get(b"BBox")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(bbox[2].as_float().unwrap(), 40.0);
+        assert_eq!(bbox[3].as_float().unwrap(), 80.0);
+
+        let source = include_bytes!("../../dynlex-backend/tests/fixtures/simple-fill-stroke.pdf");
+        let exported = export_annotations(source, &[ellipse]).unwrap();
+        let before = ParsedPdf::open(Arc::new(source.to_vec()))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        let after = ParsedPdf::open(Arc::new(exported))
+            .unwrap()
+            .render_page(1, 1.0)
+            .unwrap();
+        assert_eq!((before.width, before.height), (after.width, after.height));
+        assert_ne!(
+            before.rgba, after.rgba,
+            "exported ellipse must paint pixels"
+        );
+    }
+
+    #[test]
+    fn repeated_save_replaces_only_the_unchanged_output() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("opds-save-{}-{unique}", std::process::id()));
+        std::fs::create_dir(&dir).unwrap();
+        let path = dir.join("annotated.pdf");
+        save_new(&path, b"first export").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+        }
+        replace_unchanged(&path, saved_bytes_digest(b"first export"), b"second export").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"second export");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+        }
+        std::fs::write(&path, b"changed externally").unwrap();
+        assert!(
+            replace_unchanged(&path, saved_bytes_digest(b"second export"), b"third export")
+                .is_err()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), b"changed externally");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{symlink, PermissionsExt};
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
+            assert!(replace_unchanged(
+                &path,
+                saved_bytes_digest(b"changed externally"),
+                b"must not replace read-only output"
+            )
+            .is_err());
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o640)).unwrap();
+            let link = dir.join("linked.pdf");
+            symlink(&path, &link).unwrap();
+            assert!(replace_unchanged(
+                &link,
+                saved_bytes_digest(b"changed externally"),
+                b"must not follow a symlink"
+            )
+            .is_err());
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn line_appearance_matches_direct_pdf_stroke_on_rotated_pages() {
@@ -1005,6 +1480,87 @@ mod tests {
     }
 
     #[test]
+    fn arrow_appearance_matches_direct_pdf_strokes_on_rotated_pages() {
+        use opds_engine_probe::ParsedPdf;
+
+        fn pdf(rotation: i64, content: Vec<u8>) -> Vec<u8> {
+            let mut doc = Document::with_version("1.4");
+            let pages = doc.new_object_id();
+            let stream = doc.add_object(Stream::new(Dictionary::new(), content));
+            let page = doc.add_object(dictionary! {
+                "Type" => "Page", "Parent" => pages, "Contents" => stream,
+                "MediaBox" => vec![0.into(), 0.into(), 200.into(), 150.into()],
+                "Rotate" => rotation,
+            });
+            doc.objects.insert(
+                pages,
+                Object::Dictionary(dictionary! {
+                    "Type" => "Pages", "Kids" => vec![Object::Reference(page)], "Count" => 1,
+                }),
+            );
+            let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages });
+            doc.trailer.set("Root", Object::Reference(catalog));
+            let mut bytes = Vec::new();
+            doc.save_to(&mut bytes).unwrap();
+            bytes
+        }
+
+        for rotation in [0_u16, 90, 180, 270] {
+            let source = pdf(i64::from(rotation), Vec::new());
+            let start = [20.0, 30.0];
+            let end = [100.0, 80.0];
+            let wings = arrow_wings(start, end).unwrap();
+            let item = Annotation {
+                id: 1,
+                page: 0,
+                bounds: Rect {
+                    x: 18.0,
+                    y: 28.0,
+                    width: 84.0,
+                    height: 54.0,
+                },
+                kind: Kind::Arrow {
+                    start,
+                    end,
+                    color_rgb: [231, 76, 60],
+                },
+            };
+            let saved = export_annotations(&source, &[item]).unwrap();
+            assert!(saved
+                .windows(b"/OpenArrow".len())
+                .any(|part| part == b"/OpenArrow"));
+            let pdf_points: Vec<_> = [start, end, wings[0], wings[1]]
+                .iter()
+                .map(|point| display_to_pdf([0.0, 0.0, 200.0, 150.0], rotation, point[0], point[1]))
+                .collect();
+            let a = pdf_points[0];
+            let z = pdf_points[1];
+            let l = pdf_points[2];
+            let r = pdf_points[3];
+            let reference = pdf(
+                i64::from(rotation),
+                format!(
+                    "0.906 0.298 0.235 RG 2 w 0 J \
+                 {:.6} {:.6} m {:.6} {:.6} l S \
+                 {:.6} {:.6} m {:.6} {:.6} l S \
+                 {:.6} {:.6} m {:.6} {:.6} l S",
+                    a[0], a[1], z[0], z[1], z[0], z[1], l[0], l[1], z[0], z[1], r[0], r[1],
+                )
+                .into_bytes(),
+            );
+            let actual = ParsedPdf::open(std::sync::Arc::new(saved))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            let expected = ParsedPdf::open(std::sync::Arc::new(reference))
+                .unwrap()
+                .render_page(1, 1.0)
+                .unwrap();
+            assert_eq!(actual.rgba, expected.rgba, "rotation {rotation}");
+        }
+    }
+
+    #[test]
     fn polyline_appearance_matches_direct_pdf_path_on_rotated_pages() {
         use opds_engine_probe::ParsedPdf;
 
@@ -1030,50 +1586,82 @@ mod tests {
             output
         }
 
-        for rotation in [0_u16, 90, 180, 270] {
-            let source = pdf(i64::from(rotation), Vec::new());
-            let points = vec![[20.0, 30.0], [100.0, 70.0], [120.0, 40.0]];
-            let annotation = Annotation {
-                id: 1,
-                page: 0,
-                bounds: Rect {
-                    x: 18.0,
-                    y: 28.0,
-                    width: 104.0,
-                    height: 44.0,
-                },
-                kind: Kind::Polyline {
-                    points: points.clone(),
-                    color_rgb: [231, 76, 60],
-                },
-            };
-            let saved = export_annotations(&source, &[annotation]).unwrap();
-            let pdf_points: Vec<_> = points
-                .iter()
-                .map(|point| display_to_pdf([0.0, 0.0, 200.0, 150.0], rotation, point[0], point[1]))
-                .collect();
-            let reference = pdf(
-                i64::from(rotation),
-                format!(
-                    "0.906 0.298 0.235 RG 2 w 0 J 0 j {} {} m {} {} l {} {} l S",
-                    pdf_points[0][0],
-                    pdf_points[0][1],
-                    pdf_points[1][0],
-                    pdf_points[1][1],
-                    pdf_points[2][0],
-                    pdf_points[2][1],
-                )
-                .into_bytes(),
-            );
-            let actual = ParsedPdf::open(std::sync::Arc::new(saved))
-                .unwrap()
-                .render_page(1, 1.0)
-                .unwrap();
-            let expected = ParsedPdf::open(std::sync::Arc::new(reference))
-                .unwrap()
-                .render_page(1, 1.0)
-                .unwrap();
-            assert_eq!(actual.rgba, expected.rgba, "rotation {rotation}");
+        let short = vec![[20.0, 30.0], [100.0, 70.0], [120.0, 40.0]];
+        let long: Vec<_> = (0..120)
+            .map(|index| [20.0 + f64::from(index), 30.0 + f64::from(index % 20)])
+            .collect();
+        for points in [short, long] {
+            for rotation in [0_u16, 90, 180, 270] {
+                let source = pdf(i64::from(rotation), Vec::new());
+                let min_x = points
+                    .iter()
+                    .map(|point| point[0])
+                    .fold(f64::INFINITY, f64::min);
+                let max_x = points
+                    .iter()
+                    .map(|point| point[0])
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let min_y = points
+                    .iter()
+                    .map(|point| point[1])
+                    .fold(f64::INFINITY, f64::min);
+                let max_y = points
+                    .iter()
+                    .map(|point| point[1])
+                    .fold(f64::NEG_INFINITY, f64::max);
+                let annotation = Annotation {
+                    id: 1,
+                    page: 0,
+                    bounds: Rect {
+                        x: min_x - 4.0,
+                        y: min_y - 4.0,
+                        width: max_x - min_x + 8.0,
+                        height: max_y - min_y + 8.0,
+                    },
+                    kind: Kind::Polyline {
+                        points: points.clone(),
+                        color_rgb: [231, 76, 60],
+                    },
+                };
+                let saved = export_annotations(&source, &[annotation]).unwrap();
+                let pdf_points: Vec<_> = points
+                    .iter()
+                    .map(|point| {
+                        display_to_pdf([0.0, 0.0, 200.0, 150.0], rotation, point[0], point[1])
+                    })
+                    .collect();
+                let mut path = format!(
+                    "0.906 0.298 0.235 RG 2 w 0 J 0 j {} {} m",
+                    pdf_points[0][0], pdf_points[0][1]
+                );
+                for point in pdf_points.iter().skip(1) {
+                    path.push_str(&format!(" {} {} l", point[0], point[1]));
+                }
+                path.push_str(" S");
+                let reference = pdf(i64::from(rotation), path.into_bytes());
+                let actual_pdf = ParsedPdf::open(std::sync::Arc::new(saved)).unwrap();
+                let expected_pdf = ParsedPdf::open(std::sync::Arc::new(reference)).unwrap();
+                for scale in [0.5, 1.0, 2.0] {
+                    let actual = actual_pdf.render_page(1, scale).unwrap();
+                    let expected = expected_pdf.render_page(1, scale).unwrap();
+                    if actual.rgba != expected.rgba {
+                        let mismatches = actual
+                            .rgba
+                            .iter()
+                            .zip(&expected.rgba)
+                            .filter(|(a, b)| a != b)
+                            .count();
+                        let first = actual
+                            .rgba
+                            .iter()
+                            .zip(&expected.rgba)
+                            .position(|(a, b)| a != b)
+                            .unwrap()
+                            / 4;
+                        panic!("rotation {rotation}, scale {scale}, {} points: {mismatches} channel mismatches, first at ({}, {})", points.len(), first % actual.width as usize, first / actual.width as usize);
+                    }
+                }
+            }
         }
     }
     #[cfg(feature = "dynlex-experimental")]

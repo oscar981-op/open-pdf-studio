@@ -3,10 +3,96 @@ use super::{text_layout, AnnotationTool, Message};
 use iced::widget::canvas::{self, Canvas, Frame, Geometry, Stroke};
 use iced::{keyboard, mouse};
 use iced::{Color, Element, Point, Rectangle, Renderer, Size, Theme};
-use opds_native_core::annotations::MAX_POLYLINE_POINTS;
-use opds_native_core::annotations::{DocumentModel, Kind, Rect, TextAlign};
+use opds_native_core::annotations::{arrow_wings, polygon_vertices, MAX_POLYLINE_POINTS};
+use opds_native_core::annotations::{DocumentModel, DocumentVersion, Kind, Rect, TextAlign};
 use opds_native_core::DocumentId;
 use std::time::{Duration, Instant};
+
+fn ellipse_path(top_left: Point, size: Size) -> canvas::Path {
+    const K: f32 = 0.552_284_8;
+    let cx = top_left.x + size.width / 2.0;
+    let cy = top_left.y + size.height / 2.0;
+    let rx = size.width / 2.0;
+    let ry = size.height / 2.0;
+    canvas::Path::new(|path| {
+        path.move_to(Point::new(cx + rx, cy));
+        path.bezier_curve_to(
+            Point::new(cx + rx, cy + K * ry),
+            Point::new(cx + K * rx, cy + ry),
+            Point::new(cx, cy + ry),
+        );
+        path.bezier_curve_to(
+            Point::new(cx - K * rx, cy + ry),
+            Point::new(cx - rx, cy + K * ry),
+            Point::new(cx - rx, cy),
+        );
+        path.bezier_curve_to(
+            Point::new(cx - rx, cy - K * ry),
+            Point::new(cx - K * rx, cy - ry),
+            Point::new(cx, cy - ry),
+        );
+        path.bezier_curve_to(
+            Point::new(cx + K * rx, cy - ry),
+            Point::new(cx + rx, cy - K * ry),
+            Point::new(cx + rx, cy),
+        );
+        path.close();
+    })
+}
+
+fn polygon_path(top_left: Point, size: Size) -> canvas::Path {
+    let vertices = polygon_vertices(Rect {
+        x: f64::from(top_left.x),
+        y: f64::from(top_left.y),
+        width: f64::from(size.width),
+        height: f64::from(size.height),
+    });
+    canvas::Path::new(|path| {
+        path.move_to(Point::new(vertices[0][0] as f32, vertices[0][1] as f32));
+        for vertex in &vertices[1..] {
+            path.line_to(Point::new(vertex[0] as f32, vertex[1] as f32));
+        }
+        path.close();
+    })
+}
+
+// Tauri's Circle tool uses the larger page-space drag component for both
+// axes. Keep the square inside the page before showing or committing it.
+fn square_drag_end(start: Point, end: Point, bounds: Rectangle, page: (f32, f32)) -> Point {
+    let (page_width, page_height) = page;
+    if bounds.width <= 0.0 || bounds.height <= 0.0 || page_width <= 0.0 || page_height <= 0.0 {
+        return end;
+    }
+    let scale_x = bounds.width / page_width;
+    let scale_y = bounds.height / page_height;
+    let sx = start.x / scale_x;
+    let sy = start.y / scale_y;
+    let dx = (end.x - start.x) / scale_x;
+    let dy = (end.y - start.y) / scale_y;
+    let available_x = if dx < 0.0 { sx } else { page_width - sx };
+    let available_y = if dy < 0.0 { sy } else { page_height - sy };
+    let side = dx
+        .abs()
+        .max(dy.abs())
+        .min(available_x)
+        .min(available_y)
+        .max(0.0);
+    Point::new(
+        start.x + (if dx < 0.0 { -side } else { side }) * scale_x,
+        start.y + (if dy < 0.0 { -side } else { side }) * scale_y,
+    )
+}
+
+fn arrow_screen_wings(from: Point, to: Point, scale_x: f32, scale_y: f32) -> Option<[Point; 2]> {
+    if scale_x <= 0.0 || scale_y <= 0.0 {
+        return None;
+    }
+    let wings = arrow_wings(
+        [f64::from(from.x / scale_x), f64::from(from.y / scale_y)],
+        [f64::from(to.x / scale_x), f64::from(to.y / scale_y)],
+    )?;
+    Some(wings.map(|point| Point::new(point[0] as f32 * scale_x, point[1] as f32 * scale_y)))
+}
 
 pub struct Layer<'a> {
     pub model: &'a DocumentModel,
@@ -21,7 +107,7 @@ pub struct Layer<'a> {
 
 #[derive(Default)]
 pub struct State {
-    drawing: Option<(Point, Point)>,
+    drawing: Option<DrawState>,
     moving: Option<MoveState>,
     resizing: Option<ResizeState>,
     line_endpoint: Option<LineEndpointState>,
@@ -29,8 +115,19 @@ pub struct State {
     modifiers: keyboard::Modifiers,
 }
 
+#[derive(Clone, Copy)]
+struct DrawState {
+    start: Point,
+    end: Point,
+    version: DocumentVersion,
+    page: usize,
+    tool_epoch: u64,
+    bitmap_size: [f32; 2],
+}
+
 struct MoveState {
     id: u64,
+    version: DocumentVersion,
     start: Point,
     current: Point,
 }
@@ -88,6 +185,7 @@ impl Handle {
 
 struct ResizeState {
     id: u64,
+    version: DocumentVersion,
     handle: Handle,
     original: Rect,
     current: Point,
@@ -95,6 +193,7 @@ struct ResizeState {
 
 struct LineEndpointState {
     id: u64,
+    version: DocumentVersion,
     start: bool,
     current: Point,
 }
@@ -104,9 +203,26 @@ struct PolylineDraft {
     cursor: Point,
     last_click: Instant,
     document: DocumentId,
+    version: DocumentVersion,
     page: usize,
     tool_epoch: u64,
     bitmap_size: [f32; 2],
+}
+
+fn append_freehand_point(points: &mut Vec<Point>, point: Point, minimum_step: f32) {
+    if points
+        .last()
+        .is_some_and(|last| (point.x - last.x).hypot(point.y - last.y) < minimum_step)
+    {
+        return;
+    }
+    if points.len() >= MAX_POLYLINE_POINTS {
+        let last = points.pop().expect("nonempty freehand stroke");
+        let mut reduced: Vec<Point> = points.iter().step_by(2).copied().collect();
+        reduced.push(last);
+        *points = reduced;
+    }
+    points.push(point);
 }
 
 impl Layer<'_> {
@@ -124,6 +240,7 @@ impl Layer<'_> {
     ) -> Option<canvas::Action<Message>> {
         (draft.points.len() >= 2).then(|| {
             canvas::Action::publish(Message::AddPolyline(
+                draft.version,
                 draft
                     .points
                     .into_iter()
@@ -136,7 +253,11 @@ impl Layer<'_> {
 
     fn selected_handle(&self, point: Point, bounds: Rectangle) -> Option<(u64, Handle, Rect)> {
         let item = self.model.get(self.selected?)?;
-        if item.page != self.page || matches!(item.kind, Kind::Line { .. } | Kind::Polyline { .. })
+        if item.page != self.page
+            || matches!(
+                item.kind,
+                Kind::Line { .. } | Kind::Arrow { .. } | Kind::Polyline { .. }
+            )
         {
             return None;
         }
@@ -161,8 +282,9 @@ impl Layer<'_> {
         if item.page != self.page {
             return None;
         }
-        let Kind::Line { start, end, .. } = &item.kind else {
-            return None;
+        let (start, end) = match &item.kind {
+            Kind::Line { start, end, .. } | Kind::Arrow { start, end, .. } => (start, end),
+            _ => return None,
         };
         [(*start, true), (*end, false)]
             .into_iter()
@@ -243,14 +365,46 @@ impl canvas::Program<Message> for Layer<'_> {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
-        if self.tool != AnnotationTool::Polyline
-            || state.polyline.as_ref().is_some_and(|draft| {
-                draft.document != self.model.view().document_id()
-                    || draft.page != self.page
-                    || draft.tool_epoch != self.tool_epoch
-                    || draft.bitmap_size != [bounds.width, bounds.height]
-            })
+        let version = self.model.version();
+        if state.drawing.is_some_and(|drawing| {
+            drawing.version != version
+                || drawing.page != self.page
+                || drawing.tool_epoch != self.tool_epoch
+                || drawing.bitmap_size != [bounds.width, bounds.height]
+        }) {
+            state.drawing = None;
+        }
+        if state
+            .moving
+            .as_ref()
+            .is_some_and(|moving| moving.version != version)
         {
+            state.moving = None;
+        }
+        if state
+            .resizing
+            .as_ref()
+            .is_some_and(|resizing| resizing.version != version)
+        {
+            state.resizing = None;
+        }
+        if state
+            .line_endpoint
+            .as_ref()
+            .is_some_and(|endpoint| endpoint.version != version)
+        {
+            state.line_endpoint = None;
+        }
+        if !matches!(
+            self.tool,
+            AnnotationTool::Polyline | AnnotationTool::Freehand
+        ) || state.polyline.as_ref().is_some_and(|draft| {
+            draft.document != self.model.view().document_id()
+                || draft.version != version
+                || draft.page != self.page
+                || draft.tool_epoch != self.tool_epoch
+                || draft.bitmap_size != [bounds.width, bounds.height]
+        }) {
             state.polyline = None;
         }
         match event {
@@ -272,13 +426,38 @@ impl canvas::Program<Message> for Layer<'_> {
                     _ => None,
                 }
             }
+            canvas::Event::Keyboard(keyboard::Event::KeyPressed {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                ..
+            }) if matches!(self.tool, AnnotationTool::Line | AnnotationTool::Arrow)
+                && state.drawing.is_some() =>
+            {
+                state.drawing = None;
+                Some(canvas::Action::request_redraw().and_capture())
+            }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Right))
                 if self.tool == AnnotationTool::Polyline && state.polyline.is_some() =>
             {
                 self.finish_polyline(state.polyline.take()?, bounds)
             }
             canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                if self.tool == AnnotationTool::Hand {
+                    return None;
+                }
                 let position = cursor.position_in(bounds)?;
+                if self.tool == AnnotationTool::Freehand {
+                    state.polyline = Some(PolylineDraft {
+                        points: vec![position],
+                        cursor: position,
+                        last_click: Instant::now(),
+                        document: self.model.view().document_id(),
+                        version: self.model.version(),
+                        page: self.page,
+                        tool_epoch: self.tool_epoch,
+                        bitmap_size: [bounds.width, bounds.height],
+                    });
+                    return Some(canvas::Action::capture());
+                }
                 if self.tool == AnnotationTool::Polyline {
                     if let Some(draft) = &mut state.polyline {
                         let previous = *draft.points.last()?;
@@ -302,6 +481,7 @@ impl canvas::Program<Message> for Layer<'_> {
                             cursor: position,
                             last_click: Instant::now(),
                             document: self.model.view().document_id(),
+                            version: self.model.version(),
                             page: self.page,
                             tool_epoch: self.tool_epoch,
                             bitmap_size: [bounds.width, bounds.height],
@@ -309,10 +489,28 @@ impl canvas::Program<Message> for Layer<'_> {
                     }
                     return Some(canvas::Action::request_redraw().and_capture());
                 }
+                if matches!(self.tool, AnnotationTool::Line | AnnotationTool::Arrow) {
+                    if let Some(drawing) = state.drawing.take() {
+                        if (position.x - drawing.start.x).hypot(position.y - drawing.start.y) < 3.0
+                        {
+                            state.drawing = Some(drawing);
+                            return Some(canvas::Action::capture());
+                        }
+                        return Some(
+                            canvas::Action::publish(Message::AddLine(
+                                drawing.version,
+                                self.page_point(drawing.start, bounds),
+                                self.page_point(position, bounds),
+                            ))
+                            .and_capture(),
+                        );
+                    }
+                }
                 if self.tool == AnnotationTool::Select {
                     if let Some((id, start)) = self.selected_line_endpoint(position, bounds) {
                         state.line_endpoint = Some(LineEndpointState {
                             id,
+                            version: self.model.version(),
                             start,
                             current: position,
                         });
@@ -324,6 +522,7 @@ impl canvas::Program<Message> for Layer<'_> {
                     if let Some((id, handle, original)) = self.selected_handle(position, bounds) {
                         state.resizing = Some(ResizeState {
                             id,
+                            version: self.model.version(),
                             handle,
                             original,
                             current: position,
@@ -338,12 +537,20 @@ impl canvas::Program<Message> for Layer<'_> {
                     let id = self.model.hit_test(self.page, point, tolerance);
                     state.moving = id.map(|id| MoveState {
                         id,
+                        version: self.model.version(),
                         start: position,
                         current: position,
                     });
                     Some(canvas::Action::publish(Message::SelectAnnotation(id)).and_capture())
                 } else {
-                    state.drawing = Some((position, position));
+                    state.drawing = Some(DrawState {
+                        start: position,
+                        end: position,
+                        version: self.model.version(),
+                        page: self.page,
+                        tool_epoch: self.tool_epoch,
+                        bitmap_size: [bounds.width, bounds.height],
+                    });
                     Some(canvas::Action::capture())
                 }
             }
@@ -352,12 +559,18 @@ impl canvas::Program<Message> for Layer<'_> {
                 if let Some(draft) = &mut state.polyline {
                     if let Some(position) = position {
                         draft.cursor = position;
+                        if self.tool == AnnotationTool::Freehand {
+                            let step = (bounds.width / self.page_points.0)
+                                .max(bounds.height / self.page_points.1)
+                                .max(3.0);
+                            append_freehand_point(&mut draft.points, position, step);
+                        }
                         return Some(canvas::Action::request_redraw().and_capture());
                     }
                 }
-                if let Some((_, end)) = &mut state.drawing {
+                if let Some(drawing) = &mut state.drawing {
                     if let Some(position) = position {
-                        *end = position;
+                        drawing.end = position;
                         return Some(canvas::Action::request_redraw().and_capture());
                     }
                 }
@@ -371,6 +584,7 @@ impl canvas::Program<Message> for Layer<'_> {
                         );
                         return Some(
                             canvas::Action::publish(Message::AnnotationGesturePreview(
+                                moving.version,
                                 moving.id,
                                 Rect {
                                     x: original.x + dx,
@@ -393,6 +607,7 @@ impl canvas::Program<Message> for Layer<'_> {
                         );
                         return Some(
                             canvas::Action::publish(Message::AnnotationGesturePreview(
+                                resizing.version,
                                 resizing.id,
                                 rect,
                             ))
@@ -409,6 +624,18 @@ impl canvas::Program<Message> for Layer<'_> {
                 None
             }
             canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                if self.tool == AnnotationTool::Freehand {
+                    let mut draft = state.polyline.take()?;
+                    if let Some(position) = cursor.position_in(bounds) {
+                        let step = (bounds.width / self.page_points.0)
+                            .max(bounds.height / self.page_points.1)
+                            .max(3.0);
+                        append_freehand_point(&mut draft.points, position, step);
+                    }
+                    return self
+                        .finish_polyline(draft, bounds)
+                        .or_else(|| Some(canvas::Action::request_redraw().and_capture()));
+                }
                 if let Some(endpoint) = state.line_endpoint.take() {
                     let position = cursor.position_in(bounds).unwrap_or(endpoint.current);
                     let mut target = self.page_point(position, bounds);
@@ -416,6 +643,7 @@ impl canvas::Program<Message> for Layer<'_> {
                     target[1] = target[1].clamp(0.0, f64::from(self.page_points.1));
                     return Some(
                         canvas::Action::publish(Message::MoveLineEndpoint(
+                            endpoint.version,
                             endpoint.id,
                             endpoint.start,
                             target,
@@ -429,8 +657,12 @@ impl canvas::Program<Message> for Layer<'_> {
                         self.resized_bounds(resizing.original, resizing.handle, position, bounds);
                     if rect != resizing.original {
                         return Some(
-                            canvas::Action::publish(Message::ResizeAnnotation(resizing.id, rect))
-                                .and_capture(),
+                            canvas::Action::publish(Message::ResizeAnnotation(
+                                resizing.version,
+                                resizing.id,
+                                rect,
+                            ))
+                            .and_capture(),
                         );
                     }
                     return Some(
@@ -447,24 +679,36 @@ impl canvas::Program<Message> for Layer<'_> {
                         || (end.y - moving.start.y).abs() >= 2.0
                     {
                         return Some(
-                            canvas::Action::publish(Message::MoveAnnotation(moving.id, delta))
-                                .and_capture(),
+                            canvas::Action::publish(Message::MoveAnnotation(
+                                moving.version,
+                                moving.id,
+                                delta,
+                            ))
+                            .and_capture(),
                         );
                     }
                     return Some(
                         canvas::Action::publish(Message::AnnotationGestureEnded).and_capture(),
                     );
                 }
-                let (start, last) = state.drawing.take()?;
-                let end = cursor.position_in(bounds).unwrap_or(last);
+                let drawing = state.drawing.take()?;
+                let start = drawing.start;
+                let raw_end = cursor.position_in(bounds).unwrap_or(drawing.end);
+                let end = if self.tool == AnnotationTool::Circle {
+                    square_drag_end(start, raw_end, bounds, self.page_points)
+                } else {
+                    raw_end
+                };
                 let width = (end.x - start.x).abs();
                 let height = (end.y - start.y).abs();
-                if self.tool == AnnotationTool::Line {
+                if matches!(self.tool, AnnotationTool::Line | AnnotationTool::Arrow) {
                     if width.hypot(height) < 3.0 {
+                        state.drawing = Some(drawing);
                         return Some(canvas::Action::request_redraw().and_capture());
                     }
                     return Some(
                         canvas::Action::publish(Message::AddLine(
+                            drawing.version,
                             self.page_point(start, bounds),
                             self.page_point(end, bounds),
                         ))
@@ -483,7 +727,10 @@ impl canvas::Program<Message> for Layer<'_> {
                     width: w,
                     height: h,
                 };
-                Some(canvas::Action::publish(Message::AddAnnotation(rect)).and_capture())
+                Some(
+                    canvas::Action::publish(Message::AddAnnotation(drawing.version, rect))
+                        .and_capture(),
+                )
             }
             _ => None,
         }
@@ -500,6 +747,16 @@ impl canvas::Program<Message> for Layer<'_> {
         let mut frame = Frame::new(renderer, bounds.size());
         let scale_x = bounds.width / self.page_points.0;
         let scale_y = bounds.height / self.page_points.1;
+        let version = self.model.version();
+        let moving = state.moving.as_ref().filter(|item| item.version == version);
+        let resizing = state
+            .resizing
+            .as_ref()
+            .filter(|item| item.version == version);
+        let line_endpoint = state
+            .line_endpoint
+            .as_ref()
+            .filter(|item| item.version == version);
         let mut selection = None;
         let mut line_selection = None;
         for annotation in self
@@ -507,7 +764,7 @@ impl canvas::Program<Message> for Layer<'_> {
             .items()
             .filter(|item| self.paint_existing && item.page == self.page)
         {
-            let rect = if let Some(resizing) = &state.resizing {
+            let rect = if let Some(resizing) = resizing {
                 if resizing.id == annotation.id {
                     self.resized_bounds(
                         resizing.original,
@@ -522,7 +779,7 @@ impl canvas::Program<Message> for Layer<'_> {
                 annotation.bounds
             };
             let mut top_left = Point::new(rect.x as f32 * scale_x, rect.y as f32 * scale_y);
-            if let Some(moving) = &state.moving {
+            if let Some(moving) = moving {
                 if moving.id == annotation.id {
                     top_left.x += moving.current.x - moving.start.x;
                     top_left.y += moving.current.y - moving.start.y;
@@ -542,24 +799,41 @@ impl canvas::Program<Message> for Layer<'_> {
                         );
                     }
                 }
+                Kind::Ellipse { color_rgb } => {
+                    frame.stroke(
+                        &ellipse_path(top_left, size),
+                        Stroke::default()
+                            .with_color(Color::from_rgb8(color_rgb[0], color_rgb[1], color_rgb[2]))
+                            .with_width(2.0),
+                    );
+                }
+                Kind::Polygon { color_rgb } => {
+                    frame.stroke(
+                        &polygon_path(top_left, size),
+                        Stroke::default()
+                            .with_color(Color::from_rgb8(color_rgb[0], color_rgb[1], color_rgb[2]))
+                            .with_width(2.0),
+                    );
+                }
                 Kind::Line {
                     start,
                     end,
                     color_rgb,
+                }
+                | Kind::Arrow {
+                    start,
+                    end,
+                    color_rgb,
                 } => {
-                    let offset = if state
-                        .moving
-                        .as_ref()
-                        .is_some_and(|moving| moving.id == annotation.id)
-                    {
-                        let moving = state.moving.as_ref().expect("checked above");
-                        Point::new(
-                            moving.current.x - moving.start.x,
-                            moving.current.y - moving.start.y,
-                        )
-                    } else {
-                        Point::ORIGIN
-                    };
+                    let offset =
+                        if let Some(moving) = moving.filter(|moving| moving.id == annotation.id) {
+                            Point::new(
+                                moving.current.x - moving.start.x,
+                                moving.current.y - moving.start.y,
+                            )
+                        } else {
+                            Point::ORIGIN
+                        };
                     let mut from = Point::new(
                         start[0] as f32 * scale_x + offset.x,
                         start[1] as f32 * scale_y + offset.y,
@@ -568,10 +842,8 @@ impl canvas::Program<Message> for Layer<'_> {
                         end[0] as f32 * scale_x + offset.x,
                         end[1] as f32 * scale_y + offset.y,
                     );
-                    if let Some(endpoint) = state
-                        .line_endpoint
-                        .as_ref()
-                        .filter(|endpoint| endpoint.id == annotation.id)
+                    if let Some(endpoint) =
+                        line_endpoint.filter(|endpoint| endpoint.id == annotation.id)
                     {
                         if endpoint.start {
                             from = endpoint.current;
@@ -585,14 +857,28 @@ impl canvas::Program<Message> for Layer<'_> {
                             .with_color(Color::from_rgb8(color_rgb[0], color_rgb[1], color_rgb[2]))
                             .with_width(2.0),
                     );
+                    if matches!(&annotation.kind, Kind::Arrow { .. }) {
+                        if let Some(wings) = arrow_screen_wings(from, to, scale_x, scale_y) {
+                            for wing in wings {
+                                frame.stroke(
+                                    &canvas::Path::line(to, wing),
+                                    Stroke::default()
+                                        .with_color(Color::from_rgb8(
+                                            color_rgb[0],
+                                            color_rgb[1],
+                                            color_rgb[2],
+                                        ))
+                                        .with_width(2.0),
+                                );
+                            }
+                        }
+                    }
                     if self.selected == Some(annotation.id) {
                         line_selection = Some((from, to));
                     }
                 }
                 Kind::Polyline { points, color_rgb } => {
-                    let offset = state
-                        .moving
-                        .as_ref()
+                    let offset = moving
                         .filter(|moving| moving.id == annotation.id)
                         .map(|moving| {
                             Point::new(
@@ -678,7 +964,10 @@ impl canvas::Program<Message> for Layer<'_> {
                 }
             }
             if self.selected == Some(annotation.id)
-                && !matches!(annotation.kind, Kind::Line { .. } | Kind::Polyline { .. })
+                && !matches!(
+                    annotation.kind,
+                    Kind::Line { .. } | Kind::Arrow { .. } | Kind::Polyline { .. }
+                )
             {
                 selection = Some((top_left, size));
             }
@@ -709,25 +998,56 @@ impl canvas::Program<Message> for Layer<'_> {
                 );
             }
         }
-        if let Some((start, end)) = state.drawing {
+        if let Some(DrawState { start, end, .. }) =
+            state.drawing.filter(|drawing| drawing.version == version)
+        {
+            let end = if self.tool == AnnotationTool::Circle {
+                square_drag_end(start, end, bounds, self.page_points)
+            } else {
+                end
+            };
             let top_left = Point::new(start.x.min(end.x), start.y.min(end.y));
             let size = Size::new((end.x - start.x).abs(), (end.y - start.y).abs());
             let color = match self.tool {
                 AnnotationTool::Highlight => Color::from_rgba(1.0, 0.89, 0.26, 0.35),
                 _ => Color::from_rgba(0.91, 0.30, 0.24, 0.8),
             };
-            if self.tool == AnnotationTool::Line {
+            if matches!(self.tool, AnnotationTool::Line | AnnotationTool::Arrow) {
                 frame.stroke(
                     &canvas::Path::line(start, end),
+                    Stroke::default().with_color(color).with_width(2.0),
+                );
+                if self.tool == AnnotationTool::Arrow {
+                    if let Some(wings) = arrow_screen_wings(start, end, scale_x, scale_y) {
+                        for wing in wings {
+                            frame.stroke(
+                                &canvas::Path::line(end, wing),
+                                Stroke::default().with_color(color).with_width(2.0),
+                            );
+                        }
+                    }
+                }
+            } else if matches!(self.tool, AnnotationTool::Circle | AnnotationTool::Ellipse) {
+                frame.stroke(
+                    &ellipse_path(top_left, size),
+                    Stroke::default().with_color(color).with_width(2.0),
+                );
+            } else if self.tool == AnnotationTool::Polygon {
+                frame.stroke(
+                    &polygon_path(top_left, size),
                     Stroke::default().with_color(color).with_width(2.0),
                 );
             } else {
                 frame.fill_rectangle(top_left, size, color);
             }
         }
-        if self.tool == AnnotationTool::Polyline {
+        if matches!(
+            self.tool,
+            AnnotationTool::Polyline | AnnotationTool::Freehand
+        ) {
             if let Some(draft) = state.polyline.as_ref().filter(|draft| {
                 draft.document == self.model.view().document_id()
+                    && draft.version == version
                     && draft.page == self.page
                     && draft.tool_epoch == self.tool_epoch
                     && draft.bitmap_size == [bounds.width, bounds.height]
@@ -756,13 +1076,26 @@ impl canvas::Program<Message> for Layer<'_> {
         bounds: Rectangle,
         cursor: mouse::Cursor,
     ) -> mouse::Interaction {
-        if state.moving.is_some() {
+        let version = self.model.version();
+        if state
+            .moving
+            .as_ref()
+            .is_some_and(|item| item.version == version)
+        {
             return mouse::Interaction::Grabbing;
         }
-        if state.line_endpoint.is_some() {
+        if state
+            .line_endpoint
+            .as_ref()
+            .is_some_and(|item| item.version == version)
+        {
             return mouse::Interaction::Grabbing;
         }
-        if let Some(resizing) = &state.resizing {
+        if let Some(resizing) = state
+            .resizing
+            .as_ref()
+            .filter(|item| item.version == version)
+        {
             return resizing.handle.interaction();
         }
         if self.tool == AnnotationTool::Select {
@@ -822,6 +1155,107 @@ mod tests {
     use super::*;
     use opds_native_core::annotations::{Annotation, Edit};
     use opds_native_core::DocumentId;
+
+    #[test]
+    fn circle_drag_stays_square_in_page_space_and_within_bounds() {
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(300.0, 200.0));
+        let page = (150.0, 200.0);
+        let start = Point::new(60.0, 40.0);
+        let end = square_drag_end(start, Point::new(90.0, 80.0), bounds, page);
+        assert_eq!(end, Point::new(140.0, 80.0));
+        let reverse = square_drag_end(start, Point::new(40.0, 15.0), bounds, page);
+        assert_eq!(reverse, Point::new(10.0, 15.0));
+        let at_edge = square_drag_end(
+            Point::new(290.0, 40.0),
+            Point::new(299.0, 80.0),
+            bounds,
+            page,
+        );
+        assert_eq!(at_edge, Point::new(300.0, 45.0));
+    }
+
+    #[test]
+    fn freehand_drag_is_bounded_and_finishes_as_a_polyline_command() {
+        use canvas::Program;
+        let model = DocumentModel::new(DocumentId(100), 1).unwrap();
+        let layer = Layer {
+            model: &model,
+            page: 0,
+            selected: None,
+            editing_text: None,
+            tool: AnnotationTool::Freehand,
+            tool_epoch: 1,
+            page_points: (256.0, 192.0),
+            paint_existing: true,
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(256.0, 192.0));
+        let mut state = State::default();
+        let press = canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left));
+        let release = canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left));
+        let start = mouse::Cursor::Available(Point::new(10.0, 20.0));
+        assert!(layer.update(&mut state, &press, bounds, start).is_some());
+        for x in 11..220 {
+            let point = Point::new(x as f32, 20.0 + (x % 7) as f32);
+            let cursor = mouse::Cursor::Available(point);
+            layer.update(
+                &mut state,
+                &canvas::Event::Mouse(mouse::Event::CursorMoved { position: point }),
+                bounds,
+                cursor,
+            );
+            assert!(state.polyline.as_ref().unwrap().points.len() <= MAX_POLYLINE_POINTS);
+        }
+        // Ordinary page-width strokes should retain their sampled vertices;
+        // decimation is reserved for drawings beyond the bounded 512-point cap.
+        assert!(state.polyline.as_ref().unwrap().points.len() > 64);
+        let end = mouse::Cursor::Available(Point::new(220.0, 24.0));
+        assert!(layer.update(&mut state, &release, bounds, end).is_some());
+        assert!(state.polyline.is_none());
+    }
+
+    #[test]
+    fn line_accepts_two_clicks_and_discards_draft_after_tool_change() {
+        use canvas::Program;
+        let model = DocumentModel::new(DocumentId(1), 1).unwrap();
+        let layer = Layer {
+            model: &model,
+            page: 0,
+            selected: None,
+            editing_text: None,
+            tool: AnnotationTool::Line,
+            tool_epoch: 1,
+            page_points: (256.0, 192.0),
+            paint_existing: true,
+        };
+        let bounds = Rectangle::new(Point::ORIGIN, Size::new(256.0, 192.0));
+        let mut state = State::default();
+        let press = canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left));
+        let release = canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left));
+        let start = mouse::Cursor::Available(Point::new(20.0, 30.0));
+        let end = mouse::Cursor::Available(Point::new(90.0, 80.0));
+        assert!(layer.update(&mut state, &press, bounds, start).is_some());
+        assert!(layer.update(&mut state, &release, bounds, start).is_some());
+        assert!(state.drawing.is_some());
+        assert!(layer.update(&mut state, &press, bounds, end).is_some());
+        assert!(state.drawing.is_none());
+
+        layer.update(&mut state, &press, bounds, start);
+        layer.update(&mut state, &release, bounds, start);
+        assert!(state.drawing.is_some());
+        let changed_tool = Layer {
+            tool_epoch: 2,
+            ..layer
+        };
+        changed_tool.update(
+            &mut state,
+            &canvas::Event::Mouse(mouse::Event::CursorMoved {
+                position: Point::new(90.0, 80.0),
+            }),
+            bounds,
+            end,
+        );
+        assert!(state.drawing.is_none());
+    }
 
     #[test]
     fn annotation_canvas_leaves_ctrl_wheel_to_the_single_page_zoom_handler() {

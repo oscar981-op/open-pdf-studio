@@ -8,11 +8,20 @@ use iced::{Element, Event, Length, Rectangle, Renderer, Size, Theme, Vector};
 struct ZoomArea<'a> {
     content: Element<'a, Message>,
     enabled: bool,
+    hand_tool: bool,
+    pan_button: Option<advanced_mouse::Button>,
 }
-pub fn view<'a>(content: impl Into<Element<'a, Message>>, enabled: bool) -> Element<'a, Message> {
+pub fn view<'a>(
+    content: impl Into<Element<'a, Message>>,
+    enabled: bool,
+    hand_tool: bool,
+    pan_button: Option<advanced_mouse::Button>,
+) -> Element<'a, Message> {
     Element::new(ZoomArea {
         content: content.into(),
         enabled,
+        hand_tool,
+        pan_button,
     })
 }
 
@@ -62,6 +71,45 @@ impl Widget<Message, Theme, Renderer> for ZoomArea<'_> {
         shell: &mut Shell<'_, Message>,
         viewport: &Rectangle,
     ) {
+        if let Some(button) = self.pan_button {
+            match event {
+                Event::Mouse(advanced_mouse::Event::CursorMoved { .. }) => {
+                    if let Some(position) = cursor.position() {
+                        shell.publish(Message::PanMoved([position.x, position.y]));
+                        shell.capture_event();
+                        return;
+                    }
+                }
+                Event::Mouse(advanced_mouse::Event::ButtonReleased(released))
+                    if *released == button =>
+                {
+                    shell.publish(Message::PanEnded);
+                    shell.capture_event();
+                    return;
+                }
+                Event::Window(iced::window::Event::Unfocused) => {
+                    shell.publish(Message::PanEnded);
+                }
+                Event::Mouse(advanced_mouse::Event::CursorLeft) => {
+                    // iced does not capture the pointer outside the window.
+                    // End the gesture so a release elsewhere cannot leave
+                    // the next in-window move stuck in pan mode.
+                    shell.publish(Message::PanEnded);
+                }
+                _ => {}
+            }
+        } else if let Event::Mouse(advanced_mouse::Event::ButtonPressed(button)) = event {
+            if (*button == advanced_mouse::Button::Middle
+                || (*button == advanced_mouse::Button::Left && self.hand_tool))
+                && cursor.position_in(layout.bounds()).is_some()
+            {
+                if let Some(position) = cursor.position() {
+                    shell.publish(Message::PanStarted(*button, [position.x, position.y]));
+                    shell.capture_event();
+                    return;
+                }
+            }
+        }
         if self.enabled {
             if let Event::Mouse(advanced_mouse::Event::WheelScrolled { delta }) = event {
                 if let Some(position) = cursor.position_in(layout.bounds()) {
@@ -92,6 +140,12 @@ impl Widget<Message, Theme, Renderer> for ZoomArea<'_> {
         viewport: &Rectangle,
         renderer: &Renderer,
     ) -> advanced_mouse::Interaction {
+        if self.pan_button.is_some() {
+            return advanced_mouse::Interaction::Grabbing;
+        }
+        if self.hand_tool && cursor.position_in(layout.bounds()).is_some() {
+            return advanced_mouse::Interaction::Grab;
+        }
         self.content
             .as_widget()
             .mouse_interaction(tree, layout, cursor, viewport, renderer)

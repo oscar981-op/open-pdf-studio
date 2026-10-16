@@ -103,6 +103,9 @@ impl DocumentView {
     pub fn page_count(&self) -> usize {
         self.page_count
     }
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
     pub fn page(&self) -> usize {
         self.page
     }
