@@ -1,0 +1,379 @@
+{
+  "protocol": "20 alternating paired new processes on same current code except source Arc copy; warm OS cache; full PDF open/render/RGBA write; exact Hayro RGBA reference",
+  "pdf": "/tmp/opds-raster-large-source.pdf",
+  "bytes": 7148200,
+  "all_rgba_equal": true,
+  "medians": {
+    "copy": {
+      "wall_ms": 39.046,
+      "peak_rss_kib": 26288.0
+    },
+    "shared": {
+      "wall_ms": 37.5315,
+      "peak_rss_kib": 26292.0
+    }
+  },
+  "shared_faster_pairs": 10,
+  "pairs": [
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 44.341,
+        "peak_rss_kib": 26232,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 37.686,
+        "peak_rss_kib": 26396,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 37.377,
+        "peak_rss_kib": 26392,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 37.183,
+        "peak_rss_kib": 26228,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 38.637,
+        "peak_rss_kib": 26268,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 34.847,
+        "peak_rss_kib": 26296,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 43.53,
+        "peak_rss_kib": 26292,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 35.612,
+        "peak_rss_kib": 26152,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 41.76,
+        "peak_rss_kib": 26416,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 37.361,
+        "peak_rss_kib": 26232,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 36.744,
+        "peak_rss_kib": 26296,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 37.088,
+        "peak_rss_kib": 26136,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 40.366,
+        "peak_rss_kib": 26068,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 40.371,
+        "peak_rss_kib": 26268,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 42.342,
+        "peak_rss_kib": 26228,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 33.511,
+        "peak_rss_kib": 26136,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 39.455,
+        "peak_rss_kib": 26296,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 38.822,
+        "peak_rss_kib": 26348,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 42.277,
+        "peak_rss_kib": 26268,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 34.144,
+        "peak_rss_kib": 26356,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 42.765,
+        "peak_rss_kib": 26272,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 42.02,
+        "peak_rss_kib": 26292,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 36.201,
+        "peak_rss_kib": 26392,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 42.424,
+        "peak_rss_kib": 26296,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 36.365,
+        "peak_rss_kib": 26416,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 41.38,
+        "peak_rss_kib": 26264,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 46.604,
+        "peak_rss_kib": 26168,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 39.502,
+        "peak_rss_kib": 26292,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 36.557,
+        "peak_rss_kib": 26360,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 39.52,
+        "peak_rss_kib": 26356,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 35.936,
+        "peak_rss_kib": 26296,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 34.84,
+        "peak_rss_kib": 26364,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 39.557,
+        "peak_rss_kib": 26288,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 35.794,
+        "peak_rss_kib": 26228,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 35.186,
+        "peak_rss_kib": 26104,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 41.833,
+        "peak_rss_kib": 26356,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 34.867,
+        "peak_rss_kib": 26156,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 35.756,
+        "peak_rss_kib": 26416,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    },
+    {
+      "shared": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 35.278,
+        "peak_rss_kib": 26228,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      },
+      "copy": {
+        "requested": "dynlex-strict",
+        "used": "Dynlex",
+        "wall_ms": 40.989,
+        "peak_rss_kib": 26288,
+        "rgba_bytes": 196608,
+        "sha256": "293d99845d3d7fad50000784de9e64557652e6a499d6f3f30cd0d38fe6640b3b"
+      }
+    }
+  ]
+}

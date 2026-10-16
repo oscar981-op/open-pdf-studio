@@ -20,8 +20,9 @@ de overige Rust-crates behouden hun bestaande licentievermelding.
 Voor de Home-ribbon zijn de PDF-specifieke SVG's uit de bestaande
 `open-pdf-studio/js/solid/data/ribbonIcons.js` en `HomeTab.jsx`
 zonder vormwijziging onder `../assets/ribbon/home/` opgenomen. Het 16 px
-titelicoon onder `../assets/ribbon/title-icon.rgba` is afgeleid van
-`open-pdf-studio/public/icon.png`. Deze assets komen uit de bestaande Open
+historische 16px-titelicoon onder `../assets/ribbon/title-icon.rgba` is afgeleid van
+`open-pdf-studio/public/icon.png`; de actuele titelbalk gebruikt de originele
+128px-PNG onder `../assets/ui/app-icon-png.bin`. Deze assets komen uit de bestaande Open
 PDF Studio-codebasis. Voor de Annotation-ribbon zijn 15 SVG's uit `ribbonIcons.js` en
 `CommentTab.jsx` onder `../assets/ribbon/annotation/` opgenomen. De acht
 groepen zijn in Hakan's port ingepast; niet-gemigreerde acties zijn

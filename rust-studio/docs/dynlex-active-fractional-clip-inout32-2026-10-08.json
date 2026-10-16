@@ -1,0 +1,316 @@
+{
+  "hashes": {
+    "backend_probe": "1fb62a7a102890fd0028a29a1f89b4e7239db11db082ad515e8a4ceb794be2d3",
+    "opds-text-worker": "409a6be78252932fe59a07d3e36f5122a72111401fc4bdc3fb75bc7fcd76a078",
+    "LiberationSans-Regular.ttf": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f"
+  },
+  "cases": [
+    {
+      "rotation": 0,
+      "crop": "0 0 640 800",
+      "scale": 0.25,
+      "source_sha256": "bc2e2936dee712220d35a1e9d7ca07793105dd8ce2bb2bd40b91e0d7a981fd7a",
+      "exit": 0,
+      "bytes": 128000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 0,
+      "crop": "0 0 640 800",
+      "scale": 1,
+      "source_sha256": "bc2e2936dee712220d35a1e9d7ca07793105dd8ce2bb2bd40b91e0d7a981fd7a",
+      "exit": 0,
+      "bytes": 2048000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 0,
+      "crop": "0 0 640 800",
+      "scale": 2,
+      "source_sha256": "bc2e2936dee712220d35a1e9d7ca07793105dd8ce2bb2bd40b91e0d7a981fd7a",
+      "exit": 0,
+      "bytes": 8192000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 0,
+      "crop": "8 8 632 792",
+      "scale": 0.25,
+      "source_sha256": "6527bd7e61cc04ae0c6f86a2988ad79938a066de54bb6dc40a53644a984a4638",
+      "exit": 0,
+      "bytes": 122304,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 0,
+      "crop": "8 8 632 792",
+      "scale": 1,
+      "source_sha256": "6527bd7e61cc04ae0c6f86a2988ad79938a066de54bb6dc40a53644a984a4638",
+      "exit": 0,
+      "bytes": 1956864,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 0,
+      "crop": "8 8 632 792",
+      "scale": 2,
+      "source_sha256": "6527bd7e61cc04ae0c6f86a2988ad79938a066de54bb6dc40a53644a984a4638",
+      "exit": 0,
+      "bytes": 7827456,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 90,
+      "crop": "0 0 640 800",
+      "scale": 0.25,
+      "source_sha256": "87344b80c095d5c6fb90fe3d43e42c96420f4002033a63dec30efdc23d3a5c57",
+      "exit": 0,
+      "bytes": 128000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 90,
+      "crop": "0 0 640 800",
+      "scale": 1,
+      "source_sha256": "87344b80c095d5c6fb90fe3d43e42c96420f4002033a63dec30efdc23d3a5c57",
+      "exit": 0,
+      "bytes": 2048000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 90,
+      "crop": "0 0 640 800",
+      "scale": 2,
+      "source_sha256": "87344b80c095d5c6fb90fe3d43e42c96420f4002033a63dec30efdc23d3a5c57",
+      "exit": 0,
+      "bytes": 8192000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 90,
+      "crop": "8 8 632 792",
+      "scale": 0.25,
+      "source_sha256": "01885c46a75b4c40229b1755f418e36171805c76c7d54d5ecf76e322bb09bc4d",
+      "exit": 0,
+      "bytes": 122304,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 90,
+      "crop": "8 8 632 792",
+      "scale": 1,
+      "source_sha256": "01885c46a75b4c40229b1755f418e36171805c76c7d54d5ecf76e322bb09bc4d",
+      "exit": 0,
+      "bytes": 1956864,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 90,
+      "crop": "8 8 632 792",
+      "scale": 2,
+      "source_sha256": "01885c46a75b4c40229b1755f418e36171805c76c7d54d5ecf76e322bb09bc4d",
+      "exit": 0,
+      "bytes": 7827456,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 180,
+      "crop": "0 0 640 800",
+      "scale": 0.25,
+      "source_sha256": "4c7d20b6d5cf4ef7946595254de24c34203a76c8803035a1937aa2b03a893da5",
+      "exit": 0,
+      "bytes": 128000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 180,
+      "crop": "0 0 640 800",
+      "scale": 1,
+      "source_sha256": "4c7d20b6d5cf4ef7946595254de24c34203a76c8803035a1937aa2b03a893da5",
+      "exit": 0,
+      "bytes": 2048000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 180,
+      "crop": "0 0 640 800",
+      "scale": 2,
+      "source_sha256": "4c7d20b6d5cf4ef7946595254de24c34203a76c8803035a1937aa2b03a893da5",
+      "exit": 0,
+      "bytes": 8192000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 180,
+      "crop": "8 8 632 792",
+      "scale": 0.25,
+      "source_sha256": "d035b6382a3074378058145ff43d21c91399c354bb940aa7fcc916b79ab04c55",
+      "exit": 0,
+      "bytes": 122304,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 180,
+      "crop": "8 8 632 792",
+      "scale": 1,
+      "source_sha256": "d035b6382a3074378058145ff43d21c91399c354bb940aa7fcc916b79ab04c55",
+      "exit": 0,
+      "bytes": 1956864,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 180,
+      "crop": "8 8 632 792",
+      "scale": 2,
+      "source_sha256": "d035b6382a3074378058145ff43d21c91399c354bb940aa7fcc916b79ab04c55",
+      "exit": 0,
+      "bytes": 7827456,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 270,
+      "crop": "0 0 640 800",
+      "scale": 0.25,
+      "source_sha256": "50c9b84fd9767a5451bc3dbd44d7accb6f8a266674eeb5458b8f961edf483a51",
+      "exit": 0,
+      "bytes": 128000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 270,
+      "crop": "0 0 640 800",
+      "scale": 1,
+      "source_sha256": "50c9b84fd9767a5451bc3dbd44d7accb6f8a266674eeb5458b8f961edf483a51",
+      "exit": 0,
+      "bytes": 2048000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 270,
+      "crop": "0 0 640 800",
+      "scale": 2,
+      "source_sha256": "50c9b84fd9767a5451bc3dbd44d7accb6f8a266674eeb5458b8f961edf483a51",
+      "exit": 0,
+      "bytes": 8192000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 270,
+      "crop": "8 8 632 792",
+      "scale": 0.25,
+      "source_sha256": "07f09f1a9c85e043b248d4bfdb62323cf8d43152e1796bed617752ea07448b24",
+      "exit": 0,
+      "bytes": 122304,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 270,
+      "crop": "8 8 632 792",
+      "scale": 1,
+      "source_sha256": "07f09f1a9c85e043b248d4bfdb62323cf8d43152e1796bed617752ea07448b24",
+      "exit": 0,
+      "bytes": 1956864,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 270,
+      "crop": "8 8 632 792",
+      "scale": 2,
+      "source_sha256": "07f09f1a9c85e043b248d4bfdb62323cf8d43152e1796bed617752ea07448b24",
+      "exit": 0,
+      "bytes": 7827456,
+      "different_channels": 0,
+      "exact": true
+    }
+  ],
+  "active_cases": [
+    {
+      "rotation": 0,
+      "crop": "0 0 640 800",
+      "source_sha256": "193d812568f2291379ae6c06df71bb5d3156938e28e0be731ee353d95dd4d406",
+      "bytes": 2048000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 0,
+      "crop": "8 8 632 792",
+      "source_sha256": "d5440b20ac96ac7d4c225e7141fc8f67ad96d9ae918ecec3595622805b472f2c",
+      "bytes": 1956864,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 90,
+      "crop": "0 0 640 800",
+      "source_sha256": "b7de2d5fba6af846b87e15382130218f26bf5a347f2e76f80fcfbbb7d44f2910",
+      "bytes": 2048000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 90,
+      "crop": "8 8 632 792",
+      "source_sha256": "ee19801d668654996881d6bed78636426525ebba0450365ad3bd5f6e032a2d47",
+      "bytes": 1956864,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 180,
+      "crop": "0 0 640 800",
+      "source_sha256": "7fadd229a3453a4ccf1078ab0348c6efeea6fb886c7496a8ba244229f89c7944",
+      "bytes": 2048000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 180,
+      "crop": "8 8 632 792",
+      "source_sha256": "66792efbdaf069e6cd19c02a4ea257c374758d357dc8295b8ff5fc0d935b5d4d",
+      "bytes": 1956864,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 270,
+      "crop": "0 0 640 800",
+      "source_sha256": "e09ed2562f8c0d8aea21a6452e69061083a356af1500ad739e5c53956e4d31e3",
+      "bytes": 2048000,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "rotation": 270,
+      "crop": "8 8 632 792",
+      "source_sha256": "bac254107d0a2e5fe78cdca2b4c8660fc801ad1bea25cca0a30ca63b5463f1d2",
+      "bytes": 1956864,
+      "different_channels": 0,
+      "exact": true
+    }
+  ],
+  "all_exact": true
+}

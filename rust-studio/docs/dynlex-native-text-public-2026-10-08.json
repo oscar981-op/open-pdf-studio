@@ -1,0 +1,415 @@
+{
+  "binary_sha256": {
+    "probe": "5bbda7b57e1b0f0380f8fbd09bb9a8d9dfae7c0c913fcf3a0839a1f1cdffaf15",
+    "worker": "78e03658cb5811361c9bd8f3c8c5b747fc88badbf81f3b7121f09c0d4e1c0f4c"
+  },
+  "protocol": "Fixed ten public pages at 25/100/200%; strict native DynLex, independent full Hayro comparison for accepted pages; single runs are not performance benchmarks.",
+  "cases": [
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 2,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"dictionary budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 2,
+      "scale": 1,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"dictionary budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 2,
+      "scale": 2,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"dictionary budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 3,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"dictionary budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 3,
+      "scale": 1,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"dictionary budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "attention",
+      "source_sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+      "page": 3,
+      "scale": 2,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"dictionary budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 1,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          153,
+          198
+        ],
+        "wall_ms": 1326.191,
+        "peak_rss_kib": 117900,
+        "sha256": "58c3b22e52137f4e77c1ba68d7641e4585feba8a9f5f68bd70115553297acc7a"
+      },
+      "pixels": {
+        "comparable": true,
+        "different_pixels": 0,
+        "different_rgba_channels": 0,
+        "mean_absolute_channel_error": 0.0
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 1,
+      "scale": 1,
+      "dynlex": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          612,
+          792
+        ],
+        "wall_ms": 1456.377,
+        "peak_rss_kib": 121880,
+        "sha256": "e86d54d685a5c04eaf08e78cec099e518e68502713517e98682b44d414f1b3f1"
+      },
+      "pixels": {
+        "comparable": true,
+        "different_pixels": 0,
+        "different_rgba_channels": 0,
+        "mean_absolute_channel_error": 0.0
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 1,
+      "scale": 2,
+      "dynlex": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          1224,
+          1584
+        ],
+        "wall_ms": 1608.44,
+        "peak_rss_kib": 138672,
+        "sha256": "8cd64545840c6b19728b76c0c8e472c316f4d73296911482f03fa0b3b3634a4d"
+      },
+      "pixels": {
+        "comparable": true,
+        "different_pixels": 0,
+        "different_rgba_channels": 0,
+        "mean_absolute_channel_error": 0.0
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          153,
+          198
+        ],
+        "wall_ms": 495.014,
+        "peak_rss_kib": 17884,
+        "sha256": "039c36d80816f5436fe29efd0b95ce26dc25cc69fce89f9638f2199dde56c659"
+      },
+      "pixels": {
+        "comparable": true,
+        "different_pixels": 0,
+        "different_rgba_channels": 0,
+        "mean_absolute_channel_error": 0.0
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 1,
+      "dynlex": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          612,
+          792
+        ],
+        "wall_ms": 465.748,
+        "peak_rss_kib": 18260,
+        "sha256": "6cfd9bc15e748a86222453b59f1e049d31b6e5bd53bb5950ea0d5a5ccaef9d77"
+      },
+      "pixels": {
+        "comparable": true,
+        "different_pixels": 0,
+        "different_rgba_channels": 0,
+        "mean_absolute_channel_error": 0.0
+      }
+    },
+    {
+      "id": "albany-contract",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 2,
+      "dynlex": {
+        "status": "rendered",
+        "used": "Dynlex",
+        "size": [
+          1224,
+          1584
+        ],
+        "wall_ms": 400.352,
+        "peak_rss_kib": 25636,
+        "sha256": "b76239baa7bb8ba82c667130bad8a9affc3dfffd4a169b91cea1bdd8e2166818"
+      },
+      "pixels": {
+        "comparable": true,
+        "different_pixels": 0,
+        "different_rgba_channels": 0,
+        "mean_absolute_channel_error": 0.0
+      }
+    },
+    {
+      "id": "albany-drawings",
+      "source_sha256": "07b49d1cbf8117b8043271a0805f3c58cd75f87cf48d7d6c21861cab78acacde",
+      "page": 3,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-drawings",
+      "source_sha256": "07b49d1cbf8117b8043271a0805f3c58cd75f87cf48d7d6c21861cab78acacde",
+      "page": 3,
+      "scale": 1,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "albany-drawings",
+      "source_sha256": "07b49d1cbf8117b8043271a0805f3c58cd75f87cf48d7d6c21861cab78acacde",
+      "page": 3,
+      "scale": 2,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 3,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 3,
+      "scale": 1,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 3,
+      "scale": 2,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 71,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 71,
+      "scale": 1,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-schematic",
+      "source_sha256": "6f42ed5cf7a2ef85bb65995ab71a154a3192ee5e923b9f41950df8cb3d7fcd90",
+      "page": 71,
+      "scale": 2,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "tfl-tube",
+      "source_sha256": "5c6f71e2ef8dbc391a683044762de5b9618f306f05afc9dfbaf3ddcf240e0117",
+      "page": 1,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"object/xref stream decode budget or invalid Flate\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "tfl-tube",
+      "source_sha256": "5c6f71e2ef8dbc391a683044762de5b9618f306f05afc9dfbaf3ddcf240e0117",
+      "page": 1,
+      "scale": 1,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"object/xref stream decode budget or invalid Flate\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "tfl-tube",
+      "source_sha256": "5c6f71e2ef8dbc391a683044762de5b9618f306f05afc9dfbaf3ddcf240e0117",
+      "page": 1,
+      "scale": 2,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"object/xref stream decode budget or invalid Flate\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-drawing-manual",
+      "source_sha256": "2630f3f2ce4670a288f430e3840b245e1d0332d34d15107ec80f11510334cfe0",
+      "page": 48,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"xref Size budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-drawing-manual",
+      "source_sha256": "2630f3f2ce4670a288f430e3840b245e1d0332d34d15107ec80f11510334cfe0",
+      "page": 48,
+      "scale": 1,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"xref Size budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "nps-drawing-manual",
+      "source_sha256": "2630f3f2ce4670a288f430e3840b245e1d0332d34d15107ec80f11510334cfe0",
+      "page": 48,
+      "scale": 2,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): Error: \\\"xref Size budget\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "usgs-topo-guide",
+      "source_sha256": "ecbdc9d547810ebc18a1be0d0a546aeca6f67e106d37982722dcc3fcb8fb6536",
+      "page": 7,
+      "scale": 0.25,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): text preflight: Stats { tokens: 48864, streams: 265, object_streams: 37, decoded_bytes: 253061 }\\nError: \\\"unsupported resource type\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "usgs-topo-guide",
+      "source_sha256": "ecbdc9d547810ebc18a1be0d0a546aeca6f67e106d37982722dcc3fcb8fb6536",
+      "page": 7,
+      "scale": 1,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): text preflight: Stats { tokens: 48864, streams: 265, object_streams: 37, decoded_bytes: 253061 }\\nError: \\\"unsupported resource type\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    },
+    {
+      "id": "usgs-topo-guide",
+      "source_sha256": "ecbdc9d547810ebc18a1be0d0a546aeca6f67e106d37982722dcc3fcb8fb6536",
+      "page": 7,
+      "scale": 2,
+      "dynlex": {
+        "status": "unsupported",
+        "reason": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (exit status: 1): text preflight: Stats { tokens: 48864, streams: 265, object_streams: 37, decoded_bytes: 253061 }\\nError: \\\"unsupported resource type\\\"\\n. No fallback rendered. Select another renderer manually.\"",
+        "returncode": 1
+      }
+    }
+  ],
+  "supported": 6,
+  "unsupported": 24,
+  "errors": 0,
+  "wrong": 0
+}

@@ -1,0 +1,793 @@
+{
+  "purpose": "explicitly experimental, no native acceptance",
+  "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "binary_sha256": {
+    "winding_probe": "39c6dd8db64b6034a74f8c8848084c93166121c61df029b576dbc80fe2a30571",
+    "truetype_page_probe": "46a1013e568e4d7569b219c6cd9154d68d442d3bd7d9b19444ab5de95a20e185",
+    "glyph_vello_probe": "e044f0c75981bfd86bd40388e1d70163a04a73682e1676dd6e201115987c5872",
+    "quad_flatten_oracle": "ca0a5ad5b4a2b713d4ed63a9c957679df21646f724ad8eb59ceb823efbab10a2",
+    "backend_probe": "a348986c8e9f5c010cf89b7375c313ea0dc5f8af9fd9599bc7dba469813a56a7"
+  },
+  "synthetic": [
+    {
+      "case": 0,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 1,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 2,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 3,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 4,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 5,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 6,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 7,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 8,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 9,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 10,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 11,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 12,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 13,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 14,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 15,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 16,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 17,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 18,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 19,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 20,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 21,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 22,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 23,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 24,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 25,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 26,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 27,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 28,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 29,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 30,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 31,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 32,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 33,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 34,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 35,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 36,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 37,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 38,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 39,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 40,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 41,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 42,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 43,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 44,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 45,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 46,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 47,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    }
+  ],
+  "whole_page": [
+    {
+      "scale": 0.25,
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\n153x198 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "rgba_written": true,
+      "pixels": {
+        "bytes": 121176,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_oracle_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_own_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "quadratic_sha256": "90aad04aa4ccb637f96e4bf4037692248e8dacc20d35058a396022c406bb8439",
+      "dense_original_outline": [
+        {
+          "steps_per_quadratic": 64,
+          "points": 707,
+          "strict_crossings": [
+            {
+              "contour": 0,
+              "edges": [
+                124,
+                137
+              ],
+              "points": [
+                [
+                  128.00767421295166,
+                  95.99097829055775
+                ],
+                [
+                  128.00807268066407,
+                  95.9887932934569
+                ],
+                [
+                  128.00834627822877,
+                  95.9906252934264
+                ],
+                [
+                  128.00647540039063,
+                  95.99047643554677
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "steps_per_quadratic": 128,
+          "points": 1411,
+          "strict_crossings": [
+            {
+              "contour": 0,
+              "edges": [
+                247,
+                272
+              ],
+              "points": [
+                [
+                  128.00767421295166,
+                  95.99097829055775
+                ],
+                [
+                  128.00787582557678,
+                  95.98988694660174
+                ],
+                [
+                  128.00834627822877,
+                  95.9906252934264
+                ],
+                [
+                  128.00740954990385,
+                  95.99055334545123
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scale": 1,
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\n612x792 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "rgba_written": true,
+      "pixels": {
+        "bytes": 1938816,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_oracle_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_own_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "quadratic_sha256": "ea04f7c457c232cf51635fa51abb628232a4ca392fb25445737efca38b8edb8c",
+      "dense_original_outline": [
+        {
+          "steps_per_quadratic": 64,
+          "points": 707,
+          "strict_crossings": [
+            {
+              "contour": 0,
+              "edges": [
+                124,
+                137
+              ],
+              "points": [
+                [
+                  128.03069685180662,
+                  95.96391316223101
+                ],
+                [
+                  128.03229072265623,
+                  95.95517317382757
+                ],
+                [
+                  128.03338511291503,
+                  95.96250117370562
+                ],
+                [
+                  128.02590160156248,
+                  95.96190574218706
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "steps_per_quadratic": 128,
+          "points": 1411,
+          "strict_crossings": [
+            {
+              "contour": 0,
+              "edges": [
+                247,
+                272
+              ],
+              "points": [
+                [
+                  128.03069685180662,
+                  95.96391316223101
+                ],
+                [
+                  128.0315033023071,
+                  95.95954778640697
+                ],
+                [
+                  128.03338511291503,
+                  95.96250117370562
+                ],
+                [
+                  128.02963819961545,
+                  95.96221338180497
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scale": 2,
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\n1224x1584 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "rgba_written": true,
+      "pixels": {
+        "bytes": 7755264,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_oracle_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_own_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "quadratic_sha256": "bb8388926d803d1d602841face96bc0fc9bba48d896d33350e986936c424819b",
+      "dense_original_outline": [
+        {
+          "steps_per_quadratic": 64,
+          "points": 707,
+          "strict_crossings": [
+            {
+              "contour": 0,
+              "edges": [
+                124,
+                137
+              ],
+              "points": [
+                [
+                  128.06139370361325,
+                  95.927826324462
+                ],
+                [
+                  128.06458144531246,
+                  95.91034634765515
+                ],
+                [
+                  128.06677022583006,
+                  95.92500234741121
+                ],
+                [
+                  128.051803203125,
+                  95.9238114843741
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "steps_per_quadratic": 128,
+          "points": 1411,
+          "strict_crossings": [
+            {
+              "contour": 0,
+              "edges": [
+                247,
+                272
+              ],
+              "points": [
+                [
+                  128.06139370361325,
+                  95.927826324462
+                ],
+                [
+                  128.06300660461423,
+                  95.91909557281394
+                ],
+                [
+                  128.06677022583006,
+                  95.92500234741121
+                ],
+                [
+                  128.05927639923095,
+                  95.92442676360996
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "text_fixtures": [
+    {
+      "rotation": 0,
+      "crop": "0 0 640 800",
+      "source_sha256": "ef7aa8fdaabc7fc6a6a64c786b950228ce3287531dee44bc703bd7f1167e0e5a",
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\n640x800 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      }
+    },
+    {
+      "rotation": 0,
+      "crop": "8 8 632 792",
+      "source_sha256": "78caf4750955a0c6a1204613464ddebb1e838b33652830e85495195d63d9a62a",
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\n624x784 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      }
+    },
+    {
+      "rotation": 90,
+      "crop": "0 0 640 800",
+      "source_sha256": "601f00450abd058c3041ceedf808b1582164de261634dbe1f41210957afb31f5",
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\n800x640 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      }
+    },
+    {
+      "rotation": 90,
+      "crop": "8 8 632 792",
+      "source_sha256": "d3b46b57915e2688e8c4ec751e501c52d0547ca9c6b57067bc9356d5153f1a0c",
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\n784x624 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      }
+    },
+    {
+      "rotation": 180,
+      "crop": "0 0 640 800",
+      "source_sha256": "f794d014592d944fae8bb4694d4c136268202c801470eab4252f7a35977d6391",
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\n640x800 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      }
+    },
+    {
+      "rotation": 180,
+      "crop": "8 8 632 792",
+      "source_sha256": "08122fbf3745cce23f2badd34225bf8a5085b6da8fb971d5e1992e55b25c58be",
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\n624x784 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      }
+    },
+    {
+      "rotation": 270,
+      "crop": "0 0 640 800",
+      "source_sha256": "decdffbe93c6392a95ab4f9ae0e14a3612f8e0a53c97687ae16a90561e802c36",
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\n800x640 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      }
+    },
+    {
+      "rotation": 270,
+      "crop": "8 8 632 792",
+      "source_sha256": "34cb955aab9f2dfd3323d91deddd2fa0f0f1d549bd91b0f96cfd18faa0883bd0",
+      "exit": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\n784x624 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      }
+    }
+  ],
+  "fixture_font_sha256": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f",
+  "invalid_cli_rejected": 5,
+  "synthetic_all_exact": true,
+  "all_exact": true
+}

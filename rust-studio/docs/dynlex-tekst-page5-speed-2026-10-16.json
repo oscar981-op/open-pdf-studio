@@ -1,0 +1,229 @@
+{
+  "pdf": "/home/aia02/Documenten/GitHub/open-pdf-studio-rust/test pdf-bestanden/Originele bestanden/Tekst.pdf",
+  "page": 5,
+  "scale": 1,
+  "pairs": [
+    {
+      "dynlex": {
+        "ms": 122.668,
+        "rss_kib": 19272,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "hayro": {
+        "ms": 57.745,
+        "rss_kib": 19776,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "hayro": {
+        "ms": 58.434,
+        "rss_kib": 19728,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "dynlex": {
+        "ms": 134.184,
+        "rss_kib": 19040,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "dynlex": {
+        "ms": 137.149,
+        "rss_kib": 18984,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "hayro": {
+        "ms": 59.441,
+        "rss_kib": 19668,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "hayro": {
+        "ms": 52.494,
+        "rss_kib": 19664,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "dynlex": {
+        "ms": 128.516,
+        "rss_kib": 19252,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "dynlex": {
+        "ms": 113.047,
+        "rss_kib": 19484,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "hayro": {
+        "ms": 66.709,
+        "rss_kib": 19712,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "hayro": {
+        "ms": 55.184,
+        "rss_kib": 19584,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "dynlex": {
+        "ms": 129.866,
+        "rss_kib": 19216,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "dynlex": {
+        "ms": 132.396,
+        "rss_kib": 19016,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "hayro": {
+        "ms": 50.433,
+        "rss_kib": 19584,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "hayro": {
+        "ms": 60.264,
+        "rss_kib": 19588,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "dynlex": {
+        "ms": 116.492,
+        "rss_kib": 19148,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "dynlex": {
+        "ms": 119.125,
+        "rss_kib": 19188,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "hayro": {
+        "ms": 58.516,
+        "rss_kib": 19584,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "hayro": {
+        "ms": 54.644,
+        "rss_kib": 19704,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "dynlex": {
+        "ms": 119.339,
+        "rss_kib": 19256,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "dynlex": {
+        "ms": 132.396,
+        "rss_kib": 19152,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "hayro": {
+        "ms": 55.805,
+        "rss_kib": 19692,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "hayro": {
+        "ms": 56.334,
+        "rss_kib": 19768,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "dynlex": {
+        "ms": 122.431,
+        "rss_kib": 19156,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "dynlex": {
+        "ms": 126.916,
+        "rss_kib": 19280,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "hayro": {
+        "ms": 59.567,
+        "rss_kib": 19720,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "hayro": {
+        "ms": 60.994,
+        "rss_kib": 19744,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "dynlex": {
+        "ms": 123.152,
+        "rss_kib": 19348,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    },
+    {
+      "dynlex": {
+        "ms": 123.958,
+        "rss_kib": 19264,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      },
+      "hayro": {
+        "ms": 60.085,
+        "rss_kib": 19728,
+        "sha256": "15b2b175806e2af11c46952bff8ba70a431d5c6bb4801b0d15895b0e80379fdd",
+        "size": 2001580
+      }
+    }
+  ],
+  "all_exact": true,
+  "medians": {
+    "dynlex": {
+      "wall_ms": 123.958,
+      "rss_kib": 19216
+    },
+    "hayro": {
+      "wall_ms": 58.434,
+      "rss_kib": 19704
+    }
+  },
+  "dynlex_faster_pairs": 0
+}

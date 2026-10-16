@@ -1,0 +1,143 @@
+{
+  "scope": "Prepared geometry replay only; excludes PDF parsing, outline staging, diagnostic writes, and byte comparisons. Sequential and batch share the same prepared scene and fresh output allocation. No parallel builds or tests during this run.",
+  "binary_sha256": "00bac381c78656bde6d2169d0b1b6c81f76510189ba87e99f55afa28c4d51b8e",
+  "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "samples": [
+    {
+      "prepare_ms": 117.815067,
+      "render_ms": 99.361317,
+      "replay_ms": [
+        52.054956,
+        48.747684,
+        47.864711
+      ],
+      "sequential_ms": [
+        504.684612,
+        427.435372,
+        419.35048400000005
+      ],
+      "paints": 660,
+      "unique_outlines": 79,
+      "outline_bytes": 112480,
+      "scene_bytes": 708608,
+      "round": 0,
+      "scale": 1
+    },
+    {
+      "prepare_ms": 84.365142,
+      "render_ms": 69.504839,
+      "replay_ms": [
+        62.556771,
+        57.351289,
+        55.152565
+      ],
+      "sequential_ms": [
+        1609.95529,
+        1537.0356269999997,
+        1544.705867
+      ],
+      "paints": 662,
+      "unique_outlines": 79,
+      "outline_bytes": 112480,
+      "scene_bytes": 714368,
+      "round": 0,
+      "scale": 2
+    },
+    {
+      "prepare_ms": 86.74682899999999,
+      "render_ms": 68.26324,
+      "replay_ms": [
+        61.127578,
+        55.612632000000005,
+        57.853336999999996
+      ],
+      "sequential_ms": [
+        1604.37864,
+        1575.8313859999998,
+        1565.7715190000001
+      ],
+      "paints": 662,
+      "unique_outlines": 79,
+      "outline_bytes": 112480,
+      "scene_bytes": 714368,
+      "round": 1,
+      "scale": 2
+    },
+    {
+      "prepare_ms": 84.293091,
+      "render_ms": 54.512674999999994,
+      "replay_ms": [
+        53.140923,
+        47.110938999999995,
+        47.126929
+      ],
+      "sequential_ms": [
+        435.515368,
+        469.742204,
+        413.803457
+      ],
+      "paints": 660,
+      "unique_outlines": 79,
+      "outline_bytes": 112480,
+      "scene_bytes": 708608,
+      "round": 1,
+      "scale": 1
+    },
+    {
+      "prepare_ms": 84.30919200000001,
+      "render_ms": 53.451608,
+      "replay_ms": [
+        48.50354,
+        46.866165,
+        46.814674000000004
+      ],
+      "sequential_ms": [
+        434.481492,
+        408.127589,
+        408.26033099999995
+      ],
+      "paints": 660,
+      "unique_outlines": 79,
+      "outline_bytes": 112480,
+      "scene_bytes": 708608,
+      "round": 2,
+      "scale": 1
+    },
+    {
+      "prepare_ms": 77.694728,
+      "render_ms": 61.477964,
+      "replay_ms": [
+        62.593182,
+        55.401539,
+        56.697168999999995
+      ],
+      "sequential_ms": [
+        1588.286573,
+        1534.9458459999998,
+        1525.9162050000002
+      ],
+      "paints": 662,
+      "unique_outlines": 79,
+      "outline_bytes": 112480,
+      "scene_bytes": 714368,
+      "round": 2,
+      "scale": 2
+    }
+  ],
+  "summary": [
+    {
+      "scale": 1,
+      "sequential_ms": 427.435372,
+      "batch_ms": 47.864711,
+      "speedup": 8.930073180636146,
+      "pairs": 9
+    },
+    {
+      "scale": 2,
+      "sequential_ms": 1565.7715190000001,
+      "batch_ms": 57.351289,
+      "speedup": 27.301418090184512,
+      "pairs": 9
+    }
+  ]
+}

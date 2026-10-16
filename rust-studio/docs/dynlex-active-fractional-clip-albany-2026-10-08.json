@@ -1,0 +1,898 @@
+{
+  "protocol": "all pages, scales 0.25/1/2, strict DynLex; unsupported has no speed score; successful output requires full Hayro equality",
+  "documents": [
+    {
+      "pdf": "/home/aia02/.cache/opds-benchmarks/internet-2026-10-08/albany-contract.pdf",
+      "pages": 49,
+      "bytes": 2474873,
+      "sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "results": [
+        {
+          "page": 1,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 1,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 1,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 2,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 2,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 3,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 4,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 4,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 4,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 5,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 5,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 6,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 6,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 6,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 7,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 7,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 8,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 9,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 9,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 9,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 10,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 10,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 10,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 11,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 11,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 11,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 12,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 12,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 12,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 13,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 13,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 13,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 14,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 14,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 14,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 15,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator cm at 1020\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator cm at 1020\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 15,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator cm at 1020\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator w at 127\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator w at 127\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 16,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator w at 127\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 17,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 17,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 17,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 18,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 18,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 18,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 19,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 19,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 19,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 20,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 20,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 20,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 21,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 21,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 21,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 22,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 22,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 22,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 23,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 23,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 23,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 24,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 24,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 24,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 25,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 25,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 25,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 26,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator cm at 184\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 26,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator cm at 184\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 26,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"unsupported operator cm at 184\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 27,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 27,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 27,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 28,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 28,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 28,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 29,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 29,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 29,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 30,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 30,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 30,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 31,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 31,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 31,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 32,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 32,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 32,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 33,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 33,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 33,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 34,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 34,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 34,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 35,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 35,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 35,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 36,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 36,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 36,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 37,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 37,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 37,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 38,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 38,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 38,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 39,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 39,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 39,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"annotation/group unsupported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 40,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 40,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 40,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 41,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 41,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 41,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 42,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 42,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 42,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 43,
+          "scale": 0.25,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 43,
+          "scale": 1,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 43,
+          "scale": 2,
+          "status": "unsupported",
+          "reason": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nError: \"expected embedded WinAnsi TrueType\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+        },
+        {
+          "page": 44,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 44,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 44,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 45,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 45,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 45,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 46,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 46,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 46,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 47,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 47,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 47,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 48,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 48,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 48,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        },
+        {
+          "page": 49,
+          "scale": 0.25,
+          "status": "supported_exact",
+          "rgba_bytes": 121176
+        },
+        {
+          "page": 49,
+          "scale": 1,
+          "status": "supported_exact",
+          "rgba_bytes": 1938816
+        },
+        {
+          "page": 49,
+          "scale": 2,
+          "status": "supported_exact",
+          "rgba_bytes": 7755264
+        }
+      ]
+    }
+  ],
+  "supported": 105,
+  "unsupported": 42,
+  "errors": 0
+}

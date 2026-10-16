@@ -1,0 +1,565 @@
+{
+  "hashes": {
+    "probe": "1fb62a7a102890fd0028a29a1f89b4e7239db11db082ad515e8a4ceb794be2d3",
+    "worker": "eb533349b899ca372be696d02b8b69e0d63f0603829132a33dae8c716495b328",
+    "font": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f"
+  },
+  "protocol": "Full RGBA equality against Hayro; strict DynLex without fallback; 4 rotations, two CropBoxes, three scales, mixed Identity-H/WinAnsi and ordered color/rectangle paints.",
+  "cases": [
+    {
+      "seed": 0,
+      "rotation": 0,
+      "crop": "0 0 256 192",
+      "scale": 0.25,
+      "source_sha256": "a0c2e521fb17cf5eef4cfb82f3b37e945ede106faca88718a27d8c9ce4923bc0",
+      "exit": 0,
+      "bytes": 12288,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 0,
+      "crop": "0 0 256 192",
+      "scale": 1,
+      "source_sha256": "a0c2e521fb17cf5eef4cfb82f3b37e945ede106faca88718a27d8c9ce4923bc0",
+      "exit": 0,
+      "bytes": 196608,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 0,
+      "crop": "0 0 256 192",
+      "scale": 2,
+      "source_sha256": "a0c2e521fb17cf5eef4cfb82f3b37e945ede106faca88718a27d8c9ce4923bc0",
+      "exit": 0,
+      "bytes": 786432,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 0,
+      "crop": "4 4 252 188",
+      "scale": 0.25,
+      "source_sha256": "4ee6c00430e2fe8493161cb17e92214560302fbc686795ada1492cf5473f5a99",
+      "exit": 0,
+      "bytes": 11408,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 0,
+      "crop": "4 4 252 188",
+      "scale": 1,
+      "source_sha256": "4ee6c00430e2fe8493161cb17e92214560302fbc686795ada1492cf5473f5a99",
+      "exit": 0,
+      "bytes": 182528,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 0,
+      "crop": "4 4 252 188",
+      "scale": 2,
+      "source_sha256": "4ee6c00430e2fe8493161cb17e92214560302fbc686795ada1492cf5473f5a99",
+      "exit": 0,
+      "bytes": 730112,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 90,
+      "crop": "0 0 256 192",
+      "scale": 0.25,
+      "source_sha256": "9fc007c591baec5ce9adba18cd619d539bb6d669887b719f0c30926b2ddef709",
+      "exit": 0,
+      "bytes": 12288,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 90,
+      "crop": "0 0 256 192",
+      "scale": 1,
+      "source_sha256": "9fc007c591baec5ce9adba18cd619d539bb6d669887b719f0c30926b2ddef709",
+      "exit": 0,
+      "bytes": 196608,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 90,
+      "crop": "0 0 256 192",
+      "scale": 2,
+      "source_sha256": "9fc007c591baec5ce9adba18cd619d539bb6d669887b719f0c30926b2ddef709",
+      "exit": 0,
+      "bytes": 786432,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 90,
+      "crop": "4 4 252 188",
+      "scale": 0.25,
+      "source_sha256": "8ed7192d8e4578f05cd21852928aaef4fb0a4e4724c3b1e97466228d87e3774b",
+      "exit": 0,
+      "bytes": 11408,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 90,
+      "crop": "4 4 252 188",
+      "scale": 1,
+      "source_sha256": "8ed7192d8e4578f05cd21852928aaef4fb0a4e4724c3b1e97466228d87e3774b",
+      "exit": 0,
+      "bytes": 182528,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 90,
+      "crop": "4 4 252 188",
+      "scale": 2,
+      "source_sha256": "8ed7192d8e4578f05cd21852928aaef4fb0a4e4724c3b1e97466228d87e3774b",
+      "exit": 0,
+      "bytes": 730112,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 180,
+      "crop": "0 0 256 192",
+      "scale": 0.25,
+      "source_sha256": "fa3945961657a3d28b78f44e6d237d3a2829628e47f23bbdee5a5d06f9b28f76",
+      "exit": 0,
+      "bytes": 12288,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 180,
+      "crop": "0 0 256 192",
+      "scale": 1,
+      "source_sha256": "fa3945961657a3d28b78f44e6d237d3a2829628e47f23bbdee5a5d06f9b28f76",
+      "exit": 0,
+      "bytes": 196608,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 180,
+      "crop": "0 0 256 192",
+      "scale": 2,
+      "source_sha256": "fa3945961657a3d28b78f44e6d237d3a2829628e47f23bbdee5a5d06f9b28f76",
+      "exit": 0,
+      "bytes": 786432,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 180,
+      "crop": "4 4 252 188",
+      "scale": 0.25,
+      "source_sha256": "8e24f277aa97894453b3561fbd2ca1b5508f0086a1bdd46ef6750a9f77ef2083",
+      "exit": 0,
+      "bytes": 11408,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 180,
+      "crop": "4 4 252 188",
+      "scale": 1,
+      "source_sha256": "8e24f277aa97894453b3561fbd2ca1b5508f0086a1bdd46ef6750a9f77ef2083",
+      "exit": 0,
+      "bytes": 182528,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 180,
+      "crop": "4 4 252 188",
+      "scale": 2,
+      "source_sha256": "8e24f277aa97894453b3561fbd2ca1b5508f0086a1bdd46ef6750a9f77ef2083",
+      "exit": 0,
+      "bytes": 730112,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 270,
+      "crop": "0 0 256 192",
+      "scale": 0.25,
+      "source_sha256": "f1087f548851d6fa40ec67978fe9c1dbe47d01c6169d7f69a4a14b405d3df784",
+      "exit": 0,
+      "bytes": 12288,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 270,
+      "crop": "0 0 256 192",
+      "scale": 1,
+      "source_sha256": "f1087f548851d6fa40ec67978fe9c1dbe47d01c6169d7f69a4a14b405d3df784",
+      "exit": 0,
+      "bytes": 196608,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 270,
+      "crop": "0 0 256 192",
+      "scale": 2,
+      "source_sha256": "f1087f548851d6fa40ec67978fe9c1dbe47d01c6169d7f69a4a14b405d3df784",
+      "exit": 0,
+      "bytes": 786432,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 270,
+      "crop": "4 4 252 188",
+      "scale": 0.25,
+      "source_sha256": "8547889f61c6dc1338b67dbf2de45e3d8044503b25bab5c7b45f82dab2958107",
+      "exit": 0,
+      "bytes": 11408,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 270,
+      "crop": "4 4 252 188",
+      "scale": 1,
+      "source_sha256": "8547889f61c6dc1338b67dbf2de45e3d8044503b25bab5c7b45f82dab2958107",
+      "exit": 0,
+      "bytes": 182528,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 0,
+      "rotation": 270,
+      "crop": "4 4 252 188",
+      "scale": 2,
+      "source_sha256": "8547889f61c6dc1338b67dbf2de45e3d8044503b25bab5c7b45f82dab2958107",
+      "exit": 0,
+      "bytes": 730112,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 0,
+      "crop": "0 0 256 192",
+      "scale": 0.25,
+      "source_sha256": "181bf62230d9acae2c0ddc010050679be117c294a2ba737f6fc73d1871de15b1",
+      "exit": 0,
+      "bytes": 12288,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 0,
+      "crop": "0 0 256 192",
+      "scale": 1,
+      "source_sha256": "181bf62230d9acae2c0ddc010050679be117c294a2ba737f6fc73d1871de15b1",
+      "exit": 0,
+      "bytes": 196608,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 0,
+      "crop": "0 0 256 192",
+      "scale": 2,
+      "source_sha256": "181bf62230d9acae2c0ddc010050679be117c294a2ba737f6fc73d1871de15b1",
+      "exit": 0,
+      "bytes": 786432,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 0,
+      "crop": "4 4 252 188",
+      "scale": 0.25,
+      "source_sha256": "13fa2290bf5c6ea3d0caa999f44fbcb808364a9abae0aef7da6e282a01e33441",
+      "exit": 0,
+      "bytes": 11408,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 0,
+      "crop": "4 4 252 188",
+      "scale": 1,
+      "source_sha256": "13fa2290bf5c6ea3d0caa999f44fbcb808364a9abae0aef7da6e282a01e33441",
+      "exit": 0,
+      "bytes": 182528,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 0,
+      "crop": "4 4 252 188",
+      "scale": 2,
+      "source_sha256": "13fa2290bf5c6ea3d0caa999f44fbcb808364a9abae0aef7da6e282a01e33441",
+      "exit": 0,
+      "bytes": 730112,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 90,
+      "crop": "0 0 256 192",
+      "scale": 0.25,
+      "source_sha256": "7506294de88258261f90689cf99788abc9f9af69f82e2af934cc48b5526eff72",
+      "exit": 0,
+      "bytes": 12288,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 90,
+      "crop": "0 0 256 192",
+      "scale": 1,
+      "source_sha256": "7506294de88258261f90689cf99788abc9f9af69f82e2af934cc48b5526eff72",
+      "exit": 0,
+      "bytes": 196608,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 90,
+      "crop": "0 0 256 192",
+      "scale": 2,
+      "source_sha256": "7506294de88258261f90689cf99788abc9f9af69f82e2af934cc48b5526eff72",
+      "exit": 0,
+      "bytes": 786432,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 90,
+      "crop": "4 4 252 188",
+      "scale": 0.25,
+      "source_sha256": "3a37ddbcad44e15188573583ea936918caf22d82a4f173c14537ab3ca9bd2789",
+      "exit": 0,
+      "bytes": 11408,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 90,
+      "crop": "4 4 252 188",
+      "scale": 1,
+      "source_sha256": "3a37ddbcad44e15188573583ea936918caf22d82a4f173c14537ab3ca9bd2789",
+      "exit": 0,
+      "bytes": 182528,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 90,
+      "crop": "4 4 252 188",
+      "scale": 2,
+      "source_sha256": "3a37ddbcad44e15188573583ea936918caf22d82a4f173c14537ab3ca9bd2789",
+      "exit": 0,
+      "bytes": 730112,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 180,
+      "crop": "0 0 256 192",
+      "scale": 0.25,
+      "source_sha256": "2f8abbd023aeac05ea9a3a23f66c33164ccdef1f0bea88ee5f095843d1a4c22a",
+      "exit": 0,
+      "bytes": 12288,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 180,
+      "crop": "0 0 256 192",
+      "scale": 1,
+      "source_sha256": "2f8abbd023aeac05ea9a3a23f66c33164ccdef1f0bea88ee5f095843d1a4c22a",
+      "exit": 0,
+      "bytes": 196608,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 180,
+      "crop": "0 0 256 192",
+      "scale": 2,
+      "source_sha256": "2f8abbd023aeac05ea9a3a23f66c33164ccdef1f0bea88ee5f095843d1a4c22a",
+      "exit": 0,
+      "bytes": 786432,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 180,
+      "crop": "4 4 252 188",
+      "scale": 0.25,
+      "source_sha256": "abef4c7a3c5262115297f6fce9aa525c194de8e64abd199c288a52315a50d1fb",
+      "exit": 0,
+      "bytes": 11408,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 180,
+      "crop": "4 4 252 188",
+      "scale": 1,
+      "source_sha256": "abef4c7a3c5262115297f6fce9aa525c194de8e64abd199c288a52315a50d1fb",
+      "exit": 0,
+      "bytes": 182528,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 180,
+      "crop": "4 4 252 188",
+      "scale": 2,
+      "source_sha256": "abef4c7a3c5262115297f6fce9aa525c194de8e64abd199c288a52315a50d1fb",
+      "exit": 0,
+      "bytes": 730112,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 270,
+      "crop": "0 0 256 192",
+      "scale": 0.25,
+      "source_sha256": "5bb9ef2172da0ae129071ef9b1559340a30ff0c13dcc0a83520c0c4d76eef4af",
+      "exit": 0,
+      "bytes": 12288,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 270,
+      "crop": "0 0 256 192",
+      "scale": 1,
+      "source_sha256": "5bb9ef2172da0ae129071ef9b1559340a30ff0c13dcc0a83520c0c4d76eef4af",
+      "exit": 0,
+      "bytes": 196608,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 270,
+      "crop": "0 0 256 192",
+      "scale": 2,
+      "source_sha256": "5bb9ef2172da0ae129071ef9b1559340a30ff0c13dcc0a83520c0c4d76eef4af",
+      "exit": 0,
+      "bytes": 786432,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 270,
+      "crop": "4 4 252 188",
+      "scale": 0.25,
+      "source_sha256": "703d0300c155a9eac845d021f654b63e3b9f403210b471cd5d2fffc39b7946e3",
+      "exit": 0,
+      "bytes": 11408,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 270,
+      "crop": "4 4 252 188",
+      "scale": 1,
+      "source_sha256": "703d0300c155a9eac845d021f654b63e3b9f403210b471cd5d2fffc39b7946e3",
+      "exit": 0,
+      "bytes": 182528,
+      "different_channels": 0,
+      "exact": true
+    },
+    {
+      "seed": 1,
+      "rotation": 270,
+      "crop": "4 4 252 188",
+      "scale": 2,
+      "source_sha256": "703d0300c155a9eac845d021f654b63e3b9f403210b471cd5d2fffc39b7946e3",
+      "exit": 0,
+      "bytes": 730112,
+      "different_channels": 0,
+      "exact": true
+    }
+  ],
+  "rejected": [
+    {
+      "case": 0,
+      "diagnostic": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 402, streams: 2, object_streams: 0, decoded_bytes: 0 }\nError: \"odd Identity-H text length\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "case": 1,
+      "diagnostic": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 402, streams: 2, object_streams: 0, decoded_bytes: 0 }\nError: \"CID outside embedded glyph set\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "case": 2,
+      "diagnostic": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 402, streams: 2, object_streams: 0, decoded_bytes: 0 }\nError: \"only Identity CIDFontType2 mapping is supported\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "case": 3,
+      "diagnostic": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 400, streams: 2, object_streams: 0, decoded_bytes: 0 }\nError: \"incomplete CID width array\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "case": 4,
+      "diagnostic": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 402, streams: 2, object_streams: 0, decoded_bytes: 0 }\nError: \"invalid CID width range\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "case": 5,
+      "diagnostic": "DynLex text preparation: text worker failed (exit status: 1): text preflight: Stats { tokens: 402, streams: 2, object_streams: 0, decoded_bytes: 0 }\nError: \"invalid or overlapping CID width\"\n\nError: \"DynLex does not support this text page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    }
+  ],
+  "all_exact": true
+}

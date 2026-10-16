@@ -1,0 +1,230 @@
+{
+  "source": "https://news.albanyoregon.gov/images/stories/finance/bids/749-SS-25-02_2025_Pipe_Bursting_Project/02_Contract_Documents_SS-25-02.pdf",
+  "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "backend_sha256": "8322b7fc91f932875fcb982662d59f3e22824515739771704516179b13da16ab",
+  "complete_original_document": true,
+  "page": 1,
+  "cases": [
+    {
+      "scale": 1.15,
+      "width": 703,
+      "height": 910,
+      "rgba_bytes": 2558920,
+      "rgba_sha256": "43248855acc131c69e0d233aa4f0b7c123499e66c18481da10da837a3aeb8ad0",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 0.87,
+      "width": 532,
+      "height": 689,
+      "rgba_bytes": 1466192,
+      "rgba_sha256": "5d0308efc51036df3139d6f06e8f3861be26868c40666ad9263c8b52acf0234c",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 1.5625,
+      "width": 956,
+      "height": 1237,
+      "rgba_bytes": 4730288,
+      "rgba_sha256": "6f7f6ed02ea01872048d32e36d0981351bdeb7da60b2875ed5cb694deca36e13",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 0.13,
+      "width": 79,
+      "height": 102,
+      "rgba_bytes": 32232,
+      "rgba_sha256": "6609effbe59ff857222762526ff33994da9e1c304b4bf9e3d4d6688229ae2015",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 0.21,
+      "width": 128,
+      "height": 166,
+      "rgba_bytes": 84992,
+      "rgba_sha256": "1caa5c9bba31289d3254df21c9a09e759a2cea426f2d691e3f7cdcfad6f7c51a",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 0.33,
+      "width": 201,
+      "height": 261,
+      "rgba_bytes": 209844,
+      "rgba_sha256": "6b997ea8406b11e00ad941fa4d0a0e9d65d52381cd59436e100b356f4acef0a8",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 0.47,
+      "width": 287,
+      "height": 372,
+      "rgba_bytes": 427056,
+      "rgba_sha256": "8165282b75b7e0f3edb2ddd30cdfd170b0fc9db863f064d4d05cab8b9f7a174b",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 0.63,
+      "width": 385,
+      "height": 498,
+      "rgba_bytes": 766920,
+      "rgba_sha256": "ace0b83594dafdfbf423b1d6dead0c4080a2d6017e5b885644f3f7bfa46b19b9",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 0.77,
+      "width": 471,
+      "height": 609,
+      "rgba_bytes": 1147356,
+      "rgba_sha256": "1a0a5e8232606a0177208d1344c23f3735e867b5d286a4bd7c0c7da42cbed8e8",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 0.99,
+      "width": 605,
+      "height": 784,
+      "rgba_bytes": 1897280,
+      "rgba_sha256": "c942902b2ea658a26a717847f42ca0e8d429798b46fb997bf76eedc3b19440bf",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 1.01,
+      "width": 618,
+      "height": 799,
+      "rgba_bytes": 1975128,
+      "rgba_sha256": "b93a8417bc8c970ceb272805832f36b6b4361b0f036fbcac609106e748c02115",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 1.13,
+      "width": 691,
+      "height": 894,
+      "rgba_bytes": 2471016,
+      "rgba_sha256": "ac522fc49ee96ffc4ebe340d79ad9daa44347ef7df52fc3149f11326c181aec2",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 1.37,
+      "width": 838,
+      "height": 1085,
+      "rgba_bytes": 3636920,
+      "rgba_sha256": "1fdfebd7f8ab612c5d52a499bedac8eb9abe671775581f5966ac3a38c809ef09",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 1.49,
+      "width": 911,
+      "height": 1180,
+      "rgba_bytes": 4299920,
+      "rgba_sha256": "b518f87b58b1065a0eeb20ba27aa49fb62b1589dcdd25f4c5fedaa19752edfdb",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 1.73,
+      "width": 1058,
+      "height": 1370,
+      "rgba_bytes": 5797840,
+      "rgba_sha256": "d4965d7e27c484ce6683123f1671257758b506cc112fa7769d80b207782b04ca",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 1.99,
+      "width": 1217,
+      "height": 1576,
+      "rgba_bytes": 7671968,
+      "rgba_sha256": "c08930f0bad2f5b4869ae98fdf5517b9521d89fb645940ac8e90ef4b94e74b6d",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 2.13,
+      "width": 1303,
+      "height": 1686,
+      "rgba_bytes": 8787432,
+      "rgba_sha256": "6e4f6a66ff2f16c61e35f646a7b9d646d9d509a749def301d98f5b6bf1d5f776",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 2.47,
+      "width": 1511,
+      "height": 1956,
+      "rgba_bytes": 11822064,
+      "rgba_sha256": "c3b5be8df2487e0096ff368517737944bb24ae6ca560a5a49a4987387ee21ddc",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 2.73,
+      "width": 1670,
+      "height": 2162,
+      "rgba_bytes": 14442160,
+      "rgba_sha256": "f239a185b57fac2b37258453c442d7455524d8ead4a2836d29afa0add4781c90",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    },
+    {
+      "scale": 3.01,
+      "width": 1842,
+      "height": 2383,
+      "rgba_bytes": 17557944,
+      "rgba_sha256": "75a7015c85f7b7f3ae046f971eeb5d972ea63427f52dc474dac4ab6766f21ed8",
+      "different_channels": 0,
+      "different_pixels": 0,
+      "max_error": 0,
+      "first_channels": []
+    }
+  ],
+  "all_exact": true
+}

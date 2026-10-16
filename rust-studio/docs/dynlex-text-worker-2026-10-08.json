@@ -1,0 +1,435 @@
+{
+  "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "binary_sha256": {
+    "text_worker_probe": "0829f6cf73c751bc00e62ec54b337152af465006a59d23c4a07458048e14de3d",
+    "truetype_page_probe": "d2bddccfa20c596c8798a2bbff8294ba8dc55ad5a941d83834e667daabb29dbd",
+    "backend_probe": "d640cccb1b889c8ef9beeba58010aba20ef6433e16230b5b23bf808de0ac16fb"
+  },
+  "font_sha256": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f",
+  "native_integration": false,
+  "worker_limits": {
+    "address_bytes": 536870912,
+    "cpu_seconds": 6,
+    "wall_seconds": 10,
+    "scene_bytes": 33554432,
+    "stderr_bytes": 65536,
+    "global_concurrency": 1
+  },
+  "cases": [
+    {
+      "case": "albany-0.25",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 0.25,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":153,\"height\":198,\"preparations\":1,\"retained_bytes\":708224,\"first_render_ms\":109.891644,\"warm_ms\":[45.950481, 46.295846000000004]}",
+      "pixels": {
+        "bytes": 121176,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 153,
+        "height": 198,
+        "preparations": 1,
+        "retained_bytes": 708224,
+        "first_render_ms": 109.891644,
+        "warm_ms": [
+          45.950481,
+          46.295846000000004
+        ]
+      }
+    },
+    {
+      "case": "albany-0.5",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 0.5,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":306,\"height\":396,\"preparations\":1,\"retained_bytes\":708416,\"first_render_ms\":100.102161,\"warm_ms\":[52.031349999999996, 52.292542999999995]}",
+      "pixels": {
+        "bytes": 484704,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 306,
+        "height": 396,
+        "preparations": 1,
+        "retained_bytes": 708416,
+        "first_render_ms": 100.102161,
+        "warm_ms": [
+          52.031349999999996,
+          52.292542999999995
+        ]
+      }
+    },
+    {
+      "case": "albany-0.87",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 0.87,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":532,\"height\":689,\"preparations\":1,\"retained_bytes\":708416,\"first_render_ms\":130.901131,\"warm_ms\":[56.301511, 56.587606]}",
+      "pixels": {
+        "bytes": 1466192,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 532,
+        "height": 689,
+        "preparations": 1,
+        "retained_bytes": 708416,
+        "first_render_ms": 130.901131,
+        "warm_ms": [
+          56.301511,
+          56.587606
+        ]
+      }
+    },
+    {
+      "case": "albany-1",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":612,\"height\":792,\"preparations\":1,\"retained_bytes\":708608,\"first_render_ms\":132.478994,\"warm_ms\":[58.788858, 56.83183]}",
+      "pixels": {
+        "bytes": 1938816,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 612,
+        "height": 792,
+        "preparations": 1,
+        "retained_bytes": 708608,
+        "first_render_ms": 132.478994,
+        "warm_ms": [
+          58.788858,
+          56.83183
+        ]
+      }
+    },
+    {
+      "case": "albany-1.15",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 1.15,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":703,\"height\":910,\"preparations\":1,\"retained_bytes\":708608,\"first_render_ms\":113.04986,\"warm_ms\":[61.748942, 65.56685700000001]}",
+      "pixels": {
+        "bytes": 2558920,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 703,
+        "height": 910,
+        "preparations": 1,
+        "retained_bytes": 708608,
+        "first_render_ms": 113.04986,
+        "warm_ms": [
+          61.748942,
+          65.56685700000001
+        ]
+      }
+    },
+    {
+      "case": "albany-1.5625",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 1.5625,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":956,\"height\":1237,\"preparations\":1,\"retained_bytes\":708800,\"first_render_ms\":131.85644499999998,\"warm_ms\":[65.999814, 64.944768]}",
+      "pixels": {
+        "bytes": 4730288,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 956,
+        "height": 1237,
+        "preparations": 1,
+        "retained_bytes": 708800,
+        "first_render_ms": 131.85644499999998,
+        "warm_ms": [
+          65.999814,
+          64.944768
+        ]
+      }
+    },
+    {
+      "case": "albany-2",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 2,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":1224,\"height\":1584,\"preparations\":1,\"retained_bytes\":714368,\"first_render_ms\":124.59859,\"warm_ms\":[73.21042899999999, 72.062383]}",
+      "pixels": {
+        "bytes": 7755264,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 1224,
+        "height": 1584,
+        "preparations": 1,
+        "retained_bytes": 714368,
+        "first_render_ms": 124.59859,
+        "warm_ms": [
+          73.21042899999999,
+          72.062383
+        ]
+      }
+    },
+    {
+      "case": "albany-3",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 3,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":1836,\"height\":2376,\"preparations\":1,\"retained_bytes\":723200,\"first_render_ms\":161.845504,\"warm_ms\":[97.445373, 100.483047]}",
+      "pixels": {
+        "bytes": 17449344,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 1836,
+        "height": 2376,
+        "preparations": 1,
+        "retained_bytes": 723200,
+        "first_render_ms": 161.845504,
+        "warm_ms": [
+          97.445373,
+          100.483047
+        ]
+      }
+    },
+    {
+      "case": "fixture-0-0",
+      "source_sha256": "ef7aa8fdaabc7fc6a6a64c786b950228ce3287531dee44bc703bd7f1167e0e5a",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":640,\"height\":800,\"preparations\":1,\"retained_bytes\":361280,\"first_render_ms\":15.73698,\"warm_ms\":[7.869164, 8.91958]}",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 640,
+        "height": 800,
+        "preparations": 1,
+        "retained_bytes": 361280,
+        "first_render_ms": 15.73698,
+        "warm_ms": [
+          7.869164,
+          8.91958
+        ]
+      }
+    },
+    {
+      "case": "fixture-0-1",
+      "source_sha256": "78caf4750955a0c6a1204613464ddebb1e838b33652830e85495195d63d9a62a",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":624,\"height\":784,\"preparations\":1,\"retained_bytes\":361280,\"first_render_ms\":18.147645,\"warm_ms\":[10.873049, 11.148623]}",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 624,
+        "height": 784,
+        "preparations": 1,
+        "retained_bytes": 361280,
+        "first_render_ms": 18.147645,
+        "warm_ms": [
+          10.873049,
+          11.148623
+        ]
+      }
+    },
+    {
+      "case": "fixture-90-0",
+      "source_sha256": "601f00450abd058c3041ceedf808b1582164de261634dbe1f41210957afb31f5",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":800,\"height\":640,\"preparations\":1,\"retained_bytes\":361280,\"first_render_ms\":24.078222,\"warm_ms\":[11.66093, 12.082187]}",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 800,
+        "height": 640,
+        "preparations": 1,
+        "retained_bytes": 361280,
+        "first_render_ms": 24.078222,
+        "warm_ms": [
+          11.66093,
+          12.082187
+        ]
+      }
+    },
+    {
+      "case": "fixture-90-1",
+      "source_sha256": "d3b46b57915e2688e8c4ec751e501c52d0547ca9c6b57067bc9356d5153f1a0c",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":784,\"height\":624,\"preparations\":1,\"retained_bytes\":361280,\"first_render_ms\":24.085182,\"warm_ms\":[9.807362999999999, 9.141974000000001]}",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 784,
+        "height": 624,
+        "preparations": 1,
+        "retained_bytes": 361280,
+        "first_render_ms": 24.085182,
+        "warm_ms": [
+          9.807362999999999,
+          9.141974000000001
+        ]
+      }
+    },
+    {
+      "case": "fixture-180-0",
+      "source_sha256": "f794d014592d944fae8bb4694d4c136268202c801470eab4252f7a35977d6391",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":640,\"height\":800,\"preparations\":1,\"retained_bytes\":361280,\"first_render_ms\":20.386488,\"warm_ms\":[13.057411, 12.001845000000001]}",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 640,
+        "height": 800,
+        "preparations": 1,
+        "retained_bytes": 361280,
+        "first_render_ms": 20.386488,
+        "warm_ms": [
+          13.057411,
+          12.001845000000001
+        ]
+      }
+    },
+    {
+      "case": "fixture-180-1",
+      "source_sha256": "08122fbf3745cce23f2badd34225bf8a5085b6da8fb971d5e1992e55b25c58be",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":624,\"height\":784,\"preparations\":1,\"retained_bytes\":361280,\"first_render_ms\":18.970346999999997,\"warm_ms\":[11.964955, 8.816018999999999]}",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 624,
+        "height": 784,
+        "preparations": 1,
+        "retained_bytes": 361280,
+        "first_render_ms": 18.970346999999997,
+        "warm_ms": [
+          11.964955,
+          8.816018999999999
+        ]
+      }
+    },
+    {
+      "case": "fixture-270-0",
+      "source_sha256": "decdffbe93c6392a95ab4f9ae0e14a3612f8e0a53c97687ae16a90561e802c36",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":800,\"height\":640,\"preparations\":1,\"retained_bytes\":361472,\"first_render_ms\":20.107903999999998,\"warm_ms\":[12.34792, 11.134362999999999]}",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 800,
+        "height": 640,
+        "preparations": 1,
+        "retained_bytes": 361472,
+        "first_render_ms": 20.107903999999998,
+        "warm_ms": [
+          12.34792,
+          11.134362999999999
+        ]
+      }
+    },
+    {
+      "case": "fixture-270-1",
+      "source_sha256": "34cb955aab9f2dfd3323d91deddd2fa0f0f1d549bd91b0f96cfd18faa0883bd0",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "{\"width\":784,\"height\":624,\"preparations\":1,\"retained_bytes\":361280,\"first_render_ms\":16.057964000000002,\"warm_ms\":[8.960681, 7.324647]}",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "width": 784,
+        "height": 624,
+        "preparations": 1,
+        "retained_bytes": 361280,
+        "first_render_ms": 16.057964000000002,
+        "warm_ms": [
+          8.960681,
+          7.324647
+        ]
+      }
+    }
+  ],
+  "rejections": [
+    {
+      "case": "objectstream-bomb",
+      "rejected_without_output": true,
+      "diagnostic": "Error: \"text worker failed (exit status: 1): Error: \\\"object/xref stream decode budget or invalid Flate\\\"\\n\""
+    },
+    {
+      "case": "truncated",
+      "rejected_without_output": true,
+      "diagnostic": "Error: \"text worker failed (exit status: 1): Error: \\\"truncated stream\\\"\\n\""
+    },
+    {
+      "case": "xref-offset",
+      "rejected_without_output": true,
+      "diagnostic": "Error: \"text worker failed (exit status: 1): text preflight: Stats { tokens: 5, streams: 0, object_streams: 0, decoded_bytes: 0 }\\nError: \\\"PDF syntax could not be read\\\"\\n\""
+    },
+    {
+      "case": "nan-scale",
+      "rejected_without_output": true,
+      "diagnostic": "Error: \"text document page/scale limit\""
+    },
+    {
+      "case": "page-zero",
+      "rejected_without_output": true,
+      "diagnostic": "Error: \"text document page/scale limit\""
+    }
+  ],
+  "timing_scope": "Unpaired diagnostics only: process startup, PDF/font/geometry preparation and scene IPC; rendering uses fresh parent-owned buffers.",
+  "native_still_explicitly_unsupported": true,
+  "all_exact": true,
+  "all_rejected": true
+}

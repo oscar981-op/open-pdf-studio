@@ -1,0 +1,526 @@
+{
+  "native_integration": false,
+  "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "font_sha256": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f",
+  "binary_sha256": {
+    "truetype_page_probe": "2c5a2e42f3834422285bef4607758b0deda1ee999016433a14607728cc47d191",
+    "backend_probe": "d640cccb1b889c8ef9beeba58010aba20ef6433e16230b5b23bf808de0ac16fb"
+  },
+  "cases": [
+    {
+      "case": "albany-0.25",
+      "page": 6,
+      "scale": 0.25,
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\nprepared {\"prepare_ms\":83.889963,\"render_ms\":39.102064999999996,\"replay_ms\":[38.017747, 40.116302, 39.865557],\"sequential_ms\":[57.427602, 56.859144, 57.239698999999995],\"paints\":658,\"unique_outlines\":79,\"outline_bytes\":112480,\"scene_bytes\":708224}\n\n153x198 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 121176,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 83.889963,
+        "render_ms": 39.102064999999996,
+        "replay_ms": [
+          38.017747,
+          40.116302,
+          39.865557
+        ],
+        "sequential_ms": [
+          57.427602,
+          56.859144,
+          57.239698999999995
+        ],
+        "paints": 658,
+        "unique_outlines": 79,
+        "outline_bytes": 112480,
+        "scene_bytes": 708224
+      },
+      "median_replay_speedup": 1.4358183682219714
+    },
+    {
+      "case": "albany-0.5",
+      "page": 6,
+      "scale": 0.5,
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\nprepared {\"prepare_ms\":77.823464,\"render_ms\":39.118446,\"replay_ms\":[39.218927, 38.177330000000005, 38.347113],\"sequential_ms\":[129.390331, 124.486921, 124.48951199999999],\"paints\":659,\"unique_outlines\":79,\"outline_bytes\":112480,\"scene_bytes\":708416}\n\n306x396 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 484704,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 77.823464,
+        "render_ms": 39.118446,
+        "replay_ms": [
+          39.218927,
+          38.177330000000005,
+          38.347113
+        ],
+        "sequential_ms": [
+          129.390331,
+          124.486921,
+          124.48951199999999
+        ],
+        "paints": 659,
+        "unique_outlines": 79,
+        "outline_bytes": 112480,
+        "scene_bytes": 708416
+      },
+      "median_replay_speedup": 3.246385510168653
+    },
+    {
+      "case": "albany-0.87",
+      "page": 6,
+      "scale": 0.87,
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\nprepared {\"prepare_ms\":81.67421599999999,\"render_ms\":42.312326999999996,\"replay_ms\":[41.199189, 39.876558, 41.191889],\"sequential_ms\":[324.407148, 310.66740500000003, 311.53564900000003],\"paints\":659,\"unique_outlines\":79,\"outline_bytes\":112480,\"scene_bytes\":708416}\n\n532x689 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1466192,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 81.67421599999999,
+        "render_ms": 42.312326999999996,
+        "replay_ms": [
+          41.199189,
+          39.876558,
+          41.191889
+        ],
+        "sequential_ms": [
+          324.407148,
+          310.66740500000003,
+          311.53564900000003
+        ],
+        "paints": 659,
+        "unique_outlines": 79,
+        "outline_bytes": 112480,
+        "scene_bytes": 708416
+      },
+      "median_replay_speedup": 7.5630338050289465
+    },
+    {
+      "case": "albany-1",
+      "page": 6,
+      "scale": 1,
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\nprepared {\"prepare_ms\":78.68249800000001,\"render_ms\":43.286323,\"replay_ms\":[45.018821, 42.725324, 42.866356],\"sequential_ms\":[429.170049, 407.852983, 409.67593200000005],\"paints\":660,\"unique_outlines\":79,\"outline_bytes\":112480,\"scene_bytes\":708608}\n\n612x792 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1938816,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 78.68249800000001,
+        "render_ms": 43.286323,
+        "replay_ms": [
+          45.018821,
+          42.725324,
+          42.866356
+        ],
+        "sequential_ms": [
+          429.170049,
+          407.852983,
+          409.67593200000005
+        ],
+        "paints": 660,
+        "unique_outlines": 79,
+        "outline_bytes": 112480,
+        "scene_bytes": 708608
+      },
+      "median_replay_speedup": 9.557050568982351
+    },
+    {
+      "case": "albany-1.15",
+      "page": 6,
+      "scale": 1.15,
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\nprepared {\"prepare_ms\":84.30986899999999,\"render_ms\":112.37520400000001,\"replay_ms\":[110.557045, 108.53352199999999, 107.08888900000001],\"sequential_ms\":[613.136347, 589.227498, 586.554754],\"paints\":660,\"unique_outlines\":79,\"outline_bytes\":112480,\"scene_bytes\":708608}\n\n703x910 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2558920,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 84.30986899999999,
+        "render_ms": 112.37520400000001,
+        "replay_ms": [
+          110.557045,
+          108.53352199999999,
+          107.08888900000001
+        ],
+        "sequential_ms": [
+          613.136347,
+          589.227498,
+          586.554754
+        ],
+        "paints": 660,
+        "unique_outlines": 79,
+        "outline_bytes": 112480,
+        "scene_bytes": 708608
+      },
+      "median_replay_speedup": 5.428990851324257
+    },
+    {
+      "case": "albany-1.5625",
+      "page": 6,
+      "scale": 1.5625,
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\nprepared {\"prepare_ms\":78.86126,\"render_ms\":114.75837299999999,\"replay_ms\":[114.462228, 110.560675, 110.456333],\"sequential_ms\":[1012.915376, 934.077266, 935.447417],\"paints\":661,\"unique_outlines\":79,\"outline_bytes\":112480,\"scene_bytes\":708800}\n\n956x1237 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 4730288,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 78.86126,
+        "render_ms": 114.75837299999999,
+        "replay_ms": [
+          114.462228,
+          110.560675,
+          110.456333
+        ],
+        "sequential_ms": [
+          1012.915376,
+          934.077266,
+          935.447417
+        ],
+        "paints": 661,
+        "unique_outlines": 79,
+        "outline_bytes": 112480,
+        "scene_bytes": 708800
+      },
+      "median_replay_speedup": 8.460941623230864
+    },
+    {
+      "case": "albany-2",
+      "page": 6,
+      "scale": 2,
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\nprepared {\"prepare_ms\":78.057857,\"render_ms\":55.003503,\"replay_ms\":[55.177075, 48.483858, 52.081065],\"sequential_ms\":[1575.560898, 1515.488871, 1519.235931],\"paints\":662,\"unique_outlines\":79,\"outline_bytes\":112480,\"scene_bytes\":714368}\n\n1224x1584 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 7755264,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 78.057857,
+        "render_ms": 55.003503,
+        "replay_ms": [
+          55.177075,
+          48.483858,
+          52.081065
+        ],
+        "sequential_ms": [
+          1575.560898,
+          1515.488871,
+          1519.235931
+        ],
+        "paints": 662,
+        "unique_outlines": 79,
+        "outline_bytes": 112480,
+        "scene_bytes": 714368
+      },
+      "median_replay_speedup": 29.17060031318484
+    },
+    {
+      "case": "albany-3",
+      "page": 6,
+      "scale": 3,
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 28200, streams: 122, object_streams: 39, decoded_bytes: 166404 }\nstaged 798 glyph codes, 658 paints, 2 fonts, 268 operators\nprepared {\"prepare_ms\":78.789999,\"render_ms\":74.243595,\"replay_ms\":[74.54152, 60.077145, 60.527572],\"sequential_ms\":[3566.0306779999996, 3377.8336950000003, 3414.0529060000003],\"paints\":664,\"unique_outlines\":79,\"outline_bytes\":112480,\"scene_bytes\":723200}\n\n1836x2376 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 17449344,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 78.789999,
+        "render_ms": 74.243595,
+        "replay_ms": [
+          74.54152,
+          60.077145,
+          60.527572
+        ],
+        "sequential_ms": [
+          3566.0306779999996,
+          3377.8336950000003,
+          3414.0529060000003
+        ],
+        "paints": 664,
+        "unique_outlines": 79,
+        "outline_bytes": 112480,
+        "scene_bytes": 723200
+      },
+      "median_replay_speedup": 56.40492081856514
+    },
+    {
+      "case": "fixture-0-0",
+      "page": 1,
+      "scale": 1,
+      "source_sha256": "ef7aa8fdaabc7fc6a6a64c786b950228ce3287531dee44bc703bd7f1167e0e5a",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\nprepared {\"prepare_ms\":10.259926,\"render_ms\":7.0327150000000005,\"replay_ms\":[11.486107, 9.24409, 9.514664000000002],\"sequential_ms\":[35.74052, 36.098996, 36.326149],\"paints\":46,\"unique_outlines\":27,\"outline_bytes\":46592,\"scene_bytes\":361280}\n\n640x800 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 10.259926,
+        "render_ms": 7.0327150000000005,
+        "replay_ms": [
+          11.486107,
+          9.24409,
+          9.514664000000002
+        ],
+        "sequential_ms": [
+          35.74052,
+          36.098996,
+          36.326149
+        ],
+        "paints": 46,
+        "unique_outlines": 27,
+        "outline_bytes": 46592,
+        "scene_bytes": 361280
+      },
+      "median_replay_speedup": 3.7940379187326
+    },
+    {
+      "case": "fixture-0-1",
+      "page": 1,
+      "scale": 1,
+      "source_sha256": "78caf4750955a0c6a1204613464ddebb1e838b33652830e85495195d63d9a62a",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\nprepared {\"prepare_ms\":5.946756,\"render_ms\":7.316059,\"replay_ms\":[5.714242, 4.091686, 4.076026],\"sequential_ms\":[34.378648, 29.458298, 29.442767],\"paints\":46,\"unique_outlines\":27,\"outline_bytes\":46592,\"scene_bytes\":361280}\n\n624x784 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 5.946756,
+        "render_ms": 7.316059,
+        "replay_ms": [
+          5.714242,
+          4.091686,
+          4.076026
+        ],
+        "sequential_ms": [
+          34.378648,
+          29.458298,
+          29.442767
+        ],
+        "paints": 46,
+        "unique_outlines": 27,
+        "outline_bytes": 46592,
+        "scene_bytes": 361280
+      },
+      "median_replay_speedup": 7.199550014346164
+    },
+    {
+      "case": "fixture-90-0",
+      "page": 1,
+      "scale": 1,
+      "source_sha256": "601f00450abd058c3041ceedf808b1582164de261634dbe1f41210957afb31f5",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\nprepared {\"prepare_ms\":4.550784,\"render_ms\":6.082269,\"replay_ms\":[10.464960000000001, 8.861954, 8.902474],\"sequential_ms\":[32.935534000000004, 35.580726999999996, 35.464765],\"paints\":46,\"unique_outlines\":27,\"outline_bytes\":46592,\"scene_bytes\":361280}\n\n800x640 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 4.550784,
+        "render_ms": 6.082269,
+        "replay_ms": [
+          10.464960000000001,
+          8.861954,
+          8.902474
+        ],
+        "sequential_ms": [
+          32.935534000000004,
+          35.580726999999996,
+          35.464765
+        ],
+        "paints": 46,
+        "unique_outlines": 27,
+        "outline_bytes": 46592,
+        "scene_bytes": 361280
+      },
+      "median_replay_speedup": 3.9836976777466577
+    },
+    {
+      "case": "fixture-90-1",
+      "page": 1,
+      "scale": 1,
+      "source_sha256": "d3b46b57915e2688e8c4ec751e501c52d0547ca9c6b57067bc9356d5153f1a0c",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\nprepared {\"prepare_ms\":4.600275,\"render_ms\":5.950087,\"replay_ms\":[5.948116, 4.172086999999999, 5.006151],\"sequential_ms\":[31.580402, 29.539639, 30.537815],\"paints\":46,\"unique_outlines\":27,\"outline_bytes\":46592,\"scene_bytes\":361280}\n\n784x624 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 4.600275,
+        "render_ms": 5.950087,
+        "replay_ms": [
+          5.948116,
+          4.172086999999999,
+          5.006151
+        ],
+        "sequential_ms": [
+          31.580402,
+          29.539639,
+          30.537815
+        ],
+        "paints": 46,
+        "unique_outlines": 27,
+        "outline_bytes": 46592,
+        "scene_bytes": 361280
+      },
+      "median_replay_speedup": 6.100058707777691
+    },
+    {
+      "case": "fixture-180-0",
+      "page": 1,
+      "scale": 1,
+      "source_sha256": "f794d014592d944fae8bb4694d4c136268202c801470eab4252f7a35977d6391",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\nprepared {\"prepare_ms\":4.746557,\"render_ms\":6.345002,\"replay_ms\":[5.756104, 4.4247119999999995, 5.144724],\"sequential_ms\":[34.087053, 30.81058, 30.962362],\"paints\":46,\"unique_outlines\":27,\"outline_bytes\":46592,\"scene_bytes\":361280}\n\n640x800 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 4.746557,
+        "render_ms": 6.345002,
+        "replay_ms": [
+          5.756104,
+          4.4247119999999995,
+          5.144724
+        ],
+        "sequential_ms": [
+          34.087053,
+          30.81058,
+          30.962362
+        ],
+        "paints": 46,
+        "unique_outlines": 27,
+        "outline_bytes": 46592,
+        "scene_bytes": 361280
+      },
+      "median_replay_speedup": 6.018274644081976
+    },
+    {
+      "case": "fixture-180-1",
+      "page": 1,
+      "scale": 1,
+      "source_sha256": "08122fbf3745cce23f2badd34225bf8a5085b6da8fb971d5e1992e55b25c58be",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\nprepared {\"prepare_ms\":4.555944,\"render_ms\":6.848191,\"replay_ms\":[5.962777, 4.94424, 4.862229],\"sequential_ms\":[32.400335000000005, 29.894775, 29.817474],\"paints\":46,\"unique_outlines\":27,\"outline_bytes\":46592,\"scene_bytes\":361280}\n\n624x784 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 4.555944,
+        "render_ms": 6.848191,
+        "replay_ms": [
+          5.962777,
+          4.94424,
+          4.862229
+        ],
+        "sequential_ms": [
+          32.400335000000005,
+          29.894775,
+          29.817474
+        ],
+        "paints": 46,
+        "unique_outlines": 27,
+        "outline_bytes": 46592,
+        "scene_bytes": 361280
+      },
+      "median_replay_speedup": 6.046384277462259
+    },
+    {
+      "case": "fixture-270-0",
+      "page": 1,
+      "scale": 1,
+      "source_sha256": "decdffbe93c6392a95ab4f9ae0e14a3612f8e0a53c97687ae16a90561e802c36",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\nprepared {\"prepare_ms\":4.653745,\"render_ms\":7.165236999999999,\"replay_ms\":[6.950783, 5.099543, 5.097042],\"sequential_ms\":[33.463112, 31.628003000000003, 31.629733],\"paints\":47,\"unique_outlines\":27,\"outline_bytes\":46592,\"scene_bytes\":361472}\n\n800x640 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 4.653745,
+        "render_ms": 7.165236999999999,
+        "replay_ms": [
+          6.950783,
+          5.099543,
+          5.097042
+        ],
+        "sequential_ms": [
+          33.463112,
+          31.628003000000003,
+          31.629733
+        ],
+        "paints": 47,
+        "unique_outlines": 27,
+        "outline_bytes": 46592,
+        "scene_bytes": 361472
+      },
+      "median_replay_speedup": 6.202464220813512
+    },
+    {
+      "case": "fixture-270-1",
+      "page": 1,
+      "scale": 1,
+      "source_sha256": "34cb955aab9f2dfd3323d91deddd2fa0f0f1d549bd91b0f96cfd18faa0883bd0",
+      "exit_code": 0,
+      "diagnostic": "text preflight: Stats { tokens: 213, streams: 2, object_streams: 0, decoded_bytes: 0 }\nstaged 47 glyph codes, 44 paints, 1 fonts, 21 operators\nprepared {\"prepare_ms\":4.633876,\"render_ms\":6.911283,\"replay_ms\":[6.389864, 4.151617, 4.312489],\"sequential_ms\":[31.777765, 29.301355, 30.595126],\"paints\":46,\"unique_outlines\":27,\"outline_bytes\":46592,\"scene_bytes\":361280}\n\n784x624 DynLex experimental full page, 43 visible glyphs; NOT native support",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      },
+      "metrics": {
+        "prepare_ms": 4.633876,
+        "render_ms": 6.911283,
+        "replay_ms": [
+          6.389864,
+          4.151617,
+          4.312489
+        ],
+        "sequential_ms": [
+          31.777765,
+          29.301355,
+          30.595126
+        ],
+        "paints": 46,
+        "unique_outlines": 27,
+        "outline_bytes": 46592,
+        "scene_bytes": 361280
+      },
+      "median_replay_speedup": 7.094540067232635
+    }
+  ],
+  "timing_scope": "Same prepared geometry, fresh output buffers; three alternating sequential/batch replay pairs. No PDF parsing, outline preparation, I/O or comparison in replay timers.",
+  "native_still_explicitly_unsupported": true,
+  "all_exact": true
+}

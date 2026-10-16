@@ -1,0 +1,507 @@
+{
+  "purpose": "explicitly experimental, no native acceptance",
+  "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "binary_sha256": {
+    "winding_probe": "fd6f71857a5ab7d3bf4ddb16d5602a89833b4a7fd3f1aaa52de502d85c857a60",
+    "truetype_page_probe": "2dc4958a5ef909fdea20792c2afa007c0e5db63745118f598fac6e26a65f09d7",
+    "glyph_vello_probe": "e044f0c75981bfd86bd40388e1d70163a04a73682e1676dd6e201115987c5872",
+    "quad_flatten_oracle": "ca0a5ad5b4a2b713d4ed63a9c957679df21646f724ad8eb59ceb823efbab10a2",
+    "backend_probe": "d640cccb1b889c8ef9beeba58010aba20ef6433e16230b5b23bf808de0ac16fb"
+  },
+  "synthetic": [
+    {
+      "case": 0,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 1,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 2,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 3,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 4,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 5,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 6,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 7,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 8,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 9,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 10,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 11,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 12,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 13,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 14,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 15,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 16,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 17,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 18,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 19,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 20,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 21,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 22,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 23,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 24,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 25,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 26,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 27,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 28,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 29,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 30,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 31,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 32,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 33,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 34,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 35,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 36,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 37,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 38,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 39,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 40,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 41,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 42,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 43,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 44,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 45,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 46,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    },
+    {
+      "case": 47,
+      "bytes": 49152,
+      "different_channels": 0,
+      "different_pixels": 0,
+      "maximum_error": 0,
+      "samples": []
+    }
+  ],
+  "whole_page": [
+    {
+      "scale": 0.25,
+      "exit": 0,
+      "diagnostic": "staged 798 glyph codes, 658 paints, 2 fonts, 268 operators\n153x198 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "rgba_written": true,
+      "pixels": {
+        "bytes": 121176,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_oracle_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_own_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "quadratic_sha256": "90aad04aa4ccb637f96e4bf4037692248e8dacc20d35058a396022c406bb8439"
+    },
+    {
+      "scale": 1,
+      "exit": 0,
+      "diagnostic": "staged 798 glyph codes, 658 paints, 2 fonts, 268 operators\n612x792 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "rgba_written": true,
+      "pixels": {
+        "bytes": 1938816,
+        "different_channels": 3,
+        "different_pixels": 1,
+        "maximum_error": 1,
+        "samples": [
+          {
+            "x": 310,
+            "y": 127,
+            "channel": 0,
+            "candidate": 46,
+            "oracle": 47
+          },
+          {
+            "x": 310,
+            "y": 127,
+            "channel": 1,
+            "candidate": 46,
+            "oracle": 47
+          },
+          {
+            "x": 310,
+            "y": 127,
+            "channel": 2,
+            "candidate": 46,
+            "oracle": 47
+          }
+        ]
+      },
+      "apostrophe_oracle_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_own_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "quadratic_sha256": "ea04f7c457c232cf51635fa51abb628232a4ca392fb25445737efca38b8edb8c"
+    },
+    {
+      "scale": 2,
+      "exit": 0,
+      "diagnostic": "staged 798 glyph codes, 658 paints, 2 fonts, 268 operators\n1224x1584 DynLex experimental full page, 657 visible glyphs; NOT native support",
+      "rgba_written": true,
+      "pixels": {
+        "bytes": 7755264,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_oracle_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "apostrophe_own_flat": {
+        "bytes": 49152,
+        "different_channels": 0,
+        "different_pixels": 0,
+        "maximum_error": 0,
+        "samples": []
+      },
+      "quadratic_sha256": "bb8388926d803d1d602841face96bc0fc9bba48d896d33350e986936c424819b"
+    }
+  ],
+  "invalid_cli_rejected": 5,
+  "synthetic_all_exact": true
+}

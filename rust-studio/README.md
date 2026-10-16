@@ -25,6 +25,14 @@ cargo run --release --bin opds-native-app -- "/pad/naar/tekening.pdf"
 Open toont nu een native Rust-bestandsbrowser met mappen, oudermap, vernieuwen en alleen PDF-bestanden. Het pad kan ook handmatig worden ingevoerd. Het lezen van mappen gebeurt via een achtergrondtaak; een laat resultaat van een vorige map wordt genegeerd. Het zoekveld filtert de huidige map zonder nieuwe schijfscan, en maximaal twintig zichtbare bestandsrijen worden als UI-widgets opgebouwd. Het linkerpaneel toont paginaminiaturen: de actieve pagina hergebruikt de bestaande bitmap; hoogstens één nabije pagina wordt tegelijk op de achtergrond op klein formaat gerenderd, met maximaal twaalf gecachte miniaturen. Verder weg gelegen pagina’s verschijnen eerst als placeholder en worden tijdens scrollen of na navigatie op de achtergrond geladen. Het paneel maakt maximaal twaalf zichtbare paginakaarten aan, ook bij zeer veel pagina’s; de scrollbar behoudt de volledige documenthoogte.
 Gebruik voor interactie altijd de release-build: de debug-build rendert zware PDF's veel trager en vertraagt ook de ribbon. Onder Annotation kunnen Highlight en Text Box met slepen op de pagina worden geplaatst. Text Box toont een meerregelige inline editor op de pagina, met een eerste Format-contexttab voor zeven tekstkleuren en de 16 lettergroottes uit de oorspronkelijke tekstannotatiedialoog; een geselecteerd tekstvak kan via Properties opnieuw worden bewerkt. Tekstkleur, lettergrootte en links/midden/rechts-uitlijning zitten in het Rust-annotatiemodel en worden met undo/redo en PDF Save As bewaard. Tijdens invoer schildert een native Rust-laag de regels, caret en selectie op hun links/midden/rechts-uitgelijnde positie; Iced blijft toetsenbord- en Unicode-invoer afhandelen. IME-compositietekst is in deze laag nog niet visueel geverifieerd. Rectangle staat onder Drawing; Select staat onder Home en kan annotaties aanwijzen en verslepen; de acht grepen van een selectie wijzigen de grootte. Delete verwijdert de selectie. Het eigenschappenpaneel toont type, pagina, positie en afmetingen. De overlay, selectie, wijzigingen en undo/redo zijn Rust. Ctrl+scroll zoomt op de pagina rond de muispositie. Een gedeelde Rust-tekstlayout breekt woorden en lange tokens binnen de tekstvakbreedte af in live invoer, pagina-overlay en PDF-appearance; expliciete en zachte regels worden binnen het tekstvak afgeknipt. Andere tekstopmaak en fontfallback ontbreken nog. Save As schrijft de native annotaties met `lopdf` als incrementele PDF-update, met printbare appearances. Een opgeslagen annotatiesnapshot bewaakt latere wijzigingen; openen, sluiten en afsluiten vragen eerst in de app of onopgeslagen annotaties mogen worden weggegooid. Tijdens Save As wordt wisselen of afsluiten tijdelijk geblokkeerd. De titelbalk-Print en Print in de voorlopige View-ribbon openen nu een eerste pure-Rust afdrukpad: uitvoer naar een nieuw PDF-bestand met alle of geselecteerde bronpagina's en native annotaties. Het printvenster heeft paginabereik (All, Current, Custom), een filter voor oorspronkelijke oneven/even pagina's, omgekeerde uitvoervolgorde en een bladerbaar voorbeeld uit de printbare PDF. Page Zoom (10–400%) schaalt de pagina-inhoud en annotaties rond het midden van het vel. Original/A4/Letter en Fit/Actual/Shrink/Custom zijn beschikbaar; preview en uitvoer gebruiken dezelfde PDF-transformatie. De Printer-sectie kan daarnaast een IPP Print-Job naar een tijdelijke, uitsluitend lokale Rust-testserver sturen en de ontvangen PDF opslaan. Er wordt geen fysieke of geïnstalleerde printer benaderd; apparaatselectie, Auto-Rotate en overige oorspronkelijke instellingen ontbreken nog. Deze eerste versie maakt uitsluitend een nieuw bestand. Printplaatsing en Save As van nieuwe native annotaties ondersteunen inmiddels 0/90/180/270°-rotatie en een verschoven CropBox binnen de MediaBox. Versleuteling en tekst zonder glyphs in Liberation Sans worden geweigerd.
 
+- [Native DynLex-tekstpagina’s: integratie, corpus en prestaties](docs/dynlex-native-text-2026-10-08.md)
+- [DynLex-tekstoptimalisatie: begrensde scan en volledige-bufferclear](docs/dynlex-text-bounds-2026-10-08.md)
+- [Meer volledige DynLex-tekstpagina’s: WinAnsi en kleur](docs/dynlex-text-winansi-2026-10-08.md)
+- [DynLex-tekst: begrensde actieve fractionele rechthoekclips](docs/dynlex-active-fractional-clip-2026-10-08.md)
+- [Begrensde Rust-tekstworker en gevalideerde DynLex-scene](docs/dynlex-text-worker-2026-10-08.md)
+- [Tekstfrontend: objectstream-budget en resterende parsergrens](docs/dynlex-text-preflight-2026-10-08.md)
+- [Volledige externe tekstpagina via aparte DynLex-windingproef](docs/dynlex-text-winding-2026-10-08.md)
+- [Volledige externe tekstpagina: glyphplaatsing en resterende rasterblokkade](docs/dynlex-truetype-page-stage-2026-10-08.md)
 - [Architectuur en dependencybeleid](docs/architecture.md)
 - [Exacte UI-pariteit met huidige app](docs/current-ui-parity.md)
 - [Overgenomen UI-code van Hakan](docs/ui-reference.md)
@@ -47,8 +55,9 @@ De originele clone blijft een aparte repository. De UI-bronnen en iconen van de 
 # Experimentele DynLex-backend
 
 De native Rust-app kan met `dynlex-experimental` een in-process DynLex-
-kernel voor een kleine gevalideerde PDF-deelset gebruiken; alle overige
-pagina's blijven via Hayro renderen. Zie
+kernel voor een kleine gevalideerde PDF-deelset gebruiken. De native DynLex-keuze
+is strikt: onbewezen pagina's/zoomstanden geven geen vervangende Hayro-bitmap.
+De gebruiker kan handmatig een andere kernel kiezen. Zie
 [backend en beperkingen](docs/dynlex-native-backend-2026-10-05.md).
 
 De Settings-ribbon kan daarnaast een optioneel dynamisch geladen PDFium
@@ -63,7 +72,20 @@ Zie de [historische metingen en grenzen](docs/dynlex-jpeg-zoom-2026-10-08.md).
 Voor de eerste externe scan is ook 125% nu bytegelijk via een gecontroleerd
 tweede samplingstadium, uitsluitend bij downsampling en uitgelijnde randen.
 Zie [samplingpariteit en meting](docs/dynlex-jpeg-sampling-2026-10-08.md).
-Vrije Ctrl+scroll-schalen en upsampling op 125% blijven unsupported.
 
-Afzonderlijke proef voor vrije JPEG-zoom (nog niet in de app):
-[20 volledige pagina/zoomvergelijkingen](docs/dynlex-fractional-jpeg-2026-10-08.md).
+De [afzonderlijke fractionele proef](docs/dynlex-fractional-jpeg-2026-10-08.md)
+is inmiddels voor begrensde volledige-JPEG-downsampling aangesloten op de native
+route: [96 brede gevallen, 20 externe zoomstanden en Ctrl+scroll](docs/dynlex-native-fractional-2026-10-08.md).
+Dit bewijst geen algemene image placement, upsampling of volledige PDF-dekking.
+
+De algemene tegelkandidaat is na een volledige pixel-audit uit de strikte
+native route gehaald: [21 onjuiste bitmaps veilig afwijzen](docs/dynlex-zoom-guard-2026-10-08.md).
+De code blijft als expliciete `unverified-tiles`-proef beschikbaar. Een mislukte
+DynLex-zoom verwijdert de tijdelijke oude bitmap; de bewezen fractionele
+full-page-downsampling en gedeelde cache blijven werken.
+
+De zelfstandige tekstproef heeft een herbruikbare begrensde paginascene en
+een cache voor fontcontouren. Albany-pagina 6 is op acht zoomstanden pixelgelijk;
+hertekenen van dezelfde voorbereide geometrie is afzonderlijk gemeten.
+Zie [voorbereide tekstscene, grenzen en meting](docs/dynlex-prepared-text-2026-10-08.md).
+Dit is nog geen nieuwe native PDF-acceptatie.

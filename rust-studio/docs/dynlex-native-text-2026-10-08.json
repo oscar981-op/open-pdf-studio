@@ -1,0 +1,238 @@
+{
+  "native_dispatch": true,
+  "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+  "binary_sha256": {
+    "backend": "5bbda7b57e1b0f0380f8fbd09bb9a8d9dfae7c0c913fcf3a0839a1f1cdffaf15",
+    "worker": "78e03658cb5811361c9bd8f3c8c5b747fc88badbf81f3b7121f09c0d4e1c0f4c"
+  },
+  "font_sha256": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f",
+  "cases": [
+    {
+      "case": "albany-0.25",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 0.25,
+      "exit_code": 0,
+      "diagnostic": "153x198 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 121176,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "albany-0.5",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 0.5,
+      "exit_code": 0,
+      "diagnostic": "306x396 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 484704,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "albany-0.87",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 0.87,
+      "exit_code": 0,
+      "diagnostic": "532x689 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 1466192,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "albany-1",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "612x792 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 1938816,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "albany-1.15",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 1.15,
+      "exit_code": 0,
+      "diagnostic": "703x910 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 2558920,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "albany-1.5625",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 1.5625,
+      "exit_code": 0,
+      "diagnostic": "956x1237 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 4730288,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "albany-2",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 2,
+      "exit_code": 0,
+      "diagnostic": "1224x1584 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 7755264,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "albany-3",
+      "source_sha256": "60e008d856ee9370fe2ba81144f98cf8ce20f87a9880442ad5c957d346416b43",
+      "page": 6,
+      "scale": 3,
+      "exit_code": 0,
+      "diagnostic": "1836x2376 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 17449344,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "fixture-0-0",
+      "source_sha256": "ef7aa8fdaabc7fc6a6a64c786b950228ce3287531dee44bc703bd7f1167e0e5a",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "640x800 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "fixture-0-1",
+      "source_sha256": "78caf4750955a0c6a1204613464ddebb1e838b33652830e85495195d63d9a62a",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "624x784 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "fixture-90-0",
+      "source_sha256": "601f00450abd058c3041ceedf808b1582164de261634dbe1f41210957afb31f5",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "800x640 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "fixture-90-1",
+      "source_sha256": "d3b46b57915e2688e8c4ec751e501c52d0547ca9c6b57067bc9356d5153f1a0c",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "784x624 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "fixture-180-0",
+      "source_sha256": "f794d014592d944fae8bb4694d4c136268202c801470eab4252f7a35977d6391",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "640x800 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "fixture-180-1",
+      "source_sha256": "08122fbf3745cce23f2badd34225bf8a5085b6da8fb971d5e1992e55b25c58be",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "624x784 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "fixture-270-0",
+      "source_sha256": "decdffbe93c6392a95ab4f9ae0e14a3612f8e0a53c97687ae16a90561e802c36",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "800x640 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 2048000,
+        "different_channels": 0,
+        "exact": true
+      }
+    },
+    {
+      "case": "fixture-270-1",
+      "source_sha256": "34cb955aab9f2dfd3323d91deddd2fa0f0f1d549bd91b0f96cfd18faa0883bd0",
+      "page": 1,
+      "scale": 1,
+      "exit_code": 0,
+      "diagnostic": "784x624 PDF=Dynlex imported_AP_DynLex=false",
+      "pixels": {
+        "bytes": 1956864,
+        "different_channels": 0,
+        "exact": true
+      }
+    }
+  ],
+  "rejections": [
+    {
+      "case": "missing",
+      "rejected_without_bitmap": true,
+      "diagnostic": "Error: \"DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "case": "crash",
+      "rejected_without_bitmap": true,
+      "diagnostic": "Error: \"DynLex does not support this text page or zoom yet: text worker failed (signal: 6 (SIGABRT) (core dumped)): . No fallback rendered. Select another renderer manually.\""
+    },
+    {
+      "case": "bad-ipc",
+      "rejected_without_bitmap": true,
+      "diagnostic": "Error: \"DynLex does not support this text page or zoom yet: scene IPC length/magic. No fallback rendered. Select another renderer manually.\""
+    }
+  ],
+  "all_exact": true,
+  "all_rejected": true
+}
