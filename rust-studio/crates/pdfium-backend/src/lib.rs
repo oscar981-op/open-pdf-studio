@@ -55,10 +55,24 @@ struct Api {
 
 impl Api {
     fn load() -> Result<Self, String> {
-        let path = std::env::var_os("OPDS_PDFIUM_LIBRARY").unwrap_or_else(|| "libpdfium.so".into());
-        // SAFETY: The library path is supplied by the local installation.
-        // Symbol types below follow PDFium's public fpdfview.h ABI.
-        let library = unsafe { Library::new(&path) }.map_err(|e| e.to_string())?;
+        let candidates = if let Some(path) = std::env::var_os("OPDS_PDFIUM_LIBRARY") {
+            vec![std::path::PathBuf::from(path)]
+        } else {
+            let mut paths = vec![std::path::PathBuf::from("libpdfium.so")];
+            if let Some(directory) = std::env::current_exe()
+                .ok()
+                .and_then(|path| path.parent().map(std::path::Path::to_path_buf))
+            {
+                paths.push(directory.join("libpdfium.so"));
+            }
+            paths
+        };
+        // SAFETY: The library comes from an explicit local installation or
+        // beside this executable. Symbols below follow PDFium's public ABI.
+        let library = candidates
+            .iter()
+            .find_map(|path| unsafe { Library::new(path) }.ok())
+            .ok_or_else(|| "PDFium-bibliotheek niet gevonden".to_string())?;
         unsafe {
             macro_rules! symbol {
                 ($name:literal, $type:ty) => {

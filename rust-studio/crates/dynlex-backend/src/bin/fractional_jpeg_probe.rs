@@ -4,7 +4,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{env, fs, io::Read, sync::Arc};
     let args: Vec<_> = env::args().collect();
     if args.len() != 5 {
-        return Err("usage: fractional_jpeg_probe INPUT.pdf OUTPUT_DIRECTORY SCALE[,SCALE...] geometric|strip-f32".into());
+        return Err("usage: fractional_jpeg_probe INPUT.pdf OUTPUT_DIRECTORY SCALE[,SCALE...] geometric|strip-f32|unverified-tiles".into());
     }
     let scales: Vec<f32> = args[3]
         .split(',')
@@ -16,6 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let strip = match args[4].as_str() {
         "geometric" => false,
         "strip-f32" => true,
+        "unverified-tiles" => false,
         _ => return Err("invalid sampling mode".into()),
     };
     if scales
@@ -35,7 +36,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(&args[2])?;
     for (i, scale) in scales.into_iter().enumerate() {
         let started = std::time::Instant::now();
-        let bitmap = probe.render(scale, strip)?;
+        let bitmap = if args[4] == "unverified-tiles" {
+            probe.render_unverified_tiled(scale)?
+        } else {
+            probe.render(scale, strip)?
+        };
         let ms = started.elapsed().as_secs_f64() * 1000.;
         fs::write(
             std::path::Path::new(&args[2]).join(format!("{i}.rgba")),

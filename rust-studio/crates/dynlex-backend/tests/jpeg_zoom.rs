@@ -96,7 +96,7 @@ fn document_cache_evicts_previous_page_and_serializes_concurrent_decode() {
 #[test]
 fn unsafe_scale_and_unproven_content_never_produce_zoom_bitmap() {
     let doc = DynlexDocument::new(Arc::new(source(0, CONTENT, 1)));
-    for scale in [f32::NAN, f32::INFINITY, 0., -1., 0.3, 9.] {
+    for scale in [f32::NAN, f32::INFINITY, 0., -1., 9.] {
         assert!(doc.try_render(1, scale).unwrap().is_none());
     }
     for content in [
@@ -168,5 +168,95 @@ fn fractional_sampling_probe_rotation_crop_diagnosis() {
         for scale in [0., f32::NAN, f32::INFINITY, -1., 8., 1.25] {
             assert!(probe.render(scale, true).is_err());
         }
+    }
+}
+
+#[test]
+fn native_zoom_requires_exact_pixels_and_retains_unverified_tiles_as_probe() {
+    use opds_dynlex_backend::fractional_probe::FractionalProbe;
+    let mut unsupported = 0;
+    let mut supported = 0;
+    for turn in [0, 90, 180, 270] {
+        let bytes = Arc::new(source(turn, CONTENT, 1));
+        let oracle = ParsedPdf::open(bytes.clone()).unwrap();
+        let probe = FractionalProbe::new(bytes.clone(), 1).unwrap();
+        let doc = DynlexDocument::new(bytes);
+        for scale in [
+            0.1, 0.15686275, 0.3, 0.77, 1.15, 1.3225, 1.75, 2.25, 3.1, 4.5, 8.,
+        ] {
+            let expected = oracle.render_page(1, scale).unwrap();
+            if let Some(actual) = doc.try_render(1, scale).unwrap() {
+                supported += 1;
+                assert_eq!(
+                    (actual.width, actual.height),
+                    (expected.width, expected.height)
+                );
+                assert!(actual.rgba == expected.rgba, "turn={turn} scale={scale}");
+            } else {
+                unsupported += 1;
+            }
+            let candidate = probe.render_unverified_tiled(scale).unwrap();
+            assert_eq!(
+                (candidate.width, candidate.height),
+                (expected.width, expected.height)
+            );
+        }
+        assert_eq!(doc.raster_cache_stats().unwrap(), (32 * 24 * 3, 1));
+    }
+    assert!(supported >= 8);
+    assert!(unsupported > 0);
+}
+
+#[test]
+fn fractional_tiles_have_identical_sampling_at_every_boundary() {
+    use opds_opdl_adapter::raster_source::RasterPlan;
+    for turn in [0, 90, 180, 270] {
+        for content in [CONTENT, "q 64 0 0 48 16 16 cm /Scan Do Q"] {
+            let bytes = source(turn, content, 1);
+            let plan = RasterPlan::from_pdf(&bytes, 1).unwrap();
+            let pixels = plan.decode().unwrap();
+            let zoom = plan.zoom(&pixels, 3.17).unwrap();
+            let whole = zoom.tile_scene(0, 0, zoom.width, zoom.height).unwrap();
+            let mut tiled = vec![0; zoom.width as usize * zoom.height as usize * 3];
+            for y in (0..zoom.height).step_by(37) {
+                for x in (0..zoom.width).step_by(43) {
+                    let w = 43.min(zoom.width - x);
+                    let h = 37.min(zoom.height - y);
+                    let tile = zoom.tile_scene(x, y, w, h).unwrap();
+                    for row in 0..h as usize {
+                        let to = ((y as usize + row) * zoom.width as usize + x as usize) * 3;
+                        let from = 64 + row * w as usize * 3;
+                        tiled[to..to + w as usize * 3]
+                            .copy_from_slice(&tile[from..from + w as usize * 3]);
+                    }
+                }
+            }
+            assert_eq!(&whole[64..], tiled);
+            assert!(zoom.tile_scene(zoom.width, 0, 1, 1).is_err());
+        }
+    }
+}
+
+#[test]
+fn over_limit_jpeg_zoom_is_rejected_before_source_decode() {
+    let mut pdf = Document::load_mem(&source(0, CONTENT, 1)).unwrap();
+    let pages = pdf.get_pages();
+    let page = pdf.get_dictionary(*pages.get(&1).unwrap()).unwrap();
+    let parent = page.get(b"Parent").unwrap().as_reference().unwrap();
+    let dict = pdf.get_dictionary_mut(parent).unwrap();
+    dict.set(
+        "MediaBox",
+        vec![0.into(), 0.into(), 3000.into(), 3000.into()],
+    );
+    dict.set(
+        "CropBox",
+        vec![0.into(), 0.into(), 3000.into(), 3000.into()],
+    );
+    let mut bytes = Vec::new();
+    pdf.save_to(&mut bytes).unwrap();
+    let doc = DynlexDocument::new(Arc::new(bytes));
+    for scale in [1., 2.] {
+        assert!(doc.try_render(1, scale).unwrap().is_none());
+        assert_eq!(doc.raster_cache_stats().unwrap(), (0, 0));
     }
 }

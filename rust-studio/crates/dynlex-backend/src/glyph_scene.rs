@@ -150,7 +150,7 @@ pub fn render_validated_glyph_scene_over_premultiplied_at_origin_owned(
 
 /// Use the same validated DynLex area/compositing kernels for a geometric
 /// Form path. The caller supplies a real OPM2 outline, never a fake glyph.
-pub(crate) fn render_validated_polygon_over_premultiplied_at_origin_owned(
+pub fn render_validated_polygon_over_premultiplied_at_origin_owned(
     outline: &[u8],
     color: [u8; 3],
     base_rgba: Vec<u8>,
@@ -281,4 +281,72 @@ mod tests {
             );
         }
     }
+}
+
+// Research-only caller has validated OPNW structure and aligned coordinates.
+// This does not change OPGS/OPM2 acceptance or native dispatch.
+pub(crate) fn paint_experimental_winding(
+    words: Vec<u64>,
+    color: [u8; 3],
+    output: Vec<u8>,
+    width: u32,
+    height: u32,
+    origin: [u32; 2],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    core::render_outlines_over_page_owned(
+        vec![(words, color)],
+        output,
+        width,
+        height,
+        [0, 0, width, height],
+        origin,
+        true,
+        true,
+    )
+}
+
+/// Private typed-scene bridge; raw outlines cannot enter through a public API.
+pub(crate) fn render_prepared_winding_page(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    core::render_prepared_page(width, height, scenes)
+}
+
+/// Per-paint rectangle masks for the validated v3 prepared scene. The
+/// separate probe called this first; native replay now uses the same math.
+pub(crate) fn render_prepared_winding_page_fractional(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+    fractional_clips: &[Option<[f64; 4]>],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    core::render_prepared_page_fractional(width, height, scenes, fractional_clips)
+}
+
+pub(crate) fn render_prepared_winding_page_fractional_over_opaque(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+    fractional_clips: &[Option<[f64; 4]>],
+    background: Vec<u8>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    core::render_prepared_page_fractional_over_opaque(
+        width,
+        height,
+        scenes,
+        fractional_clips,
+        background,
+    )
+}
+
+/// Diagnostic split timings only; ordinary replay does not read a clock per paint.
+pub(crate) fn profile_prepared_winding_page(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+    profile: &mut [std::time::Duration; 4],
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    core::render_prepared_page_profiled(width, height, scenes, Some(profile))
 }

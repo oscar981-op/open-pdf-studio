@@ -6,6 +6,7 @@ pub mod geometry_v2;
 pub mod geometry_v3;
 mod jpeg_rgb;
 pub mod paint_v4;
+pub mod partial_image;
 pub mod path_v3;
 pub mod raster_source;
 pub mod text_quad_glyph;
@@ -545,6 +546,114 @@ fn number(object: &Object) -> Result<f64, Box<dyn Error>> {
         Object::Integer(value) => Ok(*value as f64),
         Object::Real(value) => Ok(f64::from(*value)),
         _ => Err(fail("expected a PDF number")),
+    }
+}
+
+// Named graphics state can be skipped only when every supplied parameter is
+// neutral for the opaque image/vector subset. Unknown and compositing entries
+// remain unsupported; merely having an unused ExtGState resource is inert.
+fn neutral_image_ext_gstate(
+    document: &Document,
+    resources: &lopdf::Dictionary,
+    name: &[u8],
+) -> Result<(), Box<dyn Error>> {
+    let states = document
+        .dereference(resources.get(b"ExtGState")?)?
+        .1
+        .as_dict()?;
+    if states.len() > 32 {
+        return Err(fail("graphics state resource count"));
+    }
+    let state = document.dereference(states.get(name)?)?.1.as_dict()?;
+    if state.is_empty() || state.len() > 16 {
+        return Err(fail("unsupported graphics state"));
+    }
+    for (key, value) in state.iter() {
+        let value = document.dereference(value)?.1;
+        let valid = match key.as_slice() {
+            b"Type" => value.as_name().ok() == Some(b"ExtGState"),
+            b"CA" | b"ca" => number(value).ok() == Some(1.),
+            b"BM" => value.as_name().ok() == Some(b"Normal"),
+            b"SMask" => value.as_name().ok() == Some(b"None"),
+            b"AIS" | b"OP" | b"op" => matches!(value, Object::Boolean(false)),
+            b"SA" => matches!(value, Object::Boolean(_)),
+            b"OPM" => matches!(number(value).ok(), Some(0. | 1.)),
+            _ => false,
+        };
+        if !valid {
+            return Err(fail("unsupported non-neutral graphics state"));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod neutral_image_state_tests {
+    use super::*;
+    use lopdf::dictionary;
+
+    #[test]
+    fn neutral_named_state_is_allowed_but_transparency_rejects() {
+        let mut doc = Document::with_version("1.7");
+        let mut state = dictionary! {
+            "Type" => "ExtGState", "CA" => 1, "ca" => 1,
+            "BM" => "Normal", "SMask" => "None", "OP" => false,
+            "op" => false, "AIS" => false, "SA" => true, "OPM" => 1,
+        };
+        let id = doc.add_object(state.clone());
+        let resources = dictionary! {"ExtGState" => dictionary! {"GS0" => id}};
+        assert!(neutral_image_ext_gstate(&doc, &resources, b"GS0").is_ok());
+        for (key, value) in [
+            ("ca", Object::Real(0.5)),
+            ("BM", Object::Name(b"Multiply".to_vec())),
+            ("SMask", Object::Null),
+            ("OP", Object::Boolean(true)),
+        ] {
+            state.set(key, value);
+            doc.objects.insert(id, state.clone().into());
+            assert!(
+                neutral_image_ext_gstate(&doc, &resources, b"GS0").is_err(),
+                "{key}"
+            );
+            state = dictionary! {
+                "Type" => "ExtGState", "CA" => 1, "ca" => 1,
+                "BM" => "Normal", "SMask" => "None", "OP" => false,
+                "op" => false, "AIS" => false, "SA" => true, "OPM" => 1,
+            };
+        }
+        assert!(neutral_image_ext_gstate(&doc, &resources, b"Missing").is_err());
+    }
+
+    #[test]
+    fn flate_predictor_default_one_decodes_exact_rgb() {
+        let mut doc = Document::with_version("1.7");
+        let rgb = [255, 0, 0, 0, 255, 0, 0, 0, 255, 12, 34, 56];
+        let compressed = miniz_oxide::deflate::compress_to_vec_zlib(&rgb, 6);
+        let mut image = Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Image", "Width" => 2,
+                "Height" => 2, "ColorSpace" => "DeviceRGB",
+                "BitsPerComponent" => 8, "Filter" => "FlateDecode",
+                "DecodeParms" => dictionary! {"Columns" => 2, "Colors" => 3, "BitsPerComponent" => 8},
+            },
+            compressed,
+        );
+        image.dict.set("Length", image.content.len() as i64);
+        let id = doc.add_object(image);
+        let resources = dictionary! {"XObject" => dictionary! {"Im0" => id}};
+        let mut budget = jpeg_rgb::MAX_PIXELS;
+        assert_eq!(
+            image_bytes(&doc, &resources, b"Im0", 2, 2, true, false, &mut budget)
+                .unwrap()
+                .as_ref(),
+            rgb
+        );
+        let image = doc.get_object_mut(id).unwrap().as_stream_mut().unwrap();
+        image.dict.set(
+            "DecodeParms",
+            dictionary! {"Predictor" => 2, "Columns" => 2, "Colors" => 3},
+        );
+        assert!(image_bytes(&doc, &resources, b"Im0", 2, 2, true, false, &mut budget).is_err());
     }
 }
 
@@ -1245,6 +1354,12 @@ fn image_bytes<'a>(
         }
         let (_, params) = document.dereference(dict.get(b"DecodeParms")?)?;
         let params = params.as_dict()?;
+        let predictor = params
+            .get(b"Predictor")
+            .ok()
+            .map(|value| value.as_i64())
+            .transpose()?
+            .unwrap_or(1);
         if params.iter().any(|(key, _)| {
             ![
                 b"Predictor".as_slice(),
@@ -1253,7 +1368,7 @@ fn image_bytes<'a>(
                 b"BitsPerComponent",
             ]
             .contains(&key.as_slice())
-        }) || params.get(b"Predictor")?.as_i64()? != 15
+        }) || !matches!(predictor, 1 | 15)
             || params.get(b"Columns")?.as_i64()? != i64::from(source_width)
             || params.get(b"Colors")?.as_i64()? != 3
             || params
@@ -1263,7 +1378,7 @@ fn image_bytes<'a>(
         {
             return Err(fail("unsupported PNG image predictor parameters"));
         }
-        true
+        predictor == 15
     } else {
         false
     };
@@ -1330,12 +1445,32 @@ fn resample_rgb(
     placed_height: u32,
     force_catmull: bool,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
+    resample_rgb_bounded(
+        pixels,
+        source_width,
+        source_height,
+        placed_width,
+        placed_height,
+        force_catmull,
+        6_000_000,
+    )
+}
+
+fn resample_rgb_bounded(
+    pixels: &[u8],
+    source_width: u32,
+    source_height: u32,
+    placed_width: u32,
+    placed_height: u32,
+    force_catmull: bool,
+    max_pixels: u32,
+) -> Result<Vec<u8>, Box<dyn Error>> {
     if (source_width, source_height) == (placed_width, placed_height) {
         return Ok(pixels.to_vec());
     }
     if placed_width
         .checked_mul(placed_height)
-        .is_none_or(|count| count > 6_000_000)
+        .is_none_or(|count| count > max_pixels)
     {
         return Err(fail("placed RGB image exceeds pixel bound"));
     }
@@ -2411,6 +2546,9 @@ fn page_to_opdl_bytes_internal(
             return Err(fail("unfinished two-contour even-odd clip"));
         }
         match op.operator.as_str() {
+            "gs" if ordered_images && op.operands.len() == 1 => {
+                neutral_image_ext_gstate(&document, resources, op.operands[0].as_name()?)?;
+            }
             "q" if op.operands.is_empty()
                 && depth < if ordered_images { 16 } else { 2 }
                 && !image_matrix

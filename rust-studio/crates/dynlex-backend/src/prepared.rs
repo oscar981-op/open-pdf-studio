@@ -28,11 +28,23 @@ pub struct DynlexDocument {
     other_pages: Mutex<VecDeque<(usize, PageSlot)>>,
     #[cfg(feature = "kernel")]
     raster_cache: SharedRasterCache,
+    #[cfg(all(feature = "kernel", target_os = "linux"))]
+    text: Option<crate::text_worker::TextDocument>,
 }
 
 impl DynlexDocument {
     pub fn new(source: Arc<Vec<u8>>) -> Self {
+        #[cfg(all(feature = "kernel", target_os = "linux"))]
+        let text = std::env::current_exe().ok().and_then(|binary| {
+            let worker = binary.with_file_name("opds-text-worker");
+            worker
+                .is_file()
+                .then(|| crate::text_worker::TextDocument::new(source.clone(), worker).ok())
+                .flatten()
+        });
         Self {
+            #[cfg(all(feature = "kernel", target_os = "linux"))]
+            text,
             source,
             #[cfg(feature = "kernel")]
             prepared: OnceLock::new(),
@@ -41,6 +53,15 @@ impl DynlexDocument {
             #[cfg(feature = "kernel")]
             raster_cache: Arc::default(),
         }
+    }
+
+    /// Explicit trusted helper registration for embedding hosts/tests. Never
+    /// derive this path from PDF metadata. Default uses the application sibling.
+    #[cfg(all(feature = "kernel", target_os = "linux"))]
+    pub fn with_text_worker(source: Arc<Vec<u8>>, helper: std::path::PathBuf) -> Self {
+        let mut document = Self::new(source.clone());
+        document.text = crate::text_worker::TextDocument::new(source, helper).ok();
+        document
     }
 
     pub fn try_render(&self, page: usize, scale: f32) -> Result<Option<Bitmap>, String> {
@@ -71,22 +92,95 @@ impl DynlexDocument {
                 Some(slot)
             };
             let cell = slot.as_deref().unwrap_or(&self.prepared);
-            match cell.get_or_init(|| {
+            let generic_started = std::time::Instant::now();
+            let generic = cell.get_or_init(|| {
                 PreparedPage::from_pdf_page_with_cache(
                     &self.source,
                     page,
                     self.raster_cache.clone(),
                 )
-            }) {
-                Ok(Some(prepared)) => prepared.render(scale),
-                Ok(None) => Ok(None),
-                Err(error) => Err(error.clone()),
+            });
+            if std::env::var_os("OPDS_TEXT_PARENT_PHASES").is_some() {
+                eprintln!(
+                    "OPDS_TEXT_PARENT_PHASES generic_prepare_or_cache={:.3} ms",
+                    generic_started.elapsed().as_secs_f64() * 1000.
+                );
             }
+            match generic {
+                Ok(Some(prepared)) => {
+                    // The generic scene can be valid at 100% yet unable to
+                    // rasterize a fractional zoom. The independent bounded
+                    // DynLex worker may still render the entire page exactly.
+                    if let Some(bitmap) = prepared.render(scale)? {
+                        return Ok(Some(bitmap));
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => return Err(error.clone()),
+            }
+            #[cfg(target_os = "linux")]
+            if let Some(text) = &self.text {
+                return text.render(page as u32, scale).map(Some).map_err(|error| {
+                    eprintln!("DynLex text preparation: {error}");
+                    "DynLex does not support this page or zoom yet. No fallback rendered. Select another renderer manually.".to_string()
+                });
+            }
+            Ok(None)
         }
         #[cfg(not(feature = "kernel"))]
         {
             Ok(None)
         }
+    }
+
+    /// Source-bound, bounded viewport for the proven opaque vector subset.
+    /// Images, text, and hybrid pages remain unsupported here; callers must
+    /// never treat this as a cropped full-page bitmap or another renderer.
+    #[cfg(feature = "kernel")]
+    pub fn try_render_vector_viewport(
+        &self,
+        page: usize,
+        scale: f32,
+        view: PixelViewport,
+    ) -> Result<Option<Bitmap>, String> {
+        if page == 0 || page > 4096 || !scale.is_finite() || !(0.01..=16.0).contains(&scale) {
+            return Ok(None);
+        }
+        let slot = if page == 1 {
+            None
+        } else {
+            let mut pages = self
+                .other_pages
+                .lock()
+                .map_err(|_| "page cache lock poisoned")?;
+            let slot = if let Some(index) = pages.iter().position(|(number, _)| *number == page) {
+                pages.remove(index).unwrap().1
+            } else {
+                Arc::new(OnceLock::new())
+            };
+            pages.push_back((page, Arc::clone(&slot)));
+            while pages.len() > 3 {
+                pages.pop_front();
+            }
+            Some(slot)
+        };
+        let cell = slot.as_deref().unwrap_or(&self.prepared);
+        match cell.get_or_init(|| {
+            PreparedPage::from_pdf_page_with_cache(&self.source, page, self.raster_cache.clone())
+        }) {
+            Ok(Some(prepared)) => prepared.render_viewport(scale, view),
+            Ok(None) => Ok(None),
+            Err(error) => Err(error.clone()),
+        }
+    }
+
+    /// Diagnostic counters for the one-entry prepared text cache.
+    #[cfg(all(feature = "kernel", target_os = "linux"))]
+    pub fn text_cache_stats(&self) -> Result<Option<(usize, usize)>, String> {
+        self.text
+            .as_ref()
+            .map(|text| text.cache_stats())
+            .transpose()
     }
 
     /// Retained original RGB bytes and successful decodes; diagnostic only.
@@ -191,7 +285,7 @@ mod scene {
     // Exact integer edges only: no tolerance that silently changes AA or image sampling.
     fn scaled(value: u32, scale: f32) -> Option<u32> {
         let n = f64::from(value) * f64::from(scale);
-        (n.is_finite() && n >= 0.0 && n <= 4096.0 && n.fract() == 0.0).then_some(n as u32)
+        (n.is_finite() && n >= 0.0 && n <= 65_536.0 && n.fract() == 0.0).then_some(n as u32)
     }
 
     #[test]
@@ -216,11 +310,20 @@ mod scene {
         }
 
         pub fn from_pdf_page(bytes: &[u8], page: usize) -> Result<Option<Self>, String> {
-            Self::from_pdf_page_with_cache(bytes, page, std::sync::Arc::default())
+            Self::from_pdf_page_impl(bytes, None, page, std::sync::Arc::default())
         }
 
         pub(super) fn from_pdf_page_with_cache(
+            source: &std::sync::Arc<Vec<u8>>,
+            page: usize,
+            cache: super::SharedRasterCache,
+        ) -> Result<Option<Self>, String> {
+            Self::from_pdf_page_impl(source, Some(source), page, cache)
+        }
+
+        fn from_pdf_page_impl(
             bytes: &[u8],
+            source: Option<&std::sync::Arc<Vec<u8>>>,
             page: usize,
             cache: super::SharedRasterCache,
         ) -> Result<Option<Self>, String> {
@@ -229,7 +332,9 @@ mod scene {
             }
             if let Ok(plan) = opds_opdl_adapter::raster_source::RasterPlan::from_pdf(bytes, page) {
                 if let Ok(space) = crate::page_space::PageSpace::from_pdf(
-                    std::sync::Arc::new(bytes.to_vec()),
+                    source
+                        .cloned()
+                        .unwrap_or_else(|| std::sync::Arc::new(bytes.to_vec())),
                     page,
                     1.,
                 ) {
@@ -299,12 +404,13 @@ mod scene {
 
         pub fn render(&self, scale: f32) -> Result<Option<Bitmap>, String> {
             if let Some((plan, key, cache)) = &self.raster {
-                // Only measured zooms; the plan additionally limits 125% to
-                // downsampling with aligned placement and crop edges.
-                if ![0.25, 0.5, 1., 1.25, 2.].contains(&scale) {
+                if !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
                     return Ok(None);
                 }
-                if self.scaled_size(scale).is_none() {
+                let extent = [self.width as f32 * scale, self.height as f32 * scale];
+                if extent.iter().any(|n| !(1.0..=4096.0).contains(n))
+                    || f64::from(extent[0]) * f64::from(extent[1]) > 6_000_000.0
+                {
                     return Ok(None);
                 }
                 // One source cache per document, shared by ALL page slots. Hold
@@ -327,12 +433,21 @@ mod scene {
                     cache.key = *key;
                     cache.decodes += 1;
                 }
-                let Ok(scene) = plan.scene(&cache.pixels, scale) else {
-                    return Ok(None);
-                };
-                drop(cache);
-                let (scene, width, height) = validated_ordered_scene(scene)?;
-                return render_validated_scene(&scene, width, height).map(Some);
+                // Preserve the established pixel-exact route where applicable.
+                if let Ok(scene) = plan.scene(&cache.pixels, scale).or_else(|_| {
+                    // Full-MediaBox downsampling uses the verified fractional
+                    // image grid and strip arithmetic. Reuse the document's
+                    // existing decoded RGB; never introduce a per-zoom cache.
+                    plan.experimental_fractional_scene(&cache.pixels, scale, true)
+                }) {
+                    drop(cache);
+                    let (scene, width, height) = validated_ordered_scene(scene)?;
+                    return render_validated_scene(&scene, width, height).map(Some);
+                }
+                // The general tiled sampler is retained in FractionalProbe,
+                // but its placement/upscaling AA is not pixel-exact. Never
+                // publish approximate pixels as a successful strict render.
+                return Ok(None);
             }
             if scale == 1.0 {
                 return render_validated_scene(&self.scene, self.width, self.height).map(Some);
@@ -356,7 +471,11 @@ mod scene {
                 return None;
             }
             let (width, height) = (scaled(self.width, scale)?, scaled(self.height, scale)?);
-            (width > 0 && height > 0 && width.checked_mul(height)? <= 6_000_000)
+            (width > 0
+                && height > 0
+                && width <= 4096
+                && height <= 4096
+                && width.checked_mul(height)? <= 6_000_000)
                 .then_some((width, height))
         }
 
@@ -368,7 +487,11 @@ mod scene {
             scale: f32,
             view: PixelViewport,
         ) -> Result<Option<Bitmap>, String> {
-            let Some((width, height)) = self.scaled_size(scale) else {
+            if !scale.is_finite() || !(0.01..=16.0).contains(&scale) {
+                return Ok(None);
+            }
+            let Some((width, height)) = scaled(self.width, scale).zip(scaled(self.height, scale))
+            else {
                 return Ok(None);
             };
             let Some(vectors) = &self.vectors else {
@@ -380,7 +503,17 @@ mod scene {
             let Some(bottom) = view.y.checked_add(view.height) else {
                 return Err("viewport overflow".into());
             };
-            if view.width == 0 || view.height == 0 || right > width || bottom > height {
+            if view.width == 0
+                || view.height == 0
+                || view.width > 4096
+                || view.height > 4096
+                || view
+                    .width
+                    .checked_mul(view.height)
+                    .is_none_or(|pixels| pixels > 6_000_000)
+                || right > width
+                || bottom > height
+            {
                 return Err("viewport outside page".into());
             }
             // Every coordinate is a multiple of this GCD. With bounded integer
@@ -472,6 +605,33 @@ mod tests {
                 rgba[start..start + v.width as usize * 4].iter().copied()
             })
             .collect()
+    }
+
+    // Hayro's public full-page API is capped at 8×. Scale the same PDF paints
+    // by two inside a cropped page and render that small page at 8×, yielding
+    // the identical 16× device-space viewport as an independent oracle.
+    fn doubled_cropped_fills_pdf(view: PixelViewport) -> Vec<u8> {
+        let mut doc = Document::with_version("1.7");
+        let pages = doc.new_object_id();
+        let content = doc.add_object(Stream::new(dictionary! {}, b"2 0 0 2 0 0 cm\n1 0 0 rg\n16 16 160 120 re\nf\n0 0 1 rg\n64 48 144 96 re\nf\n0 1 0 rg\n240 176 16 16 re\nf\n".to_vec()));
+        let page_height = 192 * 16;
+        let media_box = vec![
+            Object::Real(view.x as f32 / 8.0),
+            Object::Real((page_height - view.y - view.height) as f32 / 8.0),
+            Object::Real((view.x + view.width) as f32 / 8.0),
+            Object::Real((page_height - view.y) as f32 / 8.0),
+        ];
+        let page = doc.add_object(dictionary! { "Type"=>"Page", "Parent"=>pages,
+        "MediaBox"=>media_box, "Resources"=>dictionary!{}, "Contents"=>content });
+        doc.objects.insert(
+            pages,
+            Object::Dictionary(dictionary! {"Type"=>"Pages","Kids"=>vec![page.into()],"Count"=>1}),
+        );
+        let catalog = doc.add_object(dictionary! {"Type"=>"Catalog","Pages"=>pages});
+        doc.trailer.set("Root", catalog);
+        let mut bytes = Vec::new();
+        doc.save_to(&mut bytes).unwrap();
+        bytes
     }
 
     #[test]
@@ -759,5 +919,85 @@ mod tests {
         }
         assert!(page.render(8.01).unwrap().is_none());
         assert!(page.render(f32::NAN).unwrap().is_none());
+    }
+
+    #[test]
+    fn sixteen_times_vector_viewport_stays_bounded_and_sharp() {
+        let page = PreparedPage::from_pdf(&fills_pdf()).unwrap().unwrap();
+        // The complete 4096×3072 page exceeds the bounded full-raster path.
+        assert!(page.render(16.0).unwrap().is_none());
+        let blue = page
+            .render_viewport(
+                16.0,
+                PixelViewport {
+                    x: 2048,
+                    y: 800,
+                    width: 128,
+                    height: 96,
+                },
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(blue.rgba.len(), 128 * 96 * 4);
+        assert!(blue
+            .rgba
+            .chunks_exact(4)
+            .all(|pixel| pixel == [0, 0, 255, 255]));
+        assert!(page
+            .render_viewport(
+                16.0,
+                PixelViewport {
+                    x: 0,
+                    y: 0,
+                    width: 4096,
+                    height: 3072,
+                },
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn source_bound_sixteen_times_vector_tile_matches_hayro() {
+        let bytes = Arc::new(fills_pdf());
+        let document = DynlexDocument::new(bytes);
+        let view = PixelViewport {
+            x: 1837,
+            y: 707,
+            width: 257,
+            height: 191,
+        };
+        let reference_source = Arc::new(doubled_cropped_fills_pdf(view));
+        let reference = ParsedPdf::open(reference_source)
+            .unwrap()
+            .render_page(1, 8.0)
+            .unwrap();
+        let actual = document
+            .try_render_vector_viewport(1, 16.0, view)
+            .unwrap()
+            .unwrap();
+        assert_eq!((actual.width, actual.height), (view.width, view.height));
+        assert_eq!(
+            (reference.width, reference.height),
+            (view.width, view.height)
+        );
+        assert_eq!(actual.rgba, reference.rgba);
+        assert!(document.try_render(1, 16.0).unwrap().is_none());
+        assert!(document
+            .try_render_vector_viewport(
+                1,
+                16.0,
+                PixelViewport {
+                    x: u32::MAX,
+                    ..view
+                }
+            )
+            .is_err());
+        let raster = DynlexDocument::new(Arc::new(
+            include_bytes!("../tests/fixtures/full-page-raster.pdf").to_vec(),
+        ));
+        assert!(raster
+            .try_render_vector_viewport(1, 16.0, view)
+            .unwrap()
+            .is_none());
     }
 }

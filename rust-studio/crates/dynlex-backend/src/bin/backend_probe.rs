@@ -6,7 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let started = std::time::Instant::now();
     let args: Vec<_> = env::args_os().collect();
     if !(3..=6).contains(&args.len()) {
-        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--dynlex-strict|--pdfium|--pdfium-strict|--own-rust|--own-rust-strict] [--scale=FACTOR] [--page=NUMBER]".into());
+        return Err("usage: backend_probe INPUT.pdf OUTPUT.rgba [--hayro|--selected|--dynlex|--dynlex-strict|--pdfium|--pdfium-strict|--own-rust|--own-rust-strict|--pdfcraft-strict] [--scale=FACTOR] [--page=NUMBER]".into());
     }
     let scale: f32 = if args.len() >= 5 {
         args[4]
@@ -81,6 +81,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                         raster.width, raster.height, used
                     );
                 }
+            }
+            Some("--pdfcraft-strict") => {
+                let pdf = ParsedPdf::open(Arc::new(bytes.clone()))?;
+                let result = opds_dynlex_backend::render_selected_strict(
+                    &pdf,
+                    &bytes,
+                    page,
+                    scale,
+                    Backend::PdfCraft,
+                )?;
+                fs::write(&args[2], &result.raster.rgba)?;
+                eprintln!(
+                    "{}x{} PDF=PdfCraft (Hayro-based)",
+                    result.raster.width, result.raster.height
+                );
             }
             Some("--selected" | "--dynlex" | "--dynlex-strict" | "--pdfium" | "--own-rust") => {
                 let backend = match args[3].to_str() {

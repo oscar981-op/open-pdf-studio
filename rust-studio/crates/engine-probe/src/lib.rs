@@ -5,6 +5,7 @@ mod imported_annotations;
 
 use hayro::hayro_interpret::InterpreterSettings;
 use hayro::hayro_syntax::Pdf;
+use hayro::hayro_syntax::PdfVersion;
 use hayro::vello_cpu::color::palette::css::{TRANSPARENT, WHITE};
 use hayro::{RenderCache, RenderSettings};
 use std::sync::{Arc, OnceLock};
@@ -23,6 +24,50 @@ pub struct Raster {
     pub total_pages: usize,
     pub parse_ms: u128,
     pub render_ms: u128,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentInfo {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub subject: Option<String>,
+    pub creator: Option<String>,
+    pub producer: Option<String>,
+    pub version: &'static str,
+}
+
+fn decode_info_field(bytes: Option<&Vec<u8>>) -> Option<String> {
+    let bytes = bytes.filter(|bytes| bytes.len() <= 4096)?;
+    let value = lopdf::decode_text_string(&lopdf::Object::String(
+        bytes.clone(),
+        lopdf::StringFormat::Literal,
+    ))
+    .ok()?;
+    let value = value.trim_start_matches('\u{feff}').to_owned();
+    (!value.trim().is_empty()).then_some(value)
+}
+
+fn document_info(pdf: &Pdf) -> DocumentInfo {
+    let metadata = pdf.metadata();
+    let version = match pdf.version() {
+        PdfVersion::Pdf10 => "1.0",
+        PdfVersion::Pdf11 => "1.1",
+        PdfVersion::Pdf12 => "1.2",
+        PdfVersion::Pdf13 => "1.3",
+        PdfVersion::Pdf14 => "1.4",
+        PdfVersion::Pdf15 => "1.5",
+        PdfVersion::Pdf16 => "1.6",
+        PdfVersion::Pdf17 => "1.7",
+        PdfVersion::Pdf20 => "2.0",
+    };
+    DocumentInfo {
+        title: decode_info_field(metadata.title.as_ref()),
+        author: decode_info_field(metadata.author.as_ref()),
+        subject: decode_info_field(metadata.subject.as_ref()),
+        creator: decode_info_field(metadata.creator.as_ref()),
+        producer: decode_info_field(metadata.producer.as_ref()),
+        version,
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -44,6 +89,7 @@ impl std::error::Error for RenderError {}
 /// Parsed PDF backed by shared original bytes. Reuse it across page and zoom renders.
 pub struct ParsedPdf {
     pdf: Pdf,
+    document_info: DocumentInfo,
     parse_ms: u128,
     imported_annotations: Vec<OnceLock<Vec<imported_annotations::ImportedAnnotation>>>,
 }
@@ -60,9 +106,11 @@ impl ParsedPdf {
     pub fn open(bytes: Arc<Vec<u8>>) -> Result<Self, RenderError> {
         let started = Instant::now();
         let pdf = Pdf::new(bytes).map_err(|error| RenderError::Parse(format!("{error:?}")))?;
+        let document_info = document_info(&pdf);
         let imported_annotations = (0..pdf.pages().len()).map(|_| OnceLock::new()).collect();
         Ok(Self {
             pdf,
+            document_info,
             parse_ms: started.elapsed().as_millis(),
             imported_annotations,
         })
@@ -70,6 +118,10 @@ impl ParsedPdf {
 
     pub fn page_count(&self) -> usize {
         self.pdf.pages().len()
+    }
+
+    pub fn document_info(&self) -> &DocumentInfo {
+        &self.document_info
     }
 
     pub fn page_dimensions(&self, page_number: usize) -> Result<(f32, f32), RenderError> {
@@ -203,6 +255,48 @@ pub fn render_page(bytes: Vec<u8>, page_number: usize, scale: f32) -> Result<Ras
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lopdf::{dictionary, Dictionary, Document, Object, Stream};
+
+    #[test]
+    fn exposes_document_info_with_pdf_text_decoding() {
+        assert_eq!(
+            decode_info_field(Some(&b"\xef\xbb\xbfUTF-8 title".to_vec())),
+            Some("UTF-8 title".into())
+        );
+        let mut source = Document::with_version("1.7");
+        let pages_id = source.new_object_id();
+        let content_id = source.add_object(Stream::new(Dictionary::new(), Vec::new()));
+        let page_id = source.add_object(dictionary! {
+            "Type" => "Page", "Parent" => pages_id, "Contents" => content_id,
+            "MediaBox" => vec![0.into(), 0.into(), 100.into(), 100.into()],
+        });
+        source.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages", "Kids" => vec![Object::Reference(page_id)], "Count" => 1,
+            }),
+        );
+        let catalog_id =
+            source.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        let info_id = source.add_object(dictionary! {
+            "Title" => lopdf::text_string("Titel €"),
+            "Author" => lopdf::text_string("Ada"),
+            "Creator" => lopdf::text_string("Open PDF Studio"),
+        });
+        source.trailer.set("Root", Object::Reference(catalog_id));
+        source.trailer.set("Info", Object::Reference(info_id));
+        let mut bytes = Vec::new();
+        source.save_to(&mut bytes).unwrap();
+
+        let parsed = ParsedPdf::open(Arc::new(bytes)).unwrap();
+        let info = parsed.document_info();
+        assert_eq!(info.title.as_deref(), Some("Titel €"));
+        assert_eq!(info.author.as_deref(), Some("Ada"));
+        assert_eq!(info.creator.as_deref(), Some("Open PDF Studio"));
+        assert_eq!(info.subject, None);
+        assert_eq!(info.version, "1.7");
+    }
+
     #[test]
     fn rejects_bad_requests_without_parsing() {
         assert_eq!(

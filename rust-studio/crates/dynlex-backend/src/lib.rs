@@ -1,12 +1,19 @@
 //! Opt-in native Rust boundary for the bounded DynLex vector kernel.
-//! Unsupported PDFs return None so the host can keep its existing renderer.
+//! Unsupported PDFs return None; the native viewer keeps selected DynLex strict.
 mod annotation_overlay;
+#[cfg(feature = "kernel")]
+pub mod experimental_winding;
 #[cfg(feature = "kernel")]
 pub mod fractional_probe;
 #[cfg(feature = "kernel")]
+pub mod hybrid_page;
+#[cfg(feature = "kernel")]
 mod lbvh;
 pub mod page_space;
+mod pdfcraft_cli;
 mod prepared;
+#[cfg(feature = "kernel")]
+pub mod winding_page;
 pub use annotation_overlay::{
     render_native_annotation_overlay, render_native_annotation_overlay_pixels,
     render_native_annotation_overlay_pixels_on_opaque_source,
@@ -41,6 +48,7 @@ pub use glyph_scene::{
     render_validated_glyph_scene_over_premultiplied,
     render_validated_glyph_scene_over_premultiplied_at_origin,
     render_validated_glyph_scene_over_premultiplied_at_origin_owned,
+    render_validated_polygon_over_premultiplied_at_origin_owned,
 };
 use opds_engine_probe::{ParsedPdf, Raster, RenderError};
 #[cfg(feature = "kernel")]
@@ -54,10 +62,17 @@ pub enum Backend {
     Dynlex,
     Pdfium,
     OwnRust,
+    PdfCraft,
+}
+
+/// PdfCraft is an explicit external comparison pipeline. Its current
+/// renderer uses Hayro/Vello; it is never used by DynLex.
+pub fn pdfcraft_available() -> bool {
+    pdfcraft_cli::available()
 }
 
 /// PDFium is loaded dynamically only for the opt-in feature. A missing
-/// library leaves the native viewer on its existing Hayro route.
+/// library leaves the PDFium choice unavailable.
 pub fn pdfium_available() -> bool {
     #[cfg(feature = "pdfium")]
     {
@@ -111,6 +126,66 @@ pub fn render_with_report(
     })
 }
 
+/// Render with the explicitly selected engine. A rejected page never borrows
+/// Hayro's bitmap under another engine's name.
+pub fn render_selected_strict(
+    pdf: &ParsedPdf,
+    source: &[u8],
+    page: usize,
+    scale: f32,
+    backend: Backend,
+) -> Result<RenderOutcome, String> {
+    let raster = match backend {
+        Backend::Hayro => pdf
+            .render_page(page, scale)
+            .map_err(|error| error.to_string())?,
+        Backend::Dynlex => {
+            return DynlexDocument::new(std::sync::Arc::new(source.to_vec()))
+                .render_strict(pdf, page, scale);
+        }
+        Backend::Pdfium => {
+            #[cfg(feature = "pdfium")]
+            {
+                let raster = opds_pdfium_backend::render(source, page, scale)?;
+                let dimensions = pdf
+                    .page_dimensions(page)
+                    .map_err(|error| error.to_string())?;
+                if (raster.page_width_pt - dimensions.0).abs() > 0.01
+                    || (raster.page_height_pt - dimensions.1).abs() > 0.01
+                {
+                    return Err("PDFium-pagina heeft afwijkende afmetingen".into());
+                }
+                raster
+            }
+            #[cfg(not(feature = "pdfium"))]
+            {
+                return Err("PDFium is niet meegebouwd".into());
+            }
+        }
+        Backend::OwnRust => {
+            #[cfg(feature = "own-rust")]
+            {
+                opds_rust_kernel::render(source, page, scale)?
+            }
+            #[cfg(not(feature = "own-rust"))]
+            {
+                return Err("Eigen Rust-kernel is niet meegebouwd".into());
+            }
+        }
+        Backend::PdfCraft => {
+            let (width, height) = pdf
+                .page_dimensions(page)
+                .map_err(|error| error.to_string())?;
+            pdfcraft_cli::render(source, page, scale, width, height, pdf.page_count())?
+        }
+    };
+    Ok(RenderOutcome {
+        raster,
+        used: backend,
+        imported_annotations_dynlex: false,
+    })
+}
+
 fn render_with_report_using(
     pdf: &ParsedPdf,
     source: &[u8],
@@ -146,6 +221,10 @@ fn render_with_report_using(
                 }
             }
         }
+    }
+    if backend == Backend::PdfCraft {
+        return render_selected_strict(pdf, source, page, scale, backend)
+            .map_err(RenderError::Parse);
     }
     if backend == Backend::Dynlex {
         let started = std::time::Instant::now();
@@ -694,6 +773,31 @@ fn paint_rgb_appearances(
 mod tests {
     use super::*;
     use std::sync::Arc;
+    #[test]
+    fn selected_strict_route_never_reports_a_different_kernel() {
+        let bytes = include_bytes!("../tests/fixtures/simple-fill-stroke.pdf");
+        let pdf = ParsedPdf::open(Arc::new(bytes.to_vec())).unwrap();
+        let hayro = render_selected_strict(&pdf, bytes, 1, 1.0, Backend::Hayro).unwrap();
+        assert_eq!(hayro.used, Backend::Hayro);
+        #[cfg(feature = "kernel")]
+        {
+            let dynlex = render_selected_strict(&pdf, bytes, 1, 1.0, Backend::Dynlex).unwrap();
+            assert_eq!(dynlex.used, Backend::Dynlex);
+            assert_eq!(dynlex.raster.rgba, hayro.raster.rgba);
+        }
+        #[cfg(feature = "own-rust")]
+        {
+            let own = render_selected_strict(&pdf, bytes, 1, 1.0, Backend::OwnRust).unwrap();
+            assert_eq!(own.used, Backend::OwnRust);
+            assert_eq!(own.raster.rgba, hayro.raster.rgba);
+        }
+        #[cfg(feature = "pdfium")]
+        if pdfium_available() {
+            let pdfium = render_selected_strict(&pdf, bytes, 1, 1.0, Backend::Pdfium).unwrap();
+            assert_eq!(pdfium.used, Backend::Pdfium);
+            assert_eq!(pdfium.raster.rgba, hayro.raster.rgba);
+        }
+    }
     #[cfg(feature = "kernel")]
     #[test]
     fn distant_imported_rgb_images_use_ordered_tiles_on_large_page() {
@@ -1709,3 +1813,9 @@ mod tests {
         assert!(validated_ordered_scene(scene).is_err());
     }
 }
+
+#[cfg(feature = "kernel")]
+pub mod text_preflight;
+
+#[cfg(all(feature = "kernel", target_os = "linux"))]
+pub mod text_worker;

@@ -136,8 +136,9 @@ fn render_layer(scenes: &[(Vec<u64>, [u8; 3])]) -> Result<Vec<u8>, Box<dyn Error
 }
 
 fn raster_glyph(words: &[u64], alpha: &mut [u8]) -> Result<(), Box<dyn Error>> {
-    // SAFETY: complete OPM2/Rust topology validation happened before ABI,
-    // and both aligned input and writable output outlive this call.
+    // SAFETY: the caller validated through the OPM2 topology boundary or
+    // the bounded OPNW nonzero-winding boundary before ABI. Both aligned
+    // input and writable output outlive this call.
     let status = unsafe {
         opds_glyph_strip_raster(
             words.as_ptr().cast(),
@@ -300,7 +301,7 @@ pub fn render_opm_over_premultiplied_at_origin_owned(
     )
 }
 
-fn render_outlines_over_page_owned(
+pub(super) fn render_outlines_over_page_owned(
     scenes: Vec<(Vec<u64>, [u8; 3])>,
     mut output: Vec<u8>,
     width: u32,
@@ -392,6 +393,245 @@ fn render_outlines_over_page_owned(
         if status != 0 {
             return Err(format!("DynLex glyph compositor status {status}").into());
         }
+    }
+    Ok(output)
+}
+
+/// Exact conservative write rectangle of glyph_strip_kernel.dl. Input is the
+/// private validated aligned OPNW ABI. Match its f64 -> f32 conversion and
+/// one-tile margin; do not tighten to mathematical ink bounds (AA can spill).
+fn strip_write_bounds(words: &[u64]) -> [usize; 4] {
+    let mut min = [256_f32, 192_f32];
+    let mut max = [0_f32; 2];
+    let mut at = 3;
+    for _ in 0..words[2] {
+        let count = words[at] as usize;
+        at += 1;
+        for point in words[at..at + count * 2].chunks_exact(2) {
+            for axis in 0..2 {
+                let value = f64::from_bits(u64::from_le(point[axis])) as f32;
+                min[axis] = min[axis].min(value);
+                max[axis] = max[axis].max(value);
+            }
+        }
+        at += count * 2;
+    }
+    [
+        ((min[0] as usize / 4).saturating_sub(1)) * 4,
+        ((min[1] as usize / 4).saturating_sub(1)) * 4,
+        ((max[0] as usize / 4 + 2).min(64)) * 4,
+        ((max[1] as usize / 4 + 2).min(48)) * 4,
+    ]
+}
+
+/// Private prepared-page path. Outlines are already structurally validated by
+/// the OPNW boundary; the fresh zeroed page is premultiplied by construction.
+/// Reuse one coverage/command pair instead of rescanning a page for each paint.
+pub(super) fn render_prepared_page(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_prepared_page_profiled(width, height, scenes, None)
+}
+
+pub(super) fn render_prepared_page_profiled(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+    profile: Option<&mut [std::time::Duration; 4]>,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_prepared_page_with_fractional(width, height, scenes, None, None, profile)
+}
+
+/// Form an independent DynLex rectangle coverage mask for each paint before
+/// ordered composition. V3 PWPG validates the coordinates before native use;
+/// the separate research path shares this exact compositor.
+pub(super) fn render_prepared_page_fractional(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+    fractional_clips: &[Option<[f64; 4]>],
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_prepared_page_with_fractional(width, height, scenes, Some(fractional_clips), None, None)
+}
+
+/// Compose validated winding paints over a caller-owned opaque image page.
+/// The ordinary prepared route still starts on transparent paper.
+pub(super) fn render_prepared_page_fractional_over_opaque(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+    fractional_clips: &[Option<[f64; 4]>],
+    background: Vec<u8>,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    render_prepared_page_with_fractional(
+        width,
+        height,
+        scenes,
+        Some(fractional_clips),
+        Some(background),
+        None,
+    )
+}
+
+fn render_prepared_page_with_fractional(
+    width: u32,
+    height: u32,
+    scenes: &[(&[u64], [u8; 3], [u32; 2], [u32; 4])],
+    fractional_clips: Option<&[Option<[f64; 4]>]>,
+    background: Option<Vec<u8>>,
+    mut profile: Option<&mut [std::time::Duration; 4]>,
+) -> Result<Vec<u8>, Box<dyn Error>> {
+    let pixels = u64::from(width) * u64::from(height);
+    if width == 0
+        || height == 0
+        || width > 4096
+        || height > 4096
+        || pixels > 6_000_000
+        || scenes.len() > 8192
+        || fractional_clips.is_some_and(|clips| {
+            clips.len() != scenes.len()
+                || clips.iter().flatten().any(|c| {
+                    c.iter().any(|v| !v.is_finite())
+                        || c[0] < 0.
+                        || c[1] < 0.
+                        || c[2] > f64::from(width)
+                        || c[3] > f64::from(height)
+                        || c[0] >= c[2]
+                        || c[1] >= c[3]
+                })
+        })
+        || scenes.iter().any(|(_, _, p, clip)| {
+            p[0] >= width
+                || p[1] >= height
+                || clip[0] >= clip[2]
+                || clip[1] >= clip[3]
+                || clip[2] > width
+                || clip[3] > height
+        })
+        || background.as_ref().is_some_and(|rgba| {
+            rgba.len() != pixels as usize * 4 || rgba.chunks_exact(4).any(|pixel| pixel[3] != 255)
+        })
+    {
+        return Err("prepared page dimensions or placements exceed bounds".into());
+    }
+    let mut output = background.unwrap_or_else(|| vec![0; pixels as usize * 4]);
+    let mut alpha = vec![0; GLYPH_PIXELS];
+    let mut clip_alpha = if fractional_clips.is_some() {
+        vec![0; GLYPH_PIXELS]
+    } else {
+        Vec::new()
+    };
+    let mut command = vec![0; 44 + GLYPH_PIXELS];
+    command[..4].copy_from_slice(b"OPGC");
+    command[4..8].copy_from_slice(&2_u32.to_le_bytes());
+    command[8..12].copy_from_slice(&width.to_le_bytes());
+    command[12..16].copy_from_slice(&height.to_le_bytes());
+    command[35] = 1;
+    for (index, &(words, color, origin, clip)) in scenes.iter().enumerate() {
+        let start = profile.as_ref().map(|_| std::time::Instant::now());
+        raster_glyph(words, &mut alpha)?;
+        if let Some(rect) = fractional_clips.and_then(|all| all[index]) {
+            let x0 = ((rect[0] as f32) - origin[0] as f32).clamp(0., 256.);
+            let y0 = ((rect[1] as f32) - origin[1] as f32).clamp(0., 192.);
+            let x1 = ((rect[2] as f32) - origin[0] as f32).clamp(0., 256.);
+            let y1 = ((rect[3] as f32) - origin[1] as f32).clamp(0., 192.);
+            if x0 >= x1 || y0 >= y1 {
+                continue;
+            }
+            let mut rectangle = vec![
+                u64::from_le_bytes(*b"OPM2\x01\0\0\0"),
+                (192_u64 << 32) | 256,
+                1,
+                5,
+            ];
+            for [x, y] in [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]] {
+                rectangle.push(f64::from(x).to_bits().to_le());
+                rectangle.push(f64::from(y).to_bits().to_le());
+            }
+            raster_glyph(&rectangle, &mut clip_alpha)?;
+            for (source, mask) in alpha.iter_mut().zip(&clip_alpha) {
+                *source = ((u16::from(*source) * u16::from(*mask) + 255) >> 8) as u8;
+            }
+        }
+        if let (Some(t), Some(p)) = (start, profile.as_deref_mut()) {
+            p[0] += t.elapsed();
+        }
+        let start = profile.as_ref().map(|_| std::time::Instant::now());
+        let mut bounds = [u32::MAX, u32::MAX, 0, 0];
+        let [left, top, right, bottom] = strip_write_bounds(words);
+        // Kernel clears the complete mask, then writes only these tiles.
+        // Still check every nonzero sample against the actual page bounds.
+        for local_y in top..bottom {
+            for local_x in left..right {
+                if alpha[local_y * 256 + local_x] == 0 {
+                    continue;
+                }
+                let x = origin[0] + local_x as u32;
+                let y = origin[1] + local_y as u32;
+                if x >= width || y >= height {
+                    return Err("prepared coverage extends outside page".into());
+                }
+                bounds[0] = bounds[0].min(x);
+                bounds[1] = bounds[1].min(y);
+                bounds[2] = bounds[2].max(x + 1);
+                bounds[3] = bounds[3].max(y + 1);
+            }
+        }
+        if bounds[2] == 0 {
+            if let (Some(t), Some(p)) = (start, profile.as_deref_mut()) {
+                p[1] += t.elapsed();
+            }
+            continue;
+        }
+        bounds[0] = bounds[0].max(clip[0]);
+        bounds[1] = bounds[1].max(clip[1]);
+        bounds[2] = bounds[2].min(clip[2]);
+        bounds[3] = bounds[3].min(clip[3]);
+        if bounds[0] >= bounds[2] || bounds[1] >= bounds[3] {
+            continue;
+        }
+        for (i, value) in bounds.into_iter().enumerate() {
+            command[16 + i * 4..20 + i * 4].copy_from_slice(&value.to_le_bytes());
+        }
+        command[32..35].copy_from_slice(&color);
+        command[36..40].copy_from_slice(&origin[0].to_le_bytes());
+        command[40..44].copy_from_slice(&origin[1].to_le_bytes());
+        command[44..].copy_from_slice(&alpha);
+        if let (Some(t), Some(p)) = (start, profile.as_deref_mut()) {
+            p[1] += t.elapsed();
+        }
+        let start = profile.as_ref().map(|_| std::time::Instant::now());
+        // SAFETY: the OPNW caller owns validated aligned outlines. Page size,
+        // coverage bounds, origin, command length and output are checked above.
+        // A successful premultiplied composition preserves that invariant.
+        let status = unsafe {
+            opds_glyph_direct_compose(
+                command.as_ptr(),
+                command.len() as i32,
+                output.as_mut_ptr(),
+                output.len() as i32,
+            )
+        };
+        if let (Some(t), Some(p)) = (start, profile.as_deref_mut()) {
+            p[2] += t.elapsed();
+        }
+        if status != 0 {
+            return Err(format!("DynLex prepared compositor status {status}").into());
+        }
+    }
+    let start = profile.as_ref().map(|_| std::time::Instant::now());
+    // Paper composition in place; no second full-page allocation.
+    for pixel in output.chunks_exact_mut(4) {
+        let paper = 255 - pixel[3];
+        for channel in &mut pixel[..3] {
+            *channel = channel.saturating_add(paper);
+        }
+        pixel[3] = 255;
+    }
+    if let (Some(t), Some(p)) = (start, profile.as_deref_mut()) {
+        p[3] += t.elapsed();
     }
     Ok(output)
 }

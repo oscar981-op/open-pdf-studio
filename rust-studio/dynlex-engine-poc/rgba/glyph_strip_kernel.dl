@@ -8,10 +8,7 @@ function strip raster {cstring:scene} into {cstring:output}:
         set contours to unsigned word at 16 in scene
         # Clear the full ABI output even when the validated glyph occupies
         # only a small set of 4x4 tiles. Callers may reuse the same buffer.
-        set pixel to 0
-        loop while pixel < 49152:
-            store 0 into output at pixel
-            set pixel to pixel + 1
+        discard @intrinsic("call", "libc", "memset", a pointer to a byte, output, 0, 49152)
         set min_x to 256.0 as a 32 bit float
         set min_y to 192.0 as a 32 bit float
         set max_x to 0.0 as a 32 bit float

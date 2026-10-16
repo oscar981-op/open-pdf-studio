@@ -969,7 +969,7 @@ mod tests {
         )
         .unwrap()
         .is_none());
-        let mut polyline = annotation;
+        let mut polyline = annotation.clone();
         polyline.kind = Kind::Polyline {
             points: vec![[8.0, 8.0], [40.0, 8.0], [40.0, 30.0]],
             color_rgb: [231, 76, 60],
@@ -984,6 +984,17 @@ mod tests {
         )
         .unwrap()
         .is_none());
+        let mut arrow = annotation;
+        arrow.kind = Kind::Arrow {
+            start: [8.0, 16.0],
+            end: [40.0, 16.0],
+            color_rgb: [231, 76, 60],
+        };
+        assert!(
+            render_native_annotation_overlay_pixels(&white, 64, 48, (64.0, 48.0), &[arrow], 0,)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

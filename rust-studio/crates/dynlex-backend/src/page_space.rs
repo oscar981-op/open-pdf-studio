@@ -117,7 +117,13 @@ impl PageSpace {
         let (mut media, mut crop, mut rotation) = (None, None, None);
         for depth in 0..16 {
             if node.contains_key(b"UserUnit") {
-                return Err("UserUnit outside geometry probe");
+                let unit = node
+                    .get::<Number>(b"UserUnit")
+                    .ok_or("invalid UserUnit")?
+                    .as_f64();
+                if unit != 1.0 {
+                    return Err("UserUnit outside geometry probe");
+                }
             }
             for (key, destination) in [
                 (b"MediaBox".as_slice(), &mut media),
@@ -360,6 +366,24 @@ mod tests {
             assert!(
                 PageSpace::from_pdf(geometry_pdf(parent, ""), 1, 1.).is_err(),
                 "{parent}"
+            );
+        }
+    }
+
+    #[test]
+    fn neutral_user_unit_preserves_geometry() {
+        for (parent, page) in [
+            ("/MediaBox [0 0 64 48]", "/UserUnit 1"),
+            ("/MediaBox [0 0 64 48] /UserUnit 1.0", ""),
+            ("/MediaBox [0 0 64 48] /UserUnit 1", "/UserUnit 1"),
+        ] {
+            let space = PageSpace::from_pdf(geometry_pdf(parent, page), 1, 1.).unwrap();
+            assert_eq!(space.media, [0., 0., 64., 48.]);
+            assert_eq!(space.pixels(), [64, 48]);
+        }
+        for invalid in ["/UserUnit 0", "/UserUnit 2", "/UserUnit /Invalid"] {
+            assert!(
+                PageSpace::from_pdf(geometry_pdf("/MediaBox [0 0 64 48]", invalid), 1, 1.).is_err()
             );
         }
     }

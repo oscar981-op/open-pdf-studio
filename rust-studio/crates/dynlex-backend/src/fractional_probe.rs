@@ -37,6 +37,40 @@ impl FractionalProbe {
         }
         render_validated_scene(&scene, w, h)
     }
+    /// Diagnostic only: this preserves the general tiled candidate, including
+    /// known sampling/AA mismatches. The native strict router never calls it.
+    pub fn render_unverified_tiled(&self, scale: f32) -> Result<Bitmap, String> {
+        let zoom = self
+            .plan
+            .zoom(&self.rgb, scale)
+            .map_err(|e| e.to_string())?;
+        let (width, height) = (zoom.width, zoom.height);
+        let size = width as usize * height as usize * 4;
+        let mut rgba = Vec::new();
+        rgba.try_reserve_exact(size)
+            .map_err(|_| "Not enough memory for zoom bitmap")?;
+        rgba.resize(size, 255);
+        for y in (0..height).step_by(1024) {
+            for x in (0..width).step_by(1024) {
+                let w = (width - x).min(1024);
+                let h = (height - y).min(1024);
+                let scene = zoom.tile_scene(x, y, w, h).map_err(|e| e.to_string())?;
+                let (scene, w, h) = validated_ordered_scene(scene)?;
+                let tile = render_validated_scene(&scene, w, h)?;
+                for row in 0..h as usize {
+                    let from = row * w as usize * 4;
+                    let to = ((y as usize + row) * width as usize + x as usize) * 4;
+                    rgba[to..to + w as usize * 4]
+                        .copy_from_slice(&tile.rgba[from..from + w as usize * 4]);
+                }
+            }
+        }
+        Ok(Bitmap {
+            width,
+            height,
+            rgba,
+        })
+    }
     pub fn decoded_bytes(&self) -> usize {
         self.rgb.len()
     }

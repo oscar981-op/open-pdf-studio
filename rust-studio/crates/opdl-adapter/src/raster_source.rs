@@ -4,7 +4,86 @@ use crate::{
     select_page_id, AxisCtm,
 };
 use lopdf::{dictionary, Document, Object, Stream};
+use std::borrow::Cow;
 use std::error::Error;
+
+/// A zoom samples the original JPEG once, then emits bounded kernel tiles.
+/// Coordinates stay in page space, so tile boundaries never reset sampling.
+pub struct RasterZoom<'a> {
+    pixels: Cow<'a, [u8]>,
+    sampled: [u32; 2],
+    crop: [u32; 4],
+    placement: [u32; 4],
+    turn: u32,
+    scale: f64,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl RasterZoom<'_> {
+    pub fn tile_scene(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
+        if width == 0
+            || height == 0
+            || width > 1024
+            || height > 1024
+            || x.checked_add(width).is_none_or(|n| n > self.width)
+            || y.checked_add(height).is_none_or(|n| n > self.height)
+        {
+            return Err(fail("raster tile outside page"));
+        }
+        let mut scene = b"OPDL".to_vec();
+        for n in [
+            3, width, height, 0, 0, width, height, 0, 1, 6, 0, 0, width, height, 0,
+        ] {
+            scene.extend_from_slice(&n.to_le_bytes());
+        }
+        let base = [self.crop[2] - self.crop[0], self.crop[3] - self.crop[1]];
+        let half = 0.5 / self.scale;
+        let [left, bottom, pw, ph] = self.placement.map(f64::from);
+        for row in y..y + height {
+            for column in x..x + width {
+                let u = (f64::from(column) + 0.5) / self.scale;
+                let v = (f64::from(row) + 0.5) / self.scale;
+                let [px, py] = match self.turn {
+                    0 => [u, f64::from(base[1]) - v],
+                    90 => [v, u],
+                    180 => [f64::from(base[0]) - u, v],
+                    270 => [f64::from(base[0]) - v, f64::from(base[1]) - u],
+                    _ => return Err(fail("invalid raster rotation")),
+                };
+                let px = px + f64::from(self.crop[0]);
+                let py = py + f64::from(self.crop[1]);
+                let coverage = |p: f64, start: f64, length: f64| {
+                    ((p + half).min(start + length) - (p - half).max(start)).max(0.0) * self.scale
+                };
+                let alpha = (coverage(px, left, pw) * coverage(py, bottom, ph)).clamp(0.0, 1.0);
+                if alpha == 0.0 {
+                    scene.extend_from_slice(&[255; 3]);
+                    continue;
+                }
+                let sx = (((px - left) / pw * f64::from(self.sampled[0]))
+                    .floor()
+                    .max(0.0) as u32)
+                    .min(self.sampled[0] - 1);
+                let sy = (((bottom + ph - py) / ph * f64::from(self.sampled[1]))
+                    .floor()
+                    .max(0.0) as u32)
+                    .min(self.sampled[1] - 1);
+                let index = ((sy * self.sampled[0] + sx) * 3) as usize;
+                for channel in &self.pixels[index..index + 3] {
+                    scene.push((f64::from(*channel) * alpha + 255.0 * (1.0 - alpha)).round() as u8);
+                }
+            }
+        }
+        Ok(scene)
+    }
+}
 
 pub struct RasterPlan {
     image: Stream,
@@ -230,8 +309,58 @@ impl RasterPlan {
         )?
         .into_owned())
     }
-    /// Diagnostic route only: a full-MediaBox JPEG with arbitrary downsampling.
-    /// It is deliberately separate from the native, proven-scale scene route.
+
+    pub fn zoom<'a>(&self, rgb: &'a [u8], scale: f32) -> Result<RasterZoom<'a>, Box<dyn Error>> {
+        if rgb.len() != self.decoded_len() || !scale.is_finite() || !(0.01..=8.0).contains(&scale) {
+            return Err(fail("invalid raster source or scale"));
+        }
+        let mut size = [
+            self.geometry.crop[2] - self.geometry.crop[0],
+            self.geometry.crop[3] - self.geometry.crop[1],
+        ]
+        .map(|n| (n as f32 * scale).floor().max(1.0) as u32);
+        if matches!(self.geometry.turn, 90 | 270) {
+            size.swap(0, 1);
+        }
+        if size.iter().any(|&n| n > 32768)
+            || size[0].checked_mul(size[1]).is_none_or(|n| n > 64_000_000)
+        {
+            return Err(fail("zoom bitmap exceeds 64 megapixel budget"));
+        }
+        let sampled =
+            [0, 1].map(|axis| (self.placement[axis + 2] as f32 * scale).ceil().max(1.0) as u32);
+        let sampled = [
+            sampled[0].min(self.source[0]),
+            sampled[1].min(self.source[1]),
+        ];
+        // At high zoom sample the retained original directly; do not allocate an
+        // enlarged intermediate. Downsampling is filtered before tile emission.
+        let pixels = if sampled == self.source {
+            Cow::Borrowed(rgb)
+        } else {
+            Cow::Owned(crate::resample_rgb_bounded(
+                rgb,
+                self.source[0],
+                self.source[1],
+                sampled[0],
+                sampled[1],
+                false,
+                jpeg_rgb::MAX_PIXELS,
+            )?)
+        };
+        Ok(RasterZoom {
+            pixels,
+            sampled,
+            crop: self.geometry.crop,
+            placement: self.placement,
+            turn: self.geometry.turn,
+            scale: f64::from(scale),
+            width: size[0],
+            height: size[1],
+        })
+    }
+    /// Bounded full-MediaBox downsampling. Native routing selects strip-f32;
+    /// the geometric mode remains an independent diagnostic candidate.
     pub fn experimental_fractional_scene(
         &self,
         rgb: &[u8],

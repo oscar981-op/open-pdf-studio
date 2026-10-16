@@ -376,6 +376,109 @@ pub fn rebase_screen_f32(
     Ok(())
 }
 
+/// Immutable bounded font outline; reusable across glyph placements and zooms.
+/// Font interpretation happens once. Flattening remains in the requested screen space.
+pub struct PreparedGlyph {
+    outline: Outline,
+    factor: f64,
+}
+
+impl PreparedGlyph {
+    pub fn new(font_data: &[u8], gid: u16, source: Source) -> Result<Self, Box<dyn Error>> {
+        if font_data.len() > 8_000_000 {
+            return Err("font bytes exceed outline preparation budget".into());
+        }
+        let face = ttf_parser::Face::parse(font_data, 0)?;
+        let mut outline = Outline::default();
+        let factor = match source {
+            Source::RawTtf => {
+                face.outline_glyph(ttf_parser::GlyphId(gid), &mut outline)
+                    .ok_or("glyph has no outline")?;
+                1.0
+            }
+            Source::SkrifaAtThousand => {
+                let font = FontRef::from_index(font_data, 0)?;
+                let glyphs = font.outline_glyphs();
+                let glyph = glyphs
+                    .get(GlyphId::new(u32::from(gid)))
+                    .ok_or("glyph has no embedded outline")?;
+                // Match Hayro's fixed 1000-unit outline request. The returned
+                // coordinates are already quantized by the pure-Rust font parser;
+                // scale TGR1's original-UPEM basis back before raster staging.
+                let instance = if glyphs.require_interpreter() {
+                    HintingInstance::new(
+                        &glyphs,
+                        Size::new(1000.0),
+                        LocationRef::default(),
+                        HintingOptions {
+                            engine: Engine::Interpreter,
+                            target: Target::Mono,
+                        },
+                    )
+                    .ok()
+                } else {
+                    None
+                };
+                let settings = if let Some(instance) = instance.as_ref() {
+                    DrawSettings::hinted(instance, false)
+                } else {
+                    DrawSettings::unhinted(Size::new(1000.0), LocationRef::default())
+                };
+                glyph.draw(settings, &mut outline)?;
+                f64::from(face.units_per_em()) / 1000.0
+            }
+        };
+
+        if outline.overflow
+            || !(1..=8).contains(&outline.contours.len())
+            || outline.cubics != 0
+            || outline.segments > 256
+            || outline
+                .contours
+                .iter()
+                .any(|c| !c.closed || c.segments.is_empty())
+        {
+            return Err("glyph outline exceeds preparation bounds".into());
+        }
+        Ok(Self { outline, factor })
+    }
+
+    pub fn retained_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
+            + self.outline.contours.capacity() * std::mem::size_of::<Contour>()
+            + self
+                .outline
+                .contours
+                .iter()
+                .map(|c| c.segments.capacity() * std::mem::size_of::<Segment>())
+                .sum::<usize>()
+    }
+
+    fn matrix(&self, matrix: [f64; 6]) -> [f64; 6] {
+        [
+            matrix[0] * self.factor,
+            matrix[1] * self.factor,
+            matrix[2] * self.factor,
+            matrix[3] * self.factor,
+            matrix[4],
+            matrix[5],
+        ]
+    }
+
+    pub fn stage(
+        &self,
+        matrix: [f64; 6],
+    ) -> Result<(Vec<u8>, Point, Option<Vec<u8>>), Box<dyn Error>> {
+        if self.outline.quads == 0 {
+            let (scene, shift) = stage_prepared_lines(&self.outline, self.matrix(matrix))?;
+            Ok((scene, shift, None))
+        } else {
+            let (scene, shift, raw) = stage_prepared_quadratic(&self.outline, self.matrix(matrix))?;
+            Ok((scene, shift, Some(raw)))
+        }
+    }
+}
+
 /// Build a bounded OPM2 scene from one embedded quadratic TrueType glyph.
 /// The returned shift is used only to make an isolated 256×192 PDF oracle.
 pub fn stage(
@@ -384,54 +487,14 @@ pub fn stage(
     matrix: [f64; 6],
     source: Source,
 ) -> Result<(Vec<u8>, Point, Vec<u8>), Box<dyn Error>> {
-    let face = ttf_parser::Face::parse(font_data, 0)?;
-    let mut outline = Outline::default();
-    let matrix = match source {
-        Source::RawTtf => {
-            face.outline_glyph(ttf_parser::GlyphId(gid), &mut outline)
-                .ok_or("glyph has no outline")?;
-            matrix
-        }
-        Source::SkrifaAtThousand => {
-            let font = FontRef::from_index(font_data, 0)?;
-            let glyphs = font.outline_glyphs();
-            let glyph = glyphs
-                .get(GlyphId::new(u32::from(gid)))
-                .ok_or("glyph has no embedded outline")?;
-            // Match Hayro's fixed 1000-unit outline request. The returned
-            // coordinates are already quantized by the pure-Rust font parser;
-            // scale TGR1's original-UPEM basis back before raster staging.
-            let instance = if glyphs.require_interpreter() {
-                HintingInstance::new(
-                    &glyphs,
-                    Size::new(1000.0),
-                    LocationRef::default(),
-                    HintingOptions {
-                        engine: Engine::Interpreter,
-                        target: Target::Mono,
-                    },
-                )
-                .ok()
-            } else {
-                None
-            };
-            let settings = if let Some(instance) = instance.as_ref() {
-                DrawSettings::hinted(instance, false)
-            } else {
-                DrawSettings::unhinted(Size::new(1000.0), LocationRef::default())
-            };
-            glyph.draw(settings, &mut outline)?;
-            let factor = f64::from(face.units_per_em()) / 1000.0;
-            [
-                matrix[0] * factor,
-                matrix[1] * factor,
-                matrix[2] * factor,
-                matrix[3] * factor,
-                matrix[4],
-                matrix[5],
-            ]
-        }
-    };
+    let glyph = PreparedGlyph::new(font_data, gid, source)?;
+    stage_prepared_quadratic(&glyph.outline, glyph.matrix(matrix))
+}
+
+fn stage_prepared_quadratic(
+    outline: &Outline,
+    matrix: [f64; 6],
+) -> Result<(Vec<u8>, Point, Vec<u8>), Box<dyn Error>> {
     if outline.overflow
         || !(1..=8).contains(&outline.contours.len())
         || outline.quads == 0
@@ -482,12 +545,12 @@ pub fn stage(
         encoded.extend_from_slice(&value.to_le_bytes());
     }
     let mut total_points = 0;
-    for contour in outline.contours {
+    for contour in &outline.contours {
         let map = |p| add(transform(p, matrix), shift);
         let start = map(contour.start);
         let mut points = vec![start];
         let mut current = start;
-        for segment in contour.segments {
+        for &segment in &contour.segments {
             match segment {
                 Segment::Line(p) => {
                     current = map(p);
@@ -531,42 +594,14 @@ pub fn stage_line_only(
     gid: u16,
     matrix: [f64; 6],
 ) -> Result<(Vec<u8>, Point), Box<dyn Error>> {
-    let face = ttf_parser::Face::parse(font_data, 0)?;
-    let mut outline = Outline::default();
-    let font = FontRef::from_index(font_data, 0)?;
-    let glyphs = font.outline_glyphs();
-    let glyph = glyphs
-        .get(GlyphId::new(u32::from(gid)))
-        .ok_or("glyph has no embedded outline")?;
-    let instance = if glyphs.require_interpreter() {
-        HintingInstance::new(
-            &glyphs,
-            Size::new(1000.0),
-            LocationRef::default(),
-            HintingOptions {
-                engine: Engine::Interpreter,
-                target: Target::Mono,
-            },
-        )
-        .ok()
-    } else {
-        None
-    };
-    let settings = if let Some(instance) = instance.as_ref() {
-        DrawSettings::hinted(instance, false)
-    } else {
-        DrawSettings::unhinted(Size::new(1000.0), LocationRef::default())
-    };
-    glyph.draw(settings, &mut outline)?;
-    let factor = f64::from(face.units_per_em()) / 1000.0;
-    let matrix = [
-        matrix[0] * factor,
-        matrix[1] * factor,
-        matrix[2] * factor,
-        matrix[3] * factor,
-        matrix[4],
-        matrix[5],
-    ];
+    let glyph = PreparedGlyph::new(font_data, gid, Source::SkrifaAtThousand)?;
+    stage_prepared_lines(&glyph.outline, glyph.matrix(matrix))
+}
+
+fn stage_prepared_lines(
+    outline: &Outline,
+    matrix: [f64; 6],
+) -> Result<(Vec<u8>, Point), Box<dyn Error>> {
     if outline.overflow
         || !(1..=8).contains(&outline.contours.len())
         || outline.quads != 0
@@ -590,9 +625,9 @@ pub fn stage_line_only(
         f64::NEG_INFINITY,
         f64::NEG_INFINITY,
     ];
-    for contour in outline.contours {
+    for contour in &outline.contours {
         let mut points = vec![transform(contour.start, matrix)];
-        for segment in contour.segments {
+        for &segment in &contour.segments {
             let Segment::Line(point) = segment else {
                 return Err("line-only glyph contains a curve".into());
             };
@@ -646,6 +681,36 @@ pub fn stage_line_only(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prepared_outline_reused_across_scales_without_retaining_render_state() {
+        let font = include_bytes!("../../../assets/fonts/LiberationSans-Regular.ttf");
+        let face = ttf_parser::Face::parse(font, 0).unwrap();
+        for character in ['g', 'I', '\u{2019}'] {
+            let gid = face.glyph_index(character).unwrap().0;
+            let prepared = PreparedGlyph::new(font, gid, Source::SkrifaAtThousand).unwrap();
+            let bytes = prepared.retained_bytes();
+            let matrix = |scale: f64| {
+                [
+                    scale * 12. / f64::from(face.units_per_em()),
+                    0.,
+                    0.,
+                    -scale * 12. / f64::from(face.units_per_em()),
+                    40.125,
+                    70.375,
+                ]
+            };
+            let first = prepared.stage(matrix(1.)).unwrap();
+            for scale in [0.25, 0.87, 1.15, 2., 8.] {
+                let result = prepared.stage(matrix(scale)).unwrap();
+                assert!(result.0.len() <= 4148);
+                assert_eq!(prepared.retained_bytes(), bytes);
+            }
+            assert_eq!(prepared.stage(matrix(1.)).unwrap(), first);
+            assert!(prepared.stage([f64::NAN; 6]).is_err());
+        }
+        assert!(PreparedGlyph::new(&[0; 64], 1, Source::SkrifaAtThousand).is_err());
+    }
 
     #[test]
     fn bounded_quadratic_flattening() {

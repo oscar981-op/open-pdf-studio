@@ -5,8 +5,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     use opds_engine_probe::ParsedPdf;
     use std::{fs, sync::Arc, time::Instant};
     let args: Vec<_> = std::env::args().collect();
-    if !(5..=6).contains(&args.len()) || !matches!(args[2].as_str(), "dynlex" | "hayro") {
-        return Err("usage: jpeg_zoom_probe PDF dynlex|hayro ROUNDS REFERENCE_DIRECTORY [SCALES_COMMA_SEPARATED]".into());
+    if !(5..=7).contains(&args.len()) || !matches!(args[2].as_str(), "dynlex" | "hayro") {
+        return Err("usage: jpeg_zoom_probe PDF dynlex|hayro ROUNDS REFERENCE_DIRECTORY [SCALES_COMMA_SEPARATED] [PAGE]".into());
     }
     let scales: Vec<f32> = args
         .get(5)
@@ -23,6 +23,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         return Err("invalid bounded scales".into());
     }
+    let page: usize = args.get(6).map(|s| s.parse()).transpose()?.unwrap_or(1);
+    if !(1..=4096).contains(&page) {
+        return Err("invalid page".into());
+    }
     let rounds: usize = args[3].parse()?;
     if !(1..=30).contains(&rounds) {
         return Err("rounds outside 1..30".into());
@@ -38,11 +42,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let started = Instant::now();
             let rgba = if args[2] == "dynlex" {
                 document
-                    .try_render(1, scale)?
+                    .try_render(page, scale)?
                     .ok_or("unsupported; no fallback")?
                     .rgba
             } else {
-                pdf.render_page(1, scale)?.rgba
+                pdf.render_page(page, scale)?.rgba
             };
             let ms = started.elapsed().as_secs_f64() * 1000.;
             // Byte comparison and file I/O excluded from the render timer.
@@ -55,6 +59,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ));
         }
     }
+    #[cfg(target_os = "linux")]
+    eprintln!("text_cache={:?}", document.text_cache_stats()?);
     let (retained, decodes) = document.raster_cache_stats()?;
     println!("{{\"mode\":\"{}\",\"open_ms\":{open_ms:.6},\"retained_rgb_bytes\":{retained},\"decodes\":{decodes},\"all_bytes_equal\":true,\"samples\":[{}]}}",args[2],rows.join(","));
     Ok(())
