@@ -626,3 +626,7 @@ js/watermark/watermark-custom-position.test.mjs
 js/watermark/watermark-autofit.test.mjs
 js/watermark/watermark-dialog-i18n.test.mjs
 js/watermark/watermark-text-history.test.mjs
+js/core/maat-notatie.test.mjs
+js/annotations/schaalcontrole.test.mjs
+js/annotations/schaalcontrole-i18n.test.mjs
+js/pdf/schaal-in-pdf.test.mjs
