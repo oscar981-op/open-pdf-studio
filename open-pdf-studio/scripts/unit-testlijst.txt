@@ -626,3 +626,6 @@ js/watermark/watermark-custom-position.test.mjs
 js/watermark/watermark-autofit.test.mjs
 js/watermark/watermark-dialog-i18n.test.mjs
 js/watermark/watermark-text-history.test.mjs
+js/core/draagbaar.test.mjs
+js/i18n/draagbaar-i18n.test.mjs
+scripts/draagbare-zip.test.mjs
